@@ -9,6 +9,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import tensordict.persistent as tensordict_persistent
 import torch
 from tensordict import (
     from_zarr,
@@ -18,11 +19,17 @@ from tensordict import (
     PersistentTensorDict,
     TensorDict,
 )
+from tensordict._td import _SubTensorDict
 from tensordict.base import _is_leaf_nontensor
 from tensordict.utils import _NUMPY_TO_TORCH_DTYPE_DICT, is_non_tensor
 from torch import multiprocessing as mp
+from torch.utils.data import BatchSampler, DataLoader, SequentialSampler
 
 TIMEOUT = 100
+
+
+def _keep_batch(batch):
+    return batch
 
 
 class _CustomNonTensor:
@@ -1246,6 +1253,76 @@ class TestZarrSerialization:
         assert (ztd2["a"] == ztd["a"]).all()
         assert (ztd2["b", "c"] == ztd["b", "c"]).all()
         assert ztd2["b", "s"] == "text"
+
+    @staticmethod
+    def _loader_data(tmp_path):
+        td = TensorDict(
+            {
+                "x": torch.randn(300, 4),
+                ("nested", "y"): torch.arange(300),
+                "s": "text",
+            },
+            batch_size=[300],
+        )
+        return td.to_zarr(tmp_path / "s.zarr")
+
+    # gh-3218: the workers sent a lazy view of the store, so the main process
+    # read every batch
+    @pytest.mark.timeout(120)
+    def test_dataloader_workers_read_rows(self, tmp_path, monkeypatch):
+        ztd = self._loader_data(tmp_path)
+        reads = []
+        read_array_at = PersistentTensorDict._read_array_at
+
+        def logged_read_array_at(self, array, idx):
+            reads.append(array.name)
+            return read_array_at(self, array, idx)
+
+        monkeypatch.setattr(
+            PersistentTensorDict, "_read_array_at", logged_read_array_at
+        )
+        batch_sampler = BatchSampler(SequentialSampler(range(300)), 64, False)
+        loader = DataLoader(  # noqa: TOR401
+            ztd, batch_size=64, num_workers=2, collate_fn=_keep_batch
+        )
+        batches = list(loader)
+        assert len(batches) == 5
+        for idx, batch in zip(batch_sampler, batches):
+            assert type(batch) is TensorDict
+            assert type(batch["nested"]) is TensorDict
+            expected = ztd[idx].to_tensordict()
+            assert batch.batch_size == expected.batch_size
+            assert (batch["x"] == expected["x"]).all()
+            assert (batch["nested", "y"] == expected["nested", "y"]).all()
+            assert batch["s"] == expected["s"]
+        # the workers read the rows, the main process none
+        reads.clear()
+        for batch in batches:
+            batch["x"], batch["nested", "y"]
+        assert reads == []
+
+    # gh-3218: in a worker, the batch pickles with its rows, not as a view
+    def test_getitems_in_worker(self, tmp_path, monkeypatch):
+        ztd = self._loader_data(tmp_path)
+        monkeypatch.setattr(
+            tensordict_persistent, "get_worker_info", object, raising=False
+        )
+        batch = pickle.loads(pickle.dumps(ztd.__getitems__([3, 1, 4])))
+        assert type(batch) is TensorDict
+        assert (batch["x"] == ztd["x"][[3, 1, 4]]).all()
+        # a key still gives the entry
+        assert (ztd.__getitems__("x") == ztd["x"]).all()
+        assert (ztd.__getitems__(("nested", "y")) == ztd["nested", "y"]).all()
+
+    @pytest.mark.timeout(120)
+    def test_dataloader_no_workers_gives_view(self, tmp_path):
+        ztd = self._loader_data(tmp_path)
+        batch = next(iter(DataLoader(ztd, batch_size=64)))  # noqa: TOR401
+        assert type(batch) is _SubTensorDict
+        # a write to the batch reaches the store
+        batch["x"] = torch.zeros(64, 4)
+        assert (ztd["x"][:64] == 0).all()
+        assert (ztd["x"][64:] != 0).any()
 
 
 @pytest.mark.skipif(not _has_zarr, reason="zarr>=3.0 not found.")

@@ -116,6 +116,11 @@ pytestmark = [
     pytest.mark.filterwarnings(
         "ignore:No PYTORCH_KERNEL_CACHE_PATH or HOME environment variable set"
     ),
+    # On free-threaded Python, urllib3 imports brotli inside the streaming tests,
+    # and brotli enables the GIL. Other modules that enable it still fail.
+    pytest.mark.filterwarnings(
+        r"ignore:The global interpreter lock \(GIL\) has been enabled to load module '_brotli':RuntimeWarning"
+    ),
     pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning"),
 ]
 
@@ -600,6 +605,36 @@ class TestLazyStackedTensorDict:
                 assert stack.entry_class("e") is torch.Tensor
                 for key in ("missing", ("a", "missing"), ("e", "missing")):
                     assert stack.entry_class(key) is type(None)
+            assert read.call_count == 0
+        finally:
+            for member in members:
+                member.close()
+
+    @pytest.mark.skipif(not _has_h5py, reason="h5py not found")
+    @pytest.mark.parametrize("composition", ["nested_lazy", "mixed"])
+    @pytest.mark.xfail(
+        strict=True,
+        raises=AssertionError,
+        reason="#3209: a lazy stack of lazy stacks of files, or of a file and an "
+        "in-memory tensordict, reads datasets to list its nested keys",
+    )
+    def test_persistent_keys_do_not_read_data_composed(self, tmp_path, composition):
+        td = TensorDict({"a": {"c": torch.ones(3)}, "e": torch.ones(3)}, [3])
+        members = [
+            PersistentTensorDict.from_dict(td, filename=tmp_path / f"keys-{i}.h5")
+            for i in range(4)
+        ]
+        try:
+            if composition == "nested_lazy":
+                stack = lazy_stack([lazy_stack(members[:2]), lazy_stack(members[2:])])
+            else:
+                stack = lazy_stack([members[0], td.clone()])
+            backend = type(members[0]._backend)
+            with mock.patch.object(
+                backend, "read_full", autospec=True, side_effect=backend.read_full
+            ) as read:
+                assert set(stack.keys(True, True)) == {("a", "c"), "e"}
+                assert stack.entry_class("e") is torch.Tensor
             assert read.call_count == 0
         finally:
             for member in members:
@@ -5387,6 +5422,17 @@ class TestLazyStackedTensorDict:
         with pytest.raises(TypeError, match="must be int or list of ints"):
             td.split(2.0, stack_dim)
 
+    def test_split_stack_dim_bad_sizes_warn_once(self):
+        # #3256: the message held the sizes, so Python's default filter
+        # showed the warning again for each new size from one call site
+        td = lazy_stack([TensorDict(a=torch.zeros(3)) for _ in range(60)])
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("default")
+            for size in range(1, 51):
+                td.split([size, 1], 0)
+        assert len(record) == 1
+        assert record[0].category is FutureWarning
+
     @pytest.mark.parametrize("stack_dim", [0, 1])
     def test_expand_dense_or_lazy_result(self, stack_dim):
         td = self._shape_stack(stack_dim, stack_dim_name="s")
@@ -5506,7 +5552,8 @@ class TestLazyStackedTensorDict:
         )
         out = td.densify()
         assert type(out) is TensorDict
-        assert [t.shape for t in out.get("b").unbind(0)] == [(2, 3), (2, 0)]
+        # the empty entry has zero rows and keeps the feature dims (#3215)
+        assert [t.shape for t in out.get("b").unbind(0)] == [(2, 3), (0, 3)]
         # a key of empty shape that is exclusive cannot be padded
         td = LazyStackedTensorDict(
             TensorDict(a=torch.ones(3), b=torch.ones(())),
@@ -5543,6 +5590,64 @@ class TestLazyStackedTensorDict:
         # a NonTensorStack is its own dense form
         stack = NonTensorStack("a", "b")
         assert stack.densify() is stack
+
+    @pytest.mark.parametrize("layout", [torch.jagged, torch.strided])
+    @pytest.mark.parametrize("sizes", [(2, 3), (2, 4, 3)])
+    @pytest.mark.parametrize("batch_size", [(), (2,)])
+    def test_densify_exclusive_key_feature_dims(self, layout, sizes, batch_size):
+        # a per-atom key with feature dims that the last sample lacks gets an
+        # empty entry with zero rows and the same feature dims, so the ragged
+        # dim is the first dim after the batch dims, as for the other keys.
+        # It got a placeholder with an empty last dim, which put the ragged
+        # dim last or raised with the jagged layout (#3215)
+        missing = len(sizes) - 1
+        td = LazyStackedTensorDict(
+            *[
+                TensorDict(
+                    pos=torch.zeros(*batch_size, n, 3),
+                    **(
+                        {}
+                        if i == missing
+                        else {
+                            "forces": torch.ones(*batch_size, n, 3),
+                            "charge": torch.ones(*batch_size, n),
+                        }
+                    ),
+                    batch_size=batch_size,
+                )
+                for i, n in enumerate(sizes)
+            ]
+        )
+        out = td.densify(layout=layout)
+        forces, charge = out["forces"], out["charge"]
+        rows = [0 if i == missing else n for i, n in enumerate(sizes)]
+        assert [t.shape for t in forces.unbind(0)] == [
+            (*batch_size, n, 3) for n in rows
+        ]
+        # a 1-d key had the right placeholder already
+        assert [t.shape for t in charge.unbind(0)] == [(*batch_size, n) for n in rows]
+        assert forces.layout == charge.layout == out["pos"].layout == layout
+        assert forces.dim() == out["pos"].dim() and forces.size(-1) == 3
+        if layout is torch.strided:
+            # the padded result is unchanged: all padding for the missing sample
+            padded = torch.nested.to_padded_tensor(forces, -1.0)
+            assert padded.shape == (len(sizes), *batch_size, max(rows), 3)
+            assert (padded[missing] == -1).all()
+
+    @pytest.mark.xfail(
+        strict=True,
+        raises=AssertionError,
+        reason="#3219: the empty entry takes the batch size of another member",
+    )
+    def test_densify_exclusive_key_member_batch_size(self):
+        # members with different batch sizes: the empty entry of the member
+        # that lacks the key should have that member's batch size
+        a = TensorDict(
+            pos=torch.zeros(2, 5, 3), forces=torch.zeros(2, 5, 3), batch_size=[2]
+        )
+        b = TensorDict(pos=torch.zeros(3, 4, 3), batch_size=[3])
+        out = LazyStackedTensorDict(a, b).densify(layout=torch.strided)
+        assert [t.shape for t in out["forces"].unbind(0)] == [(2, 5, 3), (3, 0, 3)]
 
     def test_get_item_shape_heterogeneous(self):
         td = LazyStackedTensorDict(

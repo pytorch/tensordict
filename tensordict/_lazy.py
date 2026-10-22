@@ -3204,7 +3204,16 @@ class LazyStackedTensorDict(TensorDictBase):
                         raise RuntimeError(
                             f"Cannot densify a tensordict with values with empty shape and exclusive keys: got shape {a_shape}."
                         )
-                    none_shape = a_shape[:-1] + (0,)
+                    # zero rows: the first dim after the batch dims of the
+                    # members is empty, the feature dims are kept (#3215)
+                    rows = self.batch_dims - 1
+                    if len(a_shape) > rows and all(
+                        shape is None or shape[rows + 1 :] == a_shape[rows + 1 :]
+                        for shape in shapes
+                    ):
+                        none_shape = a_shape[:rows] + (0,) + a_shape[rows + 1 :]
+                    else:
+                        none_shape = a_shape[:-1] + (0,)
                     for tensor in list_of_entries:
                         if tensor is not None:
                             a_tensor = tensor.new_zeros(none_shape)
@@ -3278,10 +3287,10 @@ class LazyStackedTensorDict(TensorDictBase):
                         _empty_misfit(source, batch_size) if members_before else None
                     )
                     if misfit is not None:
-                        key, value = misfit
+                        key, _ = misfit
                         problem = (
                             f"cannot give that batch size to the entry {key!r}, whose "
-                            f"batch size {list(value.batch_size)} does not start with it",
+                            "batch size does not start with it",
                             "a RuntimeError, as TensorDict.empty does",
                         )
                 if problem is None:
@@ -3293,11 +3302,9 @@ class LazyStackedTensorDict(TensorDictBase):
                         names=names if names is not None else NO_DEFAULT,
                     )
                 if problem != "names":
-                    args = f"recurse=True, batch_size={list(batch_size)}"
-                    if names is not None:
-                        args = f"{args}, names={list(names)}"
                     warning = (
-                        f"LazyStackedTensorDict.empty({args}) {problem[0]}, and "
+                        "LazyStackedTensorDict.empty with recurse=True and a new "
+                        f"batch size {problem[0]}, and "
                         "returns the empty stack of its members, which keeps the "
                         "size of the stack dim. Starting with TensorDict 0.17, the "
                         f"default will change to raising {problem[1]}."
@@ -4577,6 +4584,7 @@ class LazyStackedTensorDict(TensorDictBase):
                             "_type": str(type(self)),
                             **_format_metadata(type(self)),
                             "stack_dim": self.stack_dim,
+                            "stack_dim_name": self._td_dim_name,
                         }
                     )
                     # Ensure we write bytes to the binary file
@@ -4656,7 +4664,13 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
             )
             i += 1
-        return cls(*tensordicts, stack_dim=stack_dim, **kwargs)
+        result = cls(*tensordicts, stack_dim=stack_dim, **kwargs)
+        # Set after construction: a subclass's __init__ may not take
+        # stack_dim_name.
+        stack_dim_name = metadata.get("stack_dim_name")
+        if stack_dim_name is not None:
+            result._td_dim_name = stack_dim_name
+        return result
 
     # Override: expand each member, which keeps the stack lazy when the
     # expanded members differ. The names come from the members and the stack
@@ -5171,10 +5185,10 @@ class LazyStackedTensorDict(TensorDictBase):
                 and _where_split_differs(self, other_tensor.ndim)
             ):
                 warnings.warn(
-                    "LazyStackedTensorDict.where splits a tensor `other` of shape "
-                    f"{tuple(other_tensor.shape)} along the stack dim and gives "
-                    "each member its piece, which differs from TensorDict.where "
-                    f"for the leaves that do not have {other_tensor.ndim} dims. "
+                    "LazyStackedTensorDict.where splits a tensor `other` along "
+                    "the stack dim and gives each member its piece, which "
+                    "differs from TensorDict.where for the leaves that do not "
+                    "have as many dims as `other`. "
                     "Starting with TensorDict 0.17, the default will change to "
                     "broadcasting like TensorDict.where, which aligns `other` with "
                     "each leaf from the right. To keep the current result, add "
@@ -5720,7 +5734,6 @@ class LazyStackedTensorDict(TensorDictBase):
         invalid = any(dim < 0 or dim >= ndim for dim in dims_list) or sorted(
             dims_list
         ) != list(range(len(dims_list)))
-        dims = dims_list
         # find the new stack dim, as np.argsort(dims_list)[self.stack_dim]: a
         # Python int, which torch.compile traces
         stack_dim = sorted(range(len(dims_list)), key=dims_list.__getitem__)[
@@ -5737,7 +5750,7 @@ class LazyStackedTensorDict(TensorDictBase):
         )
         if invalid:
             _warn_lazy_shape_args(
-                "permute", f"dims={dims}, which are not a permutation of its batch dims"
+                "permute", "dims that are not a permutation of its batch dims"
             )
         return result
 
@@ -5805,9 +5818,9 @@ class LazyStackedTensorDict(TensorDictBase):
                 if negative or start != len(self.tensordicts):
                     # stacklevel 4: skip this generator, _split and split
                     warnings.warn(
-                        f"LazyStackedTensorDict.split got the sizes {split_sizes} "
-                        "along the stack dim, which are negative or do not add up "
-                        f"to the stack size {len(self.tensordicts)}. Today the "
+                        "LazyStackedTensorDict.split got sizes along the stack "
+                        "dim that are negative or do not add up to the stack "
+                        "size. Today the "
                         "pieces miss members or have a wrong batch size. Starting "
                         "with TensorDict 0.17, the default will change to raising "
                         "a RuntimeError, as TensorDict.split and torch.split do.",

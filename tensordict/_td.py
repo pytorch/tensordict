@@ -2299,6 +2299,11 @@ class TensorDict(TensorDictBase):
                 batch_size=metadata.pop("shape"),
                 device=metadata.pop("device") if device is None else device,
             )
+            # Set after construction: a subclass's __init__ may not take
+            # names. A key named "_names" has a dict entry.
+            names = metadata.get("_names")
+            if isinstance(names, list):
+                result._set_names(names)
         else:
             if is_tensorclass(out):
                 # A tensordict save, such as the ``_tensordict`` directory

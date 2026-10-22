@@ -128,15 +128,20 @@ entries are collated as above:
 Batch samplers
 --------------
 
-A batch sampler gives the indices of a whole batch. Pass it as ``sampler``,
-with ``batch_size=None``. The ``DataLoader`` then calls ``data[indices]`` with
+A batch sampler gives the indices of a whole batch. Pass it as
+``batch_sampler``. The ``DataLoader`` then calls ``data.__getitems__`` with
 the list of indices of each batch, and ``collate_fn`` gets the tensordict:
 
   >>> from torch.utils.data import BatchSampler, SequentialSampler
   >>> sampler = BatchSampler(SequentialSampler(data), batch_size=4, drop_last=True)
-  >>> loader = DataLoader(data, sampler=sampler, batch_size=None, collate_fn=lambda x: x)
+  >>> loader = DataLoader(data, batch_sampler=sampler, collate_fn=lambda x: x)
   >>> [batch["label"].tolist() for batch in loader]
   [[0, 1, 2, 3], [4, 5, 6, 7]]
+
+Passing it as ``sampler``, with ``batch_size=None``, gives the same batches
+through ``data[indices]``, but the workers of the ``DataLoader`` then send
+an HDF5 or zarr :class:`~tensordict.PersistentTensorDict` batch as a lazy
+view, which the main process reads.
 
 Worker processes and pinned memory
 ----------------------------------
@@ -152,6 +157,26 @@ worker processes. Each worker gets the dataset when it starts:
   the workers open the same files and do not copy the data. Pickle cannot
   send a ``lambda``, so define ``collate_fn`` as a function at the top level
   of a module.
+
+In a worker, ``__getitems__`` of an HDF5 or zarr
+:class:`~tensordict.PersistentTensorDict` reads the rows into a
+:class:`~tensordict.TensorDict` in memory, so the batch is not a view that
+writes to the file, as it is without workers. With
+``persistent_workers=True``, each worker keeps its own HDF5 file handle
+across epochs, so it may not see writes that the main process makes to the
+file between epochs: HDF5 does not support writes across processes without
+SWMR mode.
+
+With ``spawn`` or ``forkserver``, each worker opens the HDF5 file again.
+While the main process has the file open for writing (``mode="r+"``,
+``"a"`` or ``"w"``), HDF5's file lock stops the workers from opening it, so
+they fail with ``BlockingIOError``, and the ``DataLoader`` raises
+``RuntimeError`` saying that a worker exited unexpectedly. Give the
+``DataLoader`` a tensordict opened with ``mode="r"``, and don't keep the file
+open for writing while the workers run; or use ``fork``. With
+``persistent_workers=True``, the workers keep the file open for reading
+across epochs, so the main process cannot open it for writing between epochs
+either.
 
 The worker examples start processes, so they are complete scripts. Save one
 to a file and run it with ``python``:
@@ -194,9 +219,9 @@ when this page is tested:
   >>> loader = DataLoader(data, batch_size=4, collate_fn=lambda x: x, pin_memory=True)  # doctest: +SKIP
   >>> batch = next(iter(loader)).to("cuda", non_blocking=True)  # doctest: +SKIP
 
-Without a ``DataLoader``, ``td.to("cuda", non_blocking_pin=True)`` pins the
-leaves with several threads (``num_threads``), and copies them to the GPU
-(see :ref:`devices`).
+Without a ``DataLoader``, ``td.to("cuda", non_blocking_pin=True)`` pins each
+leaf on the calling thread and copies it to the GPU (see :ref:`devices`).
+For leaves of a few KiB, a plain ``td.to("cuda")`` is usually faster.
 
 Share a tensordict between processes
 ------------------------------------

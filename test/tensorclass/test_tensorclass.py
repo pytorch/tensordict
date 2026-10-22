@@ -493,6 +493,78 @@ KwOnly(torch.Tensor())
     assert 'Too many positional arguments for "KwOnly"' in errors
 
 
+@pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
+def test_tensorclass_stub_python310_static(tmp_path, monkeypatch):
+    # #3290: on Python 3.10, typing has no dataclass_transform or Self, so the
+    # stub must take them from typing_extensions for tensorclasses to get
+    # their fields.
+    from mypy import api
+
+    monkeypatch.chdir(tmp_path)
+    stubs = tmp_path / "stubs"
+    package = stubs / "tensordict"
+    package.mkdir(parents=True)
+    torch_package = stubs / "torch"
+    torch_package.mkdir()
+    torch_package.joinpath("__init__.pyi").write_text(
+        """from typing import Any
+
+class Tensor: ...
+class device: ...
+
+def __getattr__(name: str) -> Any: ...
+"""
+    )
+    package.joinpath("__init__.pyi").write_text(
+        "from .tensorclass import TensorClass as TensorClass\n"
+        "from .tensorclass import tensorclass as tensorclass\n"
+    )
+    package.joinpath("utils.pyi").write_text(
+        """from typing import Any, TypeAlias
+
+import torch
+
+DeviceType: TypeAlias = torch.device | str | int
+
+def __getattr__(name: str) -> Any: ...
+"""
+    )
+    package.joinpath("tensorclass.pyi").write_text(
+        (_TENSORDICT_DIR / "tensorclass.pyi").read_text()
+    )
+    config = tmp_path / "mypy.ini"
+    config.write_text(
+        f"""[mypy]
+python_version = 3.10
+show_error_codes = True
+mypy_path = {stubs}
+no_site_packages = True
+ignore_missing_imports = True
+"""
+    )
+    user = tmp_path / "user.py"
+    user.write_text(
+        """import torch
+from tensordict import TensorClass, tensorclass
+
+class Observation(TensorClass):
+    pixels: torch.Tensor
+
+@tensorclass
+class Step:
+    obs: torch.Tensor
+
+t = torch.Tensor()
+Observation(pixels=t, batch_size=[4])
+Observation(t, batch_size=[4])
+Step(obs=t)
+"""
+    )
+    stdout, stderr, status = api.run(["--config-file", str(config), str(user)])
+    assert not stderr, stderr
+    assert [line for line in stdout.splitlines() if line.startswith("user.py:")] == []
+
+
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")
 def test_tensorclass_stub_init_subclass():
     # The class keywords (class X(TensorClass, autocast=True)) go to the
@@ -627,6 +699,82 @@ assert_type(obs.named_apply(named_drop, filter_empty=False), Obs)
 
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")
 @pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
+def test_tensorclass_stub_update_static_types(tmp_path, monkeypatch):
+    # #3237: the update of tensorclass.pyi takes nested keys and a typed dict.
+    # tensorclass.pyi is checked alone, as in
+    # test_tensorclass_stub_static_types: the modules it imports are reduced
+    # to the names these checks need, or to Any. Mypy also searches the
+    # working directory, which must not hold the tensordict sources.
+    from mypy import api
+
+    monkeypatch.chdir(tmp_path)
+    stubs = tmp_path / "stubs"
+    package = stubs / "tensordict"
+    package.mkdir(parents=True)
+    torch_package = stubs / "torch"
+    torch_package.mkdir()
+    torch_package.joinpath("__init__.pyi").write_text(
+        """from typing import Any
+
+class Tensor: ...
+class device: ...
+
+def __getattr__(name: str) -> Any: ...
+"""
+    )
+    package.joinpath("__init__.pyi").write_text(
+        "from .tensorclass import TensorClass as TensorClass\n"
+    )
+    package.joinpath("utils.pyi").write_text(
+        """from typing import Any, TypeAlias
+
+import torch
+
+DeviceType: TypeAlias = torch.device | str | int
+
+def __getattr__(name: str) -> Any: ...
+"""
+    )
+    package.joinpath("_tensorcollection.pyi").write_text(
+        "class TensorCollection: ...\n"
+    )
+    package.joinpath("tensorclass.pyi").write_text(
+        (_TENSORDICT_DIR / "tensorclass.pyi").read_text()
+    )
+
+    config = tmp_path / "mypy.ini"
+    config.write_text(
+        f"""[mypy]
+python_version = 3.11
+show_error_codes = True
+mypy_path = {stubs}
+no_site_packages = True
+ignore_missing_imports = True
+"""
+    )
+
+    valid = tmp_path / "valid.py"
+    valid.write_text(
+        """from typing import assert_type
+import torch
+from tensordict import TensorClass
+
+class Obs(TensorClass):
+    a: torch.Tensor
+
+t = torch.Tensor()
+obs = Obs(a=t, batch_size=[3])
+data: dict[str, torch.Tensor] = {"a": t}
+assert_type(obs.update({("a", "b"): t}), Obs)
+assert_type(obs.update(data), Obs)
+"""
+    )
+    stdout, stderr, status = api.run(["--config-file", str(config), str(valid)])
+    assert status == 0, stdout + stderr
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+@pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
 def test_tensordict_stub_source_static_types(tmp_path, monkeypatch):
     from mypy import api
 
@@ -738,6 +886,200 @@ TensorDict.from_dict([torch.Tensor()])
 
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")
 @pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
+def test_common_calls_source_static_types(tmp_path, monkeypatch):
+    # #3237: with py.typed, mypy must accept td.items(), td.update() with a
+    # nested key, TensorDictSequential(m1, m2) and setting out_keys. The
+    # annotations of CompatibleType, update, items, values, out_keys and the
+    # TensorDictSequential overloads are copied from the sources into a
+    # package of their own, with the import cycle of base.py and
+    # _tensorcollection.pyi. Mypy also searches the working directory, which
+    # must not hold the tensordict sources.
+    from mypy import api
+
+    monkeypatch.chdir(tmp_path)
+
+    def members(path, class_name, names, *, overloads_only=False):
+        with open(_TENSORDICT_DIR / path, "r") as f:
+            tree = ast.parse(f.read())
+        (class_node,) = (
+            node
+            for node in tree.body
+            if isinstance(node, ast.ClassDef) and node.name == class_name
+        )
+        nodes = [
+            node
+            for node in class_node.body
+            if isinstance(node, ast.FunctionDef)
+            and node.name in names
+            and not (
+                overloads_only
+                and "overload" not in map(ast.unparse, node.decorator_list)
+            )
+        ]
+        for node in nodes:
+            node.body = [ast.Expr(ast.Constant(...))]
+        return textwrap.indent("\n".join(map(ast.unparse, nodes)), "    ")
+
+    with open(_TENSORDICT_DIR / "base.py", "r") as f:
+        (compatible_type,) = (
+            ast.unparse(node)
+            for node in ast.parse(f.read()).body
+            if ast.unparse(node).startswith(("CompatibleType =", "CompatibleType:"))
+        )
+
+    stubs = tmp_path / "stubs"
+    package = stubs / "tensordict"
+    (package / "nn").mkdir(parents=True)
+    torch_package = stubs / "torch"
+    torch_package.mkdir()
+    torch_package.joinpath("__init__.pyi").write_text(
+        """from typing import Any
+
+class Tensor:
+    shape: Any
+
+def __getattr__(name: str) -> Any: ...
+"""
+    )
+    package.joinpath("_nestedkey.pyi").write_text(
+        (_TENSORDICT_DIR / "_nestedkey.pyi").read_text()
+    )
+    imports = """from collections.abc import Mapping
+from typing import (
+    Any, Callable, Iterator, List, OrderedDict, overload, Self, Sequence, Tuple,
+    Type, TypeAlias, TypeVar, Union,
+)
+
+from torch import Tensor
+from tensordict._nestedkey import NestedKey
+"""
+    package.joinpath("__init__.pyi").write_text("")
+    package.joinpath("_tensorcollection.pyi").write_text(
+        f"""{imports}
+from tensordict.base import TensorDictBase
+
+T = TypeVar("T", bound="TensorCollection")
+CompatibleType: TypeAlias = Tensor
+
+class TensorCollection:
+    def to_tensordict(self) -> TensorDictBase: ...
+{members("_tensorcollection.pyi", "TensorCollection", ("update",))}
+"""
+    )
+    # A module, not a stub, as in the sources: the cycle hides
+    # TensorCollection from a plain alias in a module only.
+    package.joinpath("base.py").write_text(
+        f"""# mypy: disable-error-code="empty-body"
+from __future__ import annotations
+
+{imports}
+from tensordict._tensorcollection import TensorCollection
+
+T = TypeVar("T", bound="TensorCollection")
+
+{compatible_type}
+
+class TensorDictBase(TensorCollection):
+{members("base.py", "TensorDictBase", ("update", "items", "values"))}
+"""
+    )
+    module_names = ("in_keys", "out_keys", "out_keys_source")
+    package.joinpath("nn", "__init__.pyi").write_text(
+        f"""{imports}
+from tensordict.base import TensorDictBase
+
+class TensorDictModuleBase:
+    def __call__(self, *args: Any, **kwargs: Any) -> Any: ...
+{members("nn/common.py", "TensorDictModuleBase", module_names)}
+
+class TensorDictModuleWrapper(TensorDictModuleBase):
+{members("nn/common.py", "TensorDictModuleWrapper", module_names)}
+
+class TensorDictSequential(TensorDictModuleBase):
+{members("nn/sequence.py", "TensorDictSequential", ("__init__",), overloads_only=True)}
+"""
+    )
+
+    config = tmp_path / "mypy.ini"
+    config.write_text(
+        f"""[mypy]
+python_version = 3.11
+show_error_codes = True
+mypy_path = {stubs}
+no_site_packages = True
+ignore_missing_imports = True
+"""
+    )
+
+    def mypy_errors(source):
+        user = tmp_path / "user.py"
+        user.write_text(source)
+        stdout, stderr, status = api.run(["--config-file", str(config), str(user)])
+        assert not stderr, stderr
+        # Errors in the copied annotations count too.
+        return [line for line in stdout.splitlines() if ": error: " in line]
+
+    # Entering the cycle at _tensorcollection hid CompatibleType from mypy.
+    valid = """from typing import assert_type
+import torch
+from tensordict._tensorcollection import TensorCollection
+from tensordict.base import CompatibleType, TensorDictBase
+from tensordict.nn import (
+    TensorDictModuleBase, TensorDictModuleWrapper, TensorDictSequential,
+)
+
+def check(td: TensorDictBase, tc: TensorCollection, t: torch.Tensor) -> None:
+    for key, value in td.items():
+        assert_type(value, torch.Tensor | TensorCollection)
+    for value in td.values():
+        assert_type(value, torch.Tensor | TensorCollection)
+    x: CompatibleType = t
+    data: dict[str, torch.Tensor] = {"a": t}
+    entries: dict[str, CompatibleType] = {"a": t}
+    nested: dict[tuple[str, str], torch.Tensor] = {("a", "b"): t}
+    td.update(data)
+    td.update(entries)
+    td.update(nested)
+    td.update({("a", "b"): t})
+    td.update({"a": t, ("b", "c"): t})
+    td.update(td)
+    tc.update({("a", "b"): t})
+    tc.update(data)
+
+class Module(TensorDictModuleBase):
+    def __init__(self) -> None:
+        self.in_keys = ["a"]
+        self.out_keys = ["b"]
+
+class Wrapper(TensorDictModuleWrapper):
+    def __init__(self) -> None:
+        self.out_keys = ["b"]
+
+def fn(td: TensorDictBase) -> TensorDictBase:
+    return td
+
+TensorDictSequential(Module(), Module())
+TensorDictSequential(Module(), fn, selected_out_keys=["b"])
+TensorDictSequential([Module(), Module()])
+"""
+    assert mypy_errors(valid) == []
+
+    invalid = """from tensordict.base import TensorDictBase
+from tensordict.nn import TensorDictSequential
+
+def check(td: TensorDictBase) -> None:
+    td.update(3)
+
+TensorDictSequential(3)
+"""
+    errors = mypy_errors(invalid)
+    assert len(errors) == 2, errors
+    assert 'Argument 1 to "update" of "TensorDictBase"' in errors[0]
+    assert "TensorDictSequential" in errors[1]
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+@pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
 def test_stack_cat_source_static_types(tmp_path, monkeypatch):
     from mypy import api
 
@@ -810,6 +1152,226 @@ assert_type(tensordict.stack([td, td]), TD)
     )
     stdout, stderr, status = api.run(["--config-file", str(config), str(valid)])
     assert status == 0, stdout + stderr
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+@pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
+def test_memmap_save_path_source_static_types(tmp_path, monkeypatch):
+    # #3268: with py.typed, mypy must accept a pathlib.Path in memmap,
+    # memmap_, save, dumps and memmap_like, as the run time does. The
+    # signatures are copied from _tensorcollection.pyi, tensorclass.pyi and
+    # the _Serialization mixin of TensorDictBase into a package of their own.
+    # Mypy also searches the working directory, which must not hold the
+    # tensordict sources.
+    from mypy import api
+
+    monkeypatch.chdir(tmp_path)
+    names = ("memmap", "memmap_", "save", "dumps", "memmap_like")
+
+    def members(path, class_name):
+        with open(_TENSORDICT_DIR / path, "r") as f:
+            tree = ast.parse(f.read())
+        (class_node,) = (
+            node
+            for node in tree.body
+            if isinstance(node, ast.ClassDef) and node.name == class_name
+        )
+        nodes = [
+            node
+            for node in class_node.body
+            if isinstance(node, ast.FunctionDef) and node.name in names
+        ]
+        assert nodes, (path, class_name)
+        for node in nodes:
+            node.body = [ast.Expr(ast.Constant(...))]
+            node.decorator_list = []
+        return textwrap.indent("\n".join(map(ast.unparse, nodes)), "    ")
+
+    stubs = tmp_path / "stubs"
+    package = stubs / "tensordict"
+    package.mkdir(parents=True)
+    imports = """from pathlib import Path
+from typing import Self
+"""
+    package.joinpath("__init__.pyi").write_text("")
+    package.joinpath("_tensorcollection.pyi").write_text(
+        f"""{imports}
+class TensorCollection:
+{members("_tensorcollection.pyi", "TensorCollection")}
+"""
+    )
+    package.joinpath("tensorclass.pyi").write_text(
+        f"""{imports}
+class TensorClass:
+{members("tensorclass.pyi", "TensorClass")}
+"""
+    )
+    package.joinpath("base.py").write_text(
+        f"""# mypy: disable-error-code="empty-body"
+from __future__ import annotations
+
+{imports}
+from tensordict._tensorcollection import TensorCollection
+
+class TensorDictBase(TensorCollection):
+{members("_base/serialization.py", "_Serialization")}
+"""
+    )
+
+    config = tmp_path / "mypy.ini"
+    config.write_text(
+        f"""[mypy]
+python_version = 3.11
+show_error_codes = True
+mypy_path = {stubs}
+no_site_packages = True
+ignore_missing_imports = True
+"""
+    )
+
+    def user_errors(source):
+        user = tmp_path / "user.py"
+        user.write_text(source)
+        stdout, stderr, status = api.run(["--config-file", str(config), str(user)])
+        assert not stderr, stderr
+        return [line for line in stdout.splitlines() if line.startswith("user.py:")]
+
+    valid = """from pathlib import Path
+from tensordict._tensorcollection import TensorCollection
+from tensordict.base import TensorDictBase
+from tensordict.tensorclass import TensorClass
+
+def check(
+    tc: TensorCollection, td: TensorDictBase, obs: TensorClass, path: Path
+) -> None:
+    tc.memmap(path)
+    tc.memmap_(path)
+    tc.save(path)
+    tc.dumps(path)
+    tc.memmap_like(path)
+    td.memmap(path)
+    td.memmap_(path)
+    td.save(path)
+    td.memmap_like(path)
+    obs.memmap(path)
+    obs.memmap_(path)
+    obs.save(path)
+    obs.dumps(path)
+    obs.memmap_like(path)
+    tc.memmap("out")
+    tc.memmap()
+"""
+    assert user_errors(valid) == []
+
+    invalid = """from tensordict._tensorcollection import TensorCollection
+
+def check(tc: TensorCollection) -> None:
+    tc.memmap(3)
+"""
+    errors = user_errors(invalid)
+    assert len(errors) == 1, errors
+    assert 'Argument 1 to "memmap" of "TensorCollection"' in errors[0]
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+@pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
+def test_tensordict_compare_and_split_source_static_types(tmp_path, monkeypatch):
+    # #3269 and #3270: with py.typed, mypy must type td == td as a tensordict,
+    # not as the bool of Mapping.__eq__, and the pieces of unbind, chunk and
+    # split as TensorDictBase, not TensorCollection. Type checkers cannot
+    # expand the starred mixin bases of TensorDictBase, so they see
+    # MutableMapping, then the TensorCollection stub, and the TYPE_CHECKING
+    # declarations of the class body. These are copied into a package of
+    # their own. Mypy also searches the working directory, which must not hold
+    # the tensordict sources.
+    from mypy import api
+
+    monkeypatch.chdir(tmp_path)
+    names = ("__eq__", "__ne__", "unbind", "chunk", "split")
+
+    def class_body(path, class_name):
+        with open(_TENSORDICT_DIR / path, "r") as f:
+            tree = ast.parse(f.read())
+        (class_node,) = (
+            node
+            for node in tree.body
+            if isinstance(node, ast.ClassDef) and node.name == class_name
+        )
+        return class_node.body
+
+    stub_members = [
+        node
+        for node in class_body("_tensorcollection.pyi", "TensorCollection")
+        if isinstance(node, ast.FunctionDef) and node.name in names
+    ]
+    assert len(stub_members) == len(names)
+    type_checking = [
+        node
+        for node in class_body("base.py", "TensorDictBase")
+        if isinstance(node, ast.If) and ast.unparse(node.test) == "TYPE_CHECKING"
+    ]
+
+    def indent(nodes):
+        return textwrap.indent("\n".join(map(ast.unparse, nodes)) or "...", "    ")
+
+    stubs = tmp_path / "stubs"
+    package = stubs / "tensordict"
+    package.mkdir(parents=True)
+    package.joinpath("__init__.pyi").write_text("")
+    package.joinpath("_tensorcollection.pyi").write_text(
+        f"""from typing import Self
+
+class TensorCollection:
+{indent(stub_members)}
+"""
+    )
+    # A module, not a stub, as in the sources.
+    package.joinpath("base.py").write_text(
+        f"""from __future__ import annotations
+
+from collections.abc import MutableMapping
+from typing import Self, TYPE_CHECKING
+
+from tensordict._tensorcollection import TensorCollection
+
+class TensorDictBase(MutableMapping, TensorCollection):
+{indent(type_checking)}
+
+class TensorDict(TensorDictBase): ...
+"""
+    )
+
+    config = tmp_path / "mypy.ini"
+    config.write_text(
+        f"""[mypy]
+python_version = 3.11
+show_error_codes = True
+mypy_path = {stubs}
+no_site_packages = True
+ignore_missing_imports = True
+"""
+    )
+
+    user = tmp_path / "user.py"
+    user.write_text(
+        """from typing import assert_type
+from tensordict.base import TensorDict, TensorDictBase
+
+def check(td: TensorDict, base: TensorDictBase) -> None:
+    assert_type(td == td, TensorDict)
+    assert_type(td != td, TensorDict)
+    assert_type(base == td, TensorDictBase)
+    assert_type(td.unbind(0), tuple[TensorDictBase, ...])
+    assert_type(td.chunk(2), tuple[TensorDictBase, ...])
+    assert_type(td.split(2), tuple[TensorDictBase, ...])
+    assert_type(base.split([1, 3], 0), tuple[TensorDictBase, ...])
+    first: TensorDictBase = td.unbind(0)[0]
+"""
+    )
+    stdout, stderr, status = api.run(["--config-file", str(config), str(user)])
+    assert not stderr, stderr
+    errors = [line for line in stdout.splitlines() if line.startswith("user.py:")]
+    assert errors == [], stdout
 
 
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")
@@ -4867,6 +5429,30 @@ class TestTensorClass:
         assert (data2[2:] == 0).all()
         assert (data2.x[2:] == 0).all()
         assert (data2.y[2:] == 0).all()
+
+    def test_setitem_past_batch_dims_no_batch_dims(self):
+        # #3202: on a tensorclass without batch dims, data[0] = value writes
+        # into the first row of every field, and warns once that it raises
+        # from 0.17, as a tensordict does; data[...] = value does not warn
+        @tensorclass
+        class MyData:
+            x: torch.Tensor
+            y: torch.Tensor
+
+        data = MyData(x=torch.zeros(3), y=torch.zeros(3, 4), batch_size=[])
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            data[0] = 1.0
+        messages = [w for w in record if "runs past the batch dims" in str(w.message)]
+        assert len(messages) == 1
+        assert messages[0].category is FutureWarning
+        assert messages[0].filename == __file__
+        assert (data.x == torch.tensor([1.0, 0.0, 0.0])).all()
+        assert (data.y[0] == 1).all() and (data.y[1:] == 0).all()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            data[...] = 2.0
+        assert (data.x == 2).all() and (data.y == 2).all()
 
     def test_setitem_other_cls(self):
         @tensorclass

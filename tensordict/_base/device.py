@@ -682,43 +682,49 @@ class _DeviceOps:
         keys, vals = self._items_list(
             leaves_only=True, include_nested=True, is_leaf=_NESTED_TENSORS_AS_LISTS
         )
-        lkeys = len(keys)
-        q_in = queue.SimpleQueue()
-        q_out = queue.SimpleQueue()
-        threads = []
-        items = {}
-        for key, val in _zip_strict(keys, vals):
-            q_in.put_nowait((key, val))
-        for _ in range(min(num_threads, lkeys)):
-            thread = Thread(target=_pin_mem, args=(q_in, q_out))
-            thread.start()
-            threads.append(thread)
-        try:
-            while len(items) < lkeys:
-                try:
-                    keyval = q_out.get(timeout=_PIN_MEM_TIMEOUT)
-                except queue.Empty:
-                    # A large or file-backed leaf can take longer than the
-                    # timeout to pin: wait as long as a thread is working.
-                    if any(thread.is_alive() for thread in threads):
-                        continue
-                    # A thread may have put its last leaf after the wait
-                    # timed out.
+        if not num_threads:
+            # Pin on the calling thread: the first pin_memory() on a new thread
+            # starts that thread's own OpenMP team of torch.get_num_threads()
+            # threads, which costs milliseconds per thread (#3210)
+            items = {key: to(val.pin_memory()) for key, val in _zip_strict(keys, vals)}
+        else:
+            lkeys = len(keys)
+            q_in = queue.SimpleQueue()
+            q_out = queue.SimpleQueue()
+            threads = []
+            items = {}
+            for key, val in _zip_strict(keys, vals):
+                q_in.put_nowait((key, val))
+            for _ in range(min(num_threads, lkeys)):
+                thread = Thread(target=_pin_mem, args=(q_in, q_out))
+                thread.start()
+                threads.append(thread)
+            try:
+                while len(items) < lkeys:
                     try:
-                        keyval = q_out.get_nowait()
+                        keyval = q_out.get(timeout=_PIN_MEM_TIMEOUT)
                     except queue.Empty:
-                        raise RuntimeError(
-                            "The pin_memory threads of to(device, "
-                            "non_blocking_pin=True) exited without returning "
-                            f"{lkeys - len(items)} of the {lkeys} leaves."
-                        ) from None
-                if not isinstance(keyval, tuple):
-                    raise keyval
-                key, val = keyval
-                items[key] = to(val)
-        finally:
-            for thread in threads:
-                thread.join(timeout=_PIN_MEM_TIMEOUT)
+                        # A large or file-backed leaf can take longer than the
+                        # timeout to pin: wait as long as a thread is working.
+                        if any(thread.is_alive() for thread in threads):
+                            continue
+                        # A thread may have put its last leaf after the wait
+                        # timed out.
+                        try:
+                            keyval = q_out.get_nowait()
+                        except queue.Empty:
+                            raise RuntimeError(
+                                "The pin_memory threads of to(device, "
+                                "non_blocking_pin=True) exited without returning "
+                                f"{lkeys - len(items)} of the {lkeys} leaves."
+                            ) from None
+                    if not isinstance(keyval, tuple):
+                        raise keyval
+                    key, val = keyval
+                    items[key] = to(val)
+            finally:
+                for thread in threads:
+                    thread.join(timeout=_PIN_MEM_TIMEOUT)
 
         def get(name, val):
             return items.get(name, val)
@@ -815,26 +821,23 @@ class _DeviceOps:
                 declares one, and to casting every leaf otherwise; pass
                 ``None`` to cast every leaf. The dtype shorthands
                 (:meth:`float`, :meth:`bfloat16`, ...) take it too.
-            non_blocking_pin (bool, optional): if ``True``, pins the tensors
-                before sending them to the device, in ``num_threads``
-                threads. Defaults to ``False``.
+            non_blocking_pin (bool, optional): if ``True``, pins each tensor
+                before sending it to the device. Defaults to ``False``.
 
                 .. note::
-                    Each call starts and joins its pinning threads, which costs
-                    the same however little data there is. So
-                    ``non_blocking_pin=True`` pays off only for large
-                    tensordicts, with leaves of a MiB or more and tens of MiB
-                    in total. For smaller tensordicts, ``td.to("cuda")`` is
-                    usually the fastest, and
-                    ``td.pin_memory().to("cuda", non_blocking=True)`` is also
-                    faster than ``non_blocking_pin=True``. Measure the
-                    crossover on your machine.
+                    ``non_blocking_pin=True`` pays off for leaves of about a
+                    MiB or more. For leaves of a few KiB, ``td.to("cuda")``
+                    is usually faster, since pinning costs more than it saves.
+                    Measure the crossover on your machine.
 
             num_threads (int, optional): with ``non_blocking_pin=True``, the
                 number of threads that pin the leaves, at most one per leaf.
-                ``0`` pins them on the calling thread. Defaults to ``None``,
-                which starts up to ``max(1, torch.get_num_threads() // 2)``
-                threads.
+                Defaults to ``None``, which, like ``0``, pins them on the
+                calling thread. Threads start on every call, and the first
+                pin on each new thread starts its own pool of
+                ``torch.get_num_threads()`` OpenMP threads, so they are
+                usually slower than the calling thread. Pass a positive
+                number only if you have measured that it helps.
             inplace (bool, optional): if ``True``, writes the cast leaves into
                 the tensordict, which keeps its identity and keys, and returns
                 ``self``. This can be faster when building a new tensordict is
@@ -1080,10 +1083,10 @@ class _DeviceOps:
             # The pin_memory threads walk the members of lazy stacks with keys
             # that hold the member index: cast_filter takes the sequential path
             if non_blocking_pin and num_threads != 0 and not named:
-                if num_threads is None:
-                    num_threads = max(1, torch.get_num_threads() // 2)
+                # num_threads=None pins on the calling thread, in this walk:
+                # the num_threads=0 branch below handles batch_size differently
                 result = self._to_cuda_with_pin_mem(
-                    num_threads=num_threads, to=to, device=device, inplace=inplace
+                    num_threads=num_threads or 0, to=to, device=device, inplace=inplace
                 )
             else:
                 apply_kwargs["device"] = device if device is not None else self.device

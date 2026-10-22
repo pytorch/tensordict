@@ -62,8 +62,8 @@ The ``non_blocking`` argument controls how the leaves are copied:
 - ``False``: the copies are blocking.
 
 With ``non_blocking_pin=True``, ``to()`` pins each leaf (see `Pinned
-memory`_) before the copy, in ``num_threads`` threads. This needs an
-accelerator.
+memory`_) before the copy, on the calling thread unless ``num_threads`` asks
+for threads. This needs an accelerator.
 
 .. _devices-temporary-moves:
 
@@ -220,7 +220,7 @@ and lets them run asynchronously. :meth:`~tensordict.TensorDict.pin_memory`
 returns a tensordict whose leaves are in pinned memory. With
 ``inplace=True``, it replaces the leaves of the same tensordict.
 ``num_threads`` sets the number of threads that pin the leaves. The default
-(``None``) uses many threads, and ``num_threads=0`` pins on the main thread.
+(``None``), like ``num_threads=0``, pins on the calling thread.
 Pinning needs an accelerator, so this example does not run on a CPU-only
 machine:
 
@@ -228,13 +228,14 @@ machine:
     >>> pinned = td.pin_memory()  # doctest: +SKIP
     >>> td_gpu = pinned.to("cuda", non_blocking=True)  # doctest: +SKIP
 
-``td.to("cuda", non_blocking_pin=True)`` pins and copies in one call. In this
-form, the pinning is asynchronous: threads pin the leaves while the copies
-run. With ``td.pin_memory().to("cuda")``, all the leaves are pinned before
-the first copy starts. Starting the threads has a fixed cost on every call,
-so the one-call form pays off only for large tensordicts, with leaves of a
-MiB or more and tens of MiB in total. For smaller ones, a plain
-``td.to("cuda")`` is usually faster than either form.
+``td.to("cuda", non_blocking_pin=True)`` pins and copies in one call: each
+leaf's copy starts as soon as that leaf is pinned. With
+``td.pin_memory().to("cuda")``, all the leaves are pinned before the first
+copy starts. Pinning pays off for leaves of about a MiB or more. For leaves of
+a few KiB, a plain ``td.to("cuda")`` is usually faster than either form.
+``to()`` pins on the calling thread unless you pass ``num_threads``. Threads
+start on every call, and the first pin on each new thread starts its own pool
+of ``torch.get_num_threads()`` OpenMP threads, so they are usually slower.
 :meth:`~tensordict.TensorDict.pin_memory_` is deprecated, and will be removed
 in version 0.17. Use ``pin_memory(inplace=True)``.
 

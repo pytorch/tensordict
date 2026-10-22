@@ -232,7 +232,7 @@ class TensorDictSequential(TensorDictModule):
     @overload
     def __init__(
         self,
-        *modules: List[Callable[[TensorDictBase], TensorDictBase]],
+        *modules: Callable,
         partial_tolerant: bool = False,
         selected_out_keys: List[NestedKey] | None = None,
         inplace: bool | str | None = None,

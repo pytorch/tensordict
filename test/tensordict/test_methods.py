@@ -5576,6 +5576,37 @@ class TestTensorDicts(TestTensorDictsBase):
         assert not call([("n", "x"), ("n", "y")])
         assert not call(["n", ("n", "x"), ("n", "y")])
 
+    @legacy_lazy_mode()
+    def test_update_select_sub_tensordict(self, td_name, device):
+        # A key of keys_to_update that names a sub-tensordict of td writes all
+        # of its entries, as td.update(other.select(*keys_to_update)) does.
+        if td_name in ("memmap_td",):
+            pytest.skip(reason="update not possible with memory-mapped td")
+        td = getattr(self, td_name)(device)
+
+        def other(value):
+            t = lambda: torch.full((4, 3, 2, 1), value)
+            return TensorDict(
+                {"My": {"father": {"was": t(), "a": t()}, "relentlessly": t()}},
+                batch_size=(4, 3, 2, 1),
+            )
+
+        for keys_to_update in (
+            ["My"],
+            [("My",)],
+            [("My", "father")],
+            [("My", ("father",))],
+        ):
+            for as_source in (lambda source: source, lambda source: source.to_dict()):
+                td.update(other(0.0))
+                td.update(as_source(other(1.0)), keys_to_update=keys_to_update)
+                expected = other(0.0).update(other(1.0).select(*keys_to_update))
+                for key in expected.keys(True, True):
+                    assert (td[key] == expected[key].to(td[key].device)).all(), (
+                        keys_to_update,
+                        key,
+                    )
+
     @pytest.mark.parametrize(
         "index", ["tensor1", "mask", "int", "range", "tensor2", "slice_tensor"]
     )
@@ -7298,6 +7329,18 @@ class TestMemmapArchive:
         assert (
             TensorDict.load_memmap(tmp_path / "plaindir", num_threads=num_threads) == td
         ).all()
+
+    def test_archive_compressed_parallel_load_stress(self, tmp_path):
+        # #3226: the inflate workers shared one memoryview, whose export count
+        # races on free-threaded Python and raised "operation forbidden on
+        # released memoryview object". Many small entries and repeated loads
+        # make the race show within a few hundred loads.
+        td = TensorDict({f"t{i}": torch.randn(4) for i in range(64)})
+        archive = tmp_path / "comp.tdz"
+        td.save(archive, compression="deflate")
+        for _ in range(200):
+            loaded = TensorDict.load_memmap(archive, num_threads=4)
+        assert (loaded == td).all()
 
     @pytest.mark.parametrize("num_threads", [1, 2, 4])
     def test_archive_local_filename_mismatch(self, tmp_path, num_threads):
