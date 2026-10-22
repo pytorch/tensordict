@@ -378,7 +378,7 @@ safetensors file maps names to tensors, and has no pickle.
 [`to_safetensors()`](reference/generated/tensordict.to_safetensors.html#tensordict.to_safetensors) saves each tensor under its nested key
 joined with `"."`, the name that a model's `state_dict` gives it, and
 [`from_safetensors()`](reference/generated/tensordict.from_safetensors.html#tensordict.from_safetensors) loads the file. You need the
-`safetensors` package:
+`safetensors` package (`pip install "tensordict[safetensors]"`):
 
 ```
 >>> from tensordict import from_safetensors, to_safetensors

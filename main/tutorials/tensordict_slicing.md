@@ -174,7 +174,7 @@ operations: reshape, split, stack, permute.
 tensordict row by row with an index.
 - [Indexing, masking, and splitting](../reference/td.html#api-methods-indexing) lists the indexing methods.
 
-**Total running time of the script:** (0 minutes 0.004 seconds)
+**Total running time of the script:** (0 minutes 0.005 seconds)
 
 [`Download Jupyter notebook: tensordict_slicing.ipynb`](../_downloads/245c7aad3c5052fda391900ac51962d9/tensordict_slicing.ipynb)
 

@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6403+g3600fc9b3.d20261022)">
+<meta name="llm:version" content="main (0.15.0.dev6407+g32b95c045.d20261022)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6403+g3600fc9b3.d20261022)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6407+g32b95c045.d20261022)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1766,7 +1766,8 @@ document.write(`
 <p>Each tensor is saved under its nested key joined with <code class="docutils literal notranslate"><span class="pre">&quot;.&quot;</span></code>, the names
 that a model’s <code class="docutils literal notranslate"><span class="pre">state_dict</span></code> uses. The structure of the tensordict (the
 batch size and dim names of each level, the class of each tensorclass,
-and the non-tensor values) is saved as one JSON string in the metadata of
+the non-tensor values, and which tensors are
+<a class="reference internal" href="tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor" title="tensordict.UnbatchedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">UnbatchedTensor</span></code></a>) is saved as one JSON string in the metadata of
 the file, so that <a class="reference internal" href="tensordict.from_safetensors.html#tensordict.from_safetensors" title="tensordict.from_safetensors"><code class="xref py py-func docutils literal notranslate"><span class="pre">from_safetensors()</span></code></a> rebuilds it.</p>
 <p>Tensors that share memory are saved as separate copies, and a tensordict
 on another device is saved through the CPU. Requires the <code class="docutils literal notranslate"><span class="pre">safetensors</span></code>
@@ -2166,7 +2167,7 @@ package.</p>
        "headline": "to_safetensors",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - to_safetensors",
        "url": "/reference/generated/tensordict.to_safetensors.html",
-       "articleBody": "to_safetensors# tensordict.to_safetensors(data: TensorDictBase, path: str | Path) \u2192 None# Saves a tensordict or a tensorclass to a safetensors file. Each tensor is saved under its nested key joined with \".\", the names that a model\u2019s state_dict uses. The structure of the tensordict (the batch size and dim names of each level, the class of each tensorclass, and the non-tensor values) is saved as one JSON string in the metadata of the file, so that from_safetensors() rebuilds it. Tensors that share memory are saved as separate copies, and a tensordict on another device is saved through the CPU. Requires the safetensors package. Parameters: data (TensorDictBase) \u2013 the tensordict or tensorclass to save. path (str or Path) \u2013 the path of the file. Raises: TypeError \u2013 if a value cannot be stored in safetensors: a nested, jagged or sparse tensor, a non-tensor value that is not JSON (str, int, float, bool, None, list or dict), a stack of non-tensor values, a lazy stack whose entries have different keys, or a bare non-tensor value. A lazy stack of tensordicts whose entries have different shapes cannot be saved either. ValueError \u2013 if two keys have the same name once joined with \".\", for example \"a.b\" and (\"a\", \"b\"). Examples \u003e\u003e\u003e import tempfile \u003e\u003e\u003e from pathlib import Path \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict, from_safetensors, to_safetensors \u003e\u003e\u003e td = TensorDict( ... {\"weight\": torch.ones(2, 3), \"sub\": {\"bias\": torch.zeros(2)}}, ... batch_size=[2], ... ) \u003e\u003e\u003e with tempfile.TemporaryDirectory() as tmp: ... to_safetensors(td, Path(tmp) / \"td.safetensors\") ... loaded = from_safetensors(Path(tmp) / \"td.safetensors\") \u003e\u003e\u003e loaded.batch_size, loaded[\"sub\", \"bias\"] (torch.Size([2]), tensor([0., 0.]))",
+       "articleBody": "to_safetensors# tensordict.to_safetensors(data: TensorDictBase, path: str | Path) \u2192 None# Saves a tensordict or a tensorclass to a safetensors file. Each tensor is saved under its nested key joined with \".\", the names that a model\u2019s state_dict uses. The structure of the tensordict (the batch size and dim names of each level, the class of each tensorclass, the non-tensor values, and which tensors are UnbatchedTensor) is saved as one JSON string in the metadata of the file, so that from_safetensors() rebuilds it. Tensors that share memory are saved as separate copies, and a tensordict on another device is saved through the CPU. Requires the safetensors package. Parameters: data (TensorDictBase) \u2013 the tensordict or tensorclass to save. path (str or Path) \u2013 the path of the file. Raises: TypeError \u2013 if a value cannot be stored in safetensors: a nested, jagged or sparse tensor, a non-tensor value that is not JSON (str, int, float, bool, None, list or dict), a stack of non-tensor values, a lazy stack whose entries have different keys, or a bare non-tensor value. A lazy stack of tensordicts whose entries have different shapes cannot be saved either. ValueError \u2013 if two keys have the same name once joined with \".\", for example \"a.b\" and (\"a\", \"b\"). Examples \u003e\u003e\u003e import tempfile \u003e\u003e\u003e from pathlib import Path \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict, from_safetensors, to_safetensors \u003e\u003e\u003e td = TensorDict( ... {\"weight\": torch.ones(2, 3), \"sub\": {\"bias\": torch.zeros(2)}}, ... batch_size=[2], ... ) \u003e\u003e\u003e with tempfile.TemporaryDirectory() as tmp: ... to_safetensors(td, Path(tmp) / \"td.safetensors\") ... loaded = from_safetensors(Path(tmp) / \"td.safetensors\") \u003e\u003e\u003e loaded.batch_size, loaded[\"sub\", \"bias\"] (torch.Size([2]), tensor([0., 0.]))",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
