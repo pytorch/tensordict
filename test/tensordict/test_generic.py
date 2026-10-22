@@ -6726,6 +6726,31 @@ class TestGeneric:
         ):
             td.to("cpu", non_blocking_pin=True, num_threads=2)
 
+    def test_to_non_blocking_pin_default_no_threads(self, monkeypatch):
+        # #3210: with the default num_threads, non_blocking_pin=True pins on
+        # the calling thread. Each new thread starts its own OpenMP team on
+        # its first pin_memory(), which made the default up to 35x slower.
+        starts = []
+
+        class CountingThread(threading.Thread):
+            def start(self):
+                starts.append(self)
+                super().start()
+
+        monkeypatch.setattr("tensordict._base.device.Thread", CountingThread)
+        if not torch.cuda.is_available():
+            # pinning needs an accelerator
+            monkeypatch.setattr(torch.Tensor, "pin_memory", lambda tensor: tensor)
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        td = TensorDict(a=torch.arange(3), b={"c": torch.ones(3)}, batch_size=[3])
+        out = td.to(device, non_blocking_pin=True)
+        assert not starts
+        assert out.device.type == device
+        assert (out.cpu() == td).all()
+        out = td.to(device, non_blocking_pin=True, num_threads=2)
+        assert len(starts) == 2
+        assert (out.cpu() == td).all()
+
     def test_load_state_dict_incomplete(self):
         data = TensorDict({"a": {"b": {"c": {}}}, "d": 1}, [])
         sd = TensorDict({"d": 0}, []).state_dict()

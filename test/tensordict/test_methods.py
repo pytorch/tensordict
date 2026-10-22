@@ -7243,6 +7243,18 @@ class TestMemmapArchive:
             TensorDict.load_memmap(tmp_path / "plaindir", num_threads=num_threads) == td
         ).all()
 
+    def test_archive_compressed_parallel_load_stress(self, tmp_path):
+        # #3226: the inflate workers shared one memoryview, whose export count
+        # races on free-threaded Python and raised "operation forbidden on
+        # released memoryview object". Many small entries and repeated loads
+        # make the race show within a few hundred loads.
+        td = TensorDict({f"t{i}": torch.randn(4) for i in range(64)})
+        archive = tmp_path / "comp.tdz"
+        td.save(archive, compression="deflate")
+        for _ in range(200):
+            loaded = TensorDict.load_memmap(archive, num_threads=4)
+        assert (loaded == td).all()
+
     @pytest.mark.parametrize("num_threads", [1, 2, 4])
     def test_archive_local_filename_mismatch(self, tmp_path, num_threads):
         archive = tmp_path / "mismatch.tdz"
