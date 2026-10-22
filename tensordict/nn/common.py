@@ -604,14 +604,16 @@ class TensorDictModuleBase(nn.Module):
         """
         return self._out_keys_apparent
 
+    @out_keys.setter
+    def out_keys(self, value: List[Union[str, Tuple[str]]]):
+        self._out_keys = self._out_keys_apparent = unravel_key_list(list(value))
+
+    # Below the setter: type checkers drop a setter that does not follow its
+    # getter, and then see out_keys as read-only (#3237).
     @property
     def out_keys_source(self):
         """All the keys that the module writes, before :meth:`select_out_keys`."""
         return self._out_keys
-
-    @out_keys.setter
-    def out_keys(self, value: List[Union[str, Tuple[str]]]):
-        self._out_keys = self._out_keys_apparent = unravel_key_list(list(value))
 
     def select_out_keys(self, *out_keys) -> TensorDictModuleBase:  # noqa: F811
         """Keeps only some of the ``out_keys`` in the output of the module, and returns the module.
@@ -1343,15 +1345,15 @@ class TensorDictModuleWrapper(TensorDictModuleBase):
         """The keys that the module writes, by default those of ``td_module``."""
         return self.__dict__.get("_out_keys_apparent", self.td_module.out_keys)
 
-    @property
-    def out_keys_source(self):
-        """All the keys that ``td_module`` writes, before :meth:`select_out_keys`."""
-        return self.td_module.out_keys_source
-
     @out_keys.setter
     def out_keys(self, value: List[Union[str, Tuple[str]]]):
         self.td_module.out_keys = value
         self._out_keys_apparent = self.td_module.out_keys
+
+    @property
+    def out_keys_source(self):
+        """All the keys that ``td_module`` writes, before :meth:`select_out_keys`."""
+        return self.td_module.out_keys_source
 
     def __getattr__(self, name: str) -> Any:
         if not is_compiling():
