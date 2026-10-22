@@ -70,6 +70,10 @@ its class:
   >>> type(batch).__name__, batch.features.shape
   ('Sample', torch.Size([4, 3]))
 
+A batch that mixes different tensorclasses raises a ``TypeError``, unless
+one class is a base of the others and has the same fields. The batch then
+takes the class of its first sample.
+
 ``collate_fn=torch.stack`` gives the same batches:
 
   >>> batch = next(iter(DataLoader(samples, batch_size=4, collate_fn=torch.stack)))
