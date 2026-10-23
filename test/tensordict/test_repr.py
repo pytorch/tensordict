@@ -1688,11 +1688,12 @@ class TestHtmlRepr:
     @pytest.mark.parametrize(
         "options", [{"show_grad": True}, {"compact": False}, {"plain": True}]
     )
-    def test_html_off_when_detailed(self, options):
+    def test_html_detailed_text_when_not_compact(self, options):
         td = TensorDict(a=torch.zeros(3, requires_grad=True), batch_size=[3])
         with set_printoptions(**options):
-            assert td._repr_html_() is None
-            assert _mesh()._repr_html_() is None
+            for obj in (td, _mesh()):
+                assert obj._repr_html_() == f"<pre>{html.escape(repr(obj))}</pre>"
+                assert not repr(obj).startswith(type(obj).__name__ + "(batch_size=")
 
     # #3240
     def test_html_compact_ignores_detailed_options(self):
@@ -1709,11 +1710,11 @@ class TestHtmlRepr:
         td = TensorDict(a=torch.zeros(3, requires_grad=True), batch_size=[3])
         formatter = DisplayFormatter()
         data, _ = formatter.format(td)
-        assert "text/html" in data
+        assert data["text/html"].startswith("<div ")
         with set_printoptions(show_grad=True):
             data, _ = formatter.format(td)
             expected = repr(td)
-        assert set(data) == {"text/plain"}
+        assert data["text/html"] == f"<pre>{html.escape(expected)}</pre>"
         assert data["text/plain"] == expected
         assert "requires_grad=True" in expected
 

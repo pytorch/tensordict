@@ -2682,10 +2682,12 @@ def _html_repr(obj) -> str | None:
     from tensordict import TensorDictBase
     from tensordict.tensorclass import _repr
 
-    # with compact=False (or a detailed-only option), the notebook shows the
-    # detailed text repr
-    if not _REPR_OPTIONS["html"] or not _REPR_OPTIONS["compact"]:
+    if not _REPR_OPTIONS["html"]:
         return None
+    if not _REPR_OPTIONS["compact"]:
+        # with compact=False (or a detailed-only option), the notebook shows
+        # the detailed text repr, with the options that it applies
+        return f"<pre>{html.escape(repr(obj))}</pre>"
     try:
         # a class with its own repr (a non-tensor class among them) keeps it
         if is_tensorclass(obj):
