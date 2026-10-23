@@ -70,7 +70,7 @@ from tensordict.functional import (
 )
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.nn import TensorDictParams
-from tensordict.tensorclass import NonTensorData, NonTensorStack
+from tensordict.tensorclass import MetaData, NonTensorData, NonTensorStack
 from tensordict.utils import (
     _getitem_batch_size,
     _LOCK_ERROR,
@@ -9589,6 +9589,59 @@ class TestGeneric:
         data = NonTensorData("c", batch_size=[2])
         assert default_collate([stack, data]).tolist() == [["a", "b"], ["c", "c"]]
         assert default_collate([data, stack]).tolist() == [["c", "c"], ["a", "b"]]
+
+    def test_collate_default_different_tensorclasses(self):
+        # #3306: the default collate of a batch of different tensorclasses
+        # returned an instance of the first class, with no fields if the
+        # classes had different ones. It raises a TypeError, unless one class
+        # is a base of the others and has their fields.
+        class A(TensorClass):
+            x: torch.Tensor
+
+        class SameFields(TensorClass):
+            x: torch.Tensor
+
+        class OtherFields(TensorClass):
+            y: torch.Tensor
+
+        @tensorclass
+        class Decorated:
+            x: torch.Tensor
+
+        class Sub(A):
+            pass
+
+        class SubWithField(A):
+            y: torch.Tensor
+
+        default_collate = torch.utils.data.default_collate
+        x = torch.zeros(3)
+        a = A(x=x)
+        for other in (
+            SameFields(x=x),
+            OtherFields(y=x),
+            Decorated(x=x),
+            SubWithField(x=x, y=x),
+            NonTensorData("s"),
+            MetaData("s"),
+        ):
+            for samples in ([a, other], [other, a], [a, a, other]):
+                with pytest.raises(TypeError, match="different tensorclasses"):
+                    default_collate(samples)
+                loader = torch.utils.data.DataLoader(samples, batch_size=3)  # noqa: TOR401
+                with pytest.raises(TypeError, match="different tensorclasses"):
+                    next(iter(loader))
+        # a subclass with the same fields stacks with its base class
+        sub = Sub(x=torch.ones(3))
+        batch = default_collate([a, sub])
+        assert type(batch) is A
+        assert (batch.x == torch.stack([x, sub.x])).all()
+        batch = default_collate([sub, a])
+        assert type(batch) is Sub
+        assert (batch.x == torch.stack([sub.x, x])).all()
+        # non-tensor data of different classes stack together
+        batch = default_collate([NonTensorData("a"), MetaData("b")])
+        assert batch.tolist() == ["a", "b"]
 
     @pytest.mark.parametrize(
         "first,other",

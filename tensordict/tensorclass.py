@@ -88,6 +88,7 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     _is_tensorclass,
     _is_unbatched,
     _LOCK_ERROR,
+    _pass_through_cls,
     _REPR_OPTIONS,
     _resolve_expand_shape,
     _SKIP_TENSORCLASS_POST_INIT,
@@ -1452,6 +1453,24 @@ def _collate_tensor_collection(batch, *, collate_fn_map=None):
                 return fn(batch, collate_fn_map=collate_fn_map)
     if is_batch:
         return batch
+    # The stack takes the class of the first item (#3306): refuse different
+    # tensorclasses, unless one is a base of the others and has their fields.
+    # Non-tensor data of any class stack together.
+    types = {type(item) for item in batch}
+    if len(types) > 1 and not all(_pass_through_cls(cls) for cls in types):
+        tc_types = [cls for cls in types if _is_tensorclass(cls)]
+        if len(tc_types) > 1 and not any(
+            all(
+                issubclass(cls, base)
+                and cls.__expected_keys__ == base.__expected_keys__
+                for cls in tc_types
+            )
+            for base in tc_types
+        ):
+            raise TypeError(
+                "Cannot collate a batch of different tensorclasses: got "
+                f"{sorted(cls.__name__ for cls in tc_types)}."
+            )
     try:
         return LazyStackedTensorDict.maybe_dense_stack(batch)
     except AttributeError as err:
