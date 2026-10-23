@@ -23,7 +23,7 @@ import warnings
 import weakref
 from collections.abc import Iterable, Mapping, MutableMapping
 from concurrent.futures import Future, ThreadPoolExecutor, wait
-from functools import wraps
+from functools import lru_cache, wraps
 from pathlib import Path
 from textwrap import indent
 from threading import local
@@ -2480,6 +2480,25 @@ def _warn_update_batch_size_prefix() -> None:
     )
 
 
+@lru_cache(maxsize=128)
+def _update_keys_nest(keys_to_update: Sequence[tuple[str, ...]]) -> bool:
+    """Whether a key of ``keys_to_update`` is strictly under another one."""
+    lengths = sorted(set(map(len, keys_to_update)))
+    if len(lengths) < 2:
+        # keys of one length: none is under another
+        return False
+    # Compare the keys of each length with the first dims of the longer keys,
+    # with set operations.
+    by_length = sorted(keys_to_update, key=len)
+    sizes = list(map(len, by_length))
+    for length in lengths[:-1]:
+        start, stop = sizes.index(length), bisect.bisect_right(sizes, length)
+        heads = set(map(operator.itemgetter(slice(length)), by_length[stop:]))
+        if not heads.isdisjoint(by_length[start:stop]):
+            return True
+    return False
+
+
 def _warn_update_keys_narrowed(
     method: str,
     source: Any,
@@ -2494,23 +2513,13 @@ def _warn_update_keys_narrowed(
     if is_dynamo_compiling():
         # Dynamo can't trace bisect; the warning is for eager code
         return
-    lengths = sorted(set(map(len, keys_to_update)))
-    if len(lengths) < 2:
-        # keys of one length: none is under another
-        return
-    # Is a key strictly under another one? Compare the keys of each length
-    # with the first dims of the longer keys, with set operations: this runs
-    # for every update_ with keys of several lengths.
-    by_length = sorted(keys_to_update, key=len)
-    sizes = list(map(len, by_length))
-    for length in lengths[:-1]:
-        start, stop = sizes.index(length), bisect.bisect_right(sizes, length)
-        heads = set(map(operator.itemgetter(slice(length)), by_length[stop:]))
-        if not heads.isdisjoint(by_length[start:stop]):
-            break
-    else:
-        return
-    if is_compiling():
+    # callers such as batched environments pass the same keys at every step:
+    # scan each list once (#3333)
+    try:
+        nested = _update_keys_nest(tuple(keys_to_update))
+    except TypeError:
+        nested = _update_keys_nest.__wrapped__(keys_to_update)
+    if not nested or is_compiling():
         return
     # the keys that another key of keys_to_update is strictly under
     prefixes = {key[:i] for key in keys_to_update for i in range(1, len(key))}
