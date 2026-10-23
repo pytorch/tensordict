@@ -73,6 +73,10 @@ its class:
 ('Sample', torch.Size([4, 3]))
 ```
 
+A batch that mixes different tensorclasses raises a `TypeError`, unless
+one class is a base of the others and has the same fields. The batch then
+takes the class of its first sample.
+
 `collate_fn=torch.stack` gives the same batches:
 
 ```

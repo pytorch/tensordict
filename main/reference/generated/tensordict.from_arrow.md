@@ -43,8 +43,15 @@ Face dataset loaded from disk). `True` copies every column.
 view of an immutable buffer then crashes the process, since torch
 has no read-only tensors. Defaults to `None`.
 - **nulls** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - what to do with null values. `"raise"`
-raises a `ValueError`. `"fill"` fills them with `NaN` in
-floating-point tensors, `0` (`False`) in the other tensors, an
+raises a `ValueError` for a null row, and for a null inside the
+rows of a list or a struct. A null inside a map or a list view,
+or in the dictionary values that a dictionary-encoded column
+selects, comes back as `None` with a `FutureWarning`:
+starting with TensorDict 0.18, the default will change to raising
+a `ValueError` for these nulls too. Nulls inside a union or a
+run-end encoded column are not checked, and come back as
+`None`. `"fill"` fills them with `NaN` in floating-point
+tensors, `0` (`False`) in the other tensors, an
 empty list in jagged tensors, and `None` in a
 [`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack). A null struct makes each of
 its fields null. `"mask"` fills them as `"fill"` does, and adds

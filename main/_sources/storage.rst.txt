@@ -560,6 +560,11 @@ first, with :func:`torch.nested.to_padded_tensor`.
 :meth:`~tensordict.TensorDict.from_parquet` keeps its own conversion, which
 reads list and struct columns as Python objects. To convert a Parquet file
 as ``from_arrow`` does, read it with ``pyarrow.parquet.read_table``.
+With the default ``nulls="raise"``, ``from_arrow`` returns a null inside a
+map, a list view or the dictionary values that a dictionary-encoded column
+selects as ``None``, with a ``FutureWarning``: starting with TensorDict 0.18,
+the default will change to raising an error for these nulls too. Nulls inside
+a union or a run-end encoded column are not checked.
 
 Typed wrappers
 --------------
