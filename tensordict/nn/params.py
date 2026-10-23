@@ -61,7 +61,7 @@ from tensordict.utils import (
     KEY_SEPARATOR,
 )
 from torch import multiprocessing as mp, nn, Tensor
-from torch.compiler import is_compiling
+from torch.compiler import is_compiling, is_dynamo_compiling
 from torch.nn.parameter import Buffer
 from torch.utils._pytree import tree_map
 
@@ -195,7 +195,10 @@ class _unlock_and_set:
         @wraps(func)
         def new_func(_self, *args, **kwargs):  # type: ignore[misc]
             if self.only_for_kwargs:
-                arg_dict = _get_args_dict(signature, (_self, *args), kwargs)
+                # Dynamo can't bind a Signature built outside the traced
+                # code (its parameters are a mappingproxy): build it there.
+                sig = inspect.signature(func) if is_dynamo_compiling() else signature
+                arg_dict = _get_args_dict(sig, (_self, *args), kwargs)
                 for kwarg, exp_value in self.only_for_kwargs.items():
                     cur_val = arg_dict.get(kwarg, NO_DEFAULT)
                     if cur_val != exp_value:
