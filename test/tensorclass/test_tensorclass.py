@@ -981,6 +981,144 @@ def test_issue_3305_installed_wheel_pyright(installed_wheel, tmp_path, python_ve
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+# #3320: save, dumps, memmap and memmap_like return a TensorDict on
+# TensorDictParams and PersistentTensorDict, and memmap_like does on a
+# sub-tensordict; TensorDictParams.memmap_like takes the keywords of the base
+# class.
+_ISSUE_3320_SOURCE = """import os
+import tempfile
+
+import torch
+from typing_extensions import assert_type
+from tensordict import LazyStackedTensorDict, PersistentTensorDict, TensorDict
+from tensordict._td import _SubTensorDict
+from tensordict.nn import TensorDictParams
+
+with tempfile.TemporaryDirectory() as tmp:
+    def path(name: str) -> str:
+        return os.path.join(tmp, name)
+
+    params = TensorDictParams(TensorDict(w=torch.nn.Parameter(torch.zeros(3))))
+    assert_type(params.save(path("p1")), TensorDict)
+    assert_type(params.dumps(path("p2"), archive=True), TensorDict)
+    assert_type(params.memmap(path("p3")), TensorDict)
+    params.memmap_like(path("p4"), existsok=True)
+    params.memmap_like(path("p5.tdz"), archive=True)
+    params.memmap_like(path("p6"), False, num_threads=2, return_early=False)
+    params.memmap_like(path("p7"), share_non_tensor=False, robust_key=True)
+
+    td = TensorDict(a=torch.zeros(3), batch_size=[3])
+    h5: PersistentTensorDict = PersistentTensorDict.from_dict(
+        td, filename=path("x.h5")
+    )
+    assert_type(h5.save(path("h1")), TensorDict)
+    assert_type(h5.dumps(path("h2")), TensorDict)
+    assert_type(h5.memmap(path("h3.tdz")), TensorDict)
+    assert_type(h5.memmap_like(path("h4")), TensorDict)
+    h5.close()
+
+    sub = _SubTensorDict(td, slice(0, 2))
+    assert_type(sub.memmap_like(path("s1")), TensorDict)
+    assert_type(sub.save(path("s2")), _SubTensorDict)
+    assert_type(td.save(path("t1")), TensorDict)
+    lazy = LazyStackedTensorDict(td, td)
+    assert_type(lazy.memmap(path("l1")), LazyStackedTensorDict)
+"""
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+def test_issue_3320_source_runs(tmp_path):
+    # The checked source must be correct code, and each assert_type must hold
+    # at run time.
+    pytest.importorskip("h5py")
+    source = _ISSUE_3320_SOURCE.replace("assert_type(", "_check_type(")
+    path = tmp_path / "user.py"
+    path.write_text(source)
+
+    def _check_type(value, cls):
+        assert type(value) is cls, (type(value), cls)
+
+    runpy.run_path(
+        str(path), init_globals={"_check_type": _check_type}, run_name="__main__"
+    )
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+@pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
+@pytest.mark.parametrize("python_version", ["3.10", "3.12"])
+def test_issue_3320_installed_wheel_mypy(installed_wheel, tmp_path, python_version):
+    # #3320: mypy typed the save family of TensorDictParams and
+    # PersistentTensorDict as the receiver's class.
+    tmp_path.joinpath("user.py").write_text(_ISSUE_3320_SOURCE)
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "mypy",
+            "--config-file=",
+            f"--cache-dir={os.devnull}",
+            f"--python-version={python_version}",
+            "user.py",
+        ],
+        cwd=tmp_path,
+        env=_checker_env(installed_wheel),
+        capture_output=True,
+        text=True,
+        timeout=1200,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+@pytest.mark.skipif(not _has_pyright, reason="pyright is not installed")
+@pytest.mark.parametrize("python_version", ["3.10", "3.12"])
+def test_issue_3320_installed_wheel_pyright(installed_wheel, tmp_path, python_version):
+    # #3320: pyright also rejected the existsok, archive, return_early,
+    # share_non_tensor and robust_key arguments of
+    # TensorDictParams.memmap_like, which mypy accepted. It must reject
+    # num_threads by position, which raises a TypeError at run time.
+    tmp_path.joinpath("user.py").write_text(_ISSUE_3320_SOURCE)
+    tmp_path.joinpath("invalid.py").write_text(
+        """import torch
+from tensordict import TensorDict
+from tensordict.nn import TensorDictParams
+
+params = TensorDictParams(TensorDict(w=torch.nn.Parameter(torch.zeros(3))))
+params.memmap_like("p", False, 2)
+params.memmap_like("p", archive=1.5)
+"""
+    )
+    # Keeps pyright from reading a configuration file above tmp_path.
+    tmp_path.joinpath("pyrightconfig.json").write_text("{}")
+
+    def pyright(path):
+        return subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pyright",
+                "--pythonpath",
+                sys.executable,
+                "--pythonversion",
+                python_version,
+                path,
+            ],
+            cwd=tmp_path,
+            env=_checker_env(installed_wheel),
+            capture_output=True,
+            text=True,
+            timeout=1200,
+        )
+
+    result = pyright("user.py")
+    assert result.returncode == 0, result.stdout + result.stderr
+    result = pyright("invalid.py")
+    errors = [line for line in result.stdout.splitlines() if " - error: " in line]
+    assert len(errors) == 2, result.stdout + result.stderr
+    assert "invalid.py:6:" in errors[0]
+    assert "invalid.py:7:" in errors[1]
+
+
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")
 @pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
 def test_tensorclass_stub_static_types(tmp_path, monkeypatch):

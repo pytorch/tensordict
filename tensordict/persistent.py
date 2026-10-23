@@ -1126,6 +1126,64 @@ class PersistentTensorDict(
     # (weakref to the tensordict that caches this one, key in it), or None
     _nested_parent = None
 
+    if TYPE_CHECKING:
+        # save, dumps, memmap and memmap_like return a TensorDict (#3320).
+        def save(  # type: ignore[override]
+            self,
+            prefix: str | Path | None = None,
+            copy_existing: bool = False,
+            *,
+            num_threads: int = 0,
+            return_early: bool = False,
+            share_non_tensor: bool = False,
+            robust_key: bool | None = True,
+            archive: bool | None = None,
+            compression: str | int | None = None,
+            atomic: bool = False,
+        ) -> TensorDict: ...
+
+        def dumps(  # type: ignore[override]
+            self,
+            prefix: str | Path | None = None,
+            copy_existing: bool = False,
+            *,
+            num_threads: int = 0,
+            return_early: bool = False,
+            share_non_tensor: bool = False,
+            robust_key: bool | None = True,
+            archive: bool | None = None,
+            compression: str | int | None = None,
+            atomic: bool = False,
+        ) -> TensorDict: ...
+
+        def memmap(  # type: ignore[override]
+            self,
+            prefix: str | Path | None = None,
+            copy_existing: bool = False,
+            *,
+            num_threads: int = 0,
+            return_early: bool = False,
+            share_non_tensor: bool = False,
+            existsok: bool = True,
+            robust_key: bool | None = True,
+            archive: bool | None = None,
+            compression: str | int | None = None,
+            atomic: bool = False,
+        ) -> TensorDict: ...
+
+        def memmap_like(  # type: ignore[override]
+            self,
+            prefix: str | Path | None = None,
+            copy_existing: bool = False,
+            *,
+            existsok: bool = True,
+            num_threads: int = 0,
+            return_early: bool = False,
+            share_non_tensor: bool = False,
+            robust_key: bool | None = True,
+            archive: bool | None = None,
+        ) -> TensorDict: ...
+
     @property
     @deprecated("PersistentTensorDict.kwargs", removal="0.17")
     def kwargs(self) -> dict[str, Any]:
