@@ -7,7 +7,7 @@ import sys
 from abc import ABCMeta
 from collections.abc import Callable, Sequence
 from dataclasses import InitVar
-from typing import Any, ClassVar, Literal, overload, Type
+from typing import Any, ClassVar, Generic, Literal, overload, Type, TypeVar
 
 if sys.version_info >= (3, 11):
     from typing import dataclass_transform, Self
@@ -18,6 +18,16 @@ import torch
 from tensordict._nestedkey import NestedKey
 from tensordict.base import TensorDictBase
 from tensordict.utils import DeviceType
+
+_SetT = TypeVar("_SetT", contravariant=True)
+_GetT = TypeVar("_GetT", covariant=True)
+
+class _InitField(Generic[_SetT, _GetT]):
+    # A descriptor-typed dataclass field: __init__ and assignment take a
+    # _SetT, and an instance reads a _GetT, as the TensorDictBase properties
+    # do (#3305). An InitVar field would make pyright reject the reads.
+    def __get__(self, instance: object, owner: Any = None) -> _GetT: ...
+    def __set__(self, instance: object, value: _SetT) -> None: ...
 
 @dataclass_transform(kw_only_default=True)
 class _TypedTensorDictMeta(ABCMeta):
@@ -52,9 +62,9 @@ class _TypedTensorDictMeta(ABCMeta):
     ) -> Type["TypedTensorDict"]: ...
 
 class TypedTensorDict(TensorDictBase, metaclass=_TypedTensorDictMeta):
-    batch_size: InitVar[Sequence[int] | torch.Size | int | None] = None
-    device: InitVar[DeviceType | None] = None
-    names: InitVar[Sequence[str] | None] = None
+    batch_size: _InitField[Sequence[int] | torch.Size | int | None, torch.Size] = ...
+    device: _InitField[DeviceType | None, torch.device | None] = ...  # type: ignore[override]
+    names: _InitField[Sequence[str] | None, Any] = ...
     non_blocking: InitVar[bool | None] = None
     lock: InitVar[bool] = False
 

@@ -1826,6 +1826,24 @@ class TensorAttrs(TensorClass):
     ) -> Self: ...
 
 class NonTensorStack(LazyStackedTensorDict):
+    def __init__(
+        self,
+        *args: Any,
+        stack_dim: int = 0,
+        hook_out: Callable | None = None,
+        hook_in: Callable | None = None,
+        batch_size: Sequence[int] | None = None,
+        device: DeviceType | None = None,
+        names: Sequence[str] | None = None,
+        stack_dim_name: str | None = None,
+        strict_shape: bool = False,
+    ) -> None: ...
+    # The result depends on the operand: a boolean tensor for another stack, a
+    # lazy stack for a number, a tensor or a tensordict, a bool for a str
+    # (#3305). An overload for the stack case would also catch every tensordict
+    # operand: checkers see the star-unpacked bases of TensorDictBase as Any.
+    def __eq__(self, other: object) -> Any: ...  # type: ignore[override]
+    def __ne__(self, other: object) -> Any: ...  # type: ignore[override]
     def maybe_to_stack(self) -> Self: ...
 
 _ClassT = TypeVar("_ClassT")

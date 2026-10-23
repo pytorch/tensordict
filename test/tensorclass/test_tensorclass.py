@@ -84,6 +84,7 @@ from torch import Tensor
 
 _has_streaming = importlib.util.find_spec("streaming", None) is not None
 _has_mypy = importlib.util.find_spec("mypy") is not None
+_has_pyright = importlib.util.find_spec("pyright") is not None
 _has_jaxtyping = importlib.util.find_spec("jaxtyping") is not None
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
@@ -853,6 +854,131 @@ def test_typing_corpus_installed_wheel_mypy(installed_wheel_mypy_errors, snippet
         f"mypy rejects correct code in test/typing_corpus/{snippet} against "
         "the installed wheel:\n" + "\n".join(errors)
     )
+
+
+# #3305: the comparisons of TensorDictParams and NonTensorStack, an
+# InteractionType argument, NonTensorStack built from plain values, and the
+# batch_size, device and names of a TypedTensorDict instance.
+_ISSUE_3305_SOURCE = """from typing import Any
+
+import torch
+from typing_extensions import assert_type
+from tensordict import NonTensorData, NonTensorStack, TensorDict, TypedTensorDict
+from tensordict.nn import (
+    InteractionType,
+    ProbabilisticTensorDictModule,
+    set_interaction_type,
+    TensorDictParams,
+)
+
+params = TensorDictParams(TensorDict(w=torch.nn.Parameter(torch.zeros(3))))
+assert_type(params == params, TensorDict)
+assert_type(params != params, TensorDict)
+
+stack = NonTensorStack("a", "b")
+NonTensorStack(1, 2, stack_dim=0, batch_size=[2], device="cpu")
+NonTensorStack(NonTensorData("a"), NonTensorData("b"))
+assert_type(stack == stack, Any)
+assert_type(stack != stack, Any)
+by_number = stack == 1
+by_tensor = stack != torch.zeros(2)
+by_str = stack == "a"
+
+ProbabilisticTensorDictModule(
+    in_keys=["loc", "scale"],
+    out_keys=["action"],
+    distribution_class=torch.distributions.Normal,
+    default_interaction_type=InteractionType.RANDOM,
+)
+with set_interaction_type(InteractionType.MODE):
+    pass
+kind: InteractionType = InteractionType.MEAN
+
+class State(TypedTensorDict):
+    x: torch.Tensor
+
+state = State(x=torch.zeros(5, 3), batch_size=[5], device="cpu", names=["b"])
+assert_type(state.batch_size, torch.Size)
+assert_type(state.device, torch.device | None)
+names = state.names
+state.batch_size = torch.Size([5])
+"""
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+def test_issue_3305_source_runs(tmp_path):
+    # The checked source must be correct code.
+    path = tmp_path / "user.py"
+    path.write_text(_ISSUE_3305_SOURCE)
+    runpy.run_path(str(path), run_name="__main__")
+
+
+def _checker_env(installed_wheel):
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in ("MYPYPATH", "PYTHONPATH")
+    }
+    env["PYTHONPATH"] = str(installed_wheel)
+    return env
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+@pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
+@pytest.mark.parametrize("python_version", ["3.10", "3.12"])
+def test_issue_3305_installed_wheel_mypy(installed_wheel, tmp_path, python_version):
+    # #3305: mypy typed params == params as TensorDictParams and stack ==
+    # stack as NonTensorStack, rejected NonTensorStack("a", "b"), and on
+    # Python 3.10 typed InteractionType.RANDOM as a str.
+    tmp_path.joinpath("user.py").write_text(_ISSUE_3305_SOURCE)
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "mypy",
+            "--config-file=",
+            f"--cache-dir={os.devnull}",
+            f"--python-version={python_version}",
+            "user.py",
+        ],
+        cwd=tmp_path,
+        env=_checker_env(installed_wheel),
+        capture_output=True,
+        text=True,
+        timeout=1200,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+@pytest.mark.skipif(not _has_pyright, reason="pyright is not installed")
+@pytest.mark.parametrize("python_version", ["3.10", "3.12"])
+def test_issue_3305_installed_wheel_pyright(installed_wheel, tmp_path, python_version):
+    # #3305: pyright also rejected InteractionType.RANDOM as an
+    # InteractionType on every Python version, and rejected reading
+    # batch_size, device and names on a TypedTensorDict instance (init-only
+    # fields), which mypy accepted.
+    tmp_path.joinpath("user.py").write_text(_ISSUE_3305_SOURCE)
+    # Keeps pyright from reading a configuration file above tmp_path.
+    tmp_path.joinpath("pyrightconfig.json").write_text("{}")
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pyright",
+            "--pythonpath",
+            sys.executable,
+            "--pythonversion",
+            python_version,
+            "user.py",
+        ],
+        cwd=tmp_path,
+        env=_checker_env(installed_wheel),
+        capture_output=True,
+        text=True,
+        timeout=1200,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")
