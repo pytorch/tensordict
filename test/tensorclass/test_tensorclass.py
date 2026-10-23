@@ -1658,6 +1658,118 @@ def check(tc: TensorCollection) -> None:
 
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")
 @pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
+def test_memmap_save_archive_static_types(tmp_path, monkeypatch):
+    # #3314: with py.typed, mypy must accept the archive and compression
+    # arguments of save, dumps and memmap, and the archive argument of
+    # memmap_like, as the run time does. The signatures are copied from
+    # _tensorcollection.pyi, tensorclass.pyi and the _Serialization mixin of
+    # TensorDictBase into a package of their own. Mypy also searches the
+    # working directory, which must not hold the tensordict sources.
+    from mypy import api
+
+    monkeypatch.chdir(tmp_path)
+    names = ("save", "dumps", "memmap", "memmap_like")
+
+    def members(path, class_name):
+        with open(_TENSORDICT_DIR / path, "r") as f:
+            tree = ast.parse(f.read())
+        (class_node,) = (
+            node
+            for node in tree.body
+            if isinstance(node, ast.ClassDef) and node.name == class_name
+        )
+        nodes = [
+            node
+            for node in class_node.body
+            if isinstance(node, ast.FunctionDef) and node.name in names
+        ]
+        assert nodes, (path, class_name)
+        for node in nodes:
+            node.body = [ast.Expr(ast.Constant(...))]
+            node.decorator_list = []
+        return textwrap.indent("\n".join(map(ast.unparse, nodes)), "    ")
+
+    stubs = tmp_path / "stubs"
+    package = stubs / "tensordict"
+    package.mkdir(parents=True)
+    imports = """from pathlib import Path
+from typing import Self
+"""
+    package.joinpath("__init__.pyi").write_text("")
+    package.joinpath("_tensorcollection.pyi").write_text(
+        f"""{imports}
+class TensorCollection:
+{members("_tensorcollection.pyi", "TensorCollection")}
+"""
+    )
+    package.joinpath("tensorclass.pyi").write_text(
+        f"""{imports}
+class TensorClass:
+{members("tensorclass.pyi", "TensorClass")}
+"""
+    )
+    package.joinpath("base.py").write_text(
+        f"""# mypy: disable-error-code="empty-body"
+from __future__ import annotations
+
+{imports}
+from tensordict._tensorcollection import TensorCollection
+
+class TensorDictBase(TensorCollection):
+{members("_base/serialization.py", "_Serialization")}
+"""
+    )
+
+    config = tmp_path / "mypy.ini"
+    config.write_text(
+        f"""[mypy]
+python_version = 3.11
+show_error_codes = True
+mypy_path = {stubs}
+no_site_packages = True
+ignore_missing_imports = True
+"""
+    )
+
+    def user_errors(source):
+        user = tmp_path / "user.py"
+        user.write_text(source)
+        stdout, stderr, status = api.run(["--config-file", str(config), str(user)])
+        assert not stderr, stderr
+        return [line for line in stdout.splitlines() if line.startswith("user.py:")]
+
+    calls = """
+    {0}.save("x.tdz", archive=True)
+    {0}.save("x.tdz", compression="deflated")
+    {0}.save("x.tdz", archive=None, compression=None)
+    {0}.dumps("x.tdz", archive=True)
+    {0}.memmap("x.tdz", archive=True, compression="stored")
+    {0}.memmap("x.tdz", archive=True, compression=8)
+    {0}.memmap_like("y.tdz", archive=True)"""
+    valid = f"""from tensordict._tensorcollection import TensorCollection
+from tensordict.base import TensorDictBase
+from tensordict.tensorclass import TensorClass
+
+def check(tc: TensorCollection, td: TensorDictBase, obs: TensorClass) -> None:
+{"".join(calls.format(name) for name in ("tc", "td", "obs"))}
+"""
+    assert user_errors(valid) == []
+
+    invalid = """from tensordict._tensorcollection import TensorCollection
+from tensordict.tensorclass import TensorClass
+
+def check(tc: TensorCollection, obs: TensorClass) -> None:
+    tc.save("x.tdz", compression=1.5)
+    obs.memmap_like("y.tdz", compression="stored")
+"""
+    errors = [line for line in user_errors(invalid) if ": error:" in line]
+    assert len(errors) == 2, errors
+    assert 'Argument "compression" to "save" of "TensorCollection"' in errors[0]
+    assert 'Unexpected keyword argument "compression" for "memmap_like"' in errors[1]
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+@pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
 def test_tensordict_compare_and_split_source_static_types(tmp_path, monkeypatch):
     # #3269 and #3270: with py.typed, mypy must type td == td as a tensordict,
     # not as the bool of Mapping.__eq__, and the pieces of unbind, chunk and

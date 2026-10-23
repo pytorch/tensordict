@@ -829,6 +829,8 @@ class TensorCollection:
         return_early: bool = False,
         share_non_tensor: bool = False,
         robust_key: bool | None = True,
+        archive: bool | None = None,
+        compression: str | int | None = None,
         atomic: bool = False,
     ) -> Self: ...
     def dumps(
@@ -840,6 +842,8 @@ class TensorCollection:
         return_early: bool = False,
         share_non_tensor: bool = False,
         robust_key: bool | None = True,
+        archive: bool | None = None,
+        compression: str | int | None = None,
         atomic: bool = False,
     ) -> Self: ...
     def memmap(
@@ -852,6 +856,8 @@ class TensorCollection:
         share_non_tensor: bool = False,
         existsok: bool = True,
         robust_key: bool | None = True,
+        archive: bool | None = None,
+        compression: str | int | None = None,
         atomic: bool = False,
     ) -> Self: ...
     def memmap_like(
@@ -864,6 +870,7 @@ class TensorCollection:
         return_early: bool = False,
         share_non_tensor: bool = False,
         robust_key: bool | None = True,
+        archive: bool | None = None,
     ) -> Self: ...
     @classmethod
     def load(
