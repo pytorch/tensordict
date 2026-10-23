@@ -380,6 +380,24 @@ def _has_exclusive_keys(td: LazyStackedTensorDict) -> bool:
     )
 
 
+def _wrap_typed_entries(source: TensorDictBase, result: TensorDictBase) -> None:
+    """Wraps each entry of ``result`` whose counterpart in ``source`` is a TypedTensorDict in that class, in place."""
+    for key, value in source.items():
+        if isinstance(value, TypedTensorDict):
+            loaded = result._get_str(key, None)
+            if loaded is not None:
+                result._set_str(
+                    key,
+                    value._wrap_archive_result(loaded),
+                    inplace=False,
+                    validated=True,
+                )
+        elif type(value) is TensorDict:
+            loaded = result._get_str(key, None)
+            if type(loaded) is TensorDict:
+                _wrap_typed_entries(value, loaded)
+
+
 def _exclusive_keys_or_reads_copies(td: TensorDictBase) -> tuple[bool, bool]:
     """Whether a lazy stack that ``td`` is, stacks or holds, at any depth, has keys that only some of its members hold, and, if not, whether ``td`` reads copies, as :func:`_reads_copies`: one walk for both."""
     if _is_tensorclass(type(td)):
@@ -876,6 +894,13 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
             return self
         if result is None:
             return None
+        return type(self)._wrap_td(result)
+
+    # Override: an archive written by memmap or memmap_like is reloaded as the
+    # source's class at every level; wrap the result, and each nested entry
+    # that is a TypedTensorDict here, as _memmap_ does for a directory (#3324).
+    def _wrap_archive_result(self, result):
+        _wrap_typed_entries(self._source, result)
         return type(self)._wrap_td(result)
 
     # Override: the source's where, with a typed ``out`` unwrapped and the

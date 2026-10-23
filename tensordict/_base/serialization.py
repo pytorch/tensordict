@@ -1758,9 +1758,12 @@ class _Serialization:
                 Windows.
 
         .. note::
-            For an archive, the result is ``load_memmap(prefix)``: its leaves
-            are views into one copy-on-write mapping of the file, so in-place
-            writes do not reach the file, and it is not locked. Archives are
+            For an archive, the result is ``load_memmap(prefix)``, wrapped
+            in the class of a :class:`~tensordict.TypedTensorDict` (and of its
+            nested ``TypedTensorDict`` and ``TensorDict`` fields, as for a
+            directory): its leaves are views into one
+            copy-on-write mapping of the file, so in-place writes do not
+            reach the file, and it is not locked. Archives are
             written in one pass, so ``num_threads`` does not speed them up. An
             existing archive is replaced by a new file: a symlink is followed,
             but other hard links keep the old content.
@@ -1813,7 +1816,9 @@ class _Serialization:
             # a different class than the one they are created from.
             # This archive was created by this process from the in-memory
             # object, so reloading its arbitrary non-tensor fields is trusted.
-            return TensorDictBase.load_memmap(prefix, allow_pickle=True)
+            return self._wrap_archive_result(
+                TensorDictBase.load_memmap(prefix, allow_pickle=True)
+            )
         if compression is not None:
             raise ValueError(
                 "compression is only supported when writing a memmap archive "
@@ -1940,8 +1945,10 @@ class _Serialization:
                 ``None`` is the same as ``True``. Defaults to ``True``.
             archive (bool, optional): if ``True``, ``prefix`` is a file, and a
                 zero-filled archive is created there and loaded back with
-                ``load_memmap(prefix, mode="r+")``, so that in-place writes into
-                the result reach the archive. Nested tensors are not supported.
+                ``load_memmap(prefix, mode="r+")`` (wrapped in the class of a
+                :class:`~tensordict.TypedTensorDict`, as for a directory), so
+                that in-place writes into the result reach the archive. Nested
+                tensors are not supported.
                 Defaults to ``None``, which creates an archive if ``prefix``
                 ends with ``".tdz"``.
 
@@ -1994,7 +2001,9 @@ class _Serialization:
             )
             # This archive was created by this process from the in-memory
             # object, so reloading its arbitrary non-tensor fields is trusted.
-            return TensorDictBase.load_memmap(prefix, mode="r+", allow_pickle=True)
+            return self._wrap_archive_result(
+                TensorDictBase.load_memmap(prefix, mode="r+", allow_pickle=True)
+            )
         # Without a prefix, the result lives in new anonymous memory: falling
         # back to self._memmap_prefix would reopen the source's files.
         if prefix is not None:
@@ -2038,6 +2047,18 @@ class _Serialization:
             existsok=existsok,
             robust_key=robust_key,
         ).lock_()
+
+    def _wrap_archive_result(self, result: TensorDictBase) -> TensorDictBase:
+        """Gives the result of an archive write the classes that a directory write returns (#3324).
+
+        :meth:`memmap` and :meth:`memmap_like` call it after they wrote a
+        ``.tdz`` archive and reloaded it with ``load_memmap``, which returns
+        the class recorded in the archive. ``result`` is that reloaded
+        tensordict, backed by the archive. A class whose directory write keeps
+        its own class wraps ``result`` in it, without copying data, and
+        returns it; the default returns ``result`` unchanged.
+        """
+        return result
 
     @classmethod
     def load(cls, prefix: str | Path, *args, **kwargs) -> Self:
