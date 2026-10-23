@@ -1048,6 +1048,34 @@ assert torch.equal(episodes[1]["_mask", "x"], torch.tensor([True, True, True]))
                 assert torch.equal(x, y), key
         assert td2.get("s").tolist() == ["x", "y", "z"]
 
+    def test_to_arrow_nested_tensorclass_str(self):
+        # #3329: a str field of a nested tensorclass raised an AttributeError
+        @tensorclass
+        class Inner:
+            x: torch.Tensor
+            label: str
+
+        inner = Inner(x=torch.tensor([1.0, 2.0]), label="a", batch_size=[2])
+        rows = to_arrow(inner).to_pylist()
+        assert rows == [{"x": 1.0, "label": "a"}, {"x": 2.0, "label": "a"}]
+        table = to_arrow(TensorDict(inner=inner, batch_size=[2]))
+        assert table.column("inner").to_pylist() == rows
+
+    def test_to_arrow_nested_non_tensor_data(self):
+        # #3329
+        td = TensorDict(
+            obs=TensorDict(
+                x=torch.tensor([1, 2]),
+                s=NonTensorData("b", batch_size=[2]),
+                batch_size=[2],
+            ),
+            batch_size=[2],
+        )
+        assert to_arrow(td).column("obs").to_pylist() == [
+            {"x": 1, "s": "b"},
+            {"x": 2, "s": "b"},
+        ]
+
     def test_arrow_empty(self):
         table = _arrow_table().slice(0, 0)
         td = from_arrow(table)
