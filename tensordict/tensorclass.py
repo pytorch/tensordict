@@ -347,6 +347,7 @@ _FALLBACK_METHOD_FROM_TD_NOWRAP = [
     "_set_names",
     "_sync_all",
     "_values_list",
+    "_wrap_archive_result",
     "all_gather",
     "all_reduce",
     "arecv",
