@@ -9,7 +9,7 @@ import os
 import weakref
 from collections import defaultdict, UserDict
 from collections.abc import Mapping
-from numbers import Number
+from numbers import Number, Real
 from pathlib import Path
 from textwrap import indent
 from typing import (
@@ -24,6 +24,7 @@ from typing import (
 )
 from warnings import warn
 
+import numpy as np
 import torch
 from tensordict._archive import _memmap_tensor_from_path
 from tensordict._base.unsupported import _NoShapeOps
@@ -1264,11 +1265,12 @@ class TensorDict(TensorDictBase):
             if (
                 non_tensor_scalars
                 and batch_size
-                and isinstance(value, (float, int, bool))
+                and isinstance(value, (Real, np.bool_))
             ):
                 # A 0-dim tensor cannot have the batch size: read the scalar
                 # as non-tensor data, which is what to_dict writes it from
-                # (#3266).
+                # (#3266). Real covers NumPy's integer and float scalars
+                # (#3335).
                 from tensordict.tensorclass import NonTensorData
 
                 input_dict[key] = NonTensorData(
