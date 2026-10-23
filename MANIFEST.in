@@ -8,3 +8,4 @@ recursive-exclude * *.py[co]
 exclude tutorials/*
 exclude packaging/*
 exclude docs/*
+prune test

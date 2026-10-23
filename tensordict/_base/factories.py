@@ -409,7 +409,7 @@ def from_zarr(
 ) -> "TensorDictBase":
     """Opens a zarr store as a :class:`~tensordict.PersistentTensorDict`.
 
-    Requires ``zarr>=3.0``. See
+    Requires ``zarr>=3.1.1``. See
     :meth:`TensorDictBase.from_zarr <tensordict.TensorDictBase.from_zarr>`.
 
     Args:

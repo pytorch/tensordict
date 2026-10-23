@@ -21,7 +21,7 @@ conda activate ./env
 min_deps=(
     "pyarrow==10.0.*"
     "pandas==1.5.*"
-    "h5py==3.9.*"
+    "h5py==3.11.*"
     "zarr==3.1.1"
     "safetensors==0.7.0"
     "numpy==1.26.*"
