@@ -5090,6 +5090,35 @@ class TestTensorDictParams:
             params.masked_select(mask, inplace=True)
         assert params.batch_size == torch.Size([3])
 
+    @pytest.mark.parametrize("name", ["save", "dumps", "memmap", "memmap_like"])
+    def test_save_family_signature(self, name):
+        # #3320: memmap_like forwards every argument to the wrapped
+        # tensordict, but declared only prefix, copy_existing and num_threads,
+        # so pyright rejected the other keywords of the base class.
+        base = inspect.signature(getattr(TensorDictBase, name)).parameters
+        params = inspect.signature(getattr(TensorDictParams, name)).parameters
+        assert [(p.name, p.kind, p.default) for p in params.values()] == [
+            (p.name, p.kind, p.default) for p in base.values()
+        ]
+
+    def test_memmap_like_arguments(self, tmp_path):
+        # #3320: the keywords of the base class reach the wrapped tensordict.
+        params = TensorDictParams(
+            TensorDict(a=nn.Parameter(torch.zeros(3)), batch_size=[3])
+        )
+        out = params.memmap_like(tmp_path / "a", False, num_threads=2)
+        assert type(out) is TensorDict
+        out = params.memmap_like(
+            tmp_path / "b.tdz",
+            existsok=False,
+            return_early=False,
+            share_non_tensor=False,
+            robust_key=True,
+            archive=True,
+        )
+        assert type(out) is TensorDict
+        assert (tmp_path / "b.tdz").is_file()
+
     @pytest.mark.parametrize(
         "name", ["TDPARAM_HANDLED_FUNCTIONS", "implements_for_tdparam"]
     )

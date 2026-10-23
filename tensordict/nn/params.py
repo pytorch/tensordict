@@ -456,6 +456,51 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
 
         def __ne__(self, other: object) -> TensorDict: ...  # type: ignore[override]
 
+        # save, dumps and memmap return a TensorDict, as memmap_like below
+        # does (#3320).
+        def save(  # type: ignore[override]
+            self,
+            prefix: str | Path | None = None,
+            copy_existing: bool = False,
+            *,
+            num_threads: int = 0,
+            return_early: bool = False,
+            share_non_tensor: bool = False,
+            robust_key: bool | None = True,
+            archive: bool | None = None,
+            compression: str | int | None = None,
+            atomic: bool = False,
+        ) -> TensorDict: ...
+
+        def dumps(  # type: ignore[override]
+            self,
+            prefix: str | Path | None = None,
+            copy_existing: bool = False,
+            *,
+            num_threads: int = 0,
+            return_early: bool = False,
+            share_non_tensor: bool = False,
+            robust_key: bool | None = True,
+            archive: bool | None = None,
+            compression: str | int | None = None,
+            atomic: bool = False,
+        ) -> TensorDict: ...
+
+        def memmap(  # type: ignore[override]
+            self,
+            prefix: str | Path | None = None,
+            copy_existing: bool = False,
+            *,
+            num_threads: int = 0,
+            return_early: bool = False,
+            share_non_tensor: bool = False,
+            existsok: bool = True,
+            robust_key: bool | None = True,
+            archive: bool | None = None,
+            compression: str | int | None = None,
+            atomic: bool = False,
+        ) -> TensorDict: ...
+
     def __init__(
         self,
         parameters: TensorDictBase | dict | None = None,
@@ -1251,12 +1296,18 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         return self._param_td.masked_select(mask)
 
     @_fallback
-    def memmap_like(
+    def memmap_like(  # type: ignore[override]
         self,
         prefix: str | Path | None = None,
         copy_existing: bool = False,
+        *,
+        existsok: bool = True,
         num_threads: int = 0,
-    ) -> Self: ...
+        return_early: bool = False,
+        share_non_tensor: bool = False,
+        robust_key: bool | None = True,
+        archive: bool | None = None,
+    ) -> TensorDict: ...
 
     # Override: with inplace=True, the base would rewrite the leaves read
     # through the get hooks.
