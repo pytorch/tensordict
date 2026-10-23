@@ -5158,8 +5158,10 @@ class TestFunctionalVmap:
         )
         torch.testing.assert_close(out, torch.stack([m(x, scale) for m in mods]))
 
+    @pytest.mark.parametrize("loop", [False, True])
     @pytest.mark.parametrize("mapped", [False, True])
-    def test_tensordict_module(self, mapped):
+    def test_tensordict_module(self, mapped, loop):
+        """Each set writes into its own copy of the input td, never the caller's."""
         torch.manual_seed(0)
         mods = [TensorDictModule(nn.Linear(3, 2), ["x"], ["y"]) for _ in range(3)]
         if mapped:
@@ -5170,9 +5172,13 @@ class TestFunctionalVmap:
             td = TensorDict(x=torch.randn(4, 3), batch_size=[4])
             inputs = {"args": (td,)}
             expected = [m(td.clone())["y"] for m in mods]
-        out = functional_vmap(mods[0], params=TensorDict.from_modules(*mods), **inputs)
+        out = functional_vmap(
+            mods[0], params=TensorDict.from_modules(*mods), loop=loop, **inputs
+        )
         assert out.batch_size == (3, 4)
         torch.testing.assert_close(out["y"], torch.stack(expected))
+        # A batched "y" left in td by vmap would make clone() raise.
+        assert "y" not in td.clone().keys()
 
     def test_loop_tuple_output(self):
         torch.manual_seed(0)
@@ -5255,6 +5261,8 @@ class TestFunctionalVmap:
             ({"in_dims": {"act": 0}}, KeyError, "not in kwargs"),
             ({"in_dims": {"obs": 0}, "batch_size": []}, ValueError, "batch dimension"),
             ({"in_dims": {"obs": 0}, "obs": (8, 3)}, ValueError, r"\(6,\) at that"),
+            ({"in_dims": {"obs": 3}}, ValueError, r"in_dims\['obs'\]=3"),
+            ({"in_dims": {"obs": -4}}, ValueError, r"in_dims\['obs'\]=-4"),
             (
                 {"in_dims": {"obs": 0}, "obs": (6, 8, 3), "batch_size": [2, 3]},
                 ValueError,

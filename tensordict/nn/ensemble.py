@@ -185,17 +185,21 @@ def functional_vmap(
         kwargs (dict, optional): the keyword inputs of ``module``.
         in_dims (dict, optional): maps keys of ``kwargs`` to the dimension that
             indexes the sets. That input needs ``params.batch_size`` at this
-            dimension, and set ``i`` receives its slice ``i``. The other
+            dimension, and set ``i`` receives its slice ``i``. With several
+            batch dimensions, the value names the first of them. The other
             inputs are shared.
-        randomness (str, optional): Defaults to ``"error"``. Specifies whether the
-            randomness in this vmap should be the same or different across batches.
-            Look at torch.vmap docs for more info.
+        randomness (str, optional): what a random op, such as dropout, does.
+            ``"error"`` will raise, ``"different"`` means the randomness for each batch
+            will be different, and ``"same"`` gives every set the same ones. Defaults to
+            ``"error"``.
         chunk_size (int, optional): the number of sets computed at once.
         method (str, optional): the name of the method of ``module`` to call
             instead of ``forward``.
         loop (bool, optional): if ``True``, calls the sets one at a time and
             stacks the results, for modules that :func:`torch.vmap` cannot
-            handle. Defaults to ``False``.
+            handle. A loop cannot detect random ops, so it does not raise under
+            ``randomness="error"``: each set gets its own random values, as
+            with ``"different"``. Defaults to ``False``.
 
     Returns:
         The outputs of ``module``, with ``params.batch_size`` as leading
@@ -243,8 +247,9 @@ def functional_vmap(
     dims = {}
     for key, dim in in_dims.items():
         shape = kwargs[key].shape
-        dim = dim % len(shape) if shape else dim
-        if shape[dim : dim + ndim] != batch_size:
+        if dim < 0:
+            dim += len(shape)
+        if dim < 0 or shape[dim : dim + ndim] != batch_size:
             raise ValueError(
                 f"kwargs[{key!r}] has shape {tuple(shape)}, but "
                 f"in_dims[{key!r}]={in_dims[key]} needs "
@@ -253,12 +258,12 @@ def functional_vmap(
         dims[key] = dim
     func = module if method is None else getattr(module, method)
 
-    def call(params, kwargs):
+    def call(params, args, kwargs):
         with params.to_module(module, preserve_module_state=False):
             return func(*args, **kwargs)
 
     if not batch_size:
-        return call(params, kwargs)
+        return call(params, args, kwargs)
 
     params = params.reshape(-1)
     kwargs = {
@@ -266,30 +271,28 @@ def functional_vmap(
         for key, value in kwargs.items()
     }
     if loop:
-        outs = [
-            call(
-                params[i],
-                {
-                    key: (
-                        value[(slice(None),) * dims[key] + (i,)]
-                        if key in dims
-                        else value
-                    )
-                    for key, value in kwargs.items()
-                },
+        outs = []
+        for i in range(params.shape[0]):
+            kwargs_i = {
+                key: value[(slice(None),) * dims[key] + (i,)] if key in dims else value
+                for key, value in kwargs.items()
+            }
+            args_i, kwargs_i = tree_map(
+                lambda x: x.clone(False) if is_tensor_collection(x) else x,
+                (args, kwargs_i),
+                is_leaf=is_tensor_collection,
             )
-            for i in range(params.shape[0])
-        ]
+            outs.append(call(params[i], args_i, kwargs_i))
         out = tree_map(lambda *xs: torch.stack(xs), *outs, is_leaf=is_tensor_collection)
     else:
         vmapped = torch.vmap(
             call,
-            (0, {key: dims.get(key) for key in kwargs}),
+            (0, None, {key: dims.get(key) for key in kwargs}),
             randomness=randomness,
             chunk_size=chunk_size,
         )
         try:
-            out = vmapped(params, kwargs)
+            out = vmapped(params, args, kwargs)
         except RuntimeError as err:
             if "Batching rule not implemented" in str(err):
                 raise RuntimeError(
