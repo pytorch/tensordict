@@ -818,26 +818,41 @@ Ensembles with from_modules and vmap
 
 :meth:`~tensordict.TensorDict.from_modules` stacks the parameters of several
 modules of the same structure into one tensordict, with a leading batch
-dimension. :func:`torch.vmap` over this tensordict calls one module with each
-set of parameters:
+dimension. :func:`~tensordict.nn.functional_vmap` calls one module with each
+set of parameters, with :func:`torch.vmap`, and stacks the outputs:
 
+  >>> from tensordict.nn import functional_vmap
   >>> nets = [nn.Linear(3, 1) for _ in range(4)]
   >>> stacked = TensorDict.from_modules(*nets)
   >>> stacked.batch_size
   torch.Size([4])
-  >>> base = nn.Linear(3, 1)
-  >>> def call(params, x):
-  ...     with params.to_module(base):
-  ...         return base(x)
   >>> x = torch.randn(10, 3)
-  >>> y = torch.vmap(call, (0, None))(stacked, x)
+  >>> y = functional_vmap(nets[0], params=stacked, args=(x,))
   >>> y.shape
   torch.Size([4, 10, 1])
   >>> torch.testing.assert_close(y[2], nets[2](x))
 
-The :doc:`functional tutorial </tutorials/functional>` explains this pattern
-in more detail. :ref:`compile` shows it under :func:`torch.compile` and with
-:func:`torch.func.grad` for per-sample gradients.
+Every set receives the inputs in ``args``. To give each set its own slice of
+an input, pass the input in ``kwargs`` and name it in ``in_dims``, with the
+dimension that indexes the sets:
+
+  >>> x_per_set = torch.randn(4, 10, 3)
+  >>> y = functional_vmap(
+  ...     nets[0], params=stacked, kwargs={"input": x_per_set}, in_dims={"input": 0}
+  ... )
+  >>> torch.testing.assert_close(y[2], nets[2](x_per_set[2]))
+
+The parameters can have several batch dimensions, for example
+``stacked.reshape(2, 2)``. The outputs then get all of them as leading
+dimensions. For a module that :func:`torch.vmap` cannot handle, such as
+:class:`torch.nn.GRU`, ``loop=True`` calls the sets one at a time and stacks
+the results in the same layout.
+
+The :doc:`functional tutorial </tutorials/functional>` explains the
+:meth:`~tensordict.TensorDict.to_module` and :func:`torch.vmap` pattern that
+this function wraps. :ref:`compile` shows that pattern under
+:func:`torch.compile` and with :func:`torch.func.grad` for per-sample
+gradients.
 
 :class:`~tensordict.nn.EnsembleModule` does the same for a
 :class:`~tensordict.nn.TensorDictModule`. It makes ``num_copies`` copies of
