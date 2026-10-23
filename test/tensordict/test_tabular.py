@@ -892,6 +892,94 @@ assert torch.equal(episodes[1]["_mask", "x"], torch.tensor([True, True, True]))
             assert set(td["_mask"].keys()) == {"x"}
             assert torch.equal(td["_mask", "x"], torch.tensor([True, False, True]))
 
+    @staticmethod
+    def _unchecked_column(pa, kind, values):
+        """A column of the type ``kind`` whose rows hold ``values``, one per row."""
+        if kind in ("list_view", "large_list_view"):
+            if not hasattr(pa, "list_view"):
+                pytest.skip("list views need pyarrow 16 or later")
+            return pa.array([[v] for v in values], getattr(pa, kind)(pa.string()))
+        if kind == "map":
+            return pa.array(
+                [[("k", v)] for v in values], pa.map_(pa.string(), pa.string())
+            )
+        if kind == "map_in_list":
+            return pa.array(
+                [[[("k", v)]] for v in values],
+                pa.list_(pa.map_(pa.string(), pa.string())),
+            )
+        if kind == "map_in_struct":
+            return pa.array(
+                [{"m": [("k", v)]} for v in values],
+                pa.struct([("m", pa.map_(pa.string(), pa.string()))]),
+            )
+        # A dictionary that holds a null whether the rows select it or not.
+        dictionary = pa.array(["a", None, "b"])
+        indices = [1 if v is None else 2 if v == "b" else 0 for v in values]
+        return pa.DictionaryArray.from_arrays(pa.array(indices, pa.int32()), dictionary)
+
+    # #3312
+    @pytest.mark.parametrize(
+        "kind",
+        [
+            "map",
+            "map_in_list",
+            "map_in_struct",
+            "list_view",
+            "large_list_view",
+            "dictionary",
+        ],
+    )
+    def test_from_arrow_nulls_raise_unchecked_warns(self, kind):
+        # nulls="raise" lets a null through inside a map, a list view or the
+        # selected dictionary values: it keeps the result, with a FutureWarning
+        # that points at the caller, until it raises in TensorDict 0.18.
+        import pyarrow as pa
+
+        column = self._unchecked_column(pa, kind, ["a", None, "b"])
+        table = pa.table({"c": column, "full": pa.array([1, 2, 3])})
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            td = from_arrow(table)
+        caught = [w for w in record if "TensorDict 0.18" in str(w.message)]
+        assert len(caught) == 1, [str(w.message) for w in record]
+        assert caught[0].category is FutureWarning
+        assert caught[0].filename == __file__
+        assert td.get("c").tolist() == column.to_pylist()
+        assert td["full"].tolist() == [1, 2, 3]
+
+        # No warning for nulls="fill" and "mask", which give the same result,
+        # for the same type without nulls, or for a slice without the null.
+        clean = self._unchecked_column(pa, kind, ["a", "b"])
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            for nulls in ("fill", "mask"):
+                td = from_arrow(table, nulls=nulls)
+                assert td.get("c").tolist() == column.to_pylist()
+                assert "masks" not in td.keys()
+            assert from_arrow(pa.table({"c": clean})).get("c").tolist() == (
+                clean.to_pylist()
+            )
+            assert from_arrow(pa.table({"c": column[2:]})).get("c").tolist() == (
+                column[2:].to_pylist()
+            )
+            # A call that raises for another null does not warn.
+            with pytest.raises(ValueError, match=r"\('l',\) has 1 null"):
+                from_arrow(pa.table({"c": column, "l": pa.array([["a"], [None], []])}))
+
+    # #3312
+    def test_from_arrow_nulls_raise_union_unchecked(self):
+        # Nulls inside a union are not checked: no error and no warning.
+        import pyarrow as pa
+
+        column = pa.UnionArray.from_sparse(
+            pa.array([0, 0], pa.int8()), [pa.array([1, None])]
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            td = from_arrow(pa.table({"u": column}))
+        assert td.get("u").tolist() == [1, None]
+
     def test_from_arrow_memory_map(self, tmp_path):
         # An in-place write into a view of a memory-mapped file kills the
         # process, so run it in a subprocess.
