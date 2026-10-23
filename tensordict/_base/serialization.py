@@ -1759,8 +1759,9 @@ class _Serialization:
 
         .. note::
             For an archive, the result is ``load_memmap(prefix)``, wrapped
-            in the class of a :class:`~tensordict.TypedTensorDict` (at every
-            level, as for a directory): its leaves are views into one
+            in the class of a :class:`~tensordict.TypedTensorDict` (and of its
+            nested ``TypedTensorDict`` and ``TensorDict`` fields, as for a
+            directory): its leaves are views into one
             copy-on-write mapping of the file, so in-place writes do not
             reach the file, and it is not locked. Archives are
             written in one pass, so ``num_threads`` does not speed them up. An
