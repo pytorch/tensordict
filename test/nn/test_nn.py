@@ -5980,6 +5980,73 @@ class TestTensorDictParams:
         assert td["s"] == "old"
         assert (td["a"] == 0).all()
 
+    def test_overrides_take_base_arguments(self, monkeypatch):
+        # #3323: these overrides declared fewer parameters than TensorDict
+        # takes, and raised TypeError for the others.
+        td = TensorDict(a=TensorDict(w=torch.zeros(4, 3)), batch_size=[4])
+        params = TensorDictParams(td.clone().apply(nn.Parameter))
+        for args, kwargs in [
+            ((), {"is_leaf": None}),
+            (("/", False, is_leaf_nontensor), {}),
+        ]:
+            out = params.flatten_keys(*args, **kwargs)
+            expected = td.flatten_keys(*args, **kwargs)
+            assert type(out) is TensorDict
+            assert out.keys() == expected.keys()
+            assert isinstance(out.get(next(iter(out.keys()))), nn.Parameter)
+        out = params.cpu(non_blocking=False)
+        assert type(out) is TensorDictParams
+        assert out.device == td.cpu(non_blocking=False).device
+        assert isinstance(out["a", "w"], nn.Parameter)
+        calls = []
+
+        def cuda(self, device=None, **kwargs):
+            calls.append((device, kwargs))
+            return self
+
+        monkeypatch.setattr(TensorDict, "cuda", cuda)
+        assert params.cuda(0, non_blocking=True) is params
+        assert calls == [(0, {"non_blocking": True})]
+
+    def test_override_signatures_match_base(self):
+        # #3323: every public override declares the parameters of
+        # TensorDictBase, with the same names, kinds and defaults, unless it
+        # forwards (*args, **kwargs).
+        exempt = {
+            # Built differently from a tensordict.
+            "__init__",
+            # map and memmap_ always raise a RuntimeError on a
+            # TensorDictParams: a base keyword there would only change which
+            # error the call gets, which is left for a separate decision.
+            "map",
+            "memmap_",
+            # Handled with the save family (#3320).
+            "memmap_like",
+        }
+        passthrough = [
+            ("self", inspect.Parameter.POSITIONAL_OR_KEYWORD),
+            ("args", inspect.Parameter.VAR_POSITIONAL),
+            ("kwargs", inspect.Parameter.VAR_KEYWORD),
+        ]
+        checked, mismatched = [], []
+        for name, attr in vars(TensorDictParams).items():
+            base = getattr(TensorDictBase, name, None)
+            if (name.startswith("_") and not name.startswith("__")) or name in exempt:
+                continue
+            if not inspect.isfunction(attr) or not inspect.isfunction(base):
+                continue
+            params = inspect.signature(attr).parameters.values()
+            if [(p.name, p.kind) for p in params] == passthrough:
+                continue
+            checked.append(name)
+            base_params = inspect.signature(base).parameters.values()
+            if [(p.name, p.kind, p.default) for p in params] != [
+                (p.name, p.kind, p.default) for p in base_params
+            ]:
+                mismatched.append(name)
+        assert {"flatten_keys", "set_", "repeat_interleave"} <= set(checked)
+        assert mismatched == []
+
 
 class TestCompositeDist:
     def test_const(self):
