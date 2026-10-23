@@ -720,6 +720,10 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         max_tasks_per_child: int | None = None,
         worker_threads: int = 1,
         mp_start_method: str | None = None,
+        *,
+        out: TensorCollection | None = None,
+        index_with_generator: bool = False,
+        pbar: bool = False,
     ):
         raise RuntimeError(
             "Cannot call map on a TensorDictParams object. Convert it "
@@ -1053,6 +1057,12 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         prefix: str | Path | None = None,
         copy_existing: bool = False,
         num_threads: int = 0,
+        *,
+        return_early: bool = False,
+        share_non_tensor: bool = False,
+        existsok: bool = True,
+        robust_key: bool | None = True,
+        atomic: bool = False,
     ) -> TensorDictBase:
         raise RuntimeError(
             "Cannot build a memmap TensorDict in-place. Use memmap or memmap_like instead."

@@ -6008,6 +6008,25 @@ class TestTensorDictParams:
         assert params.cuda(0, non_blocking=True) is params
         assert calls == [(0, {"non_blocking": True})]
 
+    def test_map_memmap_inplace_raise_with_base_arguments(self, tmp_path):
+        # #3323: map and memmap_ raise a RuntimeError on a TensorDictParams;
+        # the keywords of the base class raised a TypeError instead.
+        params = TensorDictParams(
+            TensorDict(a=nn.Parameter(torch.zeros(4, 3)), batch_size=[4])
+        )
+        out = TensorDict(a=torch.zeros(4, 3), batch_size=[4])
+        for kwargs in [{}, {"out": out}, {"index_with_generator": True}]:
+            with pytest.raises(RuntimeError, match="Cannot call map on a"):
+                params.map(lambda x: x + 1, 0, 1, **kwargs)
+        with pytest.raises(RuntimeError, match="Cannot call map on a"):
+            params.map(lambda x: x + 1, 0, 1, None, None, None, None, None, 1, None)
+        for kwargs in [{}, {"existsok": True}, {"atomic": True}]:
+            with pytest.raises(RuntimeError, match="Cannot build a memmap"):
+                params.memmap_(tmp_path, **kwargs)
+        with pytest.raises(RuntimeError, match="Cannot build a memmap"):
+            params.memmap_(tmp_path, False, 2)
+        assert not any(tmp_path.iterdir())
+
     def test_override_signatures_match_base(self):
         # #3323: every public override declares the parameters of
         # TensorDictBase, with the same names, kinds and defaults, unless it
@@ -6015,11 +6034,6 @@ class TestTensorDictParams:
         exempt = {
             # Built differently from a tensordict.
             "__init__",
-            # map and memmap_ always raise a RuntimeError on a
-            # TensorDictParams: a base keyword there would only change which
-            # error the call gets, which is left for a separate decision.
-            "map",
-            "memmap_",
             # Handled with the save family (#3320).
             "memmap_like",
         }
@@ -6028,6 +6042,10 @@ class TestTensorDictParams:
             ("args", inspect.Parameter.VAR_POSITIONAL),
             ("kwargs", inspect.Parameter.VAR_KEYWORD),
         ]
+        # map and memmap_ always raise a RuntimeError on a TensorDictParams,
+        # and main accepts some parameters by position there that the base
+        # takes by keyword only: compare their names and defaults, not kinds.
+        any_kind = {"map", "memmap_"}
         checked, mismatched = [], []
         for name, attr in vars(TensorDictParams).items():
             base = getattr(TensorDictBase, name, None)
@@ -6040,11 +6058,16 @@ class TestTensorDictParams:
                 continue
             checked.append(name)
             base_params = inspect.signature(base).parameters.values()
-            if [(p.name, p.kind, p.default) for p in params] != [
+            if name in any_kind:
+                if {p.name: p.default for p in params} != {
+                    p.name: p.default for p in base_params
+                }:
+                    mismatched.append(name)
+            elif [(p.name, p.kind, p.default) for p in params] != [
                 (p.name, p.kind, p.default) for p in base_params
             ]:
                 mismatched.append(name)
-        assert {"flatten_keys", "set_", "repeat_interleave"} <= set(checked)
+        assert {"flatten_keys", "set_", "repeat_interleave", "map"} <= set(checked)
         assert mismatched == []
 
 
