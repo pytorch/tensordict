@@ -32,7 +32,11 @@ can run asynchronously with respect to the host. Defaults to
 - **keys_to_update** (*sequence**of*[*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*,**optional*) - if passed, only
 these keys are copied, without the cost of
 `td.update_(other.select(*keys_to_update))`. Defaults to
-`None`, which copies every entry.
+`None`, which copies every entry. If it lists a
+sub-tensordict key and a key under it, the whole sub-tensordict
+is copied and the call warns, while `select` keeps only the
+deeper keys; starting with TensorDict 0.17, the default will
+change to copying only the deeper keys, as `select` does.
 - ****kwargs** - entries to copy at the top level, by key.
 
 Returns:

@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6512+g7f97b3549.d20261022)">
+<meta name="llm:version" content="main (0.15.0.dev6513+g0eec87080.d20261022)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6512+g7f97b3549.d20261022)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6513+g0eec87080.d20261022)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1787,7 +1787,11 @@ can run asynchronously with respect to the host. Defaults to
 <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>keys_to_update</strong> (<em>sequence</em><em> of </em><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a><em>, </em><em>optional</em>) – if passed, only
 these keys are copied. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, which copies every
-entry.</p></li>
+entry. If it lists a sub-tensordict key and a key under it, the
+whole sub-tensordict is copied and the call warns, while
+<code class="docutils literal notranslate"><span class="pre">select</span></code> keeps only the deeper keys; starting with TensorDict
+0.17, the default will change to copying only the deeper keys,
+as <code class="docutils literal notranslate"><span class="pre">select</span></code> does.</p></li>
 </ul>
 </dd>
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
@@ -2174,7 +2178,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.update_at",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.update_at",
        "url": "/reference/generated/tensordict.TensorDictBase.update_at_.html",
-       "articleBody": "TensorDictBase.update_at# TensorDictBase.update_at_(input_dict_or_td: dict[str, Tensor | TensorCollection] | T, idx: None | int | slice | str | Tensor | List[Any] | Tuple[Any, ...], clone: bool = False, *, non_blocking: bool = False, keys_to_update: Sequence[NestedKey] | None = None) \u2192 Self# Copies the entries of a dictionary or tensordict into the existing entries at idx. td.update_at_(other, idx) writes each entry as td.set_at_(key, other[key], idx): the existing tensors keep their storage, so update_at_ works on a locked tensordict. Every key of the input must exist in the tensordict. Tensor and non-tensor leaves are supported. For a faster copy of tensors only, use copy_at_(). Parameters: input_dict_or_td (TensorDictBase or dict) \u2013 the entries to copy. Their leading dimensions are those of td[idx]. idx (int, slice, Tensor or tuple) \u2013 the index to write at, along the batch dimensions. clone (bool, optional) \u2013 if True, clones the tensors of the input before copying them. Defaults to False. Keyword Arguments: non_blocking (bool, optional) \u2013 if True, copies between devices can run asynchronously with respect to the host. Defaults to False. keys_to_update (sequence of NestedKey, optional) \u2013 if passed, only these keys are copied. Defaults to None, which copies every entry. Returns: self. Raises: KeyError \u2013 if a key of the input is missing from the tensordict. RuntimeError \u2013 if a value does not fit the shape of its entry. Deprecated since version 0.15: The keyword names index (for idx) and input_dict (for input_dict_or_td) warn, and will be removed in TensorDict 0.17. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.zeros(3, 4, 5), b=torch.zeros(3, 4, 10), batch_size=[3, 4]) \u003e\u003e\u003e other = TensorDict(a=torch.ones(1, 4, 5), b=torch.ones(1, 4, 10), batch_size=[1, 4]) \u003e\u003e\u003e _ = td.update_at_(other, slice(1, 2)) \u003e\u003e\u003e td[\"a\"].sum(dim=(1, 2)) tensor([ 0., 20., 0.]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.update_at# TensorDictBase.update_at_(input_dict_or_td: dict[str, Tensor | TensorCollection] | T, idx: None | int | slice | str | Tensor | List[Any] | Tuple[Any, ...], clone: bool = False, *, non_blocking: bool = False, keys_to_update: Sequence[NestedKey] | None = None) \u2192 Self# Copies the entries of a dictionary or tensordict into the existing entries at idx. td.update_at_(other, idx) writes each entry as td.set_at_(key, other[key], idx): the existing tensors keep their storage, so update_at_ works on a locked tensordict. Every key of the input must exist in the tensordict. Tensor and non-tensor leaves are supported. For a faster copy of tensors only, use copy_at_(). Parameters: input_dict_or_td (TensorDictBase or dict) \u2013 the entries to copy. Their leading dimensions are those of td[idx]. idx (int, slice, Tensor or tuple) \u2013 the index to write at, along the batch dimensions. clone (bool, optional) \u2013 if True, clones the tensors of the input before copying them. Defaults to False. Keyword Arguments: non_blocking (bool, optional) \u2013 if True, copies between devices can run asynchronously with respect to the host. Defaults to False. keys_to_update (sequence of NestedKey, optional) \u2013 if passed, only these keys are copied. Defaults to None, which copies every entry. If it lists a sub-tensordict key and a key under it, the whole sub-tensordict is copied and the call warns, while select keeps only the deeper keys; starting with TensorDict 0.17, the default will change to copying only the deeper keys, as select does. Returns: self. Raises: KeyError \u2013 if a key of the input is missing from the tensordict. RuntimeError \u2013 if a value does not fit the shape of its entry. Deprecated since version 0.15: The keyword names index (for idx) and input_dict (for input_dict_or_td) warn, and will be removed in TensorDict 0.17. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.zeros(3, 4, 5), b=torch.zeros(3, 4, 10), batch_size=[3, 4]) \u003e\u003e\u003e other = TensorDict(a=torch.ones(1, 4, 5), b=torch.ones(1, 4, 10), batch_size=[1, 4]) \u003e\u003e\u003e _ = td.update_at_(other, slice(1, 2)) \u003e\u003e\u003e td[\"a\"].sum(dim=(1, 2)) tensor([ 0., 20., 0.]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
