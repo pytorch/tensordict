@@ -4152,6 +4152,95 @@ class TestGeneric:
             assert data["d"].batch_size == torch.Size(batch_size)
             assert data["d", "g"].batch_size == torch.Size(batch_size)
 
+    @pytest.mark.parametrize("value", [7, 1.5, True])
+    def test_from_dict_to_dict_non_tensor_scalar(self, value):
+        # https://github.com/pytorch/tensordict/issues/3266: to_dict writes
+        # non-tensor data as its Python value, and from_dict read a scalar as a
+        # 0-dim tensor that does not fit the batch size.
+        td = TensorDict(a=torch.zeros(3), batch_size=[3])
+        td.set_non_tensor("n", value)
+        td.set_non_tensor(("nested", "n"), value)
+        out = TensorDict.from_dict(td.to_dict(), batch_size=[3])
+        for key in ("n", ("nested", "n")):
+            assert isinstance(out.get(key), NonTensorData)
+            assert out.get(key).batch_size == (3,)
+            assert type(out[key]) is type(value)
+            assert out[key] == value
+        assert out["nested"].batch_size == (3,)
+        # Without a batch size, a scalar is still read as a 0-dim tensor.
+        assert isinstance(TensorDict.from_dict({"n": value})["n"], torch.Tensor)
+
+    @pytest.mark.parametrize(
+        "op",
+        [
+            "lazy_eq",
+            "lazy_eq_nested",
+            "lazy_update",
+            "lazy_update_new_key",
+            "lazy_update_at_",
+            "dense_setitem_slice",
+            "dense_setitem_mask",
+        ],
+    )
+    def test_dict_scalar_operand_still_raises(self, op):
+        # https://github.com/pytorch/tensordict/issues/3266: from_dict reads a
+        # Python scalar as non-tensor data, but the dicts that comparisons,
+        # updates and indexed writes convert still read it as a 0-dim tensor,
+        # which does not fit the batch size. Reading it as non-tensor data
+        # would compare zeros with 1 as True, or replace a tensor with
+        # non-tensor data.
+        lazy = LazyStackedTensorDict(
+            *[
+                TensorDict(a=torch.zeros(()), n=TensorDict(a=torch.zeros(())))
+                for _ in range(3)
+            ]
+        )
+        dense = TensorDict(a=torch.zeros(3), batch_size=[3])
+        ops = {
+            "lazy_eq": lambda: lazy == {"a": 1},
+            "lazy_eq_nested": lambda: lazy == {"n": {"a": 1}},
+            "lazy_update": lambda: lazy.update({"a": 7}),
+            "lazy_update_new_key": lambda: lazy.update({"x": 7}),
+            "lazy_update_at_": lambda: lazy.update_at_({"a": 1}, slice(0, 2)),
+            "dense_setitem_slice": lambda: dense.__setitem__(slice(0, 2), {"a": 1}),
+            "dense_setitem_mask": lambda: dense.__setitem__(
+                torch.tensor([True, False, True]), {"a": 1}
+            ),
+        }
+        with pytest.raises(RuntimeError, match="batch dimension mismatch"):
+            ops[op]()
+        assert isinstance(lazy.get("a"), torch.Tensor)
+        assert "x" not in lazy.keys()
+        assert (dense["a"] == 0).all()
+
+    def test_from_dict_scalar_through_from_list_from_any_tensorclass(self):
+        # https://github.com/pytorch/tensordict/issues/3266: from_list,
+        # from_any and a tensorclass's from_dict convert dicts with from_dict,
+        # so they read a scalar as non-tensor data too; the update methods of
+        # a tensorclass still raise for it.
+        class TC(TensorClass):
+            a: torch.Tensor
+            n: Any = None
+
+        out = TensorDict.from_list(
+            [{"a": torch.zeros(3), "n": 7}] * 2, batch_size=[2, 3]
+        )
+        assert isinstance(out.get("n"), NonTensorStack)
+        assert out.get("n").batch_size == (2, 3)
+        out = TensorDict.from_any({"a": torch.zeros(3), "n": 7}, batch_size=[3])
+        assert isinstance(out.get("n"), NonTensorData)
+        tc = TC.from_dict({"a": torch.zeros(3), "n": 7}, batch_size=[3])
+        assert isinstance(tc._tensordict.get("n"), NonTensorData)
+        assert tc.n == 7
+        for update in (
+            lambda: tc.update_({"a": 1.0}),
+            lambda: tc.update_at_({"a": 1.0}, slice(0, 2)),
+            lambda: tc.update({"a": 1.0}, inplace=True),
+        ):
+            with pytest.raises(RuntimeError, match="batch dimension mismatch"):
+                update()
+        assert (tc.a == 0).all()
+
     @pytest.mark.parametrize(
         "kwargs",
         [
@@ -4182,12 +4271,12 @@ class TestGeneric:
         # https://github.com/pytorch/tensordict/issues/2979
         td = TensorDict(a=torch.zeros(3))
         td3 = TensorDict(a=torch.zeros(3), batch_size=[3])
-        with pytest.warns(FutureWarning, match="batch_size=.2, 3. for the tensor"):
+        with pytest.warns(FutureWarning, match="batch_size.* for the tensor"):
             assert TensorDict.from_list([td, td], batch_size=[2, 3]).batch_size == (2,)
         with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
             out = TensorDict.from_list([td3, td3], batch_size=[2])
         assert out.batch_size == (2, 3)
-        with pytest.warns(FutureWarning, match="device=meta"):
+        with pytest.warns(FutureWarning, match="device.* for the tensor"):
             assert TensorDict.from_list([td, td], device="meta").device is None
         # silent when the result has the batch size and device asked for
         data = [{"a": torch.zeros(3)}, {"a": torch.zeros(3)}]
@@ -9554,6 +9643,34 @@ class TestGeneric:
         batch = default_collate([NonTensorData("a"), MetaData("b")])
         assert batch.tolist() == ["a", "b"]
 
+    @pytest.mark.parametrize(
+        "first,other",
+        [
+            ("tensordict", "tensor"),
+            ("tensordict", "dict"),
+            ("tensordict", "None"),
+            ("tensorclass", "tensor"),
+        ],
+    )
+    def test_collate_default_mixed_with_other_types(self, first, other):
+        # #3302: a batch that mixes a tensordict or a tensorclass with
+        # something that is not a tensor collection raises a TypeError, as on
+        # 0.15.2, not an AttributeError.
+        class Sample(TensorClass):
+            x: torch.Tensor
+
+        elem = {
+            "tensordict": TensorDict(a=torch.zeros(3)),
+            "tensorclass": Sample(x=torch.zeros(3)),
+        }[first]
+        item = {
+            "tensor": torch.zeros(3),
+            "dict": {"a": torch.zeros(3)},
+            "None": None,
+        }[other]
+        with pytest.raises(TypeError, match="mixes tensordicts or tensorclasses"):
+            torch.utils.data.default_collate([elem, item])
+
     def test_collate_default_registration(self):
         # tensordict adds two keys to torch's default_collate_fn_map, and keeps
         # the collate function that another library registered first.
@@ -11381,6 +11498,71 @@ class TestGeneric:
         loaded = tensordict.load_memmap(tmpdir)
         expected = torch.cat([expected, rows(4, 2)])
         assert loaded.batch_size == expected.batch_size
+        assert (loaded == expected).all()
+
+    @pytest.mark.parametrize("replaced", [True, False])
+    def test_append_memmap_killed_empty_nested(self, tmpdir, replaced):
+        # #3249: with an empty nested tensordict, the directory still loads
+        # after the root meta.json is replaced. The docs decide by the root
+        # .meta.json.append.tmp: rename the leftovers if it is gone, delete
+        # them if it is there.
+        def rows(num_rows, value):
+            return TensorDict(
+                a=torch.full((num_rows,), float(value)),
+                sub=TensorDict(batch_size=[num_rows]),
+                batch_size=[num_rows],
+            )
+
+        rows(3, 0).memmap(tmpdir)
+        # Kill the child right after the first meta.json is replaced, or right
+        # before.
+        code = (
+            "import os, torch\n"
+            "from tensordict import TensorDict, append_memmap\n"
+            "replace = os.replace\n"
+            "def replace_and_die(src, dst):\n"
+            f"    if {replaced}:\n"
+            "        replace(src, dst)\n"
+            "    os._exit(9)\n"
+            "os.replace = replace_and_die\n"
+            "rows = TensorDict(a=torch.ones(2), sub=TensorDict(batch_size=[2]), "
+            "batch_size=[2])\n"
+            f"append_memmap({str(tmpdir)!r}, rows)\n"
+        )
+        # The child imports the tensordict that this test imports.
+        package_root = os.path.dirname(os.path.dirname(tensordict.__file__))
+        pythonpath = os.pathsep.join(
+            filter(None, [package_root, os.environ.get("PYTHONPATH")])
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            env={**os.environ, "PYTHONPATH": pythonpath},
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        assert result.returncode == 9, result.stderr
+        leftovers = list(Path(tmpdir).rglob(".meta.json.append.tmp"))
+        assert len(leftovers) == (1 if replaced else 2)
+        # The documented rule.
+        root_replaced = not (Path(tmpdir) / ".meta.json.append.tmp").exists()
+        assert root_replaced == replaced
+        for tmp in leftovers:
+            if root_replaced:
+                os.replace(tmp, tmp.with_name("meta.json"))
+            else:
+                os.remove(tmp)
+        expected = torch.cat([rows(3, 0), rows(2, 1)]) if replaced else rows(3, 0)
+        loaded = tensordict.load_memmap(tmpdir)
+        assert loaded.batch_size == expected.batch_size
+        assert loaded["sub"].batch_size == expected.batch_size
+        assert (loaded == expected).all()
+        del loaded
+        tensordict.append_memmap(tmpdir, rows(4, 2))
+        loaded = tensordict.load_memmap(tmpdir)
+        expected = torch.cat([expected, rows(4, 2)])
+        assert loaded.batch_size == expected.batch_size
+        assert loaded["sub"].batch_size == expected.batch_size
         assert (loaded == expected).all()
 
     def test_memmap_format_version(self, tmp_path):
@@ -14549,8 +14731,7 @@ class TestGeneric:
 
         match = (
             r"^update\(update_batch_size=True\) got a source with batch size "
-            r"torch\.Size\(\[2\]\) for a destination with batch size "
-            r"torch\.Size\(\[\]\), a prefix of it, .*Starting with TensorDict "
+            r".*, a prefix of it, .*Starting with TensorDict "
             r"0\.17, the default will change"
         )
         td = TensorDict(x=torch.ones(2, 3), y=torch.ones(5))

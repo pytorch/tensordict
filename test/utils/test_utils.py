@@ -1239,10 +1239,6 @@ def _warning_message_violations(path, root):
     return violations
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="#3256: warning messages still interpolate runtime values",
-)
 def test_warning_messages_hold_no_runtime_values():
     # #3232: a warning's message interpolates only what the allow-list and
     # the exemptions above name. tensordict/_deprecation.py itself is skipped: its helpers pass on
@@ -1333,6 +1329,48 @@ def test_warning_once_per_call_site(case):
         "values, instead of one: the message holds the value (#3232). The "
         "first two:\n" + "\n".join(messages[:2])
     )
+
+
+def _from_list_batch_sizes():
+    td = TensorDict(a=torch.zeros(3))
+    return (lambda size: TensorDict.from_list([td, td], batch_size=[2, size])), range(
+        1, 21
+    )
+
+
+def _empty_names_batch_sizes():
+    td = TensorDict()
+    return (lambda size: td.empty(batch_size=[size, 2], names=["a", "a"])), range(1, 21)
+
+
+def _update_prefix_batch_sizes():
+    def update(size):
+        TensorDict(x=torch.ones(size)).update(
+            TensorDict(x=torch.zeros(size), batch_size=[size]),
+            update_batch_size=True,
+        )
+
+    return update, range(1, 21)
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        pytest.param(_from_list_batch_sizes, id="from_list-tensor-collections"),
+        pytest.param(_empty_names_batch_sizes, id="empty-names"),
+        pytest.param(_update_prefix_batch_sizes, id="update-prefix-batch-size"),
+    ],
+)
+def test_future_warning_once_per_call_site(case):
+    # #3256: these FutureWarnings printed the batch sizes of the call, so one
+    # call site warned again for each new batch size.
+    call, values = case()
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter("default")
+        for value in values:
+            call(value)
+    messages = [str(w.message) for w in record]
+    assert len(messages) == 1, "\n".join(messages[:2])
 
 
 def _min_time_interleaved(calls, values, rounds=7):

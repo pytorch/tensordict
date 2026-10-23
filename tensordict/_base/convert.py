@@ -460,21 +460,21 @@ class _Conversion:
         out = stack(input)
         ignored = []
         if batch_size is not None and out.batch_size != torch.Size(batch_size):
-            ignored.append(f"batch_size={list(batch_size)}")
+            ignored.append("batch_size")
         if device is not None:
             from tensordict._td import _parse_device
 
             if out.device != _parse_device(device, memoize=False)[0]:
-                ignored.append(f"device={device}")
+                ignored.append("device")
         if ignored:
             # the tensor collections of the list skip from_dict (#2979)
             warnings.warn(
                 f"from_list ignores {' and '.join(ignored)} for the tensor "
-                f"collections of the list: the result has batch size "
-                f"{out.batch_size} and device {out.device}. Starting with "
-                "TensorDict 0.17, the default will change to applying them "
-                "to the result, which raises if the batch size does not "
-                "fit, as for a list of dicts.",
+                "collections of the list: the result keeps the batch size "
+                "and device of their stack. Starting with TensorDict 0.17, "
+                "the default will change to applying them to the result, "
+                "which raises if the batch size does not fit, as for a list "
+                "of dicts.",
                 FutureWarning,
                 stacklevel=_user_stacklevel(),
             )
@@ -592,7 +592,7 @@ class _Conversion:
                     auto_batch_size=False,
                 )
 
-        out = TensorDict.from_dict(
+        out = TensorDict._from_dict_impl(
             input_dict,
             batch_size=batch_size_set,
             device=device,

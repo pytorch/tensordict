@@ -116,7 +116,7 @@ from torch.utils._pytree import tree_is_leaf, tree_map
 from torch.utils.data._utils.collate import default_collate_fn_map
 
 if TYPE_CHECKING:
-    from typing import Self
+    from typing_extensions import Self
 else:
     Self = Any
 
@@ -1480,6 +1480,11 @@ def _collate_tensor_collection(batch, *, collate_fn_map=None):
             raise TypeError(
                 "Cannot collate a batch that mixes tensorclass instances with "
                 f"tensordicts: got {sorted(cls.__name__ for cls in types)}."
+            ) from err
+        if not all(is_tensor_collection(cls) for cls in types):
+            raise TypeError(
+                "Cannot collate a batch that mixes tensordicts or tensorclasses "
+                f"with other types: got {sorted(cls.__name__ for cls in types)}."
             ) from err
         raise
 
@@ -5010,6 +5015,7 @@ def _from_dict(
     batch_size=None,
     device=None,
     batch_dims=None,
+    non_tensor_scalars: bool = True,
 ):
     # we pass through a tensordict because keys could be passed as NestedKeys
     # We can't assume all keys are strings, otherwise calling cls(**kwargs)
@@ -5031,12 +5037,15 @@ def _from_dict(
             for key, value in input_dict.items()
             if value is not None or key not in cls.__expected_keys__
         }
-    td = TensorDict.from_dict(
+    # The update methods pass non_tensor_scalars=False: a Python scalar in
+    # their dict stays a 0-dim tensor and raises as before (#3266).
+    td = TensorDict._from_dict_impl(
         input_dict,
         batch_size=batch_size,
         device=device,
         batch_dims=batch_dims,
         auto_batch_size=auto_batch_size,
+        non_tensor_scalars=non_tensor_scalars,
     )
     non_tensordict = {}
 
@@ -5122,7 +5131,7 @@ def _from_dict_for_update(cls, input_dict, **kwargs):
     # warning, unless the class defines its own from_dict(). Dynamo traces
     # this attribute read, not an identity check on cls.from_dict.__func__.
     if getattr(cls.from_dict, "_tc_default_from_dict", False):
-        return _from_dict(cls, input_dict, **kwargs)
+        return _from_dict(cls, input_dict, non_tensor_scalars=False, **kwargs)
     return cls.from_dict(input_dict, **kwargs)
 
 
