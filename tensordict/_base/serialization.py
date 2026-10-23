@@ -2049,9 +2049,15 @@ class _Serialization:
         ).lock_()
 
     def _wrap_archive_result(self, result: TensorDictBase) -> TensorDictBase:
-        # memmap and memmap_like reload an archive with load_memmap, which
-        # returns the class recorded in the archive: a class whose directory
-        # result keeps its own class overrides this to wrap it (#3324).
+        """Gives the result of an archive write the classes that a directory write returns (#3324).
+
+        :meth:`memmap` and :meth:`memmap_like` call it after they wrote a
+        ``.tdz`` archive and reloaded it with ``load_memmap``, which returns
+        the class recorded in the archive. ``result`` is that reloaded
+        tensordict, backed by the archive. A class whose directory write keeps
+        its own class wraps ``result`` in it, without copying data, and
+        returns it; the default returns ``result`` unchanged.
+        """
         return result
 
     @classmethod
