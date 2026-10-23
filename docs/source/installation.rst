@@ -47,7 +47,7 @@ Some features need other packages. Install them with an extra, for example
      - Installs
      - For
    * - ``h5``
-     - ``h5py>=3.9``
+     - ``h5py>=3.11``
      - HDF5 files: :meth:`~tensordict.TensorDict.to_h5`,
        :meth:`~tensordict.TensorDict.from_h5`, and
        :class:`~tensordict.PersistentTensorDict`.
