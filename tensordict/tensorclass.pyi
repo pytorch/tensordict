@@ -853,6 +853,8 @@ class TensorClass(_TensorClassInitArgs):
         return_early: bool = False,
         share_non_tensor: bool = False,
         robust_key: bool | None = True,
+        archive: bool | None = None,
+        compression: str | int | None = None,
         atomic: bool = False,
     ) -> Self: ...
     def dumps(
@@ -864,6 +866,8 @@ class TensorClass(_TensorClassInitArgs):
         return_early: bool = False,
         share_non_tensor: bool = False,
         robust_key: bool | None = True,
+        archive: bool | None = None,
+        compression: str | int | None = None,
         atomic: bool = False,
     ) -> Self: ...
     def memmap(
@@ -876,6 +880,8 @@ class TensorClass(_TensorClassInitArgs):
         share_non_tensor: bool = False,
         existsok: bool = True,
         robust_key: bool | None = True,
+        archive: bool | None = None,
+        compression: str | int | None = None,
         atomic: bool = False,
     ) -> Self: ...
     def memmap_like(
@@ -888,6 +894,7 @@ class TensorClass(_TensorClassInitArgs):
         return_early: bool = False,
         share_non_tensor: bool = False,
         robust_key: bool | None = True,
+        archive: bool | None = None,
     ) -> Self: ...
     @classmethod
     def load(cls, prefix: str | Path, *args, **kwargs) -> Self: ...
