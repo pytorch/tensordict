@@ -432,8 +432,8 @@ def _to_array(pa, value, key):
         if tensor._ragged_idx != 1:
             raise ValueError(
                 f"to_arrow needs the ragged dim of the jagged tensor {key!r} at "
-                f"position 1, got {tensor._ragged_idx}. Transpose it back first, "
-                f"with .transpose(1, {tensor._ragged_idx})."
+                f"position 1, got {tensor._ragged_idx}. Move it there first, for "
+                f"example with .transpose(1, {tensor._ragged_idx})."
             )
         return pa.LargeListArray.from_arrays(
             pa.array(tensor.offsets().numpy()), _to_array(pa, tensor.values(), key)
@@ -458,8 +458,9 @@ def to_arrow(td: TensorDictBase) -> pyarrow.Table:
     - 1-D tensors become primitive columns. The columns of contiguous numeric
       tensors on the CPU view their data. Boolean tensors are copied.
     - tensors with more dimensions become ``arrow.fixed_shape_tensor`` columns.
-    - jagged nested tensors (``layout=torch.jagged``) become ``large_list``
-      columns.
+    - jagged nested tensors (``layout=torch.jagged``) with their ragged dim
+      at position 1 become ``large_list`` columns; another ragged dim raises a
+      ``ValueError``.
     - nested tensordicts become ``struct`` columns.
     - non-tensor entries, such as a :class:`~tensordict.NonTensorStack` of
       strings, become columns of the type that :func:`pyarrow.array` infers
