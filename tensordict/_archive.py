@@ -35,7 +35,12 @@ from pathlib import Path, PurePosixPath
 import numpy as np
 import torch
 from tensordict.memmap import _raise_if_jagged, MemoryMappedTensor
-from tensordict.utils import _SKIP_TENSORCLASS_POST_INIT, _zip_strict
+from tensordict.utils import (
+    _is_unbatched,
+    _SKIP_TENSORCLASS_POST_INIT,
+    _warn_unbatched_saved_as_plain,
+    _zip_strict,
+)
 
 # Suffix that triggers archive mode by default in ``save``/``memmap``.
 TENSORDICT_ARCHIVE_SUFFIX = ".tdz"
@@ -882,6 +887,9 @@ def _write_archive_from_td(
     from tensordict.base import _NESTED_TENSORS_AS_LISTS
 
     leaves = list(td.values(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS))
+    if any(_is_unbatched(value) for value in leaves):
+        # meta.json has no place for the class (#3264)
+        _warn_unbatched_saved_as_plain()
     has_nested = any(getattr(v, "is_nested", False) for v in leaves)
     if like and has_nested:
         # memmap_like reloads the archive with load_memmap(mode="r+"), which

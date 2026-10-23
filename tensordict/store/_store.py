@@ -55,7 +55,7 @@ _has_redis = importlib.util.find_spec("redis", None) is not None
 STORE_BACKENDS = Literal["redis", "dragonfly"]
 
 if TYPE_CHECKING:
-    from typing import Self
+    from typing_extensions import Self
 else:
     Self = Any
 

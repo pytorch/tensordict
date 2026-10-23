@@ -407,11 +407,17 @@ For a tensorclass, both attribute access and ``get()`` also return the
 Limitations
 ~~~~~~~~~~~
 
-- Memory-mapped serialization and consolidation do not support
-  :class:`~tensordict.UnbatchedTensor` yet.
-  :meth:`~tensordict.TensorDict.memmap` and
+- Memory-mapped serialization to a directory and consolidation do not
+  support :class:`~tensordict.UnbatchedTensor` yet.
+  :meth:`~tensordict.TensorDict.memmap` with a directory prefix and
   :meth:`~tensordict.TensorDict.consolidate` raise ``NotImplementedError``
   when the tensordict contains one. :func:`torch.save` keeps them.
+- :meth:`~tensordict.TensorDict.to_h5`,
+  :meth:`~tensordict.TensorDict.to_zarr` and ``.tdz`` archives (written by
+  :meth:`~tensordict.TensorDict.memmap` or
+  :meth:`~tensordict.TensorDict.save` with a ``.tdz`` path) save
+  :class:`~tensordict.UnbatchedTensor` entries as plain tensors, and they
+  are read back as plain tensors. Such a save emits a ``UserWarning``.
 - If you stack tensordicts whose :class:`~tensordict.UnbatchedTensor`
   entries have different data, the result keeps only the data of the first
   one, and it warns.

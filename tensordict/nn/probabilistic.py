@@ -12,7 +12,7 @@ import sys
 import warnings
 from collections.abc import MutableSequence
 from textwrap import indent
-from typing import Any, Callable, Dict, List, OrderedDict, overload, TYPE_CHECKING
+from typing import Any, Callable, Dict, List, overload, TYPE_CHECKING
 
 import torch
 from tensordict._deprecation import deprecated, deprecated_attributes, warn_deprecated
@@ -57,7 +57,7 @@ else:
     from .utils import _StrEnum as StrEnum
 
 if TYPE_CHECKING:
-    from typing import Self
+    from typing_extensions import Self
 else:
     Self = Any
 
@@ -1525,7 +1525,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
     @overload
     def __init__(
         self,
-        modules: OrderedDict[str, TensorDictModuleBase | ProbabilisticTensorDictModule],
+        modules: dict[str, TensorDictModuleBase | ProbabilisticTensorDictModule],
         partial_tolerant: bool = False,
         return_composite: bool | None = None,
         *,
@@ -1540,6 +1540,16 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         partial_tolerant: bool = False,
         return_composite: bool | None = None,
         *,
+        selected_out_keys: List[NestedKey] | None = None,
+        inplace: bool | None = None,
+    ) -> None: ...
+
+    @overload
+    def __init__(
+        self,
+        *modules: TensorDictModuleBase | ProbabilisticTensorDictModule,
+        partial_tolerant: bool = False,
+        return_composite: bool | None = None,
         selected_out_keys: List[NestedKey] | None = None,
         inplace: bool | None = None,
     ) -> None: ...

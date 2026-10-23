@@ -1406,9 +1406,6 @@ _ROUND_TRIP_BUGS = {
         ): "#3265: saving a jagged leaf fails with an error that names no key"
         for path in ("h5", "zarr")
     },
-    ("non_tensor", "to_dict"): (
-        "#3266: from_dict(to_dict()) fails on a nested non-tensor entry"
-    ),
 }
 
 
