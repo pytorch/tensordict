@@ -366,7 +366,18 @@ def from_arrow(
         raise ValueError(f"nulls must be one of {_NULLS}, got {nulls!r}.")
     if mask_key is not None and nulls != "mask":
         raise ValueError(f"from_arrow got a mask_key but nulls={nulls!r}, not 'mask'.")
-    mask_key = unravel_key("_mask" if mask_key is None else mask_key)
+    if mask_key is None:
+        mask_key = "_mask"
+    elif not isinstance(mask_key, str) and not (
+        isinstance(mask_key, tuple)
+        and all(isinstance(k, (str, tuple)) for k in mask_key)
+    ):
+        raise TypeError(
+            f"mask_key must be a string or a tuple of strings, got {mask_key!r}."
+        )
+    mask_key = unravel_key(mask_key)
+    if mask_key in ("", ()):
+        raise ValueError("mask_key must not be empty.")
     first = mask_key if isinstance(mask_key, str) else mask_key[0]
     if not isinstance(table, (pa.Table, pa.RecordBatch)):
         table = pa.table(table)
@@ -387,7 +398,12 @@ def from_arrow(
         unchecked_nulls = unchecked_nulls or (
             nulls == "raise"
             # Cheap gate, so numeric columns skip the walk over their type.
-            and (pa.types.is_nested(column.type) or pa.types.is_dictionary(column.type))
+            and (
+                pa.types.is_nested(column.type)
+                or pa.types.is_dictionary(column.type)
+                # pyarrow 15's is_nested leaves out fixed_size_list.
+                or pa.types.is_fixed_size_list(column.type)
+            )
             and _has_unchecked_nulls(pa, column)
         )
     if unchecked_nulls:

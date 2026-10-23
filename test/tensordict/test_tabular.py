@@ -805,6 +805,25 @@ class TestArrow:
                 pa.table({"y": pa.array([1.0, None])}), nulls=nulls, mask_key="m"
             )
 
+    # #3334
+    @pytest.mark.parametrize(
+        "mask_key, error",
+        [
+            ("", ValueError),
+            ((), ValueError),
+            (1, TypeError),
+            (["a", "b"], TypeError),
+            (("a", 1), TypeError),
+        ],
+    )
+    def test_from_arrow_mask_key_invalid(self, mask_key, error):
+        import pyarrow as pa
+
+        with pytest.raises(error, match="mask_key"):
+            from_arrow(
+                pa.table({"y": pa.array([1.0, None])}), nulls="mask", mask_key=mask_key
+            )
+
     # #3313: padding a from_arrow(nulls="mask") result keeps its null masks and
     # every row. The result depended on hash order, so run it with several
     # PYTHONHASHSEEDs.
@@ -979,6 +998,27 @@ assert torch.equal(episodes[1]["_mask", "x"], torch.tensor([True, True, True]))
             warnings.simplefilter("error", FutureWarning)
             td = from_arrow(pa.table({"u": column}))
         assert td.get("u").tolist() == [1, None]
+
+    # #3334: pyarrow 15's is_nested leaves out fixed_size_list, so emulate it.
+    @pytest.mark.parametrize("kind", ["map", "dictionary"])
+    @pytest.mark.parametrize("pyarrow_15_is_nested", [False, True])
+    def test_from_arrow_nulls_raise_fixed_size_list_warns(
+        self, kind, pyarrow_15_is_nested, monkeypatch
+    ):
+        import pyarrow as pa
+
+        if pyarrow_15_is_nested:
+            is_nested = pa.types.is_nested
+            monkeypatch.setattr(
+                pa.types,
+                "is_nested",
+                lambda t: is_nested(t) and not pa.types.is_fixed_size_list(t),
+            )
+        values = self._unchecked_column(pa, kind, ["a", None, "b"])
+        column = pa.FixedSizeListArray.from_arrays(values, 1)
+        with pytest.warns(FutureWarning, match="TensorDict 0.18"):
+            td = from_arrow(pa.table({"c": column}))
+        assert td.get("c").tolist() == column.to_pylist()
 
     def test_from_arrow_memory_map(self, tmp_path):
         # An in-place write into a view of a memory-mapped file kills the
