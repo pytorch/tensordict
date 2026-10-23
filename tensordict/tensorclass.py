@@ -1471,6 +1471,14 @@ def _collate_tensor_collection(batch, *, collate_fn_map=None):
                 "Cannot collate a batch of different tensorclasses: got "
                 f"{sorted(cls.__name__ for cls in tc_types)}."
             )
+    # Items with different numbers of batch dims cannot be stacked (#3330).
+    if all(is_tensor_collection(item) for item in batch):
+        batch_dims = {item.batch_dims for item in batch}
+        if len(batch_dims) > 1:
+            raise TypeError(
+                "Cannot collate a batch of tensordicts or tensorclasses with "
+                f"different numbers of batch dims: got {sorted(batch_dims)}."
+            )
     try:
         return LazyStackedTensorDict.maybe_dense_stack(batch)
     except AttributeError as err:

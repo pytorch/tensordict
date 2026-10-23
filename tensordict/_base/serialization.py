@@ -39,6 +39,7 @@ from tensordict._nestedkey import NestedKey
 from tensordict._td_memmap import _class_id
 from tensordict.base import (
     _default_is_leaf,
+    _is_leaf_nontensor,
     _is_tensor_collection,
     _load_metadata,
     _NESTED_TENSORS_AS_LISTS_NONTENSOR,
@@ -222,6 +223,16 @@ def _writes_state_dict_metadata(td, key: tuple[str, ...]) -> bool:
     )
 
 
+def _valueless_level_metadata(td, key: tuple[str, ...]) -> dict | None:
+    """Returns the ``_metadata`` entry that ``state_dict`` writes for the level ``key`` of ``td`` (``()`` for ``td``), or ``None`` if the level holds a tensor or non-tensor data."""
+    level = td.get(key) if key else td
+    if _is_non_tensor(type(level)):
+        return None
+    for _ in level.keys(True, True, is_leaf=_is_leaf_nontensor):
+        return None
+    return level.state_dict(flatten=False)._metadata[""]
+
+
 def _flat_state_dict_entries(td, key: str):
     """Yields the nested key of ``key`` and of each entry below it, with ``True`` for a leaf.
 
@@ -319,6 +330,11 @@ def _check_flat_state_dict_keys(td, prefix: str) -> None:
                 continue
             if other and not _writes_state_dict_metadata(td, other):
                 seen[flat_key] = key
+                continue
+            # Two levels without values and with the same metadata write the
+            # same flat state dict (#3331)
+            metadata = _valueless_level_metadata(td, other)
+            if metadata is not None and metadata == _valueless_level_metadata(td, key):
                 continue
         conflicts = [k[0] if len(k) == 1 else k for k in (other, key)]
         raise KeyError(
