@@ -580,6 +580,8 @@ See also
 
 - :ref:`saving`: memory-mapped directories, archives, and their on-disk
   layout.
+- :ref:`datasets-larger-than-memory`: write a dataset that does not fit in
+  RAM to disk, grow it, and train from it with a ``DataLoader``.
 - :ref:`data-loading`: read these datasets with a ``DataLoader``, and share
   them between processes.
 - :ref:`distributed`: send tensordicts between nodes.
