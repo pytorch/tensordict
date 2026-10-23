@@ -9671,6 +9671,34 @@ class TestGeneric:
         with pytest.raises(TypeError, match="mixes tensordicts or tensorclasses"):
             torch.utils.data.default_collate([elem, item])
 
+    @pytest.mark.parametrize(
+        "kind,batch_sizes",
+        [
+            ("tensordict", ([2], [])),
+            ("tensordict", ([2, 3], [2])),
+            ("tensorclass", ([2], [])),
+        ],
+    )
+    def test_collate_default_different_batch_dims(self, kind, batch_sizes):
+        # #3330: a batch of tensor collections with different numbers of batch
+        # dims raises a TypeError, as on 0.15.2, not a RuntimeError.
+        class Sample(TensorClass):
+            x: torch.Tensor
+
+        cls = {"tensordict": TensorDict, "tensorclass": Sample}[kind]
+        key = {"tensordict": "a", "tensorclass": "x"}[kind]
+        batch = [
+            cls(**{key: torch.zeros(2, 3)}, batch_size=batch_size)
+            for batch_size in batch_sizes
+        ]
+        dims = sorted(len(batch_size) for batch_size in batch_sizes)
+        for samples in (batch, batch[::-1]):
+            with pytest.raises(
+                TypeError,
+                match=re.escape(f"different numbers of batch dims: got {dims}"),
+            ):
+                torch.utils.data.default_collate(samples)
+
     def test_collate_default_registration(self):
         # tensordict adds two keys to torch's default_collate_fn_map, and keeps
         # the collate function that another library registered first.
