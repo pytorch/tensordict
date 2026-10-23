@@ -228,6 +228,9 @@ display fails. Nested in another tensordict, a
 [`TensorDictStore`](reference/generated/tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore) shows as its class name.
 - `set_printoptions(html=False)` turns the HTML display off, and the
 notebook shows the text display instead.
+- With `compact=False`, passed or set by a detailed-only option such as
+`set_printoptions(show_grad=True)`, the notebook shows the detailed text
+display instead of the HTML tree.
 
 ### Available options
 
@@ -236,7 +239,7 @@ These options choose the format:
 | Option | Default | Description |
 | --- | --- | --- |
 | `compact` | `True` | Print each entry as its dtype and its shape after the batch dims (`f32[3]`), on one line when it fits. See What print shows. With `False`, print the detailed display that the options below describe. |
-| `html` | `True` | Display tensordicts as HTML in notebooks. See Notebook display. |
+| `html` | `True` | Display tensordicts as HTML in notebooks: the tree, or the detailed text when `compact` is `False`. See Notebook display. |
 
 These options control the lines of the outer `TensorDict(...)` block of the
 detailed display:
