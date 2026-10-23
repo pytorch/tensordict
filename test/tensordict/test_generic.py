@@ -7185,8 +7185,11 @@ class TestGeneric:
         # A tensor field collides with a dotted key, but a non-tensor field is
         # stored in the _metadata of its tensorclass and collides with nothing
         checkpoint = Checkpoint(state=TensorDict(), label="x", batch_size=[])
-        with pytest.raises(KeyError, match="collide.*flatten=False"):
-            TensorDict({"c": checkpoint, "c.state": {}}, []).state_dict()
+        # #3331: two empty levels with the same metadata lose nothing
+        td = TensorDict({"c": checkpoint, "c.state": {}}, [])
+        sd = td.state_dict()
+        assert list(sd) == []
+        assert td.clone().load_state_dict(sd)["c"].label == "x"
         sd = TensorDict({"c.label": {}, "c": checkpoint}, []).state_dict()
         assert set(sd._metadata) == {"", "c.label", "c", "c.state"}
 
@@ -7227,6 +7230,44 @@ class TestGeneric:
                 td.state_dict(flatten=flatten)
             counts.append(read_full.call_count)
         assert counts == [3, 3]
+
+    # #3331
+    @pytest.mark.parametrize("reverse", [False, True])
+    @pytest.mark.parametrize("nested", [{}, {"c": {}}], ids=["empty", "nested_empty"])
+    def test_state_dict_flat_collision_empty_levels(self, reverse, nested):
+        # Two levels without values and with the same metadata write the same
+        # flat state dict: no value is lost
+        items = [("a.b", {}), ("a", {"b": nested})]
+        if reverse:
+            items.reverse()
+        td = TensorDict(dict(items), [])
+        sd = td.state_dict()
+        assert list(sd) == []
+        expected = {"", "a.b", "a"} | ({"a.b.c"} if nested else set())
+        assert set(sd._metadata) == expected
+        restored = td.clone().load_state_dict(sd)
+        assert set(restored.keys(True)) == set(td.keys(True))
+        nested_sd = td.state_dict(flatten=False)
+        assert list(nested_sd) == [key for key, _ in items]
+        assert list(nested_sd["a"]["b"]) == list(nested)
+        restored = td.clone().load_state_dict(nested_sd, from_flatten=False)
+        assert set(restored.keys(True)) == set(td.keys(True))
+
+    # #3331
+    @pytest.mark.parametrize("reverse", [False, True])
+    @pytest.mark.parametrize("kind", ["leaf", "level_with_leaves"])
+    def test_state_dict_flat_collision_with_value(self, reverse, kind):
+        # A collision still raises when an entry writes a value, even an equal
+        # one: loading the state dict back would restore one key only
+        if kind == "leaf":
+            items = [("a.b", torch.tensor(1)), ("a", {"b": torch.tensor(1)})]
+        else:
+            items = [("a.b", {}), ("a", {"b": {"x": torch.tensor(1)}})]
+        if reverse:
+            items.reverse()
+        td = TensorDict(dict(items), [])
+        with pytest.raises(KeyError, match="collide.*flatten=False"):
+            td.state_dict()
 
     @staticmethod
     def _lazy_stack_of_h5(tmp_path):
