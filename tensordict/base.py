@@ -2515,11 +2515,7 @@ def _warn_update_keys_narrowed(
         return
     # callers such as batched environments pass the same keys at every step:
     # scan each list once (#3333)
-    try:
-        nested = _update_keys_nest(tuple(keys_to_update))
-    except TypeError:
-        nested = _update_keys_nest.__wrapped__(keys_to_update)
-    if not nested or is_compiling():
+    if not _update_keys_nest(tuple(keys_to_update)) or is_compiling():
         return
     # the keys that another key of keys_to_update is strictly under
     prefixes = {key[:i] for key in keys_to_update for i in range(1, len(key))}
