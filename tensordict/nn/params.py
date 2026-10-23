@@ -118,8 +118,7 @@ def _apply_leaves(data, fn, *others):
         return fn(data, *others)
 
 
-def _get_args_dict(func, args, kwargs):
-    signature = inspect.signature(func)
+def _get_args_dict(signature, args, kwargs):
     bound_arguments = signature.bind(*args, **kwargs)
     bound_arguments.apply_defaults()
 
@@ -190,11 +189,13 @@ class _unlock_and_set:
         name = func.__name__
         # p["x"] = p would write p into the tensordict that p wraps
         check_self = name in ("__setitem__", "set")
+        # computed once: building it on every call cost more with each parameter
+        signature = inspect.signature(func) if self.only_for_kwargs else None
 
         @wraps(func)
         def new_func(_self, *args, **kwargs):  # type: ignore[misc]
             if self.only_for_kwargs:
-                arg_dict = _get_args_dict(func, (_self, *args), kwargs)
+                arg_dict = _get_args_dict(signature, (_self, *args), kwargs)
                 for kwarg, exp_value in self.only_for_kwargs.items():
                     cur_val = arg_dict.get(kwarg, NO_DEFAULT)
                     if cur_val != exp_value:
