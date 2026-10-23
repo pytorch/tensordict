@@ -61,7 +61,7 @@ from tensordict.utils import (
     KEY_SEPARATOR,
 )
 from torch import multiprocessing as mp, nn, Tensor
-from torch.compiler import is_compiling
+from torch.compiler import is_compiling, is_dynamo_compiling
 from torch.nn.parameter import Buffer
 from torch.utils._pytree import tree_map
 
@@ -118,8 +118,7 @@ def _apply_leaves(data, fn, *others):
         return fn(data, *others)
 
 
-def _get_args_dict(func, args, kwargs):
-    signature = inspect.signature(func)
+def _get_args_dict(signature, args, kwargs):
     bound_arguments = signature.bind(*args, **kwargs)
     bound_arguments.apply_defaults()
 
@@ -190,11 +189,16 @@ class _unlock_and_set:
         name = func.__name__
         # p["x"] = p would write p into the tensordict that p wraps
         check_self = name in ("__setitem__", "set")
+        # computed once: building it on every call cost more with each parameter
+        signature = inspect.signature(func) if self.only_for_kwargs else None
 
         @wraps(func)
         def new_func(_self, *args, **kwargs):  # type: ignore[misc]
             if self.only_for_kwargs:
-                arg_dict = _get_args_dict(func, (_self, *args), kwargs)
+                # Dynamo can't bind a Signature built outside the traced
+                # code (its parameters are a mappingproxy): build it there.
+                sig = inspect.signature(func) if is_dynamo_compiling() else signature
+                arg_dict = _get_args_dict(sig, (_self, *args), kwargs)
                 for kwarg, exp_value in self.only_for_kwargs.items():
                     cur_val = arg_dict.get(kwarg, NO_DEFAULT)
                     if cur_val != exp_value:
@@ -690,7 +694,13 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_lock_blocked
     @_unlock_and_set
     def set(
-        self, key: NestedKey, item: CompatibleType, inplace: bool = False, **kwargs: Any
+        self,
+        key: NestedKey,
+        item: CompatibleType,
+        inplace: bool = False,
+        *,
+        non_blocking: bool = False,
+        **kwargs: Any,
     ) -> TensorDictBase: ...
 
     # Override: the base runs with _param_td unlocked, so that a lock=True
@@ -759,6 +769,10 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         max_tasks_per_child: int | None = None,
         worker_threads: int = 1,
         mp_start_method: str | None = None,
+        *,
+        out: TensorCollection | None = None,
+        index_with_generator: bool = False,
+        pbar: bool = False,
     ):
         raise RuntimeError(
             "Cannot call map on a TensorDictParams object. Convert it "
@@ -777,8 +791,10 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         inplace: bool = False,
         default: Any = NO_DEFAULT,
         filter_empty: bool | None = None,
+        propagate_lock: bool = False,
         call_on_nested: bool = False,
         is_leaf: Callable[[type], bool] | None = None,
+        out: TensorDictBase | None = None,
         **constructor_kwargs,
     ) -> TensorDictBase | None: ...
 
@@ -787,14 +803,17 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         self,
         fn: Callable,
         *others: TensorDictBase,
+        nested_keys: bool = False,
         batch_size: Sequence[int] | None = None,
         device: torch.device | None = NO_DEFAULT,
         names: Sequence[str] | None = NO_DEFAULT,
         inplace: bool = False,
         default: Any = NO_DEFAULT,
         filter_empty: bool | None = None,
+        propagate_lock: bool = False,
         call_on_nested: bool = False,
         is_leaf: Callable[[type], bool] | None = None,
+        out: TensorDictBase | None = None,
         **constructor_kwargs,
     ) -> TensorDictBase | None: ...
 
@@ -838,7 +857,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
 
     @_get_post_hook
     @_fallback
-    def get(self, key: NestedKey, default: Any = None) -> CompatibleType: ...
+    def get(self, key: NestedKey, *args, **kwargs) -> CompatibleType: ...
 
     @_get_post_hook
     @_fallback
@@ -863,14 +882,14 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             return self
         return self._from_converted(params)
 
-    def cpu(self):
-        params = self._param_td.cpu()
+    def cpu(self, **kwargs):
+        params = self._param_td.cpu(**kwargs)
         if params is self._param_td:
             return self
         return self._from_converted(params)
 
-    def cuda(self, device=None):
-        params = self._param_td.cuda(device=device)
+    def cuda(self, device: int | str | torch.device | None = None, **kwargs):
+        params = self._param_td.cuda(device=device, **kwargs)
         if params is self._param_td:
             return self
         return self._from_converted(params)
@@ -956,6 +975,8 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     def to_zarr(
         self,
         filename,
+        *,
+        allow_pickle: bool | None = None,
         **kwargs,
     ): ...
 
@@ -1085,6 +1106,12 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         prefix: str | Path | None = None,
         copy_existing: bool = False,
         num_threads: int = 0,
+        *,
+        return_early: bool = False,
+        share_non_tensor: bool = False,
+        existsok: bool = True,
+        robust_key: bool | None = True,
+        atomic: bool = False,
     ) -> TensorDictBase:
         raise RuntimeError(
             "Cannot build a memmap TensorDict in-place. Use memmap or memmap_like instead."
@@ -1177,7 +1204,10 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
 
     @_unlock_and_set(inplace=True)
     def flatten_keys(
-        self, separator: str = KEY_SEPARATOR, inplace: bool = False
+        self,
+        separator: str = KEY_SEPARATOR,
+        inplace: bool = False,
+        is_leaf: Callable[[Type], bool] | None = None,
     ) -> TensorDictBase: ...
 
     @_unlock_and_set(inplace=True)
@@ -1195,10 +1225,11 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         self,
         input_dict,
         *,
-        auto_batch_size: bool = False,
+        auto_batch_size: bool | None = None,
         batch_size=None,
         device=None,
         batch_dims=None,
+        names=None,
     ): ...
 
     @_carry_over
@@ -1284,11 +1315,18 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     # Override: with inplace=True, the base would rewrite the leaves read
     # through the get hooks.
     @_fallback
-    def reshape(self, *shape: int): ...
+    def reshape(self, *args, **kwargs): ...
 
     # Override: as reshape.
     @_fallback
-    def repeat_interleave(self, *shape: int): ...
+    def repeat_interleave(
+        self,
+        repeats: torch.Tensor | int,
+        dim: int | None = None,
+        *,
+        output_size: int | None = None,
+        inplace: bool = False,
+    ): ...
 
     @_fallback
     def _repeat(self, *repeats: int): ...
@@ -1453,7 +1491,12 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
 
     @_apply_on_data_and_non_tensor
     def set_at_(
-        self, key: NestedKey, value: CompatibleType, index: IndexType
+        self,
+        key: NestedKey,
+        value: CompatibleType,
+        index: IndexType,
+        *,
+        non_blocking: bool = False,
     ) -> Self: ...
 
     @_apply_on_data_and_non_tensor
@@ -1461,6 +1504,8 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         self,
         key: NestedKey,
         item: CompatibleType,
+        *,
+        non_blocking: bool = False,
     ) -> Self: ...
 
     @_apply_on_data
@@ -1481,11 +1526,12 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     @_apply_on_data_and_non_tensor
     def update_(
         self,
-        input_dict_or_td: dict[str, CompatibleType] | T,
+        input_dict_or_td: dict[str, CompatibleType] | T | None = None,
         clone: bool = False,
         *,
         non_blocking: bool = False,
         keys_to_update: Sequence[NestedKey] | None = None,
+        **kwargs,
     ) -> T: ...
 
     @_apply_on_data_and_non_tensor

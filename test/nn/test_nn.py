@@ -6009,6 +6009,96 @@ class TestTensorDictParams:
         assert td["s"] == "old"
         assert (td["a"] == 0).all()
 
+    def test_overrides_take_base_arguments(self, monkeypatch):
+        # #3323: these overrides declared fewer parameters than TensorDict
+        # takes, and raised TypeError for the others.
+        td = TensorDict(a=TensorDict(w=torch.zeros(4, 3)), batch_size=[4])
+        params = TensorDictParams(td.clone().apply(nn.Parameter))
+        for args, kwargs in [
+            ((), {"is_leaf": None}),
+            (("/", False, is_leaf_nontensor), {}),
+        ]:
+            out = params.flatten_keys(*args, **kwargs)
+            expected = td.flatten_keys(*args, **kwargs)
+            assert type(out) is TensorDict
+            assert out.keys() == expected.keys()
+            assert isinstance(out.get(next(iter(out.keys()))), nn.Parameter)
+        out = params.cpu(non_blocking=False)
+        assert type(out) is TensorDictParams
+        assert out.device == td.cpu(non_blocking=False).device
+        assert isinstance(out["a", "w"], nn.Parameter)
+        calls = []
+
+        def cuda(self, device=None, **kwargs):
+            calls.append((device, kwargs))
+            return self
+
+        monkeypatch.setattr(TensorDict, "cuda", cuda)
+        assert params.cuda(0, non_blocking=True) is params
+        assert calls == [(0, {"non_blocking": True})]
+
+    def test_map_memmap_inplace_raise_with_base_arguments(self, tmp_path):
+        # #3323: map and memmap_ raise a RuntimeError on a TensorDictParams;
+        # the keywords of the base class raised a TypeError instead.
+        params = TensorDictParams(
+            TensorDict(a=nn.Parameter(torch.zeros(4, 3)), batch_size=[4])
+        )
+        out = TensorDict(a=torch.zeros(4, 3), batch_size=[4])
+        for kwargs in [{}, {"out": out}, {"index_with_generator": True}]:
+            with pytest.raises(RuntimeError, match="Cannot call map on a"):
+                params.map(lambda x: x + 1, 0, 1, **kwargs)
+        with pytest.raises(RuntimeError, match="Cannot call map on a"):
+            params.map(lambda x: x + 1, 0, 1, None, None, None, None, None, 1, None)
+        for kwargs in [{}, {"existsok": True}, {"atomic": True}]:
+            with pytest.raises(RuntimeError, match="Cannot build a memmap"):
+                params.memmap_(tmp_path, **kwargs)
+        with pytest.raises(RuntimeError, match="Cannot build a memmap"):
+            params.memmap_(tmp_path, False, 2)
+        assert not any(tmp_path.iterdir())
+
+    def test_override_signatures_match_base(self):
+        # #3323: every public override declares the parameters of
+        # TensorDictBase, with the same names, kinds and defaults, unless it
+        # forwards (*args, **kwargs).
+        exempt = {
+            # Built differently from a tensordict.
+            "__init__",
+            # Handled with the save family (#3320).
+            "memmap_like",
+        }
+        passthrough = [
+            ("self", inspect.Parameter.POSITIONAL_OR_KEYWORD),
+            ("args", inspect.Parameter.VAR_POSITIONAL),
+            ("kwargs", inspect.Parameter.VAR_KEYWORD),
+        ]
+        # map and memmap_ always raise a RuntimeError on a TensorDictParams,
+        # and main accepts some parameters by position there that the base
+        # takes by keyword only: compare their names and defaults, not kinds.
+        any_kind = {"map", "memmap_"}
+        checked, mismatched = [], []
+        for name, attr in vars(TensorDictParams).items():
+            base = getattr(TensorDictBase, name, None)
+            if (name.startswith("_") and not name.startswith("__")) or name in exempt:
+                continue
+            if not inspect.isfunction(attr) or not inspect.isfunction(base):
+                continue
+            params = inspect.signature(attr).parameters.values()
+            if [(p.name, p.kind) for p in params] == passthrough:
+                continue
+            checked.append(name)
+            base_params = inspect.signature(base).parameters.values()
+            if name in any_kind:
+                if {p.name: p.default for p in params} != {
+                    p.name: p.default for p in base_params
+                }:
+                    mismatched.append(name)
+            elif [(p.name, p.kind, p.default) for p in params] != [
+                (p.name, p.kind, p.default) for p in base_params
+            ]:
+                mismatched.append(name)
+        assert {"flatten_keys", "set_", "repeat_interleave", "map"} <= set(checked)
+        assert mismatched == []
+
 
 class TestCompositeDist:
     def test_const(self):

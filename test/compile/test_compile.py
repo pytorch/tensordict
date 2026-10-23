@@ -3219,6 +3219,36 @@ class TestNN:
             assert result.names == expected.names == ["x"]
             assert_close(result, expected)
 
+    @pytest.mark.parametrize("op", ["detach", "apply", "named_apply", "flatten_keys"])
+    def test_tdparams_unlock_and_set(self, mode, op):
+        # #3323: these methods go through _unlock_and_set, which binds the call
+        # to the method's signature to read inplace; TorchRL compiles detach()
+        # on a TensorDictParams (its FQL loss). After a dict mutation in the
+        # same graph, Dynamo refuses to iterate a mappingproxy it did not build,
+        # so a Signature built outside the traced code broke these calls.
+        state = {"calls": 0}
+
+        def fn(params):
+            state["calls"] = state["calls"] + 1
+            if op == "detach":
+                return params.detach()
+            if op == "apply":
+                return params.apply(lambda x: x * 2)
+            if op == "named_apply":
+                return params.named_apply(lambda name, x: x * 2)
+            return params.flatten_keys()
+
+        fn_c = torch.compile(fn, fullgraph=True, mode=mode)
+        params = TensorDictParams(
+            TensorDict(a=torch.randn(4, 3), b={"c": torch.randn(4)}, batch_size=[4])
+        )
+        expected = fn(params)
+        result = fn_c(params)
+        assert type(result) is type(expected)
+        assert set(result.keys(True, True)) == set(expected.keys(True, True))
+        for key in expected.keys(True, True):
+            torch.testing.assert_close(result[key], expected[key])
+
     @pytest.mark.parametrize("op", ["clone", "init", "unsqueeze"])
     def test_tdparams_new(self, mode, op):
         # Building a new TensorDictParams in the compiled region (gh-2791).
