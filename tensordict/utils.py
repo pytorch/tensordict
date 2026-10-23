@@ -2180,7 +2180,8 @@ def _plain_summary(tensor: Tensor) -> str:
         # The jagged layout has no std over all elements (#3259).
         tensor = torch.cat([t.reshape(-1) for t in tensor.unbind()])
     if tensor.is_floating_point() or tensor.is_complex():
-        tensor = tensor.to(torch.float64)
+        # casting complex to real drops the imaginary part and warns (#3286).
+        tensor = tensor.to(torch.complex128 if tensor.is_complex() else torch.float64)
         # std of one element is nan, and torch warns when computing it (#3259).
         std = tensor.std().item() if tensor.numel() > 1 else float("nan")
         return f"mean={tensor.mean().item():.4g}, std={std:.4g}"

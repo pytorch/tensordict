@@ -738,6 +738,16 @@ class TestSetPrintoptions:
             r = repr(TensorDict(j=nt, batch_size=[2]))
         assert "min=0, max=9" in r
 
+    def test_plain_mode_complex(self):
+        # plain=True dropped the imaginary part of a complex leaf and warned on every print
+        td = TensorDict(c=torch.arange(3.0) * (1 + 1j), s=torch.tensor(1.0 + 1j))
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            with set_printoptions(compact=False, plain=True):
+                r = repr(td)
+        assert "mean=1+1j, std=1.414" in r
+        assert "mean=1+1j, std=nan" in r
+
     def test_lazy_stacked_respects_options(self):
         td1 = TensorDict({"a": torch.randn(3)})
         td2 = TensorDict({"a": torch.randn(3)})
