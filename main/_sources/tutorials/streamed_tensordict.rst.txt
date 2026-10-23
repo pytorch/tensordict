@@ -380,7 +380,7 @@ collects ``batch_size`` buckets of data, for ``timeout=1`` second each:
 
  .. code-block:: none
 
-    TensorDict from stream TensorDict(batch_size=[5], fields={bucket0: i64[j3], bucket1: i64[j4]})
+    TensorDict from stream TensorDict(batch_size=[5], fields={bucket0: i64[j4], bucket1: i64[j3]})
 
 
 
@@ -442,7 +442,7 @@ Further reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 6.020 seconds)
+   **Total running time of the script:** (0 minutes 6.019 seconds)
 
 
 .. _sphx_glr_download_tutorials_streamed_tensordict.py:
