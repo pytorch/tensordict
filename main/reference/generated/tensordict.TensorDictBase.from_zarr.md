@@ -5,7 +5,7 @@
 Opens a zarr store as a [`PersistentTensorDict`](tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict).
 
 The data stays in the store: entries are read when they are accessed.
-Requires `zarr>=3.0`. See [Save and load tensordicts](../../saving.html#saving) and
+Requires `zarr>=3.1.1`. See [Save and load tensordicts](../../saving.html#saving) and
 [`PersistentTensorDict`](tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict).
 
 Parameters:

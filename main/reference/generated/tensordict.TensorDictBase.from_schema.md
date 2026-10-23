@@ -34,7 +34,7 @@ by `prefix=<dir>` (see [`memmap_like()`](tensordict.TensorDictBase.memmap_like.h
 HDF5 file given by `filename=<path>`.
 - `"zarr"`: a [`PersistentTensorDict`](tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) in
 the zarr store given by `filename=<path or store>`
-(requires `zarr>=3.0`).
+(requires `zarr>=3.1.1`).
 - `"shared"`: tensors in shared memory (see
 [`share_memory_()`](tensordict.TensorDictBase.share_memory_.html#tensordict.TensorDictBase.share_memory_)).
 - `"redis"` or `"dragonfly"`: a

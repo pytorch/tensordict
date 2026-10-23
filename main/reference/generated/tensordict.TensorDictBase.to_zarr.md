@@ -8,7 +8,7 @@ Each leaf becomes an array of the store, and each nested tensordict a
 group. An existing store at `filename` is overwritten. The batch
 size and the names of the batch dimensions are saved in the store
 attributes, so that [`from_zarr()`](tensordict.TensorDictBase.from_zarr.html#tensordict.TensorDictBase.from_zarr) restores them. Requires
-`zarr>=3.0`. See [Save and load tensordicts](../../saving.html#saving).
+`zarr>=3.1.1`. See [Save and load tensordicts](../../saving.html#saving).
 
 Parameters:
 
