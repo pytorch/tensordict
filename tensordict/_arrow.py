@@ -15,7 +15,7 @@ import torch
 from tensordict._td import TensorDict
 from tensordict.base import is_tensor_collection, TensorDictBase
 from tensordict.tensorclass import NonTensorStack
-from tensordict.utils import _user_stacklevel, is_non_tensor
+from tensordict.utils import _user_stacklevel, is_non_tensor, NestedKey, unravel_key
 
 if TYPE_CHECKING:
     import pyarrow
@@ -267,6 +267,7 @@ def from_arrow(
     *,
     copy: bool | None = None,
     nulls: Literal["raise", "fill", "mask"] = "raise",
+    mask_key: NestedKey | None = None,
     device: torch.device | str | int | None = None,
 ) -> TensorDict:
     """Converts an Arrow table to a tensordict, with one entry per column, viewing the data where it can.
@@ -320,10 +321,15 @@ def from_arrow(
             empty list in jagged tensors, and ``None`` in a
             :class:`~tensordict.NonTensorStack`. A null struct makes each of
             its fields null. ``"mask"`` fills them as ``"fill"`` does, and adds
-            the boolean entry ``("masks", *key)`` for each entry ``key`` that
-            has nulls, ``True`` where the row is not null, as
-            :func:`~tensordict.pad_sequence` does with ``return_mask=True``.
-            Filling copies the column. Defaults to ``"raise"``.
+            the boolean entry ``(*mask_key, *key)`` for each entry ``key``
+            that has nulls, ``True`` where the row is not null. Filling copies
+            the column. Defaults to ``"raise"``.
+        mask_key (NestedKey, optional): the key of the masks that
+            ``nulls="mask"`` adds. It differs from the ``"masks"`` key of
+            :func:`~tensordict.pad_sequence` with ``return_mask=True``, so
+            that the result can be padded with masks too. Passing it with
+            another ``nulls`` raises a ``ValueError``. Defaults to
+            ``"_mask"``.
         device (torch.device, str or int, optional): the device of the
             result. Defaults to ``None``, which keeps the tensors on the CPU
             and gives a tensordict without a device.
@@ -351,18 +357,22 @@ def from_arrow(
         >>> td.get("text").tolist()
         ['a', 'b', 'c']
         >>> td = from_arrow(pa.table({"y": pa.array([1.0, None])}), nulls="mask")
-        >>> td["y"], td["masks", "y"]
+        >>> td["y"], td["_mask", "y"]
         (tensor([1., nan], dtype=torch.float64), tensor([ True, False]))
     """
     pa = _import_pyarrow()
     _check_pyarrow_version(pa, "from_arrow")
     if nulls not in _NULLS:
         raise ValueError(f"nulls must be one of {_NULLS}, got {nulls!r}.")
+    if mask_key is not None and nulls != "mask":
+        raise ValueError(f"from_arrow got a mask_key but nulls={nulls!r}, not 'mask'.")
+    mask_key = unravel_key("_mask" if mask_key is None else mask_key)
+    first = mask_key if isinstance(mask_key, str) else mask_key[0]
     if not isinstance(table, (pa.Table, pa.RecordBatch)):
         table = pa.table(table)
-    if nulls == "mask" and "masks" in table.column_names:
+    if nulls == "mask" and first in table.column_names:
         raise ValueError(
-            "nulls='mask' writes the masks under the key 'masks', which is a column "
+            f"nulls='mask' writes the masks under the key {first!r}, which is a column "
             "of the table."
         )
     masks = {}
@@ -394,7 +404,7 @@ def from_arrow(
         )
     result = TensorDict(data, batch_size=[table.num_rows])
     for key, mask in masks.items():
-        result.set(("masks", *key), mask)
+        result.set(unravel_key((mask_key, *key)), mask)
     if device is not None:
         result = result.to(device)
     return result

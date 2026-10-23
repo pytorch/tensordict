@@ -7,6 +7,7 @@ import datetime
 import decimal
 import importlib.util
 import json
+import os
 import pathlib
 import re
 import subprocess
@@ -720,9 +721,9 @@ class TestArrow:
         )
         assert td.get("s").tolist() == ["a", None, "c"]
         if nulls == "fill":
-            assert "masks" not in td.keys()
+            assert "_mask" not in td.keys()
         else:
-            assert set(td["masks"].keys(include_nested=True, leaves_only=True)) == {
+            assert set(td["_mask"].keys(include_nested=True, leaves_only=True)) == {
                 "f",
                 "i",
                 "b",
@@ -732,20 +733,20 @@ class TestArrow:
                 ("st", "y"),
                 "s",
             }
-            assert torch.equal(td["masks", "f"], torch.tensor([True, False, True]))
-            assert torch.equal(td["masks", "i"], torch.tensor([False, True, True]))
+            assert torch.equal(td["_mask", "f"], torch.tensor([True, False, True]))
+            assert torch.equal(td["_mask", "i"], torch.tensor([False, True, True]))
             assert torch.equal(
-                td["masks", "st", "y"], torch.tensor([True, False, False])
+                td["_mask", "st", "y"], torch.tensor([True, False, False])
             )
-            with pytest.raises(ValueError, match="under the key 'masks'"):
-                from_arrow(pa.table({"masks": [1]}), nulls="mask")
+            with pytest.raises(ValueError, match="under the key '_mask'"):
+                from_arrow(pa.table({"_mask": [1]}), nulls="mask")
         # Nulls inside a list are filled.
         td = from_arrow(pa.table({"l": pa.array([[1, None], [2]])}), nulls=nulls)
         assert [x.tolist() for x in td["l"].unbind(0)] == [[1, 0], [2]]
 
     def test_from_arrow_nulls_mask_key(self):
-        # #3241: nulls='mask' stores its masks under the key that
-        # pad_sequence(return_mask=True) uses, "masks".
+        # #3241, #3313: nulls='mask' stores its masks under "_mask", not under
+        # the key that pad_sequence(return_mask=True) uses, "masks".
         import pyarrow as pa
 
         padded = pad_sequence(
@@ -754,14 +755,83 @@ class TestArrow:
         )
         assert "masks" in padded.keys()
         td = from_arrow(pa.table({"y": pa.array([1.0, None])}), nulls="mask")
-        assert set(td.keys()) == {"y", "masks"}
-        assert torch.equal(td["masks", "y"], torch.tensor([True, False]))
-        with pytest.raises(ValueError, match="under the key 'masks'"):
-            from_arrow(pa.table({"masks": [1]}), nulls="mask")
-        # "_mask" is now an ordinary column name.
-        td = from_arrow(pa.table({"_mask": [1, None]}), nulls="mask")
-        assert torch.equal(td["_mask"], torch.tensor([1, 0]))
-        assert torch.equal(td["masks", "_mask"], torch.tensor([True, False]))
+        assert set(td.keys()) == {"y", "_mask"}
+        assert torch.equal(td["_mask", "y"], torch.tensor([True, False]))
+        with pytest.raises(ValueError, match="under the key '_mask'"):
+            from_arrow(pa.table({"_mask": [1]}), nulls="mask")
+        # "masks" is an ordinary column name.
+        td = from_arrow(pa.table({"masks": [1, None]}), nulls="mask")
+        assert torch.equal(td["masks"], torch.tensor([1, 0]))
+        assert torch.equal(td["_mask", "masks"], torch.tensor([True, False]))
+
+    # #3313
+    @pytest.mark.parametrize("mask_key", ["nulls", ("meta", "nulls")])
+    def test_from_arrow_mask_key(self, mask_key):
+        import pyarrow as pa
+
+        table = pa.table({"y": pa.array([1.0, None]), "st": pa.array([{"x": 1}, None])})
+        td = from_arrow(table, nulls="mask", mask_key=mask_key)
+        prefix = (mask_key,) if isinstance(mask_key, str) else mask_key
+        assert set(td.keys(True, True)) == {
+            "y",
+            ("st", "x"),
+            (*prefix, "y"),
+            (*prefix, "st", "x"),
+        }
+        assert torch.equal(td[(*prefix, "y")], torch.tensor([True, False]))
+        assert torch.equal(td[(*prefix, "st", "x")], torch.tensor([True, False]))
+
+    # #3313
+    def test_from_arrow_mask_key_clash(self):
+        import pyarrow as pa
+
+        table = pa.table({"meta": [1, None], "_mask": [2, 3]})
+        with pytest.raises(ValueError, match="under the key 'meta'"):
+            from_arrow(table, nulls="mask", mask_key="meta")
+        with pytest.raises(ValueError, match="under the key 'meta'"):
+            from_arrow(table, nulls="mask", mask_key=("meta", "nulls"))
+        # A column named "_mask" is fine with another mask_key.
+        td = from_arrow(table, nulls="mask", mask_key="nulls")
+        assert torch.equal(td["_mask"], torch.tensor([2, 3]))
+        assert torch.equal(td["nulls", "meta"], torch.tensor([True, False]))
+
+    # #3313
+    @pytest.mark.parametrize("nulls", ["raise", "fill"])
+    def test_from_arrow_mask_key_without_mask(self, nulls):
+        import pyarrow as pa
+
+        with pytest.raises(ValueError, match="mask_key"):
+            from_arrow(
+                pa.table({"y": pa.array([1.0, None])}), nulls=nulls, mask_key="m"
+            )
+
+    # #3313: padding a from_arrow(nulls="mask") result keeps its null masks and
+    # every row. The result depended on hash order, so run it with several
+    # PYTHONHASHSEEDs.
+    def test_from_arrow_mask_pad_sequence(self):
+        script = """
+import pyarrow as pa
+import torch
+from tensordict import from_arrow, pad_sequence
+from tensordict.functional import unpad_sequence
+
+td = from_arrow(pa.table({"x": pa.array([1.0, None, 3.0, 4.0, 5.0])}), nulls="mask")
+padded = pad_sequence([td[:2], td[2:5]], return_mask=True)
+episodes = unpad_sequence(padded)
+assert [e.batch_size[0] for e in episodes] == [2, 3], episodes
+assert torch.equal(episodes[0]["_mask", "x"], torch.tensor([True, False]))
+assert torch.equal(episodes[1]["_mask", "x"], torch.tensor([True, True, True]))
+"""
+        for seed in range(1, 6):
+            env = {**os.environ, "PYTHONHASHSEED": str(seed)}
+            result = subprocess.run(
+                [sys.executable, "-c", script],
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            assert result.returncode == 0, (seed, result.stderr)
 
     # #3261
     def test_from_arrow_nulls_raise_non_tensor_list(self):
@@ -795,7 +865,7 @@ class TestArrow:
             assert td.get("x").tolist() == [[None], ["b"]]
             assert td.get("y").tolist() == [[["a"]], [["b", None]]]
             assert td.get("z").tolist() == [[{"s": "a"}], [{"s": None}]]
-            assert "masks" not in td.keys()
+            assert "_mask" not in td.keys()
 
     # #3260
     @pytest.mark.parametrize("nulls", ["fill", "mask"])
@@ -817,10 +887,10 @@ class TestArrow:
         assert td["x"].tolist() == [1, 0, 3]
         assert [x.tolist() for x in td["l"].unbind(0)] == [[1, 0], [2], []]
         if nulls == "fill":
-            assert "masks" not in td.keys()
+            assert "_mask" not in td.keys()
         else:
-            assert set(td["masks"].keys()) == {"x"}
-            assert torch.equal(td["masks", "x"], torch.tensor([True, False, True]))
+            assert set(td["_mask"].keys()) == {"x"}
+            assert torch.equal(td["_mask", "x"], torch.tensor([True, False, True]))
 
     @staticmethod
     def _unchecked_column(pa, kind, values):
@@ -1635,7 +1705,7 @@ class TestTabularTypeMatrix:
             f"from_arrow(nulls={nulls!r}) of an Arrow column {case_id} gives\n"
             f"  {actual}\nwhere its docstring gives\n  {expected}"
         )
-        masks = td.get("masks", None)
+        masks = td.get("_mask", None)
         if nulls != "mask":
             assert masks is None, (
                 f"from_arrow(nulls={nulls!r}) of an Arrow column {case_id} adds "

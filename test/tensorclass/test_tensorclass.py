@@ -570,6 +570,119 @@ Step(obs=t)
     assert [line for line in stdout.splitlines() if line.startswith("user.py:")] == []
 
 
+@pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
+def test_tensordict_self_python310_static(tmp_path, monkeypatch):
+    # #3304: on Python 3.10, typing has no Self, so the .py modules must take
+    # it from typing_extensions for methods typed -> Self to keep their type.
+    from mypy import api
+
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / "source"
+    shutil.copytree(
+        _TENSORDICT_DIR,
+        source / "tensordict",
+        ignore=shutil.ignore_patterns("__pycache__", "*.so"),
+    )
+    stubs = tmp_path / "stubs"
+    torch_package = stubs / "torch"
+    torch_package.mkdir(parents=True)
+    torch_package.joinpath("__init__.pyi").write_text(
+        """from typing import Any
+
+class Tensor: ...
+class device: ...
+
+def __getattr__(name: str) -> Any: ...
+"""
+    )
+    config = tmp_path / "mypy.ini"
+    config.write_text(
+        f"""[mypy]
+python_version = 3.10
+show_error_codes = True
+mypy_path = {stubs},{source}
+no_site_packages = True
+ignore_missing_imports = True
+follow_imports = silent
+"""
+    )
+    user = tmp_path / "user.py"
+    user.write_text(
+        """import torch
+from tensordict import TensorDict
+
+td = TensorDict(a=torch.zeros(4), batch_size=[4])
+reveal_type(td.clone())
+reveal_type(td == td)
+"""
+    )
+    stdout, stderr, status = api.run(["--config-file", str(config), str(user)])
+    assert not stderr, stderr
+    assert [line for line in stdout.splitlines() if line.startswith("user.py:")] == [
+        'user.py:5: note: Revealed type is "tensordict._td.TensorDict"',
+        'user.py:6: note: Revealed type is "tensordict._td.TensorDict"',
+    ]
+
+
+# The names that typing has only from Python 3.11 or later.
+_TYPING_NAMES_AFTER_PY310 = frozenset(
+    {
+        "assert_never",
+        "assert_type",
+        "clear_overloads",
+        "dataclass_transform",
+        "get_overloads",
+        "get_protocol_members",
+        "is_protocol",
+        "LiteralString",
+        "Never",
+        "NoDefault",
+        "NotRequired",
+        "override",
+        "ReadOnly",
+        "Required",
+        "reveal_type",
+        "Self",
+        "TypeAliasType",
+        "TypeIs",
+        "TypeVarTuple",
+        "Unpack",
+    }
+)
+
+
+def test_no_typing_import_newer_than_python310():
+    # #3304: on Python 3.10, typing lacks the names above, so type checkers
+    # can't resolve them there. Code that only type checkers read (the .pyi
+    # stubs and the TYPE_CHECKING blocks) must import them from
+    # typing_extensions. A runtime import with a fallback, inside try or under
+    # a sys.version_info check, is fine.
+    offenders = []
+    for path in sorted(_TENSORDICT_DIR.rglob("*.py*")):
+        if path.suffix not in (".py", ".pyi"):
+            continue
+        tree = ast.parse(path.read_text())
+        guarded = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Try) or (
+                isinstance(node, ast.If) and "version_info" in ast.unparse(node.test)
+            ):
+                guarded.update(id(child) for child in ast.walk(node))
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.ImportFrom)
+                and node.module == "typing"
+                and id(node) not in guarded
+            ):
+                names = {alias.name for alias in node.names} & _TYPING_NAMES_AFTER_PY310
+                if names:
+                    offenders.append(
+                        f"{path.relative_to(_TENSORDICT_DIR.parent)}:{node.lineno}: "
+                        f"{sorted(names)}"
+                    )
+    assert not offenders, "\n".join(offenders)
+
+
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")
 def test_tensorclass_stub_init_subclass():
     # The class keywords (class X(TensorClass, autocast=True)) go to the
@@ -1229,6 +1342,123 @@ TensorDictSequential(3)
     assert len(errors) == 2, errors
     assert 'Argument 1 to "update" of "TensorDictBase"' in errors[0]
     assert "TensorDictSequential" in errors[1]
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+@pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
+@pytest.mark.parametrize("python_version", ["3.10", "3.12"])
+def test_sequential_overloads_source_static_types(
+    tmp_path, monkeypatch, python_version
+):
+    # #3303: mypy must accept ProbabilisticTensorDictSequential(m1, m2) and a
+    # plain dict of modules, as documented. The __init__ overloads of both
+    # sequences are copied from the sources into a stub. Mypy also searches
+    # the working directory, which must not hold the tensordict sources.
+    from mypy import api
+
+    monkeypatch.chdir(tmp_path)
+
+    def overloads(path, class_name):
+        with open(_TENSORDICT_DIR / path, "r") as f:
+            tree = ast.parse(f.read())
+        (class_node,) = (
+            node
+            for node in tree.body
+            if isinstance(node, ast.ClassDef) and node.name == class_name
+        )
+        nodes = [
+            node
+            for node in class_node.body
+            if isinstance(node, ast.FunctionDef)
+            and node.name == "__init__"
+            and "overload" in map(ast.unparse, node.decorator_list)
+        ]
+        for node in nodes:
+            node.body = [ast.Expr(ast.Constant(...))]
+        return textwrap.indent("\n".join(map(ast.unparse, nodes)), "    ")
+
+    stubs = tmp_path / "stubs"
+    package = stubs / "tensordict"
+    (package / "nn").mkdir(parents=True)
+    package.joinpath("__init__.pyi").write_text("")
+    package.joinpath("_nestedkey.pyi").write_text(
+        (_TENSORDICT_DIR / "_nestedkey.pyi").read_text()
+    )
+    package.joinpath("nn", "__init__.pyi").write_text(
+        f"""from typing import Any, Callable, List, OrderedDict, overload
+
+from tensordict._nestedkey import NestedKey
+
+class TensorDictBase: ...
+
+class TensorDictModuleBase:
+    def __call__(self, *args: Any, **kwargs: Any) -> Any: ...
+
+class TensorDictModule(TensorDictModuleBase):
+    def __init__(self, module: Any, in_keys: Any, out_keys: Any) -> None: ...
+
+class ProbabilisticTensorDictModule(TensorDictModuleBase):
+    def __init__(self, **kwargs: Any) -> None: ...
+
+class TensorDictSequential(TensorDictModuleBase):
+{overloads("nn/sequence.py", "TensorDictSequential")}
+
+class ProbabilisticTensorDictSequential(TensorDictSequential):
+{overloads("nn/probabilistic.py", "ProbabilisticTensorDictSequential")}
+"""
+    )
+
+    config = tmp_path / "mypy.ini"
+    config.write_text(
+        f"""[mypy]
+python_version = {python_version}
+show_error_codes = True
+mypy_path = {stubs}
+no_site_packages = True
+ignore_missing_imports = True
+"""
+    )
+
+    def mypy_errors(source):
+        user = tmp_path / "user.py"
+        user.write_text(source)
+        stdout, stderr, status = api.run(["--config-file", str(config), str(user)])
+        assert not stderr, stderr
+        # Errors in the copied annotations count too.
+        return [line for line in stdout.splitlines() if ": error: " in line]
+
+    valid = """import collections
+from tensordict.nn import (
+    ProbabilisticTensorDictModule,
+    ProbabilisticTensorDictSequential,
+    TensorDictModule,
+    TensorDictSequential,
+)
+
+net = TensorDictModule(None, in_keys=["x"], out_keys=["loc", "scale"])
+prob = ProbabilisticTensorDictModule(in_keys=["loc", "scale"], out_keys=["action"])
+ProbabilisticTensorDictSequential(net, prob)
+ProbabilisticTensorDictSequential(net, prob, return_composite=True)
+ProbabilisticTensorDictSequential({"net": net, "prob": prob})
+ProbabilisticTensorDictSequential(collections.OrderedDict(net=net, prob=prob))
+TensorDictSequential({"net": net, "prob": prob})
+TensorDictSequential(collections.OrderedDict(net=net, prob=prob))
+"""
+    assert mypy_errors(valid) == []
+
+    invalid = """from tensordict.nn import (
+    ProbabilisticTensorDictSequential,
+    TensorDictSequential,
+)
+
+ProbabilisticTensorDictSequential(3)
+TensorDictSequential({"net": 3})
+"""
+    errors = mypy_errors(invalid)
+    assert len(errors) == 2, errors
+    assert errors[0].startswith("user.py:6:"), errors
+    assert "ProbabilisticTensorDictSequential" in errors[0]
+    assert errors[1].startswith("user.py:7:"), errors
 
 
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")
