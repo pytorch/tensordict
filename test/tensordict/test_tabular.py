@@ -1048,6 +1048,44 @@ assert torch.equal(episodes[1]["_mask", "x"], torch.tensor([True, True, True]))
                 assert torch.equal(x, y), key
         assert td2.get("s").tolist() == ["x", "y", "z"]
 
+    def test_to_arrow_ragged_dim_not_1(self):
+        # #3328: a jagged leaf whose ragged dim is not dim 1 was written with
+        # the wrong rows
+        nt = torch.nested.nested_tensor(
+            [torch.arange(5.0).view(1, 5), torch.arange(10.0, 15.0).view(1, 5)],
+            layout=torch.jagged,
+        ).transpose(1, 2)
+        assert nt._ragged_idx == 2
+        td = TensorDict(n=nt, obs=TensorDict(m=nt, batch_size=[2]), batch_size=[2])
+        with pytest.raises(ValueError, match=r"'n' at position 1, got 2"):
+            to_arrow(td.select("n"))
+        with pytest.raises(ValueError, match=r"\('obs', 'm'\) at position 1, got 2"):
+            to_arrow(td.select("obs"))
+        table = to_arrow(TensorDict(n=nt.transpose(1, 2), batch_size=[2]))
+        assert table.to_pydict() == {
+            "n": [[[0.0, 1.0, 2.0, 3.0, 4.0]], [[10.0, 11.0, 12.0, 13.0, 14.0]]]
+        }
+
+    def test_to_arrow_ragged_dim_1_roundtrip(self):
+        # #3328: a jagged leaf with its ragged dim at 1, as from_arrow gives,
+        # still converts
+        nt = torch.nested.nested_tensor_from_jagged(
+            torch.arange(10.0).view(5, 2), torch.tensor([0, 2, 5])
+        )
+        assert nt._ragged_idx == 1
+        td = TensorDict(obs=TensorDict(n=nt, batch_size=[2]), batch_size=[2])
+        table = to_arrow(td)
+        assert table.to_pydict() == {
+            "obs": [
+                {"n": [[0.0, 1.0], [2.0, 3.0]]},
+                {"n": [[4.0, 5.0], [6.0, 7.0], [8.0, 9.0]]},
+            ]
+        }
+        td2 = from_arrow(table)
+        assert td2["obs", "n"]._ragged_idx == 1
+        for x, y in zip(td2["obs", "n"].unbind(0), nt.unbind(0)):
+            assert torch.equal(x, y)
+
     def test_arrow_empty(self):
         table = _arrow_table().slice(0, 0)
         td = from_arrow(table)

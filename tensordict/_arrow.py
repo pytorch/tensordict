@@ -410,8 +410,8 @@ def from_arrow(
     return result
 
 
-def _to_array(pa, value):
-    """Converts one entry of a tensordict to an Arrow array."""
+def _to_array(pa, value, key):
+    """Converts the entry ``key`` of a tensordict to an Arrow array."""
     if is_non_tensor(value):
         return pa.array(value.tolist())
     if is_tensor_collection(value):
@@ -419,7 +419,8 @@ def _to_array(pa, value):
         if not keys:
             return pa.array([{}] * value.shape[0], type=pa.struct([]))
         return pa.StructArray.from_arrays(
-            [_to_array(pa, value.get(key)) for key in keys], names=keys
+            [_to_array(pa, value.get(k), unravel_key((key, k))) for k in keys],
+            names=keys,
         )
     tensor = value.detach().cpu().contiguous()
     if tensor.is_nested:
@@ -428,8 +429,14 @@ def _to_array(pa, value):
                 "to_arrow converts the nested tensors of layout torch.jagged only, "
                 f"got {tensor.layout}."
             )
+        if tensor._ragged_idx != 1:
+            raise ValueError(
+                f"to_arrow needs the ragged dim of the jagged tensor {key!r} at "
+                f"position 1, got {tensor._ragged_idx}. Transpose it back first, "
+                f"with .transpose(1, {tensor._ragged_idx})."
+            )
         return pa.LargeListArray.from_arrays(
-            pa.array(tensor.offsets().numpy()), _to_array(pa, tensor.values())
+            pa.array(tensor.offsets().numpy()), _to_array(pa, tensor.values(), key)
         )
     if tensor.ndim == 1:
         return pa.array(tensor.numpy())
@@ -493,4 +500,4 @@ def to_arrow(td: TensorDictBase) -> pyarrow.Table:
             "to_arrow needs a tensordict with one batch dimension, got the batch "
             f"size {td.batch_size}. Call td.reshape(-1) first to flatten it."
         )
-    return pa.table({key: _to_array(pa, value) for key, value in td.items()})
+    return pa.table({key: _to_array(pa, value, key) for key, value in td.items()})
