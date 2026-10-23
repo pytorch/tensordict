@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6534+g77d60850d.d20261023)">
+<meta name="llm:version" content="main (0.15.0.dev6545+g173b983f7.d20261023)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6534+g77d60850d.d20261023)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6545+g173b983f7.d20261023)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1769,8 +1769,9 @@ document.write(`
 <li><p>1-D tensors become primitive columns. The columns of contiguous numeric
 tensors on the CPU view their data. Boolean tensors are copied.</p></li>
 <li><p>tensors with more dimensions become <code class="docutils literal notranslate"><span class="pre">arrow.fixed_shape_tensor</span></code> columns.</p></li>
-<li><p>jagged nested tensors (<code class="docutils literal notranslate"><span class="pre">layout=torch.jagged</span></code>) become <code class="docutils literal notranslate"><span class="pre">large_list</span></code>
-columns.</p></li>
+<li><p>jagged nested tensors (<code class="docutils literal notranslate"><span class="pre">layout=torch.jagged</span></code>) with their ragged dim
+at position 1 become <code class="docutils literal notranslate"><span class="pre">large_list</span></code> columns; another ragged dim raises a
+<code class="docutils literal notranslate"><span class="pre">ValueError</span></code>.</p></li>
 <li><p>nested tensordicts become <code class="docutils literal notranslate"><span class="pre">struct</span></code> columns.</p></li>
 <li><p>non-tensor entries, such as a <a class="reference internal" href="tensordict.NonTensorStack.html#tensordict.NonTensorStack" title="tensordict.NonTensorStack"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorStack</span></code></a> of
 strings, become columns of the type that <code class="xref py py-func docutils literal notranslate"><span class="pre">pyarrow.array()</span></code> infers
@@ -2164,7 +2165,7 @@ more dimensions.</p>
        "headline": "to_arrow",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - to_arrow",
        "url": "/reference/generated/tensordict.to_arrow.html",
-       "articleBody": "to_arrow# tensordict.to_arrow(td: TensorDictBase) \u2192 pyarrow.Table# Converts a tensordict with one batch dimension to an Arrow table, with one column per entry. Requires pyarrow 15 or later. This is the reverse of from_arrow(). The entries convert as follows: 1-D tensors become primitive columns. The columns of contiguous numeric tensors on the CPU view their data. Boolean tensors are copied. tensors with more dimensions become arrow.fixed_shape_tensor columns. jagged nested tensors (layout=torch.jagged) become large_list columns. nested tensordicts become struct columns. non-tensor entries, such as a NonTensorStack of strings, become columns of the type that pyarrow.array() infers from their values. A LazyStackedTensorDict with entries of different shapes converts after densify(layout=torch.jagged). Parameters: td (TensorDictBase) \u2013 the tensordict. Its batch size must have one dimension: call td.reshape(-1) first to flatten a batch with more dimensions. Returns: A pyarrow.Table with td.batch_size[0] rows, or no rows if td has no entries. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict, to_arrow \u003e\u003e\u003e td = TensorDict( ... x=torch.tensor([1.0, 2.0]), ... image=torch.zeros(2, 3, 4), ... obs=TensorDict(y=torch.tensor([3, 4]), batch_size=[2]), ... batch_size=[2], ... ) \u003e\u003e\u003e to_arrow(td).schema x: float image: extension\u003carrow.fixed_shape_tensor[value_type=float, shape=[3,4], permutation=[0,1]]\u003e obs: struct\u003cy: int64\u003e child 0, y: int64",
+       "articleBody": "to_arrow# tensordict.to_arrow(td: TensorDictBase) \u2192 pyarrow.Table# Converts a tensordict with one batch dimension to an Arrow table, with one column per entry. Requires pyarrow 15 or later. This is the reverse of from_arrow(). The entries convert as follows: 1-D tensors become primitive columns. The columns of contiguous numeric tensors on the CPU view their data. Boolean tensors are copied. tensors with more dimensions become arrow.fixed_shape_tensor columns. jagged nested tensors (layout=torch.jagged) with their ragged dim at position 1 become large_list columns; another ragged dim raises a ValueError. nested tensordicts become struct columns. non-tensor entries, such as a NonTensorStack of strings, become columns of the type that pyarrow.array() infers from their values. A LazyStackedTensorDict with entries of different shapes converts after densify(layout=torch.jagged). Parameters: td (TensorDictBase) \u2013 the tensordict. Its batch size must have one dimension: call td.reshape(-1) first to flatten a batch with more dimensions. Returns: A pyarrow.Table with td.batch_size[0] rows, or no rows if td has no entries. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict, to_arrow \u003e\u003e\u003e td = TensorDict( ... x=torch.tensor([1.0, 2.0]), ... image=torch.zeros(2, 3, 4), ... obs=TensorDict(y=torch.tensor([3, 4]), batch_size=[2]), ... batch_size=[2], ... ) \u003e\u003e\u003e to_arrow(td).schema x: float image: extension\u003carrow.fixed_shape_tensor[value_type=float, shape=[3,4], permutation=[0,1]]\u003e obs: struct\u003cy: int64\u003e child 0, y: int64",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

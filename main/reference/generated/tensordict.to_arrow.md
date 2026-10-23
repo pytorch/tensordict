@@ -10,8 +10,9 @@ Requires pyarrow 15 or later. This is the reverse of
 - 1-D tensors become primitive columns. The columns of contiguous numeric
 tensors on the CPU view their data. Boolean tensors are copied.
 - tensors with more dimensions become `arrow.fixed_shape_tensor` columns.
-- jagged nested tensors (`layout=torch.jagged`) become `large_list`
-columns.
+- jagged nested tensors (`layout=torch.jagged`) with their ragged dim
+at position 1 become `large_list` columns; another ragged dim raises a
+`ValueError`.
 - nested tensordicts become `struct` columns.
 - non-tensor entries, such as a [`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack) of
 strings, become columns of the type that `pyarrow.array()` infers
