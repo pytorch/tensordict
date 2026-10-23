@@ -15514,10 +15514,29 @@ class TestGeneric:
         assert outcome() == fast
 
     # #3333
-    def test_update__keys_to_update_leaves_skip_narrowed_check(self, monkeypatch):
-        # Between exact TensorDicts, a keys_to_update list whose keys all name
-        # leaves cannot warn that it narrows a sub-tensordict: update_ skips
-        # that check, as batched environments call it at every step.
+    @pytest.mark.parametrize(
+        "keys, checked, warns",
+        [
+            # every listed key names a leaf
+            (["a", ("n", "x"), ("n", "y")], False, False),
+            # a sub-tensordict and every leaf under it
+            (["n", ("n", "x"), ("n", "y")], False, False),
+            ("keys(True)", False, False),
+            # a sub-tensordict and some of its leaves
+            (["n", ("n", "x")], True, True),
+            # a listed key under a leaf, which the source lacks
+            (["n", ("n", "x"), ("n", "x", "z"), ("n", "y")], True, True),
+            # a sub-tensordict alone
+            (["a", "n"], True, False),
+        ],
+    )
+    def test_update__keys_to_update_skip_narrowed_check(
+        self, keys, checked, warns, monkeypatch
+    ):
+        # Between exact TensorDicts, update_ skips the narrowed-keys check
+        # where it cannot warn: every listed key names a leaf or a
+        # sub-tensordict of the source, and every leaf it writes is listed.
+        # Batched environments call update_ at every step.
         calls = []
         check = tensordict_base._warn_update_keys_narrowed
 
@@ -15532,14 +15551,17 @@ class TestGeneric:
             batch_size=[3],
         )
         source = td.clone().apply_(lambda t: t.fill_(1))
-        td.update_(source, keys_to_update=["a", ("n", "x"), ("n", "y")])
-        assert calls == []
-        assert (td == 1).all()
-        # a key that names a sub-tensordict still runs the check, and warns
-        td.zero_()
-        with pytest.warns(FutureWarning, match="keep only the deeper keys"):
-            td.update_(source, keys_to_update=["n", ("n", "x")])
-        assert len(calls) == 1
+        if keys == "keys(True)":
+            keys = list(td.keys(True))
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            td.update_(source, keys_to_update=keys)
+        warned = any("keep only the deeper keys" in str(w.message) for w in record)
+        assert bool(calls) == checked
+        assert warned == warns
+        # every list writes all of "n", and "a" only where it lists it
+        assert (td["n"] == 1).all()
+        assert bool((td["a"] == 1).all()) == ("a" in keys)
 
     @pytest.mark.parametrize("method", ["update_", "copy_"])
     def test_update__forward_ad(self, method):
