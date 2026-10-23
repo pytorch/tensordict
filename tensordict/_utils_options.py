@@ -156,7 +156,9 @@ class set_printoptions(_DecoratorContextManager):
             ``show_is_view``, ``show_storage_size`` and ``plain``) also set
             ``compact=False`` when ``compact`` is not passed; with an
             explicit ``compact=True``, the compact form ignores them.
-            ``html=False`` turns off the HTML display of notebooks.
+            ``html=False`` turns off the HTML display of notebooks; with
+            ``compact=False``, a notebook shows the detailed text instead of
+            the HTML tree.
 
     Raises:
         TypeError: if an option is unknown.

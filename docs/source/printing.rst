@@ -223,6 +223,9 @@ uses the colors of the notebook theme, so it reads in light and dark themes.
   :class:`~tensordict.store.TensorDictStore` shows as its class name.
 - ``set_printoptions(html=False)`` turns the HTML display off, and the
   notebook shows the text display instead.
+- With ``compact=False``, passed or set by a detailed-only option such as
+  ``set_printoptions(show_grad=True)``, the notebook shows the detailed text
+  display instead of the HTML tree.
 
 Available options
 ~~~~~~~~~~~~~~~~~
@@ -237,7 +240,9 @@ Option                Default      Description
                                    when it fits. See `What print shows`_. With
                                    ``False``, print the detailed display that the
                                    options below describe.
-``html``              ``True``     Display tensordicts as HTML in notebooks.
+``html``              ``True``     Display tensordicts as HTML in notebooks:
+                                   the tree, or the detailed text when
+                                   ``compact`` is ``False``.
                                    See `Notebook display`_.
 ====================  ===========  ===================================================
 

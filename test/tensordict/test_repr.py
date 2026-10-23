@@ -53,6 +53,7 @@ else:
 
 
 _has_streaming = importlib.util.find_spec("streaming", None) is not None
+_has_ipython = importlib.util.find_spec("IPython", None) is not None
 
 try:
     import h5py  # noqa
@@ -113,8 +114,9 @@ elif is_npu_available():
 @pytest.fixture(autouse=True)
 def _verbose_repr(request):
     # Most tests here check the format of compact=False; TestCompactRepr checks
-    # the default, the compact repr.
-    if request.cls is TestCompactRepr:
+    # the default, the compact repr, and TestHtmlRepr the HTML display, which
+    # compact=False turns off.
+    if request.cls in (TestCompactRepr, TestHtmlRepr):
         yield
         return
     with set_printoptions(compact=False):
@@ -1659,8 +1661,8 @@ class TestHtmlRepr:
             raise RuntimeError
 
         td = TensorDict({"<a>": torch.zeros(())})
-        expected = f"<pre>{html.escape(repr(td))}</pre>"
         monkeypatch.setattr(tensordict.utils, "_compact_parts", fail)
+        expected = f"<pre>{html.escape(repr(td))}</pre>"
         assert td._repr_html_() == expected
 
     def test_html_keeps_own_repr(self):
@@ -1681,6 +1683,40 @@ class TestHtmlRepr:
         with set_printoptions(show_batch_size=False, show_device=False):
             out = _mesh_sample()._repr_html_()
         assert "batch_size" not in out and "device" not in out
+
+    # #3240
+    @pytest.mark.parametrize(
+        "options", [{"show_grad": True}, {"compact": False}, {"plain": True}]
+    )
+    def test_html_detailed_text_when_not_compact(self, options):
+        td = TensorDict(a=torch.zeros(3, requires_grad=True), batch_size=[3])
+        with set_printoptions(**options):
+            for obj in (td, _mesh()):
+                assert obj._repr_html_() == f"<pre>{html.escape(repr(obj))}</pre>"
+                assert not repr(obj).startswith(type(obj).__name__ + "(batch_size=")
+
+    # #3240
+    def test_html_compact_ignores_detailed_options(self):
+        td = TensorDict(a=torch.zeros(3, requires_grad=True), batch_size=[3])
+        assert td._repr_html_().startswith("<div ")
+        with set_printoptions(compact=True, show_grad=True):
+            assert td._repr_html_().startswith("<div ")
+
+    # #3240
+    @pytest.mark.skipif(not _has_ipython, reason="IPython not installed")
+    def test_html_notebook_shows_detailed_text(self):
+        from IPython.core.formatters import DisplayFormatter
+
+        td = TensorDict(a=torch.zeros(3, requires_grad=True), batch_size=[3])
+        formatter = DisplayFormatter()
+        data, _ = formatter.format(td)
+        assert data["text/html"].startswith("<div ")
+        with set_printoptions(show_grad=True):
+            data, _ = formatter.format(td)
+            expected = repr(td)
+        assert data["text/html"] == f"<pre>{html.escape(expected)}</pre>"
+        assert data["text/plain"] == expected
+        assert "requires_grad=True" in expected
 
 
 # Printing on every container type (#3233): repr, str, print and _repr_html_
