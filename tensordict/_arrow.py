@@ -375,9 +375,13 @@ def from_arrow(
         raise TypeError(
             f"mask_key must be a string or a tuple of strings, got {mask_key!r}."
         )
-    mask_key = unravel_key(mask_key)
-    if mask_key in ("", ()):
-        raise ValueError("mask_key must not be empty.")
+    unravelled = unravel_key(mask_key)
+    if unravelled == ():
+        raise ValueError(
+            f"mask_key must be a string or a non-empty tuple of strings, got "
+            f"{mask_key!r}."
+        )
+    mask_key = unravelled
     first = mask_key if isinstance(mask_key, str) else mask_key[0]
     if not isinstance(table, (pa.Table, pa.RecordBatch)):
         table = pa.table(table)

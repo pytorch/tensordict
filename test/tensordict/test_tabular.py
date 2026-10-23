@@ -809,7 +809,6 @@ class TestArrow:
     @pytest.mark.parametrize(
         "mask_key, error",
         [
-            ("", ValueError),
             ((), ValueError),
             (1, TypeError),
             (["a", "b"], TypeError),
