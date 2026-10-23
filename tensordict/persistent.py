@@ -52,8 +52,11 @@ from tensordict.memmap import MemoryMappedTensor
 from tensordict.utils import (
     _as_context_manager,
     _cache_while_locked,
+    _is_unbatched,
     _LOCK_ERROR,
     _NUMPY_TO_TORCH_DTYPE_DICT,
+    _UNBATCHED_SAVE,
+    _warn_unbatched_saved_as_plain,
     expand_right,
     IndexType,
     is_non_tensor,
@@ -68,7 +71,7 @@ _has_h5 = importlib.util.find_spec("h5py", None) is not None
 _has_zarr = importlib.util.find_spec("zarr", None) is not None
 
 if TYPE_CHECKING:
-    from typing import Self
+    from typing_extensions import Self
 else:
     Self = Any
 
@@ -600,6 +603,8 @@ class _ZarrBackend(_PersistentBackend):
         return "w-" if mode == "x" else mode
 
     def open_file(self, filename, mode):
+        # zarr 2 has no use_consolidated: name the version needed (#3298)
+        self.check_available()
         import zarr
 
         if isinstance(filename, Path):
@@ -615,6 +620,7 @@ class _ZarrBackend(_PersistentBackend):
             return zarr.open_group(filename, mode=mode, use_consolidated=False)
 
     def open_new_file(self, filename, metadata=None):
+        self.check_available()
         import zarr
 
         if isinstance(filename, Path):
@@ -1378,10 +1384,18 @@ class PersistentTensorDict(
             **kwargs,
         )
         out._backend.metadata_on_create = _has_batch_size
-        if is_tensor_collection(input_dict):
-            out.update(input_dict)
-        else:
-            out.update(TensorDict(input_dict, batch_size=batch_size))
+        # one UnbatchedTensor warning per save, however many leaves (#3264)
+        outer = getattr(_UNBATCHED_SAVE, "warned", None)
+        if outer is None:
+            _UNBATCHED_SAVE.warned = False
+        try:
+            if is_tensor_collection(input_dict):
+                out.update(input_dict)
+            else:
+                out.update(TensorDict(input_dict, batch_size=batch_size))
+        finally:
+            if outer is None:
+                _UNBATCHED_SAVE.warned = None
         out._backend.metadata_on_create = False
         if not _has_batch_size:
             _set_max_batch_size(out)
@@ -2320,6 +2334,9 @@ class PersistentTensorDict(
         if hasattr(value, "requires_grad") and value.requires_grad:
             raise RuntimeError("Cannot set a tensor that has requires_grad=True.")
         if isinstance(value, torch.Tensor):
+            if _is_unbatched(value):
+                # the file has no place for the class (#3264)
+                _warn_unbatched_saved_as_plain()
             out = value.cpu().detach().numpy()
         elif isinstance(value, dict):
             out = TensorDict(value, [])

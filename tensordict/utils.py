@@ -4509,6 +4509,29 @@ def _user_stacklevel() -> int:
     return stacklevel
 
 
+# Set while to_h5/to_zarr write a tensordict: True once the save has warned, so
+# a save with several UnbatchedTensor leaves warns once. Python's per-call-site
+# dedup can't be relied on: a library that changes the warnings filters during
+# the save (zarr 3.0) resets it.
+_UNBATCHED_SAVE = threading.local()
+
+
+def _warn_unbatched_saved_as_plain() -> None:
+    """Warns that an h5, zarr or ``.tdz`` save writes an UnbatchedTensor leaf as a plain tensor (#3264)."""
+    state = getattr(_UNBATCHED_SAVE, "warned", None)
+    if state:
+        return
+    if state is False:
+        _UNBATCHED_SAVE.warned = True
+    warnings.warn(
+        "UnbatchedTensor leaves are saved as plain tensors: they are read back "
+        "as plain tensors, or fail to load when their shape does not fit the "
+        "batch size. Exclude them before saving.",
+        UserWarning,
+        stacklevel=_user_stacklevel(),
+    )
+
+
 def _warn_dim_past_batch_dims(op: str) -> None:
     """Warns that ``op`` got a dim outside the batch dims, which raises from 0.17 (#2148)."""
     warnings.warn(

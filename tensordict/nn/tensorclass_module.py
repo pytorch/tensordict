@@ -121,8 +121,9 @@ class TensorClassModuleWrapper(TensorDictModuleBase):
 
         """
         if args or kwargs:
-            ignored = [f"{len(args)} positional argument(s)"] if args else []
-            ignored += [repr(name) for name in kwargs]
+            kwarg_names = list(kwargs)
+            ignored = ["positional arguments"] if args else []
+            ignored += [repr(name) for name in kwarg_names]
             warnings.warn(
                 f"TensorClassModuleWrapper ignores {', '.join(ignored)}. "
                 "Starting with TensorDict 0.17, the default will change to "
