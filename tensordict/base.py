@@ -7042,10 +7042,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             input_dict_or_td = TensorDict.from_dict(
                 input_dict_or_td, batch_dims=self.batch_dims
             )
-        if keys_to_update is not None and len(keys_to_update) > 1:
-            _warn_update_keys_narrowed(
-                "update_", input_dict_or_td, keys_to_update, dest=self
-            )
+        check_narrowed = keys_to_update is not None and len(keys_to_update) > 1
         entries = None
         if (
             keys_to_update is not None
@@ -7075,6 +7072,15 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 sources,
                 entries,
             )
+            if check_narrowed and named != len(wanted):
+                # Only a listed key that names a sub-tensordict of the source
+                # can warn: where every listed key names a leaf, skip the
+                # check, which costs about 0.5 us per call (#3333). Nothing
+                # is written yet.
+                _warn_update_keys_narrowed(
+                    "update_", input_dict_or_td, keys_to_update, dest=self
+                )
+            check_narrowed = False
             if named < 0 or (
                 named != len(wanted) and _reads_copies_under(self, keys_to_update)
             ):
@@ -7083,6 +7089,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 if dests:
                     _copy_leaves(dests, sources, non_blocking, exact=True)
                 return self
+        if check_narrowed:
+            _warn_update_keys_narrowed(
+                "update_", input_dict_or_td, keys_to_update, dest=self
+            )
         if (
             keys_to_update is not None
             and entries is None

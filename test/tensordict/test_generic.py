@@ -15513,6 +15513,34 @@ class TestGeneric:
         )
         assert outcome() == fast
 
+    # #3333
+    def test_update__keys_to_update_leaves_skip_narrowed_check(self, monkeypatch):
+        # Between exact TensorDicts, a keys_to_update list whose keys all name
+        # leaves cannot warn that it narrows a sub-tensordict: update_ skips
+        # that check, as batched environments call it at every step.
+        calls = []
+        check = tensordict_base._warn_update_keys_narrowed
+
+        def counting(*args, **kwargs):
+            calls.append(args[2])
+            return check(*args, **kwargs)
+
+        monkeypatch.setattr(tensordict_base, "_warn_update_keys_narrowed", counting)
+        td = TensorDict(
+            a=torch.zeros(3),
+            n=TensorDict(x=torch.zeros(3), y=torch.zeros(3), batch_size=[3]),
+            batch_size=[3],
+        )
+        source = td.clone().apply_(lambda t: t.fill_(1))
+        td.update_(source, keys_to_update=["a", ("n", "x"), ("n", "y")])
+        assert calls == []
+        assert (td == 1).all()
+        # a key that names a sub-tensordict still runs the check, and warns
+        td.zero_()
+        with pytest.warns(FutureWarning, match="keep only the deeper keys"):
+            td.update_(source, keys_to_update=["n", ("n", "x")])
+        assert len(calls) == 1
+
     @pytest.mark.parametrize("method", ["update_", "copy_"])
     def test_update__forward_ad(self, method):
         # inside a dual level, update_ and copy_ copy each leaf with copy_,
