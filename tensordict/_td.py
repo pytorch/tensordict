@@ -3316,6 +3316,21 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
     # td[key] = value writes into an existing entry of the source
     _setitem_key_inplace = BEST_ATTEMPT_INPLACE
 
+    if TYPE_CHECKING:
+        # memmap_like returns a TensorDict (#3320).
+        def memmap_like(  # type: ignore[override]
+            self,
+            prefix: str | Path | None = None,
+            copy_existing: bool = False,
+            *,
+            existsok: bool = True,
+            num_threads: int = 0,
+            return_early: bool = False,
+            share_non_tensor: bool = False,
+            robust_key: bool | None = True,
+            archive: bool | None = None,
+        ) -> TensorDict: ...
+
     def __init__(
         self,
         source: T,
