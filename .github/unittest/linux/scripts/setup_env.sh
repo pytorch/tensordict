@@ -134,7 +134,7 @@ if ${pip_only}; then
     pip install numpy cloudpickle pytest pytest-benchmark pytest-instafail \
         pytest-rerunfailures pytest-timeout pytest-xdist redis mypy
     # Optional test dependencies, which may have no wheels for this Python yet
-    for pkg in h5py orjson mosaicml-streaming safetensors "zarr>=3.0"; do
+    for pkg in h5py orjson mosaicml-streaming safetensors "zarr>=3.1.1"; do
         pip install "${pkg}" || echo "${pkg} not available for Python ${PYTHON_VERSION}, skipping"
     done
 else
@@ -143,7 +143,7 @@ else
     cat "${this_dir}/environment.yml"
     conda env update --file "${this_dir}/environment.yml" --prune
     # zarr>=3 requires Python>=3.11; skip on older interpreters
-    pip install "zarr>=3.0" || echo "zarr>=3.0 not available for Python ${PYTHON_VERSION}, skipping"
+    pip install "zarr>=3.1.1" || echo "zarr>=3.1.1 not available for Python ${PYTHON_VERSION}, skipping"
 fi
 
 #if [[ $OSTYPE == 'darwin'* ]]; then

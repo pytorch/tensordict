@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 import pickle
+import re
 import warnings
 from pathlib import Path
 
@@ -1058,9 +1059,48 @@ class TestZarrStores:
             ),
         }
         with pytest.raises(
-            ImportError, match=r"requires zarr>=3\.0, got zarr==2\.18\.3"
+            ImportError, match=r"requires zarr>=3\.1\.1, got zarr==2\.18\.3"
         ):
             calls[call]()
+
+    @pytest.mark.parametrize(
+        "version,ok",
+        [
+            ("3.0.8", False),
+            ("3.1.0", False),
+            ("3.1.1rc1", False),
+            ("3.1.1.dev3", False),
+            ("3.1.1", True),
+            ("3.1.2.dev5+g1234abc", True),
+            ("3.2.0", True),
+            ("4.0.0", True),
+        ],
+    )
+    def test_zarr_below_3_1_1_raises_import_error(
+        self, tmp_path, monkeypatch, version, ok
+    ):
+        # #3352: the zarr extra needs zarr>=3.1.1 (3.0.0-3.0.7 are yanked,
+        # 3.0.8-3.1.0 warn on every string array); the check accepted any zarr 3
+        import zarr
+
+        monkeypatch.setattr(zarr, "__version__", version)
+        backend = tensordict_persistent._ZarrBackend()
+        if ok:
+            backend.check_available()
+            return
+        with pytest.raises(
+            ImportError,
+            match=rf"requires zarr>=3\.1\.1, got zarr=={re.escape(version)}\. "
+            r"Upgrade with `pip install 'zarr>=3\.1\.1'`",
+        ):
+            backend.check_available()
+        with pytest.raises(ImportError, match=r"requires zarr>=3\.1\.1"):
+            PersistentTensorDict(
+                filename=str(tmp_path / "a.zarr"),
+                backend="zarr",
+                mode="w",
+                batch_size=[3],
+            )
 
     def test_explicit_store(self, tmp_path):
         from zarr.storage import LocalStore
