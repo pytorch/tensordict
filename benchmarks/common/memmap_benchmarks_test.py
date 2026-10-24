@@ -170,7 +170,7 @@ def test_load_archive(benchmark, tmpdir, pause_when_exit):
 
 
 @pytest.mark.gpu
-@pytest.mark.skipif(not _has_zarr, reason="zarr>=3.0 not found.")
+@pytest.mark.skipif(not _has_zarr, reason="zarr>=3.1.1 not found.")
 def test_serialize_model_zarr(benchmark, tmpdir, pause_when_exit):
     """Tests efficiency of saving weights as a zarr store."""
     import shutil
@@ -192,7 +192,7 @@ def test_serialize_model_zarr(benchmark, tmpdir, pause_when_exit):
     del t
 
 
-@pytest.mark.skipif(not _has_zarr, reason="zarr>=3.0 not found.")
+@pytest.mark.skipif(not _has_zarr, reason="zarr>=3.1.1 not found.")
 def test_load_zarr(benchmark, tmpdir, pause_when_exit):
     """Tests efficiency of loading and materializing a zarr store."""
     t = _transformer()

@@ -563,7 +563,7 @@ _ZARR_METADATA_ATTR = "__tensordict__"
 
 
 class _ZarrBackend(_PersistentBackend):
-    """zarr (>= 3.0) storage dialect.
+    """zarr (>= 3.1.1) storage dialect.
 
     Tensors are stored as zarr arrays (one chunk per leaf and no compressor
     unless specified otherwise through the ``PersistentTensorDict`` kwargs),
@@ -591,9 +591,15 @@ class _ZarrBackend(_PersistentBackend):
             )
         import zarr
 
-        if int(zarr.__version__.split(".")[0]) < 3:
+        # zarr 3 depends on packaging, zarr 2 may not: check the major first
+        too_old = int(zarr.__version__.split(".")[0]) < 3
+        if not too_old:
+            from packaging.version import Version
+
+            too_old = Version(zarr.__version__) < Version("3.1.1")
+        if too_old:
             raise ImportError(
-                f"tensordict's zarr backend requires zarr>=3.0, got zarr=={zarr.__version__}. "
+                f"tensordict's zarr backend requires zarr>=3.1.1, got zarr=={zarr.__version__}. "
                 "Upgrade with `pip install 'zarr>=3.1.1'`."
             )
 
