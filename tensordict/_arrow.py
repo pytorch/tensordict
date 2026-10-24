@@ -415,12 +415,12 @@ def _to_array(pa, value, key):
     if is_non_tensor(value):
         return pa.array(value.tolist())
     if is_tensor_collection(value):
-        keys = list(value.keys())
-        if not keys:
+        items = list(value.items())
+        if not items:
             return pa.array([{}] * value.shape[0], type=pa.struct([]))
         return pa.StructArray.from_arrays(
-            [_to_array(pa, value.get(k), unravel_key((key, k))) for k in keys],
-            names=keys,
+            [_to_array(pa, item, unravel_key((key, k))) for k, item in items],
+            names=[k for k, _ in items],
         )
     tensor = value.detach().cpu().contiguous()
     if tensor.is_nested:
