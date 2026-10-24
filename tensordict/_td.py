@@ -1284,12 +1284,13 @@ class TensorDict(TensorDictBase):
                 device=device,
                 names=names,
             )
-        except RuntimeError:
+        except (RuntimeError, TypeError, ValueError):
             # A Python or NumPy scalar becomes a 0-dim tensor, which cannot
             # have a non-empty batch size: read it as non-tensor data, which
             # is what to_dict writes it from (#3266, #3335). Doing this only
             # once the batch size check fails keeps the leaves' loop as fast
-            # as before.
+            # as before. Some scalars fail earlier, when they become a tensor:
+            # an int beyond int64 raises ValueError, np.uint64 TypeError.
             scalars = (
                 [
                     key

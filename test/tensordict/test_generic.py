@@ -4191,6 +4191,24 @@ class TestGeneric:
         assert isinstance(TensorDict.from_dict({"n": value})["n"], torch.Tensor)
 
     @pytest.mark.parametrize(
+        "value", [2**80, -(2**70), np.uint64(5)], ids=["2**80", "-2**70", "uint64"]
+    )
+    def test_from_dict_to_dict_scalar_not_a_tensor(self, value):
+        # #3335: an int beyond int64 or a np.uint64 cannot become a tensor at
+        # all. With a batch size, from_dict reads it back as non-tensor data,
+        # as other scalars.
+        td = TensorDict(a=torch.zeros(3), batch_size=[3])
+        td.set_non_tensor(("nested", "n"), value)
+        td.set_non_tensor("n", value)
+        out = TensorDict.from_dict(td.to_dict(), batch_size=[3])
+        for key in ("n", ("nested", "n")):
+            assert isinstance(out.get(key), NonTensorData)
+            assert out[key] == value
+        # a wrong-shaped tensor next to it raises as before
+        with pytest.raises(RuntimeError, match="batch dimension mismatch"):
+            TensorDict.from_dict({"n": value, "b": torch.zeros(2)}, batch_size=[3])
+
+    @pytest.mark.parametrize(
         "op",
         [
             "lazy_eq",
