@@ -805,6 +805,35 @@ class TestArrow:
                 pa.table({"y": pa.array([1.0, None])}), nulls=nulls, mask_key="m"
             )
 
+    # #3334
+    @pytest.mark.parametrize(
+        "mask_key, error",
+        [
+            ((), ValueError),
+            (1, TypeError),
+            (["a", "b"], TypeError),
+            (("a", 1), TypeError),
+        ],
+    )
+    def test_from_arrow_mask_key_invalid(self, mask_key, error):
+        import pyarrow as pa
+
+        with pytest.raises(error, match="mask_key"):
+            from_arrow(
+                pa.table({"y": pa.array([1.0, None])}), nulls="mask", mask_key=mask_key
+            )
+
+    # #3334
+    @pytest.mark.parametrize("mask_key", [("a", (1,)), (("a", 1),), ((("a",), 2),)])
+    def test_from_arrow_mask_key_nested_wrong_type(self, mask_key):
+        # a non-string inside a nested tuple raises TypeError, as at the top
+        import pyarrow as pa
+
+        with pytest.raises(TypeError, match="mask_key"):
+            from_arrow(
+                pa.table({"y": pa.array([1.0, None])}), nulls="mask", mask_key=mask_key
+            )
+
     # #3313: padding a from_arrow(nulls="mask") result keeps its null masks and
     # every row. The result depended on hash order, so run it with several
     # PYTHONHASHSEEDs.
@@ -980,6 +1009,27 @@ assert torch.equal(episodes[1]["_mask", "x"], torch.tensor([True, True, True]))
             td = from_arrow(pa.table({"u": column}))
         assert td.get("u").tolist() == [1, None]
 
+    # #3334: pyarrow 15's is_nested leaves out fixed_size_list, so emulate it.
+    @pytest.mark.parametrize("kind", ["map", "dictionary"])
+    @pytest.mark.parametrize("pyarrow_15_is_nested", [False, True])
+    def test_from_arrow_nulls_raise_fixed_size_list_warns(
+        self, kind, pyarrow_15_is_nested, monkeypatch
+    ):
+        import pyarrow as pa
+
+        if pyarrow_15_is_nested:
+            is_nested = pa.types.is_nested
+            monkeypatch.setattr(
+                pa.types,
+                "is_nested",
+                lambda t: is_nested(t) and not pa.types.is_fixed_size_list(t),
+            )
+        values = self._unchecked_column(pa, kind, ["a", None, "b"])
+        column = pa.FixedSizeListArray.from_arrays(values, 1)
+        with pytest.warns(FutureWarning, match="TensorDict 0.18"):
+            td = from_arrow(pa.table({"c": column}))
+        assert td.get("c").tolist() == column.to_pylist()
+
     def test_from_arrow_memory_map(self, tmp_path):
         # An in-place write into a view of a memory-mapped file kills the
         # process, so run it in a subprocess.
@@ -1047,6 +1097,72 @@ assert torch.equal(episodes[1]["_mask", "x"], torch.tensor([True, True, True]))
             for x, y in zip(td2[key].unbind(0), td[key].unbind(0)):
                 assert torch.equal(x, y), key
         assert td2.get("s").tolist() == ["x", "y", "z"]
+
+    def test_to_arrow_nested_tensorclass_str(self):
+        # #3329: a str field of a nested tensorclass raised an AttributeError
+        @tensorclass
+        class Inner:
+            x: torch.Tensor
+            label: str
+
+        inner = Inner(x=torch.tensor([1.0, 2.0]), label="a", batch_size=[2])
+        rows = to_arrow(inner).to_pylist()
+        assert rows == [{"x": 1.0, "label": "a"}, {"x": 2.0, "label": "a"}]
+        table = to_arrow(TensorDict(inner=inner, batch_size=[2]))
+        assert table.column("inner").to_pylist() == rows
+
+    def test_to_arrow_nested_non_tensor_data(self):
+        # #3329
+        td = TensorDict(
+            obs=TensorDict(
+                x=torch.tensor([1, 2]),
+                s=NonTensorData("b", batch_size=[2]),
+                batch_size=[2],
+            ),
+            batch_size=[2],
+        )
+        assert to_arrow(td).column("obs").to_pylist() == [
+            {"x": 1, "s": "b"},
+            {"x": 2, "s": "b"},
+        ]
+
+    def test_to_arrow_ragged_dim_not_1(self):
+        # #3328: a jagged leaf whose ragged dim is not dim 1 was written with
+        # the wrong rows
+        nt = torch.nested.nested_tensor(
+            [torch.arange(5.0).view(1, 5), torch.arange(10.0, 15.0).view(1, 5)],
+            layout=torch.jagged,
+        ).transpose(1, 2)
+        assert nt._ragged_idx == 2
+        td = TensorDict(n=nt, obs=TensorDict(m=nt, batch_size=[2]), batch_size=[2])
+        with pytest.raises(ValueError, match=r"'n' at position 1, got 2"):
+            to_arrow(td.select("n"))
+        with pytest.raises(ValueError, match=r"\('obs', 'm'\) at position 1, got 2"):
+            to_arrow(td.select("obs"))
+        table = to_arrow(TensorDict(n=nt.transpose(1, 2), batch_size=[2]))
+        assert table.to_pydict() == {
+            "n": [[[0.0, 1.0, 2.0, 3.0, 4.0]], [[10.0, 11.0, 12.0, 13.0, 14.0]]]
+        }
+
+    def test_to_arrow_ragged_dim_1_roundtrip(self):
+        # #3328: a jagged leaf with its ragged dim at 1, as from_arrow gives,
+        # still converts
+        nt = torch.nested.nested_tensor_from_jagged(
+            torch.arange(10.0).view(5, 2), torch.tensor([0, 2, 5])
+        )
+        assert nt._ragged_idx == 1
+        td = TensorDict(obs=TensorDict(n=nt, batch_size=[2]), batch_size=[2])
+        table = to_arrow(td)
+        assert table.to_pydict() == {
+            "obs": [
+                {"n": [[0.0, 1.0], [2.0, 3.0]]},
+                {"n": [[4.0, 5.0], [6.0, 7.0], [8.0, 9.0]]},
+            ]
+        }
+        td2 = from_arrow(table)
+        assert td2["obs", "n"]._ragged_idx == 1
+        for x, y in zip(td2["obs", "n"].unbind(0), nt.unbind(0)):
+            assert torch.equal(x, y)
 
     def test_arrow_empty(self):
         table = _arrow_table().slice(0, 0)

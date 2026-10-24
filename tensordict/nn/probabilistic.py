@@ -1526,9 +1526,9 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
     def __init__(
         self,
         modules: dict[str, TensorDictModuleBase | ProbabilisticTensorDictModule],
+        *,
         partial_tolerant: bool = False,
         return_composite: bool | None = None,
-        *,
         selected_out_keys: List[NestedKey] | None = None,
         inplace: bool | None = None,
     ) -> None: ...
@@ -1537,9 +1537,9 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
     def __init__(
         self,
         modules: List[TensorDictModuleBase | ProbabilisticTensorDictModule],
+        *,
         partial_tolerant: bool = False,
         return_composite: bool | None = None,
-        *,
         selected_out_keys: List[NestedKey] | None = None,
         inplace: bool | None = None,
     ) -> None: ...

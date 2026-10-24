@@ -944,7 +944,7 @@ class _Conversion:
         """Opens a zarr store as a :class:`~tensordict.PersistentTensorDict`.
 
         The data stays in the store: entries are read when they are accessed.
-        Requires ``zarr>=3.0``. See :ref:`saving` and
+        Requires ``zarr>=3.1.1``. See :ref:`saving` and
         :class:`~tensordict.PersistentTensorDict`.
 
         Args:
@@ -1064,7 +1064,7 @@ class _Conversion:
                   HDF5 file given by ``filename=<path>``.
                 - ``"zarr"``: a :class:`~tensordict.PersistentTensorDict` in
                   the zarr store given by ``filename=<path or store>``
-                  (requires ``zarr>=3.0``).
+                  (requires ``zarr>=3.1.1``).
                 - ``"shared"``: tensors in shared memory (see
                   :meth:`~.share_memory_`).
                 - ``"redis"`` or ``"dragonfly"``: a
@@ -3527,7 +3527,7 @@ class _Conversion:
         group. An existing store at ``filename`` is overwritten. The batch
         size and the names of the batch dimensions are saved in the store
         attributes, so that :meth:`~.from_zarr` restores them. Requires
-        ``zarr>=3.0``. See :ref:`saving`.
+        ``zarr>=3.1.1``. See :ref:`saving`.
 
         Args:
             filename (str, path or zarr store): the path of the zarr store (a

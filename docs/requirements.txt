@@ -1,7 +1,7 @@
 matplotlib
 numpy
 safetensors
-zarr>=3.0; python_version >= "3.11"
+zarr>=3.1.1; python_version >= "3.11"
 # The Sphinx packages are pinned: the docs job fails on any Sphinx warning, and
 # a new release of one can add warnings. Update them together, on purpose.
 sphinx-copybutton==0.5.2

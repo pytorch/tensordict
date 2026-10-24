@@ -1471,9 +1471,19 @@ def _collate_tensor_collection(batch, *, collate_fn_map=None):
                 "Cannot collate a batch of different tensorclasses: got "
                 f"{sorted(cls.__name__ for cls in tc_types)}."
             )
+    # Items with different numbers of batch dims cannot be stacked (#3330).
+    if all(is_tensor_collection(item) for item in batch):
+        batch_dims = {item.batch_dims for item in batch}
+        if len(batch_dims) > 1:
+            raise TypeError(
+                "Cannot collate a batch of tensordicts or tensorclasses with "
+                f"different numbers of batch dims: got {sorted(batch_dims)}."
+            )
     try:
         return LazyStackedTensorDict.maybe_dense_stack(batch)
-    except AttributeError as err:
+    except torch.OutOfMemoryError:
+        raise
+    except (AttributeError, RuntimeError) as err:
         types = {type(item) for item in batch}
         kinds = {_is_tensorclass(cls) for cls in types if is_tensor_collection(cls)}
         if len(kinds) > 1:
@@ -1486,7 +1496,12 @@ def _collate_tensor_collection(batch, *, collate_fn_map=None):
                 "Cannot collate a batch that mixes tensordicts or tensorclasses "
                 f"with other types: got {sorted(cls.__name__ for cls in types)}."
             ) from err
-        raise
+        # 0.15.2 raised TypeError for every batch of tensordicts, and code that
+        # falls back on TypeError relies on it (#3330)
+        raise TypeError(
+            "Cannot collate a batch of tensordicts or tensorclasses that do not "
+            f"stack: {err}"
+        ) from err
 
 
 class _TensorClassCollateMeta(type):

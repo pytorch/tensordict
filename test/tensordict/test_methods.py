@@ -5576,6 +5576,55 @@ class TestTensorDicts(TestTensorDictsBase):
         assert not call([("n", "x"), ("n", "y")])
         assert not call(["n", ("n", "x"), ("n", "y")])
 
+    @pytest.mark.parametrize("method", ["update_", "update_at_"])
+    def test_update__keys_to_update_narrowed_warns_repeated(
+        self, td_name, device, method
+    ):
+        # #3333: update_ and update_at_ scan each keys_to_update list once for
+        # a key under another one, and still warn at every call that needs it.
+        td = getattr(self, td_name)(device)
+        td.unlock_()
+        zeros = torch.zeros(td.shape, device=device)
+        td.set("z", zeros)
+        td.set(("n", "x"), zeros)
+        td.set(("n", "y"), zeros)
+        if method == "update_":
+            ones = torch.ones(td.shape, device=device)
+            written = slice(None)
+        else:
+            ones = torch.ones(td.shape[1:], device=device)
+            written = 0
+        source = {"z": ones, "n": {"x": ones, "y": ones}}
+
+        def call(keys):
+            with torch.no_grad(), warnings.catch_warnings(record=True) as record:
+                warnings.simplefilter("always")
+                if method == "update_":
+                    td.update_(source, keys_to_update=keys)
+                else:
+                    td.update_at_(source, 0, keys_to_update=keys)
+            return any(
+                "keep only the deeper keys" in str(w.message)
+                and issubclass(w.category, FutureWarning)
+                for w in record
+            )
+
+        hits = tensordict_base._update_keys_nest.cache_info().hits
+        for _ in range(3):
+            td.set_(("n", "x"), zeros)
+            td.set_(("n", "y"), zeros)
+            warned = call(["n", ("n", "y")])
+            x = td["n", "x"][written]
+            # a file or a store writes only the deeper key already, and is silent
+            assert warned == bool((x == 1).all())
+            assert warned or (x == 0).all()
+            if td_name == "td":
+                assert warned
+            # keys of several depths, none under another
+            assert not call([("n", "x"), ("n", "y"), "z"])
+            assert (td["z"][written] == 1).all()
+        assert tensordict_base._update_keys_nest.cache_info().hits > hits
+
     @legacy_lazy_mode()
     def test_update_select_sub_tensordict(self, td_name, device):
         # A key of keys_to_update that names a sub-tensordict of td writes all

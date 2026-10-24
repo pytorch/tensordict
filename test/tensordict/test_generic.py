@@ -4171,6 +4171,44 @@ class TestGeneric:
         assert isinstance(TensorDict.from_dict({"n": value})["n"], torch.Tensor)
 
     @pytest.mark.parametrize(
+        "value",
+        [np.int64(7), np.float32(1.5), np.bool_(True), np.float64(1.5)],
+        ids=lambda v: type(v).__name__,
+    )
+    def test_from_dict_to_dict_numpy_scalar(self, value):
+        # #3335: from_dict read NumPy scalars other than np.float64 as 0-dim
+        # tensors, which do not fit the batch size.
+        td = TensorDict(a=torch.zeros(3), batch_size=[3])
+        td.set_non_tensor("n", value)
+        td.set_non_tensor(("nested", "n"), value)
+        out = TensorDict.from_dict(td.to_dict(), batch_size=[3])
+        for key in ("n", ("nested", "n")):
+            assert isinstance(out.get(key), NonTensorData)
+            assert out.get(key).batch_size == (3,)
+            assert type(out[key]) is type(value)
+            assert out[key] == value
+        # Without a batch size, a NumPy scalar is still read as a 0-dim tensor.
+        assert isinstance(TensorDict.from_dict({"n": value})["n"], torch.Tensor)
+
+    @pytest.mark.parametrize(
+        "value", [2**80, -(2**70), np.uint64(5)], ids=["2**80", "-2**70", "uint64"]
+    )
+    def test_from_dict_to_dict_scalar_not_a_tensor(self, value):
+        # #3335: an int beyond int64 or a np.uint64 cannot become a tensor at
+        # all. With a batch size, from_dict reads it back as non-tensor data,
+        # as other scalars.
+        td = TensorDict(a=torch.zeros(3), batch_size=[3])
+        td.set_non_tensor(("nested", "n"), value)
+        td.set_non_tensor("n", value)
+        out = TensorDict.from_dict(td.to_dict(), batch_size=[3])
+        for key in ("n", ("nested", "n")):
+            assert isinstance(out.get(key), NonTensorData)
+            assert out[key] == value
+        # a wrong-shaped tensor next to it raises as before
+        with pytest.raises(RuntimeError, match="batch dimension mismatch"):
+            TensorDict.from_dict({"n": value, "b": torch.zeros(2)}, batch_size=[3])
+
+    @pytest.mark.parametrize(
         "op",
         [
             "lazy_eq",
@@ -7185,8 +7223,11 @@ class TestGeneric:
         # A tensor field collides with a dotted key, but a non-tensor field is
         # stored in the _metadata of its tensorclass and collides with nothing
         checkpoint = Checkpoint(state=TensorDict(), label="x", batch_size=[])
-        with pytest.raises(KeyError, match="collide.*flatten=False"):
-            TensorDict({"c": checkpoint, "c.state": {}}, []).state_dict()
+        # #3331: two empty levels with the same metadata lose nothing
+        td = TensorDict({"c": checkpoint, "c.state": {}}, [])
+        sd = td.state_dict()
+        assert list(sd) == []
+        assert td.clone().load_state_dict(sd)["c"].label == "x"
         sd = TensorDict({"c.label": {}, "c": checkpoint}, []).state_dict()
         assert set(sd._metadata) == {"", "c.label", "c", "c.state"}
 
@@ -7227,6 +7268,44 @@ class TestGeneric:
                 td.state_dict(flatten=flatten)
             counts.append(read_full.call_count)
         assert counts == [3, 3]
+
+    # #3331
+    @pytest.mark.parametrize("reverse", [False, True])
+    @pytest.mark.parametrize("nested", [{}, {"c": {}}], ids=["empty", "nested_empty"])
+    def test_state_dict_flat_collision_empty_levels(self, reverse, nested):
+        # Two levels without values and with the same metadata write the same
+        # flat state dict: no value is lost
+        items = [("a.b", {}), ("a", {"b": nested})]
+        if reverse:
+            items.reverse()
+        td = TensorDict(dict(items), [])
+        sd = td.state_dict()
+        assert list(sd) == []
+        expected = {"", "a.b", "a"} | ({"a.b.c"} if nested else set())
+        assert set(sd._metadata) == expected
+        restored = td.clone().load_state_dict(sd)
+        assert set(restored.keys(True)) == set(td.keys(True))
+        nested_sd = td.state_dict(flatten=False)
+        assert list(nested_sd) == [key for key, _ in items]
+        assert list(nested_sd["a"]["b"]) == list(nested)
+        restored = td.clone().load_state_dict(nested_sd, from_flatten=False)
+        assert set(restored.keys(True)) == set(td.keys(True))
+
+    # #3331
+    @pytest.mark.parametrize("reverse", [False, True])
+    @pytest.mark.parametrize("kind", ["leaf", "level_with_leaves"])
+    def test_state_dict_flat_collision_with_value(self, reverse, kind):
+        # A collision still raises when an entry writes a value, even an equal
+        # one: loading the state dict back would restore one key only
+        if kind == "leaf":
+            items = [("a.b", torch.tensor(1)), ("a", {"b": torch.tensor(1)})]
+        else:
+            items = [("a.b", {}), ("a", {"b": {"x": torch.tensor(1)}})]
+        if reverse:
+            items.reverse()
+        td = TensorDict(dict(items), [])
+        with pytest.raises(KeyError, match="collide.*flatten=False"):
+            td.state_dict()
 
     @staticmethod
     def _lazy_stack_of_h5(tmp_path):
@@ -9670,6 +9749,64 @@ class TestGeneric:
         }[other]
         with pytest.raises(TypeError, match="mixes tensordicts or tensorclasses"):
             torch.utils.data.default_collate([elem, item])
+
+    @pytest.mark.parametrize(
+        "kind,batch_sizes",
+        [
+            ("tensordict", ([2], [])),
+            ("tensordict", ([2, 3], [2])),
+            ("tensorclass", ([2], [])),
+        ],
+    )
+    def test_collate_default_different_batch_dims(self, kind, batch_sizes):
+        # #3330: a batch of tensor collections with different numbers of batch
+        # dims raises a TypeError, as on 0.15.2, not a RuntimeError.
+        class Sample(TensorClass):
+            x: torch.Tensor
+
+        cls = {"tensordict": TensorDict, "tensorclass": Sample}[kind]
+        key = {"tensordict": "a", "tensorclass": "x"}[kind]
+        batch = [
+            cls(**{key: torch.zeros(2, 3)}, batch_size=batch_size)
+            for batch_size in batch_sizes
+        ]
+        dims = sorted(len(batch_size) for batch_size in batch_sizes)
+        for samples in (batch, batch[::-1]):
+            with pytest.raises(
+                TypeError,
+                match=re.escape(f"different numbers of batch dims: got {dims}"),
+            ):
+                torch.utils.data.default_collate(samples)
+
+    @pytest.mark.parametrize(
+        "case",
+        ["ragged lazy stack", "devices", "leaf and nested", "leaf and non-tensor"],
+    )
+    def test_collate_default_unstackable_raises_type_error(self, case):
+        # #3330: a batch of tensordicts that do not stack raises a TypeError,
+        # as on 0.15.2, not the RuntimeError or AttributeError of the stack.
+        z = torch.zeros
+        first = TensorDict(a=z(2), batch_size=[2])
+        second = {
+            "ragged lazy stack": LazyStackedTensorDict(
+                TensorDict(a=z(2)), TensorDict(a=z(3))
+            ),
+            "devices": TensorDict(a=z(2, device="meta"), batch_size=[2]),
+            "leaf and nested": TensorDict(
+                a=TensorDict(b=z(2), batch_size=[2]), batch_size=[2]
+            ),
+            "leaf and non-tensor": TensorDict(
+                a=NonTensorData("x", batch_size=[2]), batch_size=[2]
+            ),
+        }[case]
+        if case == "ragged lazy stack":
+            first = TensorDict(a=z(2, 2), batch_size=[2])
+            samples = [second, first]
+        else:
+            samples = [first, second]
+        with pytest.raises(TypeError, match="do not stack") as info:
+            torch.utils.data.default_collate(samples)
+        assert isinstance(info.value.__cause__, (RuntimeError, AttributeError))
 
     def test_collate_default_registration(self):
         # tensordict adds two keys to torch's default_collate_fn_map, and keeps
@@ -15512,6 +15649,56 @@ class TestGeneric:
             tensordict_base, "_keys_update_pairs", lambda *args, **kwargs: -1
         )
         assert outcome() == fast
+
+    # #3333
+    @pytest.mark.parametrize(
+        "keys, checked, warns",
+        [
+            # every listed key names a leaf
+            (["a", ("n", "x"), ("n", "y")], False, False),
+            # a sub-tensordict and every leaf under it
+            (["n", ("n", "x"), ("n", "y")], False, False),
+            ("keys(True)", False, False),
+            # a sub-tensordict and some of its leaves
+            (["n", ("n", "x")], True, True),
+            # a listed key under a leaf, which the source lacks
+            (["n", ("n", "x"), ("n", "x", "z"), ("n", "y")], True, True),
+            # a sub-tensordict alone
+            (["a", "n"], True, False),
+        ],
+    )
+    def test_update__keys_to_update_skip_narrowed_check(
+        self, keys, checked, warns, monkeypatch
+    ):
+        # Between exact TensorDicts, update_ skips the narrowed-keys check
+        # where it cannot warn: every listed key names a leaf or a
+        # sub-tensordict of the source, and every leaf it writes is listed.
+        # Batched environments call update_ at every step.
+        calls = []
+        check = tensordict_base._warn_update_keys_narrowed
+
+        def counting(*args, **kwargs):
+            calls.append(args[2])
+            return check(*args, **kwargs)
+
+        monkeypatch.setattr(tensordict_base, "_warn_update_keys_narrowed", counting)
+        td = TensorDict(
+            a=torch.zeros(3),
+            n=TensorDict(x=torch.zeros(3), y=torch.zeros(3), batch_size=[3]),
+            batch_size=[3],
+        )
+        source = td.clone().apply_(lambda t: t.fill_(1))
+        if keys == "keys(True)":
+            keys = list(td.keys(True))
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            td.update_(source, keys_to_update=keys)
+        warned = any("keep only the deeper keys" in str(w.message) for w in record)
+        assert bool(calls) == checked
+        assert warned == warns
+        # every list writes all of "n", and "a" only where it lists it
+        assert (td["n"] == 1).all()
+        assert bool((td["a"] == 1).all()) == ("a" in keys)
 
     @pytest.mark.parametrize("method", ["update_", "copy_"])
     def test_update__forward_ad(self, method):

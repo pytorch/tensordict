@@ -896,6 +896,19 @@ def test_update__keys_to_update(benchmark, selected):
     benchmark(dest.update_, source, keys_to_update=keys)
 
 
+def test_update__keys_to_update_mixed_depth(benchmark):
+    # keys of several depths, none under another: the narrowed-keys check
+    # scans such a list once (#3333)
+    source = TensorDict(
+        {f"obs{i}": torch.ones(4, 8) for i in range(2)},
+        batch_size=[4],
+    )
+    source["nested"] = TensorDict(x=torch.ones(4, 2), y=torch.ones(4))
+    dest = source.clone()
+    keys = ["obs0", "obs1", ("nested", "x"), ("nested", "y")]
+    benchmark(dest.update_, source, keys_to_update=keys)
+
+
 @pytest.mark.parametrize("n", [64, 4096])
 def test_copy__row_flat(benchmark, n):
     # rsl_rl's rollout storage write: storage[step].copy_(obs) (#2859)
