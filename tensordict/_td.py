@@ -9,7 +9,7 @@ import os
 import weakref
 from collections import defaultdict, UserDict
 from collections.abc import Mapping
-from numbers import Number
+from numbers import Number, Real
 from pathlib import Path
 from textwrap import indent
 from typing import (
@@ -24,6 +24,7 @@ from typing import (
 )
 from warnings import warn
 
+import numpy as np
 import torch
 from tensordict._archive import _memmap_tensor_from_path
 from tensordict._base.unsupported import _NoShapeOps
@@ -1261,20 +1262,6 @@ class TensorDict(TensorDictBase):
                     value, auto_batch_size=False, device=device, batch_size=batch_size
                 )
                 continue
-            if (
-                non_tensor_scalars
-                and batch_size
-                and isinstance(value, (float, int, bool))
-            ):
-                # A 0-dim tensor cannot have the batch size: read the scalar
-                # as non-tensor data, which is what to_dict writes it from
-                # (#3266).
-                from tensordict.tensorclass import NonTensorData
-
-                input_dict[key] = NonTensorData(
-                    value, batch_size=batch_size, device=device
-                )
-                continue
             # we don't know if another tensor of smaller size is coming
             # so we can't be sure that the batch-size will still be valid later
             input_dict[key] = TensorDict.from_any(
@@ -1290,12 +1277,44 @@ class TensorDict(TensorDictBase):
                 # them here, without the warning for a list of the wrong length
                 names = None
         # regular __init__ breaks because a tensor may have the same batch-size as the tensordict
-        out = cls(
-            input_dict,
-            batch_size=batch_size_set,
-            device=device,
-            names=names,
-        )
+        try:
+            out = cls(
+                input_dict,
+                batch_size=batch_size_set,
+                device=device,
+                names=names,
+            )
+        except RuntimeError:
+            # A Python or NumPy scalar becomes a 0-dim tensor, which cannot
+            # have a non-empty batch size: read it as non-tensor data, which
+            # is what to_dict writes it from (#3266, #3335). Doing this only
+            # once the batch size check fails keeps the leaves' loop as fast
+            # as before.
+            scalars = (
+                [
+                    key
+                    for key, value in input_dict.items()
+                    if isinstance(value, (Real, np.bool_))
+                ]
+                if non_tensor_scalars and batch_size
+                else None
+            )
+            if not scalars:
+                raise
+            out = None
+        if out is None:
+            from tensordict.tensorclass import NonTensorData
+
+            for key in scalars:
+                input_dict[key] = NonTensorData(
+                    input_dict[key], batch_size=batch_size, device=device
+                )
+            out = cls(
+                input_dict,
+                batch_size=batch_size_set,
+                device=device,
+                names=names,
+            )
         if batch_size is None:
             if auto_batch_size is None and batch_dims is None:
                 auto_batch_size = False

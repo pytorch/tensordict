@@ -4171,6 +4171,26 @@ class TestGeneric:
         assert isinstance(TensorDict.from_dict({"n": value})["n"], torch.Tensor)
 
     @pytest.mark.parametrize(
+        "value",
+        [np.int64(7), np.float32(1.5), np.bool_(True), np.float64(1.5)],
+        ids=lambda v: type(v).__name__,
+    )
+    def test_from_dict_to_dict_numpy_scalar(self, value):
+        # #3335: from_dict read NumPy scalars other than np.float64 as 0-dim
+        # tensors, which do not fit the batch size.
+        td = TensorDict(a=torch.zeros(3), batch_size=[3])
+        td.set_non_tensor("n", value)
+        td.set_non_tensor(("nested", "n"), value)
+        out = TensorDict.from_dict(td.to_dict(), batch_size=[3])
+        for key in ("n", ("nested", "n")):
+            assert isinstance(out.get(key), NonTensorData)
+            assert out.get(key).batch_size == (3,)
+            assert type(out[key]) is type(value)
+            assert out[key] == value
+        # Without a batch size, a NumPy scalar is still read as a 0-dim tensor.
+        assert isinstance(TensorDict.from_dict({"n": value})["n"], torch.Tensor)
+
+    @pytest.mark.parametrize(
         "op",
         [
             "lazy_eq",
