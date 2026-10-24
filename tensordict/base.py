@@ -85,6 +85,7 @@ from tensordict.utils import (
     _get_item,
     _html_repr,
     _index_preserve_data_ptr,
+    _is_key_selected,
     _is_non_tensor,
     _is_tensorclass,
     _is_unbatched,
@@ -100,6 +101,7 @@ from tensordict.utils import (
     _proc_init,
     _prune_selected_keys,
     _REPR_OPTIONS,
+    _selection_trie,
     _set_max_batch_size,
     _shape,
     _SKIP_TENSORCLASS_POST_INIT,
@@ -6725,16 +6727,25 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             # self's batch size is a prefix of the source's (#2957)
             _warn_update_batch_size_prefix()
 
+        selection = None
         for input_key, value in input_dict_or_td.items():
             key = _unravel_key_to_tuple(input_key)
             if not key:
                 raise KeyError(_GENERIC_NESTED_ERR.format(input_key))
             firstkey, subkey = key[0], key[1:]
-            if keys_to_update and not any(
-                firstkey == ktu if isinstance(ktu, str) else firstkey == ktu[0]
-                for ktu in keys_to_update
-            ):
-                continue
+            if keys_to_update:
+                if subkey:
+                    # a tuple key (#3216) is narrowed as a tensordict source is
+                    if selection is None:
+                        selection = _selection_trie(keys_to_update)
+                    selected = _is_key_selected(key, selection)
+                else:
+                    selected = any(
+                        firstkey == ktu if isinstance(ktu, str) else firstkey == ktu[0]
+                        for ktu in keys_to_update
+                    )
+                if not selected:
+                    continue
             target = self._get_str(firstkey, None)
             if clone and hasattr(value, "clone"):
                 value = value.clone()
