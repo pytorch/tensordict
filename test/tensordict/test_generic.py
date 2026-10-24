@@ -9760,6 +9760,36 @@ class TestGeneric:
             ):
                 torch.utils.data.default_collate(samples)
 
+    @pytest.mark.parametrize(
+        "case",
+        ["ragged lazy stack", "devices", "leaf and nested", "leaf and non-tensor"],
+    )
+    def test_collate_default_unstackable_raises_type_error(self, case):
+        # #3330: a batch of tensordicts that do not stack raises a TypeError,
+        # as on 0.15.2, not the RuntimeError or AttributeError of the stack.
+        z = torch.zeros
+        first = TensorDict(a=z(2), batch_size=[2])
+        second = {
+            "ragged lazy stack": LazyStackedTensorDict(
+                TensorDict(a=z(2)), TensorDict(a=z(3))
+            ),
+            "devices": TensorDict(a=z(2, device="meta"), batch_size=[2]),
+            "leaf and nested": TensorDict(
+                a=TensorDict(b=z(2), batch_size=[2]), batch_size=[2]
+            ),
+            "leaf and non-tensor": TensorDict(
+                a=NonTensorData("x", batch_size=[2]), batch_size=[2]
+            ),
+        }[case]
+        if case == "ragged lazy stack":
+            first = TensorDict(a=z(2, 2), batch_size=[2])
+            samples = [second, first]
+        else:
+            samples = [first, second]
+        with pytest.raises(TypeError, match="do not stack") as info:
+            torch.utils.data.default_collate(samples)
+        assert isinstance(info.value.__cause__, (RuntimeError, AttributeError))
+
     def test_collate_default_registration(self):
         # tensordict adds two keys to torch's default_collate_fn_map, and keeps
         # the collate function that another library registered first.
