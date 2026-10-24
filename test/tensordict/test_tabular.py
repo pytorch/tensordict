@@ -823,6 +823,17 @@ class TestArrow:
                 pa.table({"y": pa.array([1.0, None])}), nulls="mask", mask_key=mask_key
             )
 
+    # #3334
+    @pytest.mark.parametrize("mask_key", [("a", (1,)), (("a", 1),), ((("a",), 2),)])
+    def test_from_arrow_mask_key_nested_wrong_type(self, mask_key):
+        # a non-string inside a nested tuple raises TypeError, as at the top
+        import pyarrow as pa
+
+        with pytest.raises(TypeError, match="mask_key"):
+            from_arrow(
+                pa.table({"y": pa.array([1.0, None])}), nulls="mask", mask_key=mask_key
+            )
+
     # #3313: padding a from_arrow(nulls="mask") result keeps its null masks and
     # every row. The result depended on hash order, so run it with several
     # PYTHONHASHSEEDs.
