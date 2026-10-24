@@ -42,6 +42,7 @@ from tensordict.base import _get_defaults_to_none, _set_get_defaults_to_none
 from tensordict.nn import (
     CompositeDistribution,
     CudaGraphModule,
+    functional_vmap,
     InteractionType,
     ProbabilisticTensorDictModule as Prob,
     ProbabilisticTensorDictSequential as ProbSeq,
@@ -3417,6 +3418,34 @@ class TestFunctional:
         assert (call_compile(x, td_zero) == 0).all()
         assert (TensorDict.from_module(module) == td).all()
         assert (td_zero == 0).all()
+
+    @pytest.mark.parametrize("loop", [False, True])
+    def test_functional_vmap(self, mode, loop):
+        """Stacked params over two batch dims, with a mapped and a shared input."""
+
+        class Add(torch.nn.Linear):
+            def forward(self, x, y):
+                return super().forward(x) + y
+
+        nets = [Add(3, 2) for _ in range(6)]
+        params = TensorDictParams(TensorDict.from_modules(*nets).reshape(2, 3))
+        x1, x2 = torch.randn(2, 3, 5, 3), torch.randn(5, 2)
+
+        def call(params, x1, x2):
+            return functional_vmap(
+                nets[0],
+                params=params,
+                kwargs={"x": x1, "y": x2},
+                in_dims={"x": 0},
+                loop=loop,
+            )
+
+        call_compile = torch.compile(call, fullgraph=True, mode=mode)
+        expected = torch.stack([n(x, x2) for n, x in zip(nets, x1.reshape(6, 5, 3))])
+        torch.testing.assert_close(call_compile(params, x1, x2), call(params, x1, x2))
+        torch.testing.assert_close(
+            call_compile(params, x1, x2), expected.reshape(2, 3, 5, 2)
+        )
 
 
 class _ExportStrTC(TensorClass):
