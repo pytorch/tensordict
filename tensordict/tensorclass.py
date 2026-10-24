@@ -75,6 +75,7 @@ from tensordict.base import (
     _update_at_aliases,
     _warn_get_kwargs,
     _warn_unsupported_operand,
+    _warn_update_invalid_key,
     CompatibleType,
 )
 from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
@@ -4640,6 +4641,9 @@ def _update_(
             )
         self._tensordict.update_(input_dict_or_td._tensordict)
         self._non_tensordict.update(non_tensordict)
+        # a TensorDict source warns in TensorDictBase.update_
+        if keys_to_update and () in map(_unravel_key_to_tuple, keys_to_update):
+            _warn_update_invalid_key()
         return self
 
     self._tensordict.update_(
