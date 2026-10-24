@@ -213,6 +213,7 @@ class TensorDictSequential(TensorDictModule):
     def __init__(
         self,
         modules: dict[str, Callable[[TensorDictBase], TensorDictBase]],
+        /,
         *,
         partial_tolerant: bool = False,
         selected_out_keys: List[NestedKey] | None = None,
@@ -223,6 +224,7 @@ class TensorDictSequential(TensorDictModule):
     def __init__(
         self,
         modules: List[Callable[[TensorDictBase], TensorDictBase]],
+        /,
         *,
         partial_tolerant: bool = False,
         selected_out_keys: List[NestedKey] | None = None,
