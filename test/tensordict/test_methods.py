@@ -5987,6 +5987,56 @@ class TestTensorDicts(TestTensorDictsBase):
         assert (inputs.grad == 1).all()
 
 
+def test_update_select_flat_dict_source():
+    # #3216: with a dict source whose keys are tuples, update(keys_to_update=...)
+    # wrote every entry under the first part of a selected key. It must write
+    # what update(source.select(*keys_to_update)) writes, as it does for a
+    # nested dict or a tensordict source.
+    def make(value, with_nested=True):
+        t = lambda: torch.full((2,), value)
+        entries = {"a": t()}
+        if with_nested:
+            entries["nested"] = {"b": t(), "c": t(), "sub": {"x": t(), "y": t()}}
+        return TensorDict(entries, batch_size=[2])
+
+    source = make(1.0)
+    flat = dict(source.items(True, True))
+    assert ("nested", "sub", "x") in flat
+    half_flat = {
+        "a": source["a"],
+        ("nested", "b"): source["nested", "b"],
+        ("nested", "c"): source["nested", "c"],
+        ("nested", "sub"): source["nested", "sub"].to_dict(),
+    }
+    for keys_to_update in (
+        ["a"],
+        ["nested"],
+        [("nested", "b")],
+        [("nested", "sub")],
+        ["nested", ("nested", "b")],
+        [("nested", "sub"), ("nested", "sub", "x")],
+        ["a", ("nested", "sub", "x"), ("nested", "c")],
+        [("nested", ("sub",), "x")],
+        ["missing", ("nested", "missing")],
+    ):
+        selected = source.select(*keys_to_update, strict=False)
+        cases = [
+            (make(0.0), flat),
+            (make(0.0), half_flat),
+            # a destination without the sub-tensordict
+            (make(0.0, with_nested=False), flat),
+        ]
+        for dest, src in cases:
+            expected = dest.clone().update(selected)
+            dest.update(src, keys_to_update=keys_to_update)
+            assert set(dest.keys(True, True)) == set(expected.keys(True, True)), (
+                keys_to_update,
+                list(src),
+            )
+            for key in expected.keys(True, True):
+                assert (dest[key] == expected[key]).all(), (keys_to_update, key)
+
+
 # The unary pointwise methods of tensordict/_base/pointwise.py, each with an
 # in-place form named "<op>_".
 _POINTWISE_UNARY_OPS = (

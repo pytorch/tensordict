@@ -85,6 +85,7 @@ from tensordict.utils import (
     _get_item,
     _html_repr,
     _index_preserve_data_ptr,
+    _is_key_selected,
     _is_non_tensor,
     _is_tensorclass,
     _is_unbatched,
@@ -6730,9 +6731,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             if not key:
                 raise KeyError(_GENERIC_NESTED_ERR.format(input_key))
             firstkey, subkey = key[0], key[1:]
-            if keys_to_update and not any(
-                firstkey == ktu if isinstance(ktu, str) else firstkey == ktu[0]
-                for ktu in keys_to_update
+            if keys_to_update and not (
+                # a tuple key (#3216) is narrowed as a tensordict source is
+                _is_key_selected(key, keys_to_update)
+                if subkey
+                else any(
+                    firstkey == ktu if isinstance(ktu, str) else firstkey == ktu[0]
+                    for ktu in keys_to_update
+                )
             ):
                 continue
             target = self._get_str(firstkey, None)

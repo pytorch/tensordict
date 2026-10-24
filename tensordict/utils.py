@@ -2995,6 +2995,24 @@ def _prune_selected_keys(keys_to_update, prefix):
     return sub_keys
 
 
+def _is_key_selected(key, keys_to_update):
+    """Whether ``update`` writes the entry at ``key`` (a tuple), given the unravelled ``keys_to_update``.
+
+    Follows the rule of :func:`_prune_selected_keys`, so a flat dict source
+    with tuple keys gets the entries that a tensordict source gets (#3216).
+    """
+    for part in key[:-1]:
+        keys_to_update = _prune_selected_keys(keys_to_update, part)
+        if keys_to_update is None:
+            return True
+        keys_to_update = unravel_key_list(keys_to_update)
+    last = key[-1]
+    return any(
+        last == ktu if isinstance(ktu, str) else last == ktu[0]
+        for ktu in keys_to_update
+    )
+
+
 class TensorDictFuture:
     """A tensordict that is still being written by background threads.
 
