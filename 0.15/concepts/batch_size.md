@@ -39,7 +39,7 @@ torch.Size([])
 in the batch (here 6), not the number of values in the tensors.
 
 A [`TensorClass`](../reference/generated/tensordict.TensorClass.html#tensordict.TensorClass) has a batch size too, with the same rules
-for its typed fields (see [TensorClass](../tensorclass.html#tensorclass-guide)).
+for its typed fields (see [TensorClass: a dataclass of tensors](../tensorclass.html#tensorclass-guide)).
 
 The leading dimensions of each entry must be equal to the batch size. If they
 are not, the constructor and each write raise a `RuntimeError` that names the
@@ -92,6 +92,11 @@ Traceback (most recent call last):
 ...
 RuntimeError: indexing a tensordict with td.batch_dims==0 is not permitted. Got index 0.
 ```
+
+A write with such an index, as in `data[0] = 0`, still goes into the first
+row of every entry, and emits a `FutureWarning`: starting with TensorDict
+0.17, the default will change to raising an `IndexError`. To write whole
+entries, write `data[...] = 0`.
 
 `TensorDict()` creates a tensordict with no entries and an empty batch size.
 
@@ -177,6 +182,19 @@ torch.Size([3, 4])
 torch.Size([1, 3])
 ```
 
+An index that runs past the batch dimensions with integers, lists, tensors or
+masks indexes the leaves when every leaf has the indexed dimensions, and grows
+the batch size to cover them, as in TensorDict 0.14, with a
+`FutureWarning`: starting with TensorDict 0.17, the default will change to
+raising an `IndexError`. Here, `td.select("joints")[:, :, [0, 1]]` has
+batch size `[2, 3, 2]`, and `td[:, :, [0, 1]]` raises, because
+`battery` has no third dimension. To index the leaves, write
+`td.select("joints").apply(lambda x: x[:, :, [0, 1]])`, which keeps the
+batch size. A write through such an index, as in
+`td.select("joints")[:, :, [0, 1]] = 0`, goes into the leaves and emits the
+same `FutureWarning`; to write into the leaves, write
+`for leaf in td.select("joints").values(True, True): leaf[:, :, [0, 1]] = 0`.
+
 A list of strings is not a key selection. To keep some keys, use
 [`select()`](../reference/generated/tensordict.TensorDictBase.select.html#tensordict.TensorDictBase.select) (see [Keys, nested keys, and locking](keys.html#keys)).
 
@@ -249,10 +267,9 @@ To join tensordicts with [`torch.stack()`](https://docs.pytorch.org/docs/stable/
 
 ## Dimension names
 
-You can give a name to each batch dimension, as with the named tensors of
-PyTorch. `names` has one entry for each batch dimension, and `None` means
-that the dimension has no name. Give the names at construction, or set them
-later:
+You can give a name to each batch dimension. `names` has one entry for
+each batch dimension, and `None` means that the dimension has no name. Give
+the names at construction, or set them later:
 
 ```
 >>> td = TensorDict(batch_size=[3, 4], names=["robot", None])
@@ -349,8 +366,8 @@ True
 ```
 
 If a dataset returns tensordicts with no batch dimensions, the default collate
-function of [`torch.utils.data.DataLoader`](https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader) iterates over them and raises
-the same `TypeError`. [Load data and share it between processes](../data_loading.html#data-loading) gives the `collate_fn` to use.
+function of [`torch.utils.data.DataLoader`](https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader) stacks them into a tensordict
+with one batch dimension (see [Load data and share it between processes](../data_loading.html#data-loading)).
 
 ## See also
 

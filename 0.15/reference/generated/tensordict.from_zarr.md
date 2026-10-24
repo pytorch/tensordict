@@ -4,7 +4,7 @@ tensordict.from_zarr(*zarr_file*, ***, *mode: [str](https://docs.python.org/3/bu
 
 Opens a zarr store as a [`PersistentTensorDict`](tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict).
 
-Requires `zarr>=3.0`. See
+Requires `zarr>=3.1.1`. See
 [`TensorDictBase.from_zarr`](tensordict.TensorDictBase.from_zarr.html#tensordict.TensorDictBase.from_zarr).
 
 Parameters:

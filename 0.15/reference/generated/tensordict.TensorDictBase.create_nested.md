@@ -8,14 +8,18 @@ The new tensordict has the batch size, device and names of the
 tensordict it is added to. An existing entry at `key` is replaced.
 For a tuple key, a plain [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict) keeps a
 plain, unlocked `TensorDict` already on the path with its entries:
-`("a", "b")` adds `"b"` to an existing `td["a"]`. A lazy stack of
-plain `TensorDict` instances does this in each member, and a
-tensorclass or a `TensorDictParams` follows the
-rule of the tensordict it wraps. Any other entry on the path, such as a
+`("a", "b")` adds `"b"` to an existing `td["a"]`. An indexed view
+of a plain `TensorDict` and a typed tensordict that wraps one do the
+same; the view keeps the entries in every row of the tensordict it
+indexes. A lazy stack of plain `TensorDict` instances, or of such
+stacks, does this in each member, and a tensorclass or a
+`TensorDictParams` follows the rule of the
+tensordict it wraps. A [`PersistentTensorDict`](tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) keeps
+the groups already on the path. Any other entry on the path, such as a
 tensor, a lazy stack, a tensorclass, a typed tensordict or a locked
 tensordict, is replaced by a new empty tensordict, and so is every
 level of the path when the tensordict is of any other type, such as a
-view, a typed tensordict or a file.
+lazy view or a store.
 
 Parameters:
 

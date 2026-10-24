@@ -7,7 +7,10 @@ Reads a CSV file into a tensordict, with one entry per column.
 Requires pandas or pyarrow: the file is read with
 `pandas.read_csv()` when pandas is installed, and with
 `pyarrow.csv.read_csv` otherwise. The columns are converted as in
-[`from_pandas()`](tensordict.TensorDictBase.from_pandas.html#tensordict.TensorDictBase.from_pandas). [`to_csv()`](tensordict.TensorDictBase.to_csv.html#tensordict.TensorDictBase.to_csv) writes such a file.
+[`from_pandas()`](tensordict.TensorDictBase.from_pandas.html#tensordict.TensorDictBase.from_pandas). [`to_csv()`](tensordict.TensorDictBase.to_csv.html#tensordict.TensorDictBase.to_csv) writes such a file. Through
+pandas, a string column is one value for the whole batch (see the
+note in [`from_pandas()`](tensordict.TensorDictBase.from_pandas.html#tensordict.TensorDictBase.from_pandas)); through pyarrow, it is a
+[`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack) with one value per row.
 
 Parameters:
 

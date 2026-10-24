@@ -188,7 +188,7 @@ In this example, ``x`` and ``y`` share only the key ``"a"``:
     >>> x + y
     Traceback (most recent call last):
     ...
-    KeyError: 'b'
+    KeyError: "keys in tensordicts mismatch. The first TD has keys {'b'} that the second does not have. The second TD has keys {'c'} that the first does not have."
     >>> list(x.add(y, default="intersection").keys())
     ['a']
     >>> sorted(x.add(y, default=torch.tensor(0.0)).keys())

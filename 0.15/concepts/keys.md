@@ -56,7 +56,7 @@ These docs build every TensorDict from a dict.
 
 If you know the keys when you write the code, a
 [`TensorClass`](../reference/generated/tensordict.TensorClass.html#tensordict.TensorClass) gives you typed attributes in place of string
-keys, and your editor completes them (see [TensorClass](../tensorclass.html#tensorclass-guide)).
+keys, and your editor completes them (see [TensorClass: a dataclass of tensors](../tensorclass.html#tensorclass-guide)).
 
 ## Valid keys
 

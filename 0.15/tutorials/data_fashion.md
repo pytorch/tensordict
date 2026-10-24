@@ -18,7 +18,7 @@ What you will learn:
 - How to convert a `torchvision` dataset into a tensordict of
 [`MemoryMappedTensor`](../reference/generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor) entries, once.
 - How to pass a tensordict to a `DataLoader` as a map-style dataset, and
-why it needs `collate_fn=lambda x: x`.
+what `collate_fn` it takes.
 - How to read the batches in a training loop.
 
 Before you start, read [Devices and memory-mapped tensors](tensordict_memory.html#sphx-glr-tutorials-tensordict-memory-py) for
@@ -68,27 +68,27 @@ test_data = datasets.FashionMNIST(
 0%| | 0.00/26.4M [00:00<?, ?B/s]
  0%| | 65.5k/26.4M [00:00<01:17, 341kB/s]
  1%| | 197k/26.4M [00:00<00:48, 541kB/s]
- 2%|▏ | 524k/26.4M [00:00<00:24, 1.07MB/s]
- 7%|▋ | 1.87M/26.4M [00:00<00:07, 3.40MB/s]
- 24%|██▎ | 6.26M/26.4M [00:00<00:01, 12.6MB/s]
- 35%|███▌ | 9.37M/26.4M [00:01<00:01, 14.1MB/s]
- 52%|█████▏ | 13.8M/26.4M [00:01<00:00, 20.8MB/s]
- 72%|███████▏ | 19.0M/26.4M [00:01<00:00, 28.3MB/s]
- 91%|█████████ | 24.0M/26.4M [00:01<00:00, 33.9MB/s]
-100%|██████████| 26.4M/26.4M [00:01<00:00, 18.2MB/s]
+ 2%|▏ | 426k/26.4M [00:00<00:30, 839kB/s]
+ 5%|▌ | 1.38M/26.4M [00:00<00:10, 2.46MB/s]
+ 18%|█▊ | 4.69M/26.4M [00:00<00:02, 9.40MB/s]
+ 34%|███▎ | 8.91M/26.4M [00:01<00:01, 14.3MB/s]
+ 49%|████▉ | 13.0M/26.4M [00:01<00:00, 20.3MB/s]
+ 67%|██████▋ | 17.7M/26.4M [00:01<00:00, 26.6MB/s]
+ 84%|████████▍ | 22.2M/26.4M [00:01<00:00, 31.4MB/s]
+100%|██████████| 26.4M/26.4M [00:01<00:00, 18.1MB/s]
 
  0%| | 0.00/29.5k [00:00<?, ?B/s]
-100%|██████████| 29.5k/29.5k [00:00<00:00, 311kB/s]
+100%|██████████| 29.5k/29.5k [00:00<00:00, 298kB/s]
 
  0%| | 0.00/4.42M [00:00<?, ?B/s]
- 1%|▏ | 65.5k/4.42M [00:00<00:12, 339kB/s]
- 4%|▍ | 197k/4.42M [00:00<00:07, 538kB/s]
- 16%|█▌ | 688k/4.42M [00:00<00:02, 1.45MB/s]
- 62%|██████▏ | 2.75M/4.42M [00:00<00:00, 5.09MB/s]
-100%|██████████| 4.42M/4.42M [00:00<00:00, 5.70MB/s]
+ 1%|▏ | 65.5k/4.42M [00:00<00:12, 342kB/s]
+ 4%|▍ | 197k/4.42M [00:00<00:07, 543kB/s]
+ 18%|█▊ | 786k/4.42M [00:00<00:02, 1.70MB/s]
+ 73%|███████▎ | 3.21M/4.42M [00:00<00:00, 6.01MB/s]
+100%|██████████| 4.42M/4.42M [00:00<00:00, 5.74MB/s]
 
  0%| | 0.00/5.15k [00:00<?, ?B/s]
-100%|██████████| 5.15k/5.15k [00:00<00:00, 57.4MB/s]
+100%|██████████| 5.15k/5.15k [00:00<00:00, 39.9MB/s]
 ```
 
 Create two tensordicts, one for the training data and one for the test
@@ -140,13 +140,7 @@ print(training_data_td)
 ```
 
 ```
-TensorDict(
- fields={
- images: MemoryMappedTensor(shape=torch.Size([60000, 28, 28]), device=cpu, dtype=torch.float32, is_shared=False),
- targets: MemoryMappedTensor(shape=torch.Size([60000]), device=cpu, dtype=torch.int64, is_shared=False)},
- batch_size=torch.Size([60000]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[60000], fields={images: f32[28,28], targets: i64[]})
 ```
 
 ## DataLoaders
@@ -157,10 +151,10 @@ datasets, and one pair from the memory-mapped tensordicts.
 A `TensorDict` implements `__len__`, `__getitem__`, and
 `__getitems__`, so you can use it as a map-style dataset. The
 `DataLoader` then reads each batch with one batched index, and the result
-is already a `TensorDict`. Pass `collate_fn=lambda x: x`: the default
-collate function cannot read a `TensorDict` and raises `TypeError`. If
-your dataset is a list of tensordicts, pass `collate_fn=torch.stack`
-instead, or `collate_fn=tensordict.lazy_stack` if their shapes differ.
+is already a `TensorDict`. Pass `collate_fn=lambda x: x` to keep that
+batch as it is; the default collate function also returns it unchanged. If
+your dataset is a list of tensordicts, the default collate function stacks
+them, densely if their shapes match and lazily otherwise.
 
 ```
 batch_size = 64
@@ -184,13 +178,7 @@ print(next(iter(train_dataloader_td)))
 ```
 
 ```
-TensorDict(
- fields={
- images: Tensor(shape=torch.Size([64, 28, 28]), device=cpu, dtype=torch.float32, is_shared=False),
- targets: Tensor(shape=torch.Size([64]), device=cpu, dtype=torch.int64, is_shared=False)},
- batch_size=torch.Size([64]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[64], fields={images: f32[28,28], targets: i64[]})
 ```
 
 Time one pass over the training data with each data loader, without a
@@ -208,8 +196,8 @@ print(f"TensorDict DataLoader: {time_one_pass(train_dataloader_td):.2f} s")
 ```
 
 ```
-torchvision DataLoader: 2.17 s
-TensorDict DataLoader: 0.07 s
+torchvision DataLoader: 2.00 s
+TensorDict DataLoader: 0.06 s
 ```
 
 ## Model
@@ -371,7 +359,7 @@ loss: 2.172683 [57600/60000]
 Test Error:
  Accuracy: 49.5%, Avg loss: 2.162513
 
-TensorDict training done! time: 1.7847 s
+TensorDict training done! time: 1.7293 s
 Epoch 1
 -------------------------
 loss: 2.305311 [ 0/60000]
@@ -381,7 +369,7 @@ loss: 2.172683 [57600/60000]
 Test Error:
  Accuracy: 49.5%, Avg loss: 2.162513
 
-Training done! time: 4.2668 s
+Training done! time: 4.0398 s
 ```
 
 ## Conclusion
@@ -410,7 +398,7 @@ transforms to whole batches, for a larger image dataset.
 - [Save and load tensordicts](../saving.html#saving) explains how to save the memory-mapped tensordict to disk
 and load it again.
 
-**Total running time of the script:** (0 minutes 15.238 seconds)
+**Total running time of the script:** (0 minutes 14.697 seconds)
 
 [`Download Jupyter notebook: data_fashion.ipynb`](../_downloads/e330622d5b746a093c669dc804b45baf/data_fashion.ipynb)
 

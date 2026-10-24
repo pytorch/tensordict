@@ -8,7 +8,7 @@ the whole group of tensors, and the result keeps the keys and the batch size
 
 A [`TensorClass`](../reference/generated/tensordict.TensorClass.html#tensordict.TensorClass) has the same operations, so a method that
 you write with them runs on one element or on a whole batch (see
-[TensorClass](../tensorclass.html#tensorclass-guide)).
+[TensorClass: a dataclass of tensors](../tensorclass.html#tensorclass-guide)).
 
 ## Pointwise operations
 
@@ -183,7 +183,7 @@ In this example, `x` and `y` share only the key `"a"`:
 >>> x + y
 Traceback (most recent call last):
 ...
-KeyError: 'b'
+KeyError: "keys in tensordicts mismatch. The first TD has keys {'b'} that the second does not have. The second TD has keys {'c'} that the first does not have."
 >>> list(x.add(y, default="intersection").keys())
 ['a']
 >>> sorted(x.add(y, default=torch.tensor(0.0)).keys())

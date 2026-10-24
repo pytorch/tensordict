@@ -237,15 +237,7 @@ node:
 >>> _ = torch.manual_seed(0)
 >>> graphs = lazy_stack([TensorDict({"nodes": torch.randn(n, 2)}) for n in [2, 3, 1]])
 >>> graphs
-LazyStackedTensorDict(
- fields={
- nodes: Tensor(shape=torch.Size([3, -1, 2]), device=cpu, dtype=torch.float32, is_shared=False)},
- exclusive_fields={
- },
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False,
- stack_dim=0)
+LazyStackedTensorDict(batch_size=[3], stack_dim=0, fields={nodes: f32[-1,2]})
 >>> [t.shape for t in graphs.get("nodes", as_list=True)]
 [torch.Size([2, 2]), torch.Size([3, 2]), torch.Size([1, 2])]
 >>> graphs.get("nodes", as_padded_tensor=True).shape
@@ -258,8 +250,12 @@ torch.Size([3, 2])
 
 [`densify()`](../reference/generated/tensordict.TensorDictBase.densify.html#tensordict.TensorDictBase.densify) turns the whole lazy stack
 into a regular TensorDict. The entries with different shapes become nested
-tensors. Pass `layout=torch.jagged`: the default, `torch.strided`, gives a
-warning from PyTorch, which recommends the jagged layout.
+tensors. A key that only some members have is filled with an empty entry for
+the members that lack it (zero rows when the members that have it agree on its
+feature dims), so it appears in the result although `keys()` of the lazy
+stack leaves it out. Pass `layout=torch.jagged`: the
+default, `torch.strided`, gives a warning from PyTorch, which recommends the
+jagged layout.
 
 ```
 >>> dense = graphs.densify(layout=torch.jagged)
@@ -275,6 +271,20 @@ directly. Its first dimension is a batch dimension:
 >>> data = TensorDict({"nodes": nt}, batch_size=[2])
 >>> data[1]["nodes"].shape
 torch.Size([3, 2])
+```
+
+Indexing (with an int, a slice, a mask or a tensor of indices), `split`,
+`chunk` and [`torch.cat()`](https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat) work along that dimension. On the nested tensor
+itself, torch does only the int index and `chunk` along it, and raises for
+the others. Leaves that share their offsets, such as token ids and their
+attention mask, still share them in the result. [`torch.stack()`](https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack) raises,
+because the result would need a second ragged dimension: use
+[`lazy_stack()`](../reference/generated/tensordict.lazy_stack.html#tensordict.lazy_stack) instead.
+
+```
+>>> data = torch.cat([data, data[torch.tensor([1])]])
+>>> data.batch_size, [t.shape for t in data[1:]["nodes"].unbind()]
+(torch.Size([3]), [torch.Size([3, 2]), torch.Size([3, 2])])
 ```
 
 ### Padding with pad_sequence
@@ -331,6 +341,8 @@ stack.
 `get(key, as_padded_tensor=True)` on a lazy stack.
 - To give a model a nested tensor, use `get(key, as_nested_tensor=True)` or
 `densify(layout=torch.jagged)`.
+- To give a variable-length attention kernel a batch without padding, pack
+the sequences, as in [Pack variable-length sequences](../cookbook.html#cookbook-packing).
 - For strings and other Python objects, use a `NonTensorStack`.
 
 ## Lazy pre-allocation
@@ -363,6 +375,8 @@ zeros. A value with another shape raises a `RuntimeError`. The
 
 ## See also
 
+- [Batch samples of different sizes without padding](../variable_size_batches.html#variable-size-batches): a how-to for batches of molecules, point
+clouds or sequences, from the `DataLoader` to the model.
 - [`LazyStackedTensorDict`](../reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict), [`stack()`](../reference/generated/tensordict.stack.html#tensordict.stack),
 [`lazy_stack()`](../reference/generated/tensordict.lazy_stack.html#tensordict.lazy_stack), [`maybe_dense_stack()`](../reference/generated/tensordict.maybe_dense_stack.html#tensordict.maybe_dense_stack),
 [`cat()`](../reference/generated/tensordict.cat.html#tensordict.cat), and [`pad_sequence()`](../reference/generated/tensordict.pad_sequence.html#tensordict.pad_sequence) in the

@@ -1,6 +1,6 @@
 # TensorDictBase.memmap_like
 
-TensorDictBase.memmap_like(*prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *copy_existing: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *existsok: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *num_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *return_early: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *share_non_tensor: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *robust_key: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = True*, *archive: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
+TensorDictBase.memmap_like(*prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Path](https://docs.python.org/3/library/pathlib.html#pathlib.Path) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *copy_existing: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *existsok: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *num_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *return_early: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *share_non_tensor: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *robust_key: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = True*, *archive: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
 
 Creates a memory-mapped tensordict with the same keys, shapes and dtypes, without copying the values.
 
@@ -99,6 +99,11 @@ other methods, see [Methods by task](../td.html#api-tensordict-methods).
 
 ## Tutorials that use `memmap_like`
 
+![](../../_images/sphx_glr_tensorclass_particles_thumb.png)
+
+[Simulating particles with a tensorclass](../../tutorials/tensorclass_particles.html)
+
+Simulating particles with a tensorclass
 ![](../../_images/sphx_glr_tensordict_memory_thumb.png)
 
 [Devices and memory-mapped tensors](../../tutorials/tensordict_memory.html)

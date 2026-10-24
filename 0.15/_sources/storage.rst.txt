@@ -451,7 +451,7 @@ With ``backend="zarr"``, :class:`~tensordict.PersistentTensorDict` stores each
 tensor as a zarr array and each nested tensordict as a zarr group. The store
 can be a local directory, a ``zarr.storage.ZipStore``, or any other
 ``zarr.abc.store.Store``. You can read and write separate chunks in parallel.
-The zarr backend needs ``zarr>=3.0`` (``pip install "tensordict[zarr]"``).
+The zarr backend needs ``zarr>=3.1.1`` (``pip install "tensordict[zarr]"``).
 
 :meth:`~tensordict.TensorDictBase.to_zarr` writes a tensordict, and
 :meth:`~tensordict.TensorDictBase.from_zarr` reads it back. ``to_zarr`` stores
@@ -508,6 +508,63 @@ size when it creates the tensordict:
   >>> td = TensorDict.from_schema({"state": ([4], torch.float32)}, batch_size=[1_000], storage="shared")
   >>> td.is_shared(), td.is_locked
   (True, True)
+
+Arrow tables
+------------
+
+:func:`~tensordict.from_arrow` converts an Arrow table to a tensordict, and
+:func:`~tensordict.to_arrow` converts a tensordict back. Numeric columns
+become tensors that view the Arrow memory, list columns become jagged nested
+tensors, struct columns become nested tensordicts, and strings become a
+:class:`~tensordict.NonTensorStack`:
+
+  >>> import pyarrow as pa
+  >>> from tensordict import from_arrow, to_arrow
+  >>> table = pa.table(
+  ...     {
+  ...         "reward": pa.array([0.5, 1.0, 0.0]),
+  ...         "tokens": pa.array([[1, 2], [3], [4, 5, 6]]),
+  ...         "prompt": pa.array(["a", "b", "c"]),
+  ...     }
+  ... )
+  >>> td = from_arrow(table)
+  >>> td["tokens"].unbind(0)[2]
+  tensor([4, 5, 6])
+  >>> to_arrow(td).column_names
+  ['reward', 'tokens', 'prompt']
+
+Hugging Face ``datasets`` and Polars hold their data in Arrow tables. After
+``select``, ``shuffle`` or ``filter``, a Hugging Face dataset keeps all the
+rows of its table and a list of the rows it selects: call
+``flatten_indices()`` first, so that its table holds only those rows:
+
+  >>> import datasets  # doctest: +SKIP
+  >>> ds = datasets.load_from_disk("my_dataset")  # doctest: +SKIP
+  >>> ds = ds.shuffle(seed=0).flatten_indices()  # doctest: +SKIP
+  >>> td = from_arrow(ds.data.table)  # doctest: +SKIP
+  >>> import polars as pl  # doctest: +SKIP
+  >>> td = from_arrow(pl.DataFrame({"x": [1.0, 2.0]}).to_arrow())  # doctest: +SKIP
+
+A dataset loaded from disk is memory-mapped, and its memory is read-only.
+``from_arrow`` copies such columns, because an in-place write into a view of
+read-only memory crashes the process. ``copy=False`` views them anyway: then
+do not write into the tensors. A column with null values raises an error,
+unless you pass ``nulls="fill"`` or ``nulls="mask"``; the latter adds a
+``"_mask"`` entry (or the ``mask_key`` you pass), which differs from the
+``"masks"`` entry of :func:`~tensordict.pad_sequence` with ``return_mask=True``
+so that the two can be combined. A tensordict with
+jagged tensors can be indexed with an integer, a slice, an index tensor or a
+boolean mask, and split, chunked, unbound and concatenated along its batch
+dimension, but not stacked. ``memmap`` does not take jagged tensors: pad them
+first, with :func:`torch.nested.to_padded_tensor`.
+:meth:`~tensordict.TensorDict.from_parquet` keeps its own conversion, which
+reads list and struct columns as Python objects. To convert a Parquet file
+as ``from_arrow`` does, read it with ``pyarrow.parquet.read_table``.
+With the default ``nulls="raise"``, ``from_arrow`` returns a null inside a
+map, a list view or the dictionary values that a dictionary-encoded column
+selects as ``None``, with a ``FutureWarning``: starting with TensorDict 0.18,
+the default will change to raising an error for these nulls too. Nulls inside
+a union or a run-end encoded column are not checked.
 
 Typed wrappers
 --------------

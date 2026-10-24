@@ -26,13 +26,7 @@ and `bool` values to [`torch.Tensor`](https://docs.pytorch.org/docs/stable/tenso
 >>> from tensordict import TensorDict
 >>> td = TensorDict({"a": 0, "b": torch.ones(3)})
 >>> td
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
- b: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[], fields={a: i64[], b: f32[3]})
 >>> td["a"]
 tensor(0)
 ```
@@ -216,7 +210,7 @@ below shows.
 - [`PersistentTensorDict`](reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) reads its data from an HDF5 or
 Zarr file on disk.
 
-[TensorClass](tensorclass.html#tensorclass-guide) explains TensorClass, and [Which container should I use?](choosing_a_container.html#choosing-a-container)
+[TensorClass: a dataclass of tensors](tensorclass.html#tensorclass-guide) explains TensorClass, and [Which container should I use?](choosing_a_container.html#choosing-a-container)
 compares the containers.
 
 ## Nested TensorDicts and tuple keys
@@ -470,8 +464,8 @@ torch.Size([4, 3])
 >>> zeros = params.detach().clone().zero_()
 >>> with zeros.to_module(model):
 ... out = model(torch.ones(3))
->>> out
-tensor([0., 0.], grad_fn=<ViewBackward0>)
+>>> out 
+tensor([0., 0.], grad_fn=<...>)
 ```
 
 Each leaf has its own file, so you can save the parameters with `memmap`
@@ -517,9 +511,13 @@ loop works for data with different keys. [Modules: TensorDictModule and tensordi
 
 - The user guide explains each idea of this page in detail. Start with
 [What is TensorDict?](overview.html#overview).
+- [Common surprises](pitfalls.html#pitfalls) lists the behaviors that surprise new users most often.
 - The tutorials are scripts that you can run. Start with
 [Getting, setting, and nesting keys](tutorials/tensordict_keys.html), then [Slicing, indexing, and masking](tutorials/tensordict_slicing.html)
 and [Changing the shape of a TensorDict](tutorials/tensordict_shapes.html).
 - The how-to guides solve one task each: [Save and load tensordicts](saving.html#saving), [Large datasets and storage backends](storage.html#storage),
 [Load data and share it between processes](data_loading.html#data-loading), [Distributed tensordicts](distributed.html#distributed), and [torch.compile, torch.func, torch.export, and CUDA graphs](compile.html#compile).
+- [How-to recipes](cookbook.html#cookbook) has short recipes for common tasks: batches of
+different lengths, data loaders, parameter groups, moving averages,
+checkpoints, and ensembles.
 - [API reference](reference/index.html#api-reference) lists every class and method.

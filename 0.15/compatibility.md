@@ -287,7 +287,7 @@ see [pre-allocating on Redis](storage.html#compat-redis-prealloc).
 
 ## See also
 
-- [TensorClass](tensorclass.html#tensorclass-guide) and [TypedTensorDict](typed_tensordict.html#typed-tensordict-guide): the two typed
+- [TensorClass: a dataclass of tensors](tensorclass.html#tensorclass-guide) and [TypedTensorDict](typed_tensordict.html#typed-tensordict-guide): the two typed
 containers.
 - [Which container should I use?](choosing_a_container.html#choosing-a-container): which container to use, and the
 `TensorClass` and `TypedTensorDict` comparison.

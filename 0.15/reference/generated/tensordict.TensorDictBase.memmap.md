@@ -1,6 +1,6 @@
 # TensorDictBase.memmap
 
-TensorDictBase.memmap(*prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *copy_existing: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *num_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *return_early: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *share_non_tensor: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *existsok: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *robust_key: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = True*, *archive: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *compression: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → Self
+TensorDictBase.memmap(*prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Path](https://docs.python.org/3/library/pathlib.html#pathlib.Path) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *copy_existing: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *num_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *return_early: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *share_non_tensor: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *existsok: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *robust_key: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = True*, *archive: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *compression: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *atomic: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → Self
 
 Writes every leaf to a memory-mapped file and returns a new tensordict of them.
 
@@ -66,6 +66,25 @@ or a [`zipfile`](https://docs.python.org/3/library/zipfile.html#module-zipfile) 
 decompressed in memory when it is loaded, instead of being
 memory-mapped. Only valid for an archive. Defaults to `None`,
 which stores the entries uncompressed.
+- **atomic** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the files are written to a
+new directory next to `prefix`, which is then renamed to
+`prefix`, so that an error or a crash during the write
+leaves `prefix` as it was. The new directory is removed if
+the write fails (but not after a crash). An existing directory
+at `prefix` is replaced as a whole once the new one is
+complete, so files that the tensordict does not write are
+removed: it must be empty or hold a saved tensordict (a
+`meta.json` file). Readers see the old or the new directory,
+except for the short time between two renames, during which
+`prefix` is missing. The write needs about twice the disk
+space of the tensordict while it runs, and a leaf that is
+already memory-mapped to a file is copied, which needs
+`copy_existing=True`. The files are not synced to the disk,
+so this guards against a killed process, not against a power
+failure. Not supported with `return_early=True`, nor for a
+directory on Windows, where a directory that holds open files
+cannot be renamed. An archive is always written this way.
+Defaults to `False`.
 
 Returns:
 
@@ -76,11 +95,16 @@ A new memory-mapped tensordict, or a
 Raises:
 
 - [**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if a leaf already has a file elsewhere and
- `copy_existing=False`, or if a file exists and
- `existsok=False`.
+ `copy_existing=False`, if a file exists and
+ `existsok=False`, or with `atomic=True`, if `prefix` is
+ a non-empty directory and `existsok=False`, or if it holds
+ no saved tensordict.
+- [**NotADirectoryError**](https://docs.python.org/3/builtins/exceptions.html#NotADirectoryError) - if `atomic=True` and `prefix` is a file.
 - [**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if `compression` is given without an archive, or if
- an archive is requested without `prefix`.
-- [**NotImplementedError**](https://docs.python.org/3/builtins/exceptions.html#NotImplementedError) - if `return_early=True` for an archive.
+ an archive or `atomic=True` is requested without `prefix`.
+- [**NotImplementedError**](https://docs.python.org/3/builtins/exceptions.html#NotImplementedError) - if `return_early=True` for an archive or
+ with `atomic=True`, or `atomic=True` for a directory on
+ Windows.
 
 Note
 

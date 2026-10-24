@@ -12,7 +12,7 @@ Bases: `_NoShapeOps`, `_NoVmap`, `_NoSetNonTensor`, `_NoSelectExclude`, [`Tensor
 A tensordict whose entries live in an HDF5 file or a Zarr store.
 
 The HDF5 backend (`backend="h5"`) needs `h5py`. The Zarr backend
-(`backend="zarr"`) needs `zarr>=3.0`. Each read of an entry loads it
+(`backend="zarr"`) needs `zarr>=3.1.1`. Each read of an entry loads it
 from the file into a new tensor, so `ptd["a"] is ptd["a"]` is
 `False`, and in-place changes to the tensor that you read do not reach
 the file. Writes (`ptd["a"] = value`) go to the file, and so do the
@@ -56,7 +56,7 @@ exist), `"w"` (create, or truncate an existing file), `"w-"`
 or `"x"` (create, fail if the file exists), `"a"` (read and
 write, create the file if needed). Defaults to `"r"`.
 - **backend** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - the storage backend, `"h5"` (requires
-`h5py`) or `"zarr"` (requires `zarr>=3.0`). Defaults to
+`h5py`) or `"zarr"` (requires `zarr>=3.1.1`). Defaults to
 `"h5"`.
 - **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the device that the
 entries are cast to when they are read. Defaults to `None`: the

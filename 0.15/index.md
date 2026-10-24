@@ -46,6 +46,47 @@ torch.Size([16, 3, 64, 64])
 
 The new function names no tensor, so it does not change when you add one.
 
+## TensorClass: fields and methods, like a dataclass
+
+[`TensorClass`](reference/generated/tensordict.TensorClass.html#tensordict.TensorClass) is the class form of the same idea. You
+declare typed fields and write methods, as for a dataclass. A method that you
+write once runs on one item or on a batch of any shape, and it compiles with
+`fullgraph=True`:
+
+```
+>>> from tensordict import TensorClass
+>>> class Particles(TensorClass):
+... pos: torch.Tensor # [*batch, 3]
+... vel: torch.Tensor # [*batch, 3]
+... mass: torch.Tensor # [*batch]
+...
+... def step(self, force: torch.Tensor, dt: float) -> "Particles":
+... vel = self.vel + dt * force / self.mass.unsqueeze(-1)
+... pos = self.pos + dt * vel
+... return Particles(pos=pos, vel=vel, mass=self.mass, batch_size=self.batch_size)
+>>> systems = Particles( # 64 systems of 1,000 particles each
+... pos=torch.randn(64, 1000, 3),
+... vel=torch.zeros(64, 1000, 3),
+... mass=torch.ones(64, 1000),
+... batch_size=[64, 1000],
+... )
+>>> systems = systems.step(torch.randn(64, 1000, 3), dt=0.01) # all 64 systems
+>>> one = systems[0].step(torch.randn(1000, 3), dt=0.01) # one system
+>>> type(one).__name__, one.batch_size
+('Particles', torch.Size([1000]))
+>>> torch.stack([systems, systems]).batch_size
+torch.Size([2, 64, 1000])
+>>> step = torch.compile(Particles.step, fullgraph=True)
+>>> step(systems, torch.randn(64, 1000, 3), 0.01).batch_size
+torch.Size([64, 1000])
+>>> systems = systems.to("cuda" if torch.cuda.is_available() else "cpu")
+```
+
+The fields are class attributes, so your editor completes `systems.pos`.
+Saving works as for a TensorDict.
+[TensorClass: a dataclass of tensors](tensorclass.html#tensorclass-guide) explains TensorClass, and
+[Which container should I use?](choosing_a_container.html#choosing-a-container) helps you choose between the two forms.
+
 ## TensorDict: keys at run time, like a dict
 
 You add and read keys at run time, as in a `dict`. A `dict` value becomes
@@ -76,44 +117,6 @@ RuntimeError: batch dimension mismatch, got self.batch_size=torch.Size([32]) and
 
 You can also [save it to disk](saving.html#saving), [pass it to modules](modules.html#modules-guide), and [compile functions that take it](compile.html#compile).
 
-## TensorClass: fields and methods, like a dataclass
-
-[`TensorClass`](reference/generated/tensordict.TensorClass.html#tensordict.TensorClass) is the class form of the same idea. You
-declare typed fields and write methods, as for a dataclass. A method that you
-write once runs on one item or on a batch of any shape, and it compiles with
-`fullgraph=True`:
-
-```
->>> from tensordict import TensorClass
->>> class Particles(TensorClass):
-... pos: torch.Tensor # [*batch, 3]
-... vel: torch.Tensor # [*batch, 3]
-... mass: torch.Tensor # [*batch]
-...
-... def step(self, force: torch.Tensor, dt: float) -> "Particles":
-... vel = self.vel + dt * force / self.mass.unsqueeze(-1)
-... pos = self.pos + dt * vel
-... return Particles(pos=pos, vel=vel, mass=self.mass, batch_size=self.batch_size)
->>> systems = Particles( # 64 systems of 1,000 particles each
-... pos=torch.randn(64, 1000, 3),
-... vel=torch.zeros(64, 1000, 3),
-... mass=torch.ones(64, 1000),
-... batch_size=[64, 1000],
-... )
->>> systems = systems.step(torch.randn(64, 1000, 3), dt=0.01) # all 64 systems
->>> one = systems[0].step(torch.randn(1000, 3), dt=0.01) # one system
->>> type(one).__name__, one.batch_size
-('Particles', torch.Size([1000]))
->>> step = torch.compile(Particles.step, fullgraph=True)
->>> step(systems, torch.randn(64, 1000, 3), 0.01).batch_size
-torch.Size([64, 1000])
-```
-
-The fields are class attributes, so your editor completes `systems.pos`.
-Indexing, stacking, `.to(device)`, and saving work as for a TensorDict.
-[TensorClass](tensorclass.html#tensorclass-guide) explains TensorClass, and
-[Which container should I use?](choosing_a_container.html#choosing-a-container) helps you choose between the two forms.
-
 ## Install
 
 ```
@@ -127,6 +130,10 @@ nightly builds, the optional dependencies, conda-forge, and source installs.
 
 - [Getting started](getting_started.html#getting-started): a one-hour tour, with examples
 that you can run. Start here.
+- [Coming from JAX](coming_from_jax.html#coming-from-jax): JAX pytree idioms in tensordict.
+- [Coming from a hand-written dataclass](coming_from_dataclass.html#coming-from-dataclass): what
+replaces a hand-written `to`, `pin_memory`, `__getitem__` and
+`collate_fn`.
 - [User guide](overview.html#overview): one page for each concept, from the batch
 size to TensorClass and `tensordict.nn`.
 - [How-to guides](saving.html#saving): one page for each task, such as saving,

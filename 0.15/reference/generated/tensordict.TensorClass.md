@@ -26,10 +26,22 @@ checkers to know the fields, or when you want to add methods. Use a
 [`TypedTensorDict`](tensordict.TypedTensorDict.html#tensordict.TypedTensorDict) instead if you need a
 [`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase) subclass (`state["key"]`,
 `**state` unpacking). [Which container should I use?](../../choosing_a_container.html#choosing-a-container) compares the
-containers, and [TensorClass](../../tensorclass.html#tensorclass-guide) is the user guide.
+containers, and [TensorClass: a dataclass of tensors](../../tensorclass.html#tensorclass-guide) is the user guide.
 
 The constructor of a subclass takes the fields, by name or in order, and
 these keyword arguments: `Foo(tensor=..., batch_size=[3])`.
+
+A field declared with [`dataclasses.field()`](https://docs.python.org/3/library/dataclasses.html#dataclasses.field) keeps its `default`,
+`default_factory` and `metadata`, and `repr=False` leaves it out of
+the repr. The options `init=False`, `compare=False` and
+`kw_only=True` are ignored, and the class warns about each when it is
+defined, unless a method of the class (`__init__`, `__eq__` and
+`__ne__`) replaces the one that ignores the option. Positional arguments
+go to the fields in the order they are declared, and warn where the
+signature of `__init__` maps them differently. The class keyword
+`kw_only=True` makes the fields of the class keyword-only, as in a
+dataclass. A [`dataclasses.InitVar`](https://docs.python.org/3/library/dataclasses.html#dataclasses.InitVar) goes to `__post_init__`, as
+in a dataclass. See [Field options, kw_only and InitVar](../../tensorclass.html#tensorclass-field-options).
 
 Keyword Arguments:
 
@@ -79,10 +91,17 @@ are cast to tensors. Other values are stored as
 
 ```
 >>> class Foo(TensorClass):
-... x: int
+... x: torch.Tensor
 >>> Foo(x=1).x
 tensor(1)
 ```
+
+A Python scalar given to a field annotated `int`, `float` or
+`bool` (or an optional or union of these) is cast too, with a
+`FutureWarning`: starting with TensorDict 0.17, the default will
+change to keeping the Python value of fields annotated int/float/bool,
+as [`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData). With a non-empty batch size,
+where a 0-d tensor does not fit, the value is kept already.
 - `autocast`: when a field is set, the value is converted to the
 annotated type. For example, an `int` field set to
 `torch.ones(())` holds `1`.
@@ -226,13 +245,7 @@ Examples
 ... nested: Any = None
 >>> foo = Foo(tensor=torch.zeros(3), non_tensor="a string!", batch_size=[3])
 >>> print(foo)
-Foo(
- non_tensor=NonTensorData(data=a string!, batch_size=torch.Size([3]), device=None),
- tensor=Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- nested=None,
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False)
+Foo(batch_size=[3], fields={non_tensor: str, tensor: f32[], nested: None})
 >>> foo[0].non_tensor
 'a string!'
 >>> foo.reshape(1, 3).batch_size
@@ -446,6 +459,7 @@ Raises:
 - [**AttributeError**](https://docs.python.org/3/builtins/exceptions.html#AttributeError) - if `key` is not a field of the class.
 - [**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if the tensorclass is locked, also with
  `inplace=True`.
+- [**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if `value` is the tensorclass itself.
 
 Examples
 
@@ -597,6 +611,11 @@ Using tensorclasses for datasets
 [Batched data loading with tensorclasses](../../tutorials/tensorclass_imagenet.html)
 
 Batched data loading with tensorclasses
+![](../../_images/sphx_glr_tensorclass_particles_thumb.png)
+
+[Simulating particles with a tensorclass](../../tutorials/tensorclass_particles.html)
+
+Simulating particles with a tensorclass
 ![](../../_images/sphx_glr_tensordict_shapes_thumb.png)
 
 [Changing the shape of a TensorDict](../../tutorials/tensordict_shapes.html)

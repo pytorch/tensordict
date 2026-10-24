@@ -203,10 +203,11 @@ reductions, gradients, and the in-place conventions.
 - [Devices, dtypes, and memory](concepts/devices.html#devices): devices, dtypes, and memory.
 - [Non-tensor data and unbatched entries](concepts/non_tensor.html#non-tensor-data): strings and other Python objects, and entries outside
 the batch size.
-- [TensorClass](tensorclass.html#tensorclass-guide) and [TypedTensorDict](typed_tensordict.html#typed-tensordict-guide): containers with
+- [TensorClass: a dataclass of tensors](tensorclass.html#tensorclass-guide) and [TypedTensorDict](typed_tensordict.html#typed-tensordict-guide): containers with
 typed fields. [Which container should I use?](choosing_a_container.html#choosing-a-container) compares them.
 - [Modules: TensorDictModule and tensordict.nn](modules.html#modules-guide): [`TensorDictModule`](reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule) and the other
 modules that read and write tensordicts.
+- [Common surprises](pitfalls.html#pitfalls): the behaviors that surprise new users most often.
 
 For saving, storage, data loading, distributed training, and
 [`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile), see [Save and load tensordicts](saving.html#saving), [Large datasets and storage backends](storage.html#storage), [Load data and share it between processes](data_loading.html#data-loading),

@@ -26,13 +26,7 @@ particles:
 >>> out is td
 True
 >>> td
-TensorDict(
- fields={
- hidden: Tensor(shape=torch.Size([5, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- pos: Tensor(shape=torch.Size([5, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([5]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[5], fields={hidden: f32[4], pos: f32[3]})
 ```
 
 By default, the module writes into the input tensordict and returns it.
@@ -238,7 +232,7 @@ outputs into it, and returns it.
 ### Run a module on a tensorclass
 
 A module also runs on a [`TensorClass`](reference/generated/tensordict.TensorClass.html#tensordict.TensorClass) instance, the class
-form of a tensordict with typed fields (see [TensorClass](tensorclass.html#tensorclass-guide)). It
+form of a tensordict with typed fields (see [TensorClass: a dataclass of tensors](tensorclass.html#tensorclass-guide)). It
 reads and writes the fields named in `in_keys` and `out_keys`, and
 returns the same instance:
 
@@ -487,7 +481,7 @@ all in the list.
 
 [`TensorClassModuleBase`](reference/generated/tensordict.nn.TensorClassModuleBase.html#tensordict.nn.TensorClassModuleBase) defines a module whose input
 and output are [`TensorClass`](reference/generated/tensordict.TensorClass.html#tensordict.TensorClass) instances instead of
-tensordicts with string keys (see [TensorClass](tensorclass.html#tensorclass-guide)). The class gives
+tensordicts with string keys (see [TensorClass: a dataclass of tensors](tensorclass.html#tensorclass-guide)). The class gives
 its input and output types as generic parameters. A type checker or an IDE
 then knows the fields that `forward` reads and writes. If you rename a
 field, the type checker finds the code that still uses the old name.

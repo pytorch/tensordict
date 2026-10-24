@@ -17,7 +17,7 @@ without it has no `input_type` and `output_type`, and its
 When both types are tensorclasses, `as_td_module()` returns a
 module that takes and returns a tensordict, for example to put the
 module in a [`TensorDictSequential`](tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential). See
-[TensorClass](../../tensorclass.html#tensorclass-guide).
+[TensorClass: a dataclass of tensors](../../tensorclass.html#tensorclass-guide).
 
 Variables:
 

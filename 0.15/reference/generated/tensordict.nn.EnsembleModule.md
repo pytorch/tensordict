@@ -41,13 +41,7 @@ Examples
 >>> ensemble = EnsembleModule(mod, num_copies=3)
 >>> data = TensorDict({'a': torch.randn(10, 4)}, batch_size=[10])
 >>> ensemble(data)
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([3, 10, 4]), device=cpu, dtype=torch.float32, is_shared=False),
- b: Tensor(shape=torch.Size([3, 10, 2]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([3, 10]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[3,10], fields={a: f32[4], b: f32[2]})
 ```
 
 To chain EnsembleModules, set `expand_input=False` on the second one and on those after it.
@@ -63,14 +57,7 @@ To chain EnsembleModules, set `expand_input=False` on the second one and on thos
 >>> seq = TensorDictSequential(e0, e1)
 >>> data = TensorDict({'x': torch.randn(5,2)}, batch_size=[5])
 >>> seq(data)
-TensorDict(
- fields={
- hidden: Tensor(shape=torch.Size([4, 5, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- x: Tensor(shape=torch.Size([4, 5, 2]), device=cpu, dtype=torch.float32, is_shared=False),
- y: Tensor(shape=torch.Size([4, 5, 1]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([4, 5]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[4,5], fields={hidden: f32[3], x: f32[2], y: f32[1]})
 ```
 
 forward(*tensordict: [TensorDict](tensordict.TensorDict.html#tensordict.TensorDict)*) → [TensorDict](tensordict.TensorDict.html#tensordict.TensorDict)

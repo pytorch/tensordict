@@ -1,6 +1,6 @@
 # LinkedList
 
-*class*tensordict.utils.LinkedList(**args*, *td: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*, ***kwargs*)
+*class*tensordict.utils.LinkedList(**args*, *td: [TensorDictBase](tensordict.TensorDictBase.html#tensordict.TensorDictBase) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, ***kwargs*)
 
 Bases: [`list`](https://docs.python.org/3/builtins/stdtypes.html#list)
 
@@ -15,6 +15,10 @@ The methods that change the length of the list (`append`, `extend`,
 only, and unlink it from the tensordict: later item assignments no longer
 write back. A `LinkedList` compares equal to a list with the same
 items. If the write to the tensordict raises, the list is unchanged.
+`tolist()` returns a plain [`list`](https://docs.python.org/3/builtins/stdtypes.html#list) copy that is not linked to
+the tensordict, as [`tolist()`](tensordict.NonTensorStack.html#tensordict.NonTensorStack.tolist) does.
+`LinkedList(iterable)`, without `td`, builds a list that is not
+linked to any tensordict.
 
 Examples
 
@@ -25,6 +29,8 @@ Examples
 >>> values = td["names"]
 >>> values[0] = "z"
 >>> td.get("names").tolist()
+['z', 'b', 'c']
+>>> values.tolist()
 ['z', 'b', 'c']
 ```
 
@@ -51,3 +57,22 @@ Removes and returns the item at `index` and unlinks the list from the tensordict
 remove(*value: [Any](https://docs.python.org/3/library/typing.html#typing.Any)*) → [None](https://docs.python.org/3/builtins/constants.html#None)
 
 Removes the first item equal to `value` and unlinks the list from the tensordict.
+
+tolist() → [list](https://docs.python.org/3/builtins/stdtypes.html#list)
+
+Returns a plain [`list`](https://docs.python.org/3/builtins/stdtypes.html#list) copy of the items, not linked to the tensordict.
+
+Nested `LinkedList` items, as `td[key]` returns for a
+non-tensor entry with more than one batch dimension, become nested
+lists, as with [`tolist()`](tensordict.NonTensorStack.html#tensordict.NonTensorStack.tolist). The other
+items are not copied.
+
+Examples
+
+```
+>>> from tensordict import TensorDict
+>>> td = TensorDict(batch_size=[2, 2])
+>>> td["names"] = [["a", "b"], ["c", "d"]]
+>>> td["names"].tolist()
+[['a', 'b'], ['c', 'd']]
+```

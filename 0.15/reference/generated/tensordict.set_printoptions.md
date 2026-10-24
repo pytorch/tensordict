@@ -20,9 +20,19 @@ Defaults to `True`.
 `show_is_shared`, `show_shape`, `show_field_device`,
 `show_dtype`, `show_field_is_shared`, `show_grad`,
 `show_is_contiguous`, `show_is_view`, `show_storage_size`,
-`plain`, `sort_keys` and `compact`. `compact=True` prints
-each entry on one line as its dtype and its feature dimensions
-(`f32[3]`).
+`plain`, `sort_keys`, `compact` and `html`. `compact=True`,
+the default, prints each entry as its dtype and its feature
+dimensions (`f32[3]`); `compact=False` prints each entry as a
+`Tensor(...)` line with its full shape, device, dtype and
+`is_shared`. The options that only the detailed form uses
+(`show_is_shared`, `show_shape`, `show_field_device`,
+`show_field_is_shared`, `show_grad`, `show_is_contiguous`,
+`show_is_view`, `show_storage_size` and `plain`) also set
+`compact=False` when `compact` is not passed; with an
+explicit `compact=True`, the compact form ignores them.
+`html=False` turns off the HTML display of notebooks; with
+`compact=False`, a notebook shows the detailed text instead of
+the HTML tree.
 
 Raises:
 
@@ -34,7 +44,9 @@ Examples
 >>> import torch
 >>> from tensordict import TensorDict, set_printoptions
 >>> td = TensorDict(a=torch.zeros(3), batch_size=[3])
->>> with set_printoptions(verbose=False):
+>>> print(td)
+TensorDict(batch_size=[3], fields={a: f32[]})
+>>> with set_printoptions(compact=False, verbose=False):
 ... print(td)
 TensorDict(
  fields={

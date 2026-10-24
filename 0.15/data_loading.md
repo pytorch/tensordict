@@ -5,6 +5,8 @@ A tensordict with a batch dimension is a dataset. A
 operation, and the batch is a tensordict. Processes on one node can also share
 one tensordict, in shared memory or in memory-mapped files, and see the writes
 of the other processes.
+For data from Hugging Face `datasets` and for training with Lightning,
+see [Use tensordict with other libraries](integrations.html#integrations).
 
 ## Use a tensordict as a dataset
 
@@ -29,14 +31,11 @@ Pass `collate_fn=lambda x: x` to keep that batch as it is:
 ('TensorDict', torch.Size([4]))
 ```
 
-The default `collate_fn` cannot read a tensordict. It raises
-`TypeError: iteration over a 0-d tensordict`:
+The default `collate_fn` returns that batch as it is too:
 
 ```
->>> next(iter(DataLoader(data, batch_size=4)))
-Traceback (most recent call last):
-...
-TypeError: iteration over a 0-d tensordict. Use keys(), values() or items() to iterate over its entries.
+>>> next(iter(DataLoader(data, batch_size=4))).batch_size
+torch.Size([4])
 ```
 
 The same works for a memory-mapped tensordict (see [Save and load tensordicts](saving.html#saving)). Each batch
@@ -57,11 +56,30 @@ torch.Size([2])
 A dataset can return one tensordict for each sample, for example a list of
 tensordicts, or a [`Dataset`](https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.Dataset) whose `__getitem__`
 builds a tensordict. The `DataLoader` then gets a list of tensordicts for
-each batch, and the default `collate_fn` raises the same `TypeError`.
-Pass `collate_fn=torch.stack` to stack the list into one tensordict:
+each batch. The default `collate_fn` stacks them into one tensordict, as
+[`collate()`](reference/generated/tensordict.collate.html#tensordict.collate) does (see below). A batch of tensorclasses keeps
+its class:
 
 ```
 >>> samples = [TensorDict({"features": torch.randn(3), "label": i}) for i in range(10)]
+>>> batch = next(iter(DataLoader(samples, batch_size=4)))
+>>> batch.batch_size, batch["label"]
+(torch.Size([4]), tensor([0, 1, 2, 3]))
+>>> from tensordict import TensorClass
+>>> class Sample(TensorClass):
+... features: torch.Tensor
+>>> batch = next(iter(DataLoader([Sample(features=torch.randn(3)) for _ in range(10)], batch_size=4)))
+>>> type(batch).__name__, batch.features.shape
+('Sample', torch.Size([4, 3]))
+```
+
+A batch that mixes different tensorclasses raises a `TypeError`, unless
+one class is a base of the others and has the same fields. The batch then
+takes the class of its first sample.
+
+`collate_fn=torch.stack` gives the same batches:
+
+```
 >>> batch = next(iter(DataLoader(samples, batch_size=4, collate_fn=torch.stack)))
 >>> batch.batch_size, batch["label"]
 (torch.Size([4]), tensor([0, 1, 2, 3]))
@@ -99,19 +117,49 @@ pairs, which `torch.stack` cannot stack:
 'LazyStackedTensorDict'
 ```
 
+The default `collate_fn` gives the same batches, so you need to pass
+[`collate()`](reference/generated/tensordict.collate.html#tensordict.collate) only for its keyword arguments, shown below:
+
+```
+>>> features, labels = next(iter(DataLoader(pairs, batch_size=4)))
+>>> type(features).__name__, labels
+('TensorDict', tensor([0, 1, 2, 3]))
+>>> type(next(iter(DataLoader(clouds, batch_size=4)))).__name__
+'LazyStackedTensorDict'
+```
+
+To pad some entries instead, each with its own value, or to stack them as
+jagged nested tensors, pass the keyword arguments of
+[`collate()`](reference/generated/tensordict.collate.html#tensordict.collate) with [`functools.partial()`](https://docs.python.org/3/library/functools.html#functools.partial). The other
+entries are collated as above:
+
+```
+>>> from functools import partial
+>>> tokens = [TensorDict({"ids": torch.ones(n, dtype=torch.long), "points": torch.randn(n, 3)}) for n in (2, 4, 3)]
+>>> collate_fn = partial(collate, pad_keys={"ids": 7}, nested_keys=["points"], mask_key="mask")
+>>> batch = next(iter(DataLoader(tokens, batch_size=3, collate_fn=collate_fn)))
+>>> batch["ids"].shape, batch["mask", "ids"].sum(-1), batch["points"].is_nested
+(torch.Size([3, 4]), tensor([2, 4, 3]), True)
+```
+
 ## Batch samplers
 
-A batch sampler gives the indices of a whole batch. Pass it as `sampler`,
-with `batch_size=None`. The `DataLoader` then calls `data[indices]` with
+A batch sampler gives the indices of a whole batch. Pass it as
+`batch_sampler`. The `DataLoader` then calls `data.__getitems__` with
 the list of indices of each batch, and `collate_fn` gets the tensordict:
 
 ```
 >>> from torch.utils.data import BatchSampler, SequentialSampler
 >>> sampler = BatchSampler(SequentialSampler(data), batch_size=4, drop_last=True)
->>> loader = DataLoader(data, sampler=sampler, batch_size=None, collate_fn=lambda x: x)
+>>> loader = DataLoader(data, batch_sampler=sampler, collate_fn=lambda x: x)
 >>> [batch["label"].tolist() for batch in loader]
 [[0, 1, 2, 3], [4, 5, 6, 7]]
 ```
+
+Passing it as `sampler`, with `batch_size=None`, gives the same batches
+through `data[indices]`, but the workers of the `DataLoader` then send
+an HDF5 or zarr [`PersistentTensorDict`](reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) batch as a lazy
+view, which the main process reads.
 
 ## Worker processes and pinned memory
 
@@ -126,6 +174,26 @@ to each worker. A memory-mapped tensordict pickles as its file names, so
 the workers open the same files and do not copy the data. Pickle cannot
 send a `lambda`, so define `collate_fn` as a function at the top level
 of a module.
+
+In a worker, `__getitems__` of an HDF5 or zarr
+[`PersistentTensorDict`](reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) reads the rows into a
+[`TensorDict`](reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) in memory, so the batch is not a view that
+writes to the file, as it is without workers. With
+`persistent_workers=True`, each worker keeps its own HDF5 file handle
+across epochs, so it may not see writes that the main process makes to the
+file between epochs: HDF5 does not support writes across processes without
+SWMR mode.
+
+With `spawn` or `forkserver`, each worker opens the HDF5 file again.
+While the main process has the file open for writing (`mode="r+"`,
+`"a"` or `"w"`), HDF5's file lock stops the workers from opening it, so
+they fail with `BlockingIOError`, and the `DataLoader` raises
+`RuntimeError` saying that a worker exited unexpectedly. Give the
+`DataLoader` a tensordict opened with `mode="r"`, and don't keep the file
+open for writing while the workers run; or use `fork`. With
+`persistent_workers=True`, the workers keep the file open for reading
+across epochs, so the main process cannot open it for writing between epochs
+either.
 
 The worker examples start processes, so they are complete scripts. Save one
 to a file and run it with `python`:
@@ -168,9 +236,9 @@ when this page is tested:
 >>> batch = next(iter(loader)).to("cuda", non_blocking=True)
 ```
 
-Without a `DataLoader`, `td.to("cuda", non_blocking_pin=True)` pins the
-leaves with several threads (`num_threads`), and copies them to the GPU
-(see [Devices, dtypes, and memory](concepts/devices.html#devices)).
+Without a `DataLoader`, `td.to("cuda", non_blocking_pin=True)` pins each
+leaf on the calling thread and copies it to the GPU (see [Devices, dtypes, and memory](concepts/devices.html#devices)).
+For leaves of a few KiB, a plain `td.to("cuda")` is usually faster.
 
 ## Share a tensordict between processes
 
@@ -339,6 +407,8 @@ backends.
 - [Save and load tensordicts](saving.html#saving): memory-mapped directories and the `mode` of
 `load_memmap`.
 - [Distributed tensordicts](distributed.html#distributed): send tensordicts between nodes.
+- [Train at scale](training_at_scale.html#training-at-scale): prefetch batches to the GPU, and resume a data
+loader.
 - The reference of [`share_memory_()`](reference/generated/tensordict.TensorDictBase.share_memory_.html#tensordict.TensorDictBase.share_memory_),
 [`pin_memory()`](reference/generated/tensordict.TensorDictBase.pin_memory.html#tensordict.TensorDictBase.pin_memory),
 [`map()`](reference/generated/tensordict.TensorDictBase.map.html#tensordict.TensorDictBase.map), and [`lazy_stack()`](reference/generated/tensordict.lazy_stack.html#tensordict.lazy_stack).

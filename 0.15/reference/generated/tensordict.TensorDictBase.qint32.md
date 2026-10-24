@@ -4,6 +4,13 @@ TensorDictBase.qint32(***, *cast_filter: [Callable](https://docs.python.org/3/li
 
 Returns a tensordict whose tensor leaves are cast to `torch.qint32`.
 
+Deprecated
+
+A quantized tensor needs a scale and a zero point, which a dtype
+cast cannot supply, so this method raises for any floating-point
+entry. It will be removed in TensorDict 0.18. Use
+`td.apply(lambda x: torch.quantize_per_tensor(x, scale, zero_point, torch.qint32))` instead.
+
 Keyword Arguments:
 
 **cast_filter** (*Callable**,**optional*) - a predicate

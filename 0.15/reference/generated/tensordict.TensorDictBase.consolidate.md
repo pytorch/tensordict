@@ -11,17 +11,32 @@ in one copy. The result is locked (see [Locking and temporary changes](../../con
 write into its leaves in place, but you cannot add or remove entries.
 
 If the tensordict is already consolidated, `self` is returned and
-the other arguments are ignored. A `filename` other than its own
-file writes nothing: `td.contiguous().consolidate(filename=other)`
-writes a new file.
+the other arguments are ignored, except `pin_memory=True`: a
+storage on the CPU that is not pinned is then copied into a pinned
+one, and a new tensordict is returned, unless `filename`,
+`inplace=True`, `return_early=True` with `num_threads > 1` or a
+`device` other than the CPU is given, or no accelerator is
+available. A `filename` other than its own
+file writes nothing and emits a [`UserWarning`](https://docs.python.org/3/builtins/exceptions.html#UserWarning):
+`td.contiguous().consolidate(filename=other)` writes a new file. A
+`device` other than the one of the storage, and
+`share_memory=True` with a storage that is not in shared memory,
+are ignored with a [`FutureWarning`](https://docs.python.org/3/builtins/exceptions.html#FutureWarning). Starting with TensorDict
+0.17, the default will change to honouring them, as for a tensordict
+that is not consolidated: the call will return a new consolidated
+tensordict. `td.contiguous().consolidate(...)` gives that result
+now.
 
 Parameters:
 
 **filename** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**Path**,**optional*) - a file to use as the storage. The
 leaves are views into a memory map of the file, and the
 metadata is written after them, so that
-[`from_consolidated()`](tensordict.TensorDictBase.from_consolidated.html#tensordict.TensorDictBase.from_consolidated) can read the file back. Defaults to
-`None`, which keeps the storage in memory.
+[`from_consolidated()`](tensordict.TensorDictBase.from_consolidated.html#tensordict.TensorDictBase.from_consolidated) can read the file back. An
+existing file is written in place, unless it is larger than
+the new one and `use_buffer=False`: it is then replaced by a
+new file, and the tensordicts that map the old file keep their
+data. Defaults to `None`, which keeps the storage in memory.
 
 Keyword Arguments:
 

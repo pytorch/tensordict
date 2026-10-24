@@ -7,8 +7,9 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta content="TensorClass is a dataclass of tensors for PyTorch. It has to(device), pin_memory, slicing of every field, torch.stack, a collate_fn for the DataLoader, pytree registration and torch.compile support." name="description" />
 
-    <title>TensorClass &#8212; tensordict 0.15 documentation</title>
+    <title>TensorClass: a dataclass of tensors &#8212; tensordict 0.15 documentation</title>
   
   
   
@@ -71,7 +72,7 @@
 <meta name="llm:site-type" content="documentation">
 <meta name="llm:framework" content="PyTorch">
 
-<meta name="llm:description" content="A dict[str, torch.Tensor] that behaves like one tensor. - TensorClass">
+<meta name="llm:description" content="TensorClass is a dataclass of tensors for PyTorch. It has to(device), pin_memory, slicing of every field, torch.stack, a collate_fn for the DataLoader, pytree registration and torch.compile support.">
 
 
 
@@ -539,6 +540,18 @@ document.write(`
                 </a>
               </li>
             
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="coming_from_jax.html">
+                  Coming from JAX pytrees
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="coming_from_dataclass.html">
+                  Coming from a hand-written dataclass
+                </a>
+              </li>
+            
           </ul>
         
       </li>
@@ -556,6 +569,12 @@ document.write(`
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="overview.html">
                   What is TensorDict?
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="pitfalls.html">
+                  Common surprises
                 </a>
               </li>
             
@@ -597,7 +616,7 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="#">
-                  TensorClass
+                  TensorClass: a dataclass of tensors
                 </a>
               </li>
             
@@ -627,15 +646,27 @@ document.write(`
         
           
           <div class="nav-item-with-toggle">
-            <a class="nav-link nav-internal" href="saving.html">
+            <a class="nav-link nav-internal" href="cookbook.html">
               How-to guides
             </a>
           </div>
           <ul class="dropdown-menu" id="dropdown-3">
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="cookbook.html">
+                  How-to recipes
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="saving.html">
                   Save and load tensordicts
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="saving_format.html">
+                  The on-disk format
                 </a>
               </li>
             
@@ -652,8 +683,26 @@ document.write(`
               </li>
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="variable_size_batches.html">
+                  Batch samples of different sizes without padding
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="integrations.html">
+                  Use tensordict with other libraries
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="distributed.html">
                   Distributed tensordicts
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="training_at_scale.html">
+                  Train at scale
                 </a>
               </li>
             
@@ -776,6 +825,12 @@ document.write(`
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="tutorials/tensorclass_imagenet.html">
                   Batched data loading with tensorclasses
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/tensorclass_particles.html">
+                  Simulating particles with a tensorclass
                 </a>
               </li>
             
@@ -1036,6 +1091,18 @@ document.write(`
                 </a>
               </li>
             
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="coming_from_jax.html">
+                  Coming from JAX pytrees
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="coming_from_dataclass.html">
+                  Coming from a hand-written dataclass
+                </a>
+              </li>
+            
           </ul>
         
       </li>
@@ -1053,6 +1120,12 @@ document.write(`
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="overview.html">
                   What is TensorDict?
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="pitfalls.html">
+                  Common surprises
                 </a>
               </li>
             
@@ -1094,7 +1167,7 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="#">
-                  TensorClass
+                  TensorClass: a dataclass of tensors
                 </a>
               </li>
             
@@ -1124,15 +1197,27 @@ document.write(`
         
           
           <div class="nav-item-with-toggle">
-            <a class="nav-link nav-internal" href="saving.html">
+            <a class="nav-link nav-internal" href="cookbook.html">
               How-to guides
             </a>
           </div>
           <ul class="dropdown-menu" id="dropdown-3">
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="cookbook.html">
+                  How-to recipes
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="saving.html">
                   Save and load tensordicts
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="saving_format.html">
+                  The on-disk format
                 </a>
               </li>
             
@@ -1149,8 +1234,26 @@ document.write(`
               </li>
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="variable_size_batches.html">
+                  Batch samples of different sizes without padding
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="integrations.html">
+                  Use tensordict with other libraries
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="distributed.html">
                   Distributed tensordicts
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="training_at_scale.html">
+                  Train at scale
                 </a>
               </li>
             
@@ -1273,6 +1376,12 @@ document.write(`
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="tutorials/tensorclass_imagenet.html">
                   Batched data loading with tensorclasses
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/tensorclass_particles.html">
+                  Simulating particles with a tensorclass
                 </a>
               </li>
             
@@ -1438,27 +1547,35 @@ document.write(`
 <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="coming_from_jax.html">Coming from JAX pytrees</a></li>
+<li class="toctree-l1"><a class="reference internal" href="coming_from_dataclass.html">Coming from a hand-written dataclass</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">User guide</span></p>
 <ul class="current nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="overview.html">What is TensorDict?</a></li>
+<li class="toctree-l1"><a class="reference internal" href="pitfalls.html">Common surprises</a></li>
 <li class="toctree-l1"><a class="reference internal" href="concepts/batch_size.html">Batch size, shapes, and indexing</a></li>
 <li class="toctree-l1"><a class="reference internal" href="concepts/keys.html">Keys, nested keys, and locking</a></li>
 <li class="toctree-l1"><a class="reference internal" href="concepts/stacking.html">Stacking and variable-size data</a></li>
 <li class="toctree-l1"><a class="reference internal" href="concepts/operations.html">Arithmetic, apply, reductions, and gradients</a></li>
 <li class="toctree-l1"><a class="reference internal" href="concepts/devices.html">Devices, dtypes, and memory</a></li>
 <li class="toctree-l1"><a class="reference internal" href="concepts/non_tensor.html">Non-tensor data and unbatched entries</a></li>
-<li class="toctree-l1 current active"><a class="current reference internal" href="#">TensorClass</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">TensorClass: a dataclass of tensors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="typed_tensordict.html">TypedTensorDict</a></li>
 <li class="toctree-l1"><a class="reference internal" href="choosing_a_container.html">Which container should I use?</a></li>
 <li class="toctree-l1"><a class="reference internal" href="modules.html">Modules: TensorDictModule and tensordict.nn</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">How-to guides</span></p>
 <ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="cookbook.html">How-to recipes</a></li>
 <li class="toctree-l1"><a class="reference internal" href="saving.html">Save and load tensordicts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="saving_format.html">The on-disk format</a></li>
 <li class="toctree-l1"><a class="reference internal" href="storage.html">Large datasets and storage backends</a></li>
 <li class="toctree-l1"><a class="reference internal" href="data_loading.html">Load data and share it between processes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="variable_size_batches.html">Batch samples of different sizes without padding</a></li>
+<li class="toctree-l1"><a class="reference internal" href="integrations.html">Use tensordict with other libraries</a></li>
 <li class="toctree-l1"><a class="reference internal" href="distributed.html">Distributed tensordicts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="training_at_scale.html">Train at scale</a></li>
 <li class="toctree-l1"><a class="reference internal" href="compile.html">torch.compile, torch.func, torch.export, and CUDA graphs</a></li>
 <li class="toctree-l1"><a class="reference internal" href="printing.html">Printing and display</a></li>
 <li class="toctree-l1"><a class="reference internal" href="compatibility.html">Containers on storage backends</a></li>
@@ -1489,6 +1606,10 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="tutorials/data_fashion.html">Using TensorDict for datasets</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorials/tensorclass_fashion.html">Using tensorclasses for datasets</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorials/tensorclass_imagenet.html">Batched data loading with tensorclasses</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Tutorials: scientific computing</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensorclass_particles.html">Simulating particles with a tensorclass</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">API reference</span></p>
 <ul class="nav bd-sidenav">
@@ -1530,7 +1651,7 @@ document.write(`
         <i class="fa-solid fa-home"></i>
       </a>
     </li>
-    <li class="breadcrumb-item active" aria-current="page">TensorClass</li>
+    <li class="breadcrumb-item active" aria-current="page">TensorClass:...</li>
   </ul>
 </nav>
 </div>
@@ -1572,7 +1693,7 @@ document.write(`
   <div style="display:none;" itemscope itemtype="https://schema.org/BreadcrumbList">
     
     <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-      <meta itemprop="name" content="TensorClass">
+      <meta itemprop="name" content="TensorClass: a dataclass of tensors">
       <meta itemprop="position" content="1">
     </div>
   </div>
@@ -1611,14 +1732,20 @@ document.write(`
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="tensorclass">
-<span id="tensorclass-guide"></span><h1>TensorClass<a class="headerlink" href="#tensorclass" title="Link to this heading">#</a></h1>
-<p>A <em>tensorclass</em> is a class for tensor data. You declare its fields with type
-annotations, as in a <a class="reference external" href="https://docs.python.org/3/library/dataclasses.html#dataclasses.dataclass" title="(in Python v3.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">dataclass()</span></code></a>, and you write its methods
-once. A method then runs on one item or on a batch of any shape, and compiles
-with <code class="docutils literal notranslate"><span class="pre">torch.compile(fullgraph=True)</span></code>. The instances have the tensor
-operations of a <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>: indexing, reshaping,
-<code class="docutils literal notranslate"><span class="pre">to(device)</span></code>, <code class="docutils literal notranslate"><span class="pre">torch.stack</span></code>, <code class="docutils literal notranslate"><span class="pre">torch.cat</span></code>, and saving to disk.</p>
+  <section id="tensorclass-a-dataclass-of-tensors">
+<span id="tensorclass-guide"></span><h1>TensorClass: a dataclass of tensors<a class="headerlink" href="#tensorclass-a-dataclass-of-tensors" title="Link to this heading">#</a></h1>
+<p>A <em>tensorclass</em> is a dataclass of tensors. You declare its fields with type
+annotations, as in a <a class="reference external" href="https://docs.python.org/3/library/dataclasses.html#dataclasses.dataclass" title="(in Python v3.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">dataclass()</span></code></a>, and it has the
+operations that such a class otherwise writes by hand: <code class="docutils literal notranslate"><span class="pre">.to(device)</span></code>,
+<code class="docutils literal notranslate"><span class="pre">pin_memory()</span></code>, slicing of every field with <code class="docutils literal notranslate"><span class="pre">batch[idx]</span></code>,
+<code class="docutils literal notranslate"><span class="pre">torch.stack</span></code> and <code class="docutils literal notranslate"><span class="pre">torch.cat</span></code>, and batching by the default
+<code class="docutils literal notranslate"><span class="pre">collate_fn</span></code> of a <a class="reference external" href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataLoader</span></code></a> (or by
+<a class="reference internal" href="reference/generated/tensordict.collate.html#tensordict.collate" title="tensordict.collate"><code class="xref py py-func docutils literal notranslate"><span class="pre">collate()</span></code></a>, which can also pad). It is
+registered as a pytree, so <code class="docutils literal notranslate"><span class="pre">torch.utils._pytree</span></code>, <a class="reference external" href="https://docs.pytorch.org/docs/stable/func.api.html#module-torch.func" title="(in PyTorch v2.14)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.func</span></code></a> and
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a> accept it. You write its methods once: a method runs
+on one item or on a batch of any shape, and compiles with
+<code class="docutils literal notranslate"><span class="pre">torch.compile(fullgraph=True)</span></code>. The instances have the other operations of
+a <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>, such as reshaping and saving to disk.</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorClass</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Particles</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">):</span>
@@ -1662,7 +1789,9 @@ constructor (see <a class="reference internal" href="#tensorclass-static-typing"
 <p>Read the quick start and <a class="reference internal" href="#tensorclass-methods"><span class="std std-ref">Methods</span></a> first. Each later section
 describes one feature: read it when you need that feature. To compare a
 tensorclass with a <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> and the other containers, see
-<a class="reference internal" href="choosing_a_container.html#choosing-a-container"><span class="std std-ref">Which container should I use?</span></a>.</p>
+<a class="reference internal" href="choosing_a_container.html#choosing-a-container"><span class="std std-ref">Which container should I use?</span></a>. If you have a dataclass with a hand-written
+<code class="docutils literal notranslate"><span class="pre">to</span></code>, <code class="docutils literal notranslate"><span class="pre">pin_memory</span></code>, <code class="docutils literal notranslate"><span class="pre">__getitem__</span></code> or collate function,
+<a class="reference internal" href="coming_from_dataclass.html#coming-from-dataclass"><span class="std std-ref">Coming from a hand-written dataclass</span></a> shows what replaces each one.</p>
 <section id="quick-start">
 <h2>Quick start<a class="headerlink" href="#quick-start" title="Link to this heading">#</a></h2>
 <p>Subclass <a class="reference internal" href="reference/generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorClass</span></code></a> and annotate each field. Then pass
@@ -1680,14 +1809,11 @@ the values and the batch size to the constructor:</p>
 <span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">],</span>  <span class="c1"># for example, 3 robots and 4 time steps</span>
 <span class="gp">... </span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
-<span class="go">Reading(</span>
-<span class="go">    count=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),</span>
-<span class="go">    sensor=NonTensorData(data=lidar, batch_size=torch.Size([3, 4]), device=None),</span>
-<span class="go">    signal=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">    backup=None,</span>
-<span class="go">    batch_size=torch.Size([3, 4]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
+<span class="go">Reading(batch_size=[3,4], fields={</span>
+<span class="go">    count: i64[1],</span>
+<span class="go">    sensor: str,</span>
+<span class="go">    signal: f32[5],</span>
+<span class="go">    backup: None})</span>
 </pre></div>
 </div>
 <p>The <code class="docutils literal notranslate"><span class="pre">backup</span></code> annotation is a string because the class refers to itself.
@@ -1753,8 +1879,9 @@ of the data as a <a class="reference internal" href="reference/generated/tensord
 <span id="tensorclass-methods"></span><h2>Methods<a class="headerlink" href="#methods" title="Link to this heading">#</a></h2>
 <p>A tensorclass is a Python class: you can add methods, properties, class
 methods, and class constants to it. Of the dataclass features,
-<code class="docutils literal notranslate"><span class="pre">__post_init__</span></code>, field defaults, and a custom <code class="docutils literal notranslate"><span class="pre">__init__</span></code> work, with the
-rules below.</p>
+<code class="docutils literal notranslate"><span class="pre">__post_init__</span></code>, field defaults, <code class="docutils literal notranslate"><span class="pre">InitVar</span></code>, <code class="docutils literal notranslate"><span class="pre">field(repr=False)</span></code>, the
+class option <code class="docutils literal notranslate"><span class="pre">kw_only</span></code>, and a custom <code class="docutils literal notranslate"><span class="pre">__init__</span></code> work, with the rules
+below.</p>
 <section id="methods-and-properties">
 <h3>Methods and properties<a class="headerlink" href="#methods-and-properties" title="Link to this heading">#</a></h3>
 <p>Methods and properties can read and assign the fields. A method that calls a
@@ -1791,6 +1918,33 @@ either:</p>
 <span class="go">['logits']</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">type</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">detached</span><span class="p">())</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">probs</span><span class="o">.</span><span class="n">shape</span>
 <span class="go">('Logits', torch.Size([4]))</span>
+</pre></div>
+</div>
+</section>
+<section id="field-defaults">
+<h3>Field defaults<a class="headerlink" href="#field-defaults" title="Link to this heading">#</a></h3>
+<p>A field can have a default, as in a dataclass. A tensor default, such as
+<code class="docutils literal notranslate"><span class="pre">step:</span> <span class="pre">torch.Tensor</span> <span class="pre">=</span> <span class="pre">torch.tensor(0)</span></code>, is one tensor that every instance
+shares, and the class too: an in-place change on one instance, such as
+<code class="docutils literal notranslate"><span class="pre">obj.step.add_(1)</span></code>, changes the others and the default. The same holds for
+a <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> or tensorclass default. Python 3.11 and later refuse most of
+these, as they refuse a <code class="docutils literal notranslate"><span class="pre">list</span></code> default (a <code class="docutils literal notranslate"><span class="pre">TensorDict</span></code>, a tensorclass that
+is not frozen), but accept a frozen tensorclass or a <code class="docutils literal notranslate"><span class="pre">TensorDictParams</span></code>
+default; Python 3.10 accepts them all. Creating a class
+with such a default emits a <code class="docutils literal notranslate"><span class="pre">FutureWarning</span></code> for each such field. Starting
+with TensorDict 0.17, the default will change to giving each instance its own
+copy (a clone) of the default. To get a copy for each instance now, use a
+default factory:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">dataclasses</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">State</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">step</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">=</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">field</span><span class="p">(</span>
+<span class="gp">... </span>        <span class="n">default_factory</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">a</span><span class="p">,</span> <span class="n">b</span> <span class="o">=</span> <span class="n">State</span><span class="p">(),</span> <span class="n">State</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">a</span><span class="o">.</span><span class="n">step</span><span class="o">.</span><span class="n">add_</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+<span class="go">tensor(1)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">b</span><span class="o">.</span><span class="n">step</span>
+<span class="go">tensor(0)</span>
 </pre></div>
 </div>
 </section>
@@ -1849,6 +2003,79 @@ its own <code class="docutils literal notranslate"><span class="pre">__post_init
 <span class="go">tensor([0, 2, 3])</span>
 </pre></div>
 </div>
+</section>
+<section id="field-options-kw-only-and-initvar">
+<span id="tensorclass-field-options"></span><h3>Field options, <code class="docutils literal notranslate"><span class="pre">kw_only</span></code> and <code class="docutils literal notranslate"><span class="pre">InitVar</span></code><a class="headerlink" href="#field-options-kw-only-and-initvar" title="Link to this heading">#</a></h3>
+<p>A field declared with <a class="reference external" href="https://docs.python.org/3/library/dataclasses.html#dataclasses.field" title="(in Python v3.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">dataclasses.field()</span></code></a> keeps its <code class="docutils literal notranslate"><span class="pre">default</span></code>,
+<code class="docutils literal notranslate"><span class="pre">default_factory</span></code> and <code class="docutils literal notranslate"><span class="pre">metadata</span></code>, and <code class="docutils literal notranslate"><span class="pre">repr=False</span></code> leaves it out of the
+printed instance: the default, the compact and the notebook reprs. The class
+option <code class="docutils literal notranslate"><span class="pre">kw_only=True</span></code> (<code class="docutils literal notranslate"><span class="pre">class</span> <span class="pre">Config(TensorClass,</span> <span class="pre">kw_only=True)</span></code>, or
+<code class="docutils literal notranslate"><span class="pre">&#64;tensorclass(kw_only=True)</span></code>) makes the fields of the class keyword-only, as
+in a dataclass. The fields of a subclass take positional arguments, unless
+the subclass sets the option too:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Config</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">,</span> <span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">weights</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">... </span>    <span class="n">note</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="s2">""</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">c</span> <span class="o">=</span> <span class="n">Config</span><span class="p">(</span><span class="n">weights</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">note</span><span class="o">=</span><span class="s2">"tuned"</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="s2">"note"</span> <span class="ow">in</span> <span class="nb">repr</span><span class="p">(</span><span class="n">c</span><span class="p">),</span> <span class="n">c</span><span class="o">.</span><span class="n">note</span>
+<span class="go">(False, 'tuned')</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">Config</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">))</span>
+<span class="gt">Traceback (most recent call last):</span>
+<span class="w">  </span><span class="c">...</span>
+<span class="gr">TypeError</span>: <span class="n">Config.__init__() takes 1 positional arguments but 2 were given</span>
+</pre></div>
+</div>
+<p>The other options are ignored, and the class warns about each when it is
+defined: <code class="docutils literal notranslate"><span class="pre">init=False</span></code> and <code class="docutils literal notranslate"><span class="pre">kw_only=True</span></code> on a field (<code class="docutils literal notranslate"><span class="pre">__init__</span></code> still
+takes the field, by name or in order), and <code class="docutils literal notranslate"><span class="pre">compare=False</span></code> (<code class="docutils literal notranslate"><span class="pre">==</span></code> compares
+the fields elementwise and returns a tensorclass).</p>
+<p>Positional arguments go to the fields in the order they are declared, as in
+earlier releases, whereas the signature of <code class="docutils literal notranslate"><span class="pre">__init__</span></code>, which <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#help" title="(in Python v3.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">help()</span></code></a>
+and IDEs show, leaves out the <code class="docutils literal notranslate"><span class="pre">init=False</span></code> and keyword-only fields, as in a
+dataclass. A call that the field order makes raise and that the signature
+allows follows the signature. A call that the signature maps differently
+emits a <code class="docutils literal notranslate"><span class="pre">FutureWarning</span></code>: starting with TensorDict 0.17, the default will
+change to positional arguments that follow the signature. Pass those fields by
+keyword to get the same result in every release:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Sample</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">label</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">=</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">kw_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="n">x</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">Sample</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">label</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span><span class="o">.</span><span class="n">x</span>
+<span class="go">tensor([1., 1.])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">Sample</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span><span class="o">.</span><span class="n">label</span>  <span class="c1"># FutureWarning</span>
+<span class="go">tensor([1., 1.])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">Sample</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span><span class="o">.</span><span class="n">label</span> <span class="ow">is</span> <span class="kc">None</span>
+<span class="go">True</span>
+</pre></div>
+</div>
+<p>A <a class="reference external" href="https://docs.python.org/3/library/dataclasses.html#dataclasses.InitVar" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">dataclasses.InitVar</span></code></a> is an argument of the generated <code class="docutils literal notranslate"><span class="pre">__init__</span></code>
+that is not a field: <code class="docutils literal notranslate"><span class="pre">__init__</span></code> passes it to <code class="docutils literal notranslate"><span class="pre">__post_init__</span></code>, as in a
+dataclass. The other calls to <code class="docutils literal notranslate"><span class="pre">__post_init__</span></code> (rebuilds,
+<code class="docutils literal notranslate"><span class="pre">from_tensordict</span></code>, loads) pass the defaults of the InitVars, so give each a
+default, and set <code class="docutils literal notranslate"><span class="pre">skip_post_init_on_rebuild</span></code> if <code class="docutils literal notranslate"><span class="pre">__post_init__</span></code> must not
+run again with the defaults:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">InitVar</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Scaled</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">"skip_post_init_on_rebuild"</span><span class="p">]):</span>
+<span class="gp">... </span>    <span class="n">x</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">... </span>    <span class="n">scale</span><span class="p">:</span> <span class="n">InitVar</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>
+<span class="gp">...</span>
+<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">scale</span><span class="p">):</span>
+<span class="gp">... </span>        <span class="bp">self</span><span class="o">.</span><span class="n">x</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">x</span> <span class="o">*</span> <span class="n">scale</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">s</span> <span class="o">=</span> <span class="n">Scaled</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">scale</span><span class="o">=</span><span class="mf">3.0</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">s</span><span class="o">.</span><span class="n">x</span>
+<span class="go">tensor([3., 3.])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">s</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span><span class="o">.</span><span class="n">x</span>  <span class="c1"># no second call to __post_init__</span>
+<span class="go">tensor([3., 3.])</span>
+</pre></div>
+</div>
+<p>This holds for a class whose <code class="docutils literal notranslate"><span class="pre">__post_init__</span></code> cannot be called without its
+InitVars. If <code class="docutils literal notranslate"><span class="pre">__post_init__</span></code> gives them defaults of its own, it gets the
+InitVars only when they are given, and the other calls pass none. Without
+<code class="docutils literal notranslate"><span class="pre">__post_init__</span></code>, the InitVars are taken by name and dropped. In both
+cases, positional arguments go to the fields in order, as above, and warn
+where the signature, which takes the InitVars, maps them differently. A class
+whose <code class="docutils literal notranslate"><span class="pre">__post_init__</span></code> does not take its InitVars does not accept them as
+arguments.</p>
 </section>
 <section id="a-custom-init">
 <h3>A custom <code class="docutils literal notranslate"><span class="pre">__init__</span></code><a class="headerlink" href="#a-custom-init" title="Link to this heading">#</a></h3>
@@ -1951,12 +2178,7 @@ string as <code class="docutils literal notranslate"><span class="pre">NonTensor
 <span class="gp">&gt;&gt;&gt; </span><span class="n">slots</span><span class="o">.</span><span class="n">X</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">slots</span><span class="o">.</span><span class="n">y</span> <span class="o">=</span> <span class="s2">"testing"</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">slots</span><span class="p">)</span>
-<span class="go">Slots(</span>
-<span class="go">    X=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),</span>
-<span class="go">    y=NonTensorData(data=testing, batch_size=torch.Size([3, 4]), device=None),</span>
-<span class="go">    batch_size=torch.Size([3, 4]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
+<span class="go">Slots(batch_size=[3,4], fields={X: f32[5], y: str})</span>
 </pre></div>
 </div>
 <p>A <code class="docutils literal notranslate"><span class="pre">None</span></code> field is a key missing from the tensor storage. Setting a field to
@@ -1971,21 +2193,15 @@ ones. The result is a tensorclass with a boolean tensor for each field. For a
 field that is not a tensor, the boolean tensor has the batch shape, and it is
 <code class="docutils literal notranslate"><span class="pre">False</span></code> where the values differ:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">data</span> <span class="o">==</span> <span class="n">data2</span><span class="p">)</span>
-<span class="go">Reading(</span>
-<span class="go">    backup=Reading(</span>
-<span class="go">        count=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
-<span class="go">        sensor=Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.bool, is_shared=False),</span>
-<span class="go">        signal=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.bool, is_shared=False),</span>
-<span class="go">        backup=None,</span>
-<span class="go">        batch_size=torch.Size([3, 4]),</span>
-<span class="go">        device=None,</span>
-<span class="go">        is_shared=False),</span>
-<span class="go">    count=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
-<span class="go">    sensor=Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.bool, is_shared=False),</span>
-<span class="go">    signal=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.bool, is_shared=False),</span>
-<span class="go">    batch_size=torch.Size([3, 4]),</span>
-<span class="go">    device=None,</span>
-<span class="go">    is_shared=False)</span>
+<span class="go">Reading(batch_size=[3,4], fields={</span>
+<span class="go">    backup: Reading{</span>
+<span class="go">        count: bool[1],</span>
+<span class="go">        sensor: bool[],</span>
+<span class="go">        signal: bool[5],</span>
+<span class="go">        backup: None},</span>
+<span class="go">    count: bool[1],</span>
+<span class="go">    sensor: bool[],</span>
+<span class="go">    signal: bool[5]})</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">data2</span><span class="o">.</span><span class="n">sensor</span> <span class="o">=</span> <span class="s2">"camera"</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="p">(</span><span class="n">data</span> <span class="o">==</span> <span class="n">data2</span><span class="p">)</span><span class="o">.</span><span class="n">sensor</span><span class="o">.</span><span class="n">any</span><span class="p">()</span>
 <span class="go">tensor(False)</span>
@@ -2039,7 +2255,15 @@ You can set them in three forms, which have the same effect:</p>
 annotation of its field. See <a class="reference internal" href="#tensorclass-autocasting"><span class="std std-ref">Auto-casting</span></a>.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">nocast</span></code></dt><dd><p>Python numbers and NumPy arrays stay as they are. Without this flag, an
-<code class="docutils literal notranslate"><span class="pre">int</span></code>, <code class="docutils literal notranslate"><span class="pre">float</span></code>, <code class="docutils literal notranslate"><span class="pre">bool</span></code>, or NumPy array becomes a tensor.</p>
+<code class="docutils literal notranslate"><span class="pre">int</span></code>, <code class="docutils literal notranslate"><span class="pre">float</span></code>, <code class="docutils literal notranslate"><span class="pre">bool</span></code>, or NumPy array becomes a tensor. A number
+given to a field annotated <code class="docutils literal notranslate"><span class="pre">int</span></code>, <code class="docutils literal notranslate"><span class="pre">float</span></code> or <code class="docutils literal notranslate"><span class="pre">bool</span></code> (or an optional
+or union of these) is the exception: with a non-empty batch size it is
+stored as <a class="reference internal" href="reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a>, and with an empty batch size
+it still becomes a 0-d tensor and emits a <a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#FutureWarning" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">FutureWarning</span></code></a>. Starting
+with TensorDict 0.17, the default will change to keeping the Python value
+of fields annotated int/float/bool, as <a class="reference internal" href="reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a>.
+Annotate the field <code class="docutils literal notranslate"><span class="pre">torch.Tensor</span></code> to keep the tensor
+(<a class="reference external" href="https://github.com/pytorch/tensordict/issues/1199">#1199</a>).</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">tensor_only</span></code></dt><dd><p>Each field must have a tensor annotation: a tensor type, a tensor collection
 (<a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> or a tensorclass), or an <code class="docutils literal notranslate"><span class="pre">Optional</span></code> or
@@ -2160,10 +2384,21 @@ frozen class cannot subclass a tensorclass that is not frozen: this raises
 checkers read a subclass without the flag as not frozen and report it, so
 repeat <code class="docutils literal notranslate"><span class="pre">frozen=True</span></code> on the subclass (for mypy, see
 <a class="reference internal" href="#tensorclass-static-typing"><span class="std std-ref">Static type checking</span></a>).</p>
+<p>To change a field of a frozen instance, make a copy with new values.
+<code class="docutils literal notranslate"><span class="pre">s.replace(step=...)</span></code> (see <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.replace.html#tensordict.TensorDictBase.replace" title="tensordict.TensorDictBase.replace"><code class="xref py py-meth docutils literal notranslate"><span class="pre">replace()</span></code></a>)
+writes the new values into a shallow copy. <a class="reference external" href="https://docs.python.org/3/library/copy.html#copy.replace" title="(in Python v3.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">copy.replace()</span></code></a> (Python 3.13
+and later) builds the copy with <code class="docutils literal notranslate"><span class="pre">__init__</span></code>, as for a dataclass, and keeps
+the batch size and names of the instance unless you pass them,
+<code class="docutils literal notranslate"><span class="pre">__init__</span></code> or <code class="docutils literal notranslate"><span class="pre">__post_init__</span></code> sets the batch size, or the new values do
+not fit that batch size (the copy then has the default batch size, <code class="docutils literal notranslate"><span class="pre">[]</span></code>);
+the device is always kept unless you pass it.
+<a class="reference external" href="https://docs.python.org/3/library/dataclasses.html#dataclasses.replace" title="(in Python v3.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">dataclasses.replace()</span></code></a> does not go through <code class="docutils literal notranslate"><span class="pre">__replace__</span></code> on any Python
+version, so its result has the default batch size (<code class="docutils literal notranslate"><span class="pre">[]</span></code>), no device and no
+names: use <code class="docutils literal notranslate"><span class="pre">s.replace(...)</span></code> or <a class="reference external" href="https://docs.python.org/3/library/copy.html#copy.replace" title="(in Python v3.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">copy.replace()</span></code></a> instead.</p>
 </section>
 </section>
 <section id="converting-a-dataclass">
-<h2>Converting a dataclass<a class="headerlink" href="#converting-a-dataclass" title="Link to this heading">#</a></h2>
+<span id="tensorclass-from-dataclass"></span><h2>Converting a dataclass<a class="headerlink" href="#converting-a-dataclass" title="Link to this heading">#</a></h2>
 <p>If you have a <code class="docutils literal notranslate"><span class="pre">&#64;dataclass</span></code>, <a class="reference internal" href="reference/generated/tensordict.from_dataclass.html#tensordict.from_dataclass" title="tensordict.from_dataclass"><code class="xref py py-func docutils literal notranslate"><span class="pre">from_dataclass()</span></code></a> makes a
 tensorclass type or instance from it. You do not change the class definition:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
@@ -2173,11 +2408,13 @@ tensorclass type or instance from it. You do not change the class definition:</p
 <span class="gp">... </span>    <span class="n">a</span><span class="p">:</span> <span class="nb">int</span>
 <span class="gp">... </span>    <span class="n">b</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">XTc</span> <span class="o">=</span> <span class="n">from_dataclass</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">autocast</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>  <span class="c1"># convert the type</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">x_tc</span> <span class="o">=</span> <span class="n">from_dataclass</span><span class="p">(</span><span class="n">X</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(())))</span>  <span class="c1"># convert an instance</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">x_tc</span> <span class="o">=</span> <span class="n">from_dataclass</span><span class="p">(</span><span class="n">X</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(())),</span> <span class="n">autocast</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>  <span class="c1"># convert an instance</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">XTc</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="n">b</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(()))</span><span class="o">.</span><span class="n">a</span>
 <span class="go">1</span>
 </pre></div>
 </div>
+<p>Without <code class="docutils literal notranslate"><span class="pre">autocast</span></code> or <code class="docutils literal notranslate"><span class="pre">nocast</span></code>, <code class="docutils literal notranslate"><span class="pre">from_dataclass(X(a=0,</span> <span class="pre">...))</span></code> casts
+<code class="docutils literal notranslate"><span class="pre">a</span></code> to a 0-d tensor and emits the <code class="docutils literal notranslate"><span class="pre">FutureWarning</span></code> of <code class="docutils literal notranslate"><span class="pre">nocast</span></code> above.</p>
 <p>It accepts the flags of a tensorclass (<code class="docutils literal notranslate"><span class="pre">autocast</span></code>, <code class="docutils literal notranslate"><span class="pre">nocast</span></code>, <code class="docutils literal notranslate"><span class="pre">frozen</span></code>,
 <code class="docutils literal notranslate"><span class="pre">tensor_only</span></code>, <code class="docutils literal notranslate"><span class="pre">shadow</span></code>). When it applies them (not with <code class="docutils literal notranslate"><span class="pre">dest_cls</span></code>,
 and not to a type that is already a tensorclass), <code class="docutils literal notranslate"><span class="pre">autocast</span></code> with
@@ -2284,6 +2521,34 @@ evaluates them in the namespace of the class finds these methods there when
 the class uses the <code class="docutils literal notranslate"><span class="pre">&#64;tensorclass</span></code> decorator, so an <code class="docutils literal notranslate"><span class="pre">int</span></code> annotation names
 the method. A subclass of <a class="reference internal" href="reference/generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorClass</span></code></a> inherits these
 methods instead. With the decorator, write <code class="docutils literal notranslate"><span class="pre">builtins.int</span></code>.</p>
+<p>A field can have a shape annotation from <a class="reference external" href="https://docs.kidger.site/jaxtyping/">jaxtyping</a>, such as
+<code class="docutils literal notranslate"><span class="pre">Float[torch.Tensor,</span> <span class="pre">&quot;*batch</span> <span class="pre">3&quot;]</span></code>. The class accepts it, with every flag, and
+treats it as the array type that it wraps: <code class="docutils literal notranslate"><span class="pre">tensor_only</span></code> accepts it as a
+tensor annotation, and <code class="docutils literal notranslate"><span class="pre">autocast</span></code> casts to <code class="docutils literal notranslate"><span class="pre">torch.Tensor</span></code>. The shapes are
+not checked when the class is built or when a field is set. To check them,
+decorate a function that takes the class with <code class="docutils literal notranslate"><span class="pre">&#64;jaxtyped</span></code>, and check the
+fields with <code class="docutils literal notranslate"><span class="pre">isinstance</span></code> in its body. The checks in one call share their
+dimension names (<code class="docutils literal notranslate"><span class="pre">n</span></code> below) with the annotations of the function:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">beartype</span><span class="w"> </span><span class="kn">import</span> <span class="n">beartype</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">jaxtyping</span><span class="w"> </span><span class="kn">import</span> <span class="n">Float</span><span class="p">,</span> <span class="n">jaxtyped</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Points</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">[</span><span class="s2">"tensor_only"</span><span class="p">]):</span>  
+<span class="gp">... </span>    <span class="n">pos</span><span class="p">:</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">"*batch 3"</span><span class="p">]</span>
+<span class="gp">... </span>    <span class="n">mass</span><span class="p">:</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">"*batch"</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nd">@jaxtyped</span><span class="p">(</span><span class="n">typechecker</span><span class="o">=</span><span class="n">beartype</span><span class="p">)</span>  
+<span class="gp">... </span><span class="k">def</span><span class="w"> </span><span class="nf">center</span><span class="p">(</span><span class="n">points</span><span class="p">:</span> <span class="n">Points</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">"3"</span><span class="p">]:</span>
+<span class="gp">... </span>    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">points</span><span class="o">.</span><span class="n">pos</span><span class="p">,</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">"n 3"</span><span class="p">])</span>
+<span class="gp">... </span>    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">points</span><span class="o">.</span><span class="n">mass</span><span class="p">,</span> <span class="n">Float</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="s2">"n"</span><span class="p">])</span>
+<span class="gp">... </span>    <span class="k">return</span> <span class="p">(</span><span class="n">points</span><span class="o">.</span><span class="n">pos</span> <span class="o">*</span> <span class="n">points</span><span class="o">.</span><span class="n">mass</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">])</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="o">/</span> <span class="n">points</span><span class="o">.</span><span class="n">mass</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">points</span> <span class="o">=</span> <span class="n">Points</span><span class="p">(</span><span class="n">pos</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">mass</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">])</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">center</span><span class="p">(</span><span class="n">points</span><span class="p">)</span><span class="o">.</span><span class="n">shape</span>  
+<span class="go">torch.Size([3])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">wrong</span> <span class="o">=</span> <span class="n">Points</span><span class="p">(</span><span class="n">pos</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">mass</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">])</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">center</span><span class="p">(</span><span class="n">wrong</span><span class="p">)</span>  
+<span class="gt">Traceback (most recent call last):</span>
+<span class="c">...</span>
+<span class="gr">AssertionError</span>
+</pre></div>
+</div>
 </section>
 <section id="legacy-the-tensorclass-decorator">
 <span id="tensorclass-legacy-decorator"></span><h2>Legacy: the <code class="docutils literal notranslate"><span class="pre">&#64;tensorclass</span></code> decorator<a class="headerlink" href="#legacy-the-tensorclass-decorator" title="Link to this heading">#</a></h2>
@@ -2312,10 +2577,14 @@ non-tensor classes.</p></li>
 <li><p><a class="reference internal" href="typed_tensordict.html#typed-tensordict-guide"><span class="std std-ref">TypedTensorDict</span></a>: typed fields on a
 <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictBase</span></code></a> subclass.</p></li>
 <li><p><a class="reference internal" href="choosing_a_container.html#choosing-a-container"><span class="std std-ref">Which container should I use?</span></a>: which container to use.</p></li>
+<li><p><a class="reference internal" href="coming_from_dataclass.html#coming-from-dataclass"><span class="std std-ref">Coming from a hand-written dataclass</span></a>: the methods of a hand-written dataclass of
+tensors, and the tensorclass operations that replace them.</p></li>
+<li><p><a class="reference internal" href="coming_from_jax.html#coming-from-jax"><span class="std std-ref">Coming from JAX pytrees</span></a>: the JAX pytree idioms in tensorclass terms.</p></li>
 <li><p><a class="reference internal" href="compatibility.html#compatibility"><span class="std std-ref">Containers on storage backends</span></a>: tensorclasses on HDF5, Redis, lazy stacks, and
 memory-mapped tensordicts.</p></li>
-<li><p>The tutorials <a class="reference internal" href="tutorials/tensorclass_fashion.html"><span class="doc">Using tensorclasses for datasets</span></a> and
-<a class="reference internal" href="tutorials/tensorclass_imagenet.html"><span class="doc">Batched data loading with tensorclasses</span></a>.</p></li>
+<li><p>The tutorials <a class="reference internal" href="tutorials/tensorclass_fashion.html"><span class="doc">Using tensorclasses for datasets</span></a>,
+<a class="reference internal" href="tutorials/tensorclass_imagenet.html"><span class="doc">Batched data loading with tensorclasses</span></a>, and
+<a class="reference internal" href="tutorials/tensorclass_particles.html"><span class="doc">Simulating particles with a tensorclass</span></a>.</p></li>
 </ul>
 </section>
 </section>
@@ -2440,7 +2709,9 @@ memory-mapped tensordicts.</p></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#quick-start">Quick start</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#methods">Methods</a><ul class="visible nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#methods-and-properties">Methods and properties</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#field-defaults">Field defaults</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#post-init"><code class="docutils literal notranslate"><span class="pre">__post_init__</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#field-options-kw-only-and-initvar">Field options, <code class="docutils literal notranslate"><span class="pre">kw_only</span></code> and <code class="docutils literal notranslate"><span class="pre">InitVar</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#a-custom-init">A custom <code class="docutils literal notranslate"><span class="pre">__init__</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#overriding-setattr-and-getitem">Overriding <code class="docutils literal notranslate"><span class="pre">__setattr__</span></code> and <code class="docutils literal notranslate"><span class="pre">__getitem__</span></code></a></li>
 </ul>
@@ -2715,11 +2986,11 @@ memory-mapped tensordicts.</p></li>
     {
        "@context": "https://schema.org",
        "@type": "Article",
-       "name": "TensorClass",
-       "headline": "TensorClass",
-       "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorClass",
+       "name": "TensorClass: a dataclass of tensors",
+       "headline": "TensorClass: a dataclass of tensors",
+       "description": "TensorClass is a dataclass of tensors for PyTorch. It has to(device), pin_memory, slicing of every field, torch.stack, a collate_fn for the DataLoader, pytree registration and torch.compile support.",
        "url": "/tensorclass.html",
-       "articleBody": "TensorClass# A tensorclass is a class for tensor data. You declare its fields with type annotations, as in a dataclass(), and you write its methods once. A method then runs on one item or on a batch of any shape, and compiles with torch.compile(fullgraph=True). The instances have the tensor operations of a TensorDict: indexing, reshaping, to(device), torch.stack, torch.cat, and saving to disk. \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorClass \u003e\u003e\u003e class Particles(TensorClass): ... pos: torch.Tensor # [*batch, 3] ... vel: torch.Tensor # [*batch, 3] ... mass: torch.Tensor # [*batch] ... ... def step(self, force: torch.Tensor, dt: float) -\u003e \"Particles\": ... vel = self.vel + dt * force / self.mass.unsqueeze(-1) ... return Particles( ... pos=self.pos + dt * vel, vel=vel, mass=self.mass, batch_size=self.batch_size ... ) \u003e\u003e\u003e _ = torch.manual_seed(0) \u003e\u003e\u003e systems = Particles( # 64 systems of 1,000 particles each ... pos=torch.randn(64, 1000, 3), ... vel=torch.zeros(64, 1000, 3), ... mass=torch.ones(64, 1000), ... batch_size=[64, 1000], ... ) \u003e\u003e\u003e systems = systems.step(torch.randn(64, 1000, 3), dt=0.01) # all 64 systems \u003e\u003e\u003e one = systems[0].step(torch.randn(1000, 3), dt=0.01) # one system \u003e\u003e\u003e type(one).__name__, one.batch_size (\u0027Particles\u0027, torch.Size([1000])) \u003e\u003e\u003e grid = systems.reshape(8, 8, 1000).step(torch.randn(8, 8, 1000, 3), dt=0.01) \u003e\u003e\u003e grid.batch_size torch.Size([8, 8, 1000]) \u003e\u003e\u003e step = torch.compile(Particles.step, fullgraph=True) \u003e\u003e\u003e force = torch.randn(64, 1000, 3) \u003e\u003e\u003e torch.allclose(step(systems, force, 0.01).pos, systems.step(force, 0.01).pos) True step has no loop over the systems and no shape argument. The batch size ([64, 1000] here) is the leading dimensions that all the fields share (see Batch size, shapes, and indexing). An index or a reshape applies to these dimensions and returns a Particles. So the same method runs on one system or on a grid of systems. The compiled step gives the same result as the eager step. The class declares its fields, so your editor completes self.pos, and a type checker reads the fields as the signature of the constructor (see Static type checking). Read the quick start and Methods first. Each later section describes one feature: read it when you need that feature. To compare a tensorclass with a TensorDict and the other containers, see Which container should I use?. Quick start# Subclass TensorClass and annotate each field. Then pass the values and the batch size to the constructor: \u003e\u003e\u003e from typing import Optional \u003e\u003e\u003e class Reading(TensorClass): ... signal: torch.Tensor ... count: torch.Tensor ... sensor: str ... backup: Optional[\"Reading\"] = None \u003e\u003e\u003e data = Reading( ... signal=torch.randn(3, 4, 5), ... count=torch.randint(10, (3, 4, 1)), ... sensor=\"lidar\", ... batch_size=[3, 4], # for example, 3 robots and 4 time steps ... ) \u003e\u003e\u003e print(data) Reading( count=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False), sensor=NonTensorData(data=lidar, batch_size=torch.Size([3, 4]), device=None), signal=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False), backup=None, batch_size=torch.Size([3, 4]), device=None, is_shared=False) The backup annotation is a string because the class refers to itself. Another way is from __future__ import annotations at the top of the module. If you do not pass batch_size, it is torch.Size([]), and the tensorclass has no batch dimensions. Read and assign the fields as attributes. A field that is not a tensor (sensor here) returns its plain value: \u003e\u003e\u003e data.sensor \u0027lidar\u0027 \u003e\u003e\u003e data.backup = Reading( ... signal=torch.randn(3, 4, 5), ... count=torch.randint(10, (3, 4, 1)), ... sensor=\"radar\", ... batch_size=[3, 4], ... ) An index applies to the batch dimensions of every field, also in the nested tensorclass. Fields that are not tensors keep their value: \u003e\u003e\u003e sub = data[:2] \u003e\u003e\u003e sub.batch_size torch.Size([2, 4]) \u003e\u003e\u003e sub.backup.signal.shape torch.Size([2, 4, 5]) \u003e\u003e\u003e sub.backup.sensor \u0027radar\u0027 The shape and device operations of TensorDict work on a tensorclass: stack, cat, reshape, to, clone, apply, and the others. They return an instance of the same class: \u003e\u003e\u003e data2 = data.clone() \u003e\u003e\u003e cat_tc = torch.cat([data, data2], 0) \u003e\u003e\u003e type(cat_tc).__name__, cat_tc.batch_size (\u0027Reading\u0027, torch.Size([6, 4])) A tensorclass is not a TensorDictBase and not a Mapping. A string index raises an error, because an index always applies to the batch dimensions. To read a field by name, use get: \u003e\u003e\u003e data[\"count\"] Traceback (most recent call last): ... ValueError: Invalid indexing arguments: \u0027count\u0027. A tensorclass is indexed along its batch dimensions; to read a field, use the attribute or get(\u0027count\u0027). \u003e\u003e\u003e data.get(\"count\").shape torch.Size([3, 4, 1]) Assigning a name that is not a field, as an attribute or with set(), raises AttributeError. set_non_tensor(), setdefault(), create_nested(), rename_key_(), update() with a TensorDict or another tensorclass, and an indexed assignment of a TensorDict (data[idx] = td) still store such a key, and warn with a DeprecationWarning. Starting with TensorDict 0.17, they raise AttributeError too. To test whether an object is a tensordict or a tensorclass, use is_tensor_collection(). to_tensordict() returns a copy of the data as a TensorDict. Methods# A tensorclass is a Python class: you can add methods, properties, class methods, and class constants to it. Of the dataclass features, __post_init__, field defaults, and a custom __init__ work, with the rules below. Methods and properties# Methods and properties can read and assign the fields. A method that calls a tensordict operation, such as apply, returns an instance of the class. A property is not a field: it is not stored and not in keys(). Use typing.ClassVar for a constant of the class. It is not a field either: \u003e\u003e\u003e from typing import ClassVar \u003e\u003e\u003e class Logits(TensorClass): ... logits: torch.Tensor ... temperature: ClassVar[float] = 2.0 ... ... @classmethod ... def uniform(cls, batch, n): ... return cls(logits=torch.zeros(batch, n), batch_size=[batch]) ... ... @property ... def probs(self): ... return (self.logits / self.temperature).softmax(-1) ... ... @probs.setter ... def probs(self, value): ... self.logits = value.log() * self.temperature ... ... def detached(self): ... return self.apply(lambda t: t.detach()) \u003e\u003e\u003e x = Logits.uniform(2, 4) \u003e\u003e\u003e x.probs[0] tensor([0.2500, 0.2500, 0.2500, 0.2500]) \u003e\u003e\u003e x.probs = torch.tensor([0.4, 0.2, 0.2, 0.2]).expand(2, 4) \u003e\u003e\u003e x.probs[0] tensor([0.4000, 0.2000, 0.2000, 0.2000]) \u003e\u003e\u003e list(x.keys()) [\u0027logits\u0027] \u003e\u003e\u003e type(x.detached()).__name__, x[0].probs.shape (\u0027Logits\u0027, torch.Size([4])) __post_init__# As in a dataclass, __post_init__ runs after the generated __init__. Use it to compute a default value, or to make sure that the fields are valid: \u003e\u003e\u003e class Batch(TensorClass): ... obs: torch.Tensor ... mask: torch.Tensor = None ... ... def __post_init__(self): ... if self.mask is None: ... self.mask = torch.ones(self.batch_size, dtype=torch.bool) \u003e\u003e\u003e b = Batch(obs=torch.zeros(3, 2), batch_size=[3]) \u003e\u003e\u003e b.mask tensor([True, True, True]) __post_init__ also runs each time tensordict rebuilds an instance, that is, makes a new instance from the data of an existing one: an index, clone, to, torch.stack, apply, and the other operations that return a tensorclass. It runs as well on the data that from_tensordict, from_dict and a load (load_memmap, load) bring in. Do little work in it, and make sure that a second run gives the same result. In the example above, the second run finds a mask and keeps it. On a lazy stack (lazy_stack(), and the operations that return one), __post_init__ runs on each stacked instance, not on the stack, so it sees fields of the shape of that instance, even when the instances have different shapes. A lazy stack of N instances makes N calls. The fields that it sets go to the stacked instances. torch.stack makes one call, on the stacked result. __post_init__ does not run on the shells that tensordict builds without fields and fills afterwards: the result of empty(), the tensorclass entries of empty(recurse=True), and the output of pad_sequence(). A shell has no field, not even those that __post_init__ would fill. Under torch.compile, __post_init__ still runs on these shells. To validate the data once, when it comes in, set the skip_post_init_on_rebuild flag. __post_init__ then runs in the generated __init__, from_tensordict, from_dict, the other constructors (from_any, from_list, fromkeys, \u2026), and when the data is loaded or received from another process, but not when tensordict rebuilds an instance. Each class follows its own flag: a tensorclass without the flag that holds one with it runs only its own __post_init__ on clone(). Subclasses inherit the flag: \u003e\u003e\u003e class Ragged(TensorClass[\"skip_post_init_on_rebuild\"]): ... offsets: torch.Tensor ... indices: torch.Tensor ... ... def __post_init__(self): ... if int(self.offsets[-1]) != len(self.indices): ... raise ValueError(\"the last offset must be len(indices)\") \u003e\u003e\u003e r = Ragged(offsets=torch.tensor([0, 2, 3]), indices=torch.zeros(3)) \u003e\u003e\u003e r.clone().offsets # no check, and no device synchronization on CUDA tensor([0, 2, 3]) A custom __init__# If the class defines __init__, it replaces the generated one. When it runs, the instance already exists, with the batch_size, device, and names that the caller passed as keyword arguments. Assign the fields as attributes. To set the batch size from the data, assign self.batch_size after the fields: \u003e\u003e\u003e class Points(TensorClass): ... xyz: torch.Tensor ... ... def __init__(self, n: int): ... self.xyz = torch.zeros(n, 3) ... self.batch_size = [n] \u003e\u003e\u003e Points(4).batch_size torch.Size([4]) \u003e\u003e\u003e Points(4)[:2].batch_size torch.Size([2]) These rules apply to a custom __init__: If it does not set a required field, the constructor raises TypeError: Points.__init__() did not set the required field \u0027xyz\u0027. Indexing, clone, torch.stack, and the other operations make new instances without a call to __init__. So __init__ must only fill the fields, and the fields must be enough to rebuild the instance. As in a dataclass, a custom __init__ does not call __post_init__. If you need it, call it yourself. super().__init__(...) with fields works when the parent class is a tensorclass with fields: it runs the generated __init__ of the parent. If the parent is TensorClass itself, a call with fields raises NotImplementedError. Assign the fields instead. Overriding __setattr__ and __getitem__# A __setattr__ or __getitem__ that the class defines replaces the one of the tensorclass. For the cases that you do not handle, call the method of super(). A custom __setattr__ also runs when the constructor sets the fields: \u003e\u003e\u003e class Clamped(TensorClass): ... x: torch.Tensor ... ... def __setattr__(self, key, value): ... if key == \"x\": ... value = value.clamp(0, 1) ... super().__setattr__(key, value) \u003e\u003e\u003e c = Clamped(x=torch.tensor([-1.0, 2.0]), batch_size=[2]) \u003e\u003e\u003e c.x tensor([0., 1.]) Fields that are not tensors# A field can hold a value that is not a tensor, such as a string. The tensorclass stores it in a wrapper. NonTensorData and MetaData# Two wrappers exist, and they differ when you stack instances: NonTensorData is the default. It keeps one value per batch element. Stacking instances gives a NonTensorStack, and attribute access returns a list of the values, even when all the values are equal. MetaData holds one value for the whole batch. Stacking MetaData(\"cfg\") with MetaData(\"cfg\") returns MetaData(\"cfg\"). Stacking items with different values returns a NonTensorStack, as for NonTensorData. Use MetaData for a value that is the same for every element, such as a label or a configuration dict. To use MetaData, assign a MetaData instance to the field: \u003e\u003e\u003e from tensordict import MetaData \u003e\u003e\u003e class Sample(TensorClass): ... x: torch.Tensor ... label: str \u003e\u003e\u003e a = Sample(x=torch.zeros(()), label=\"cfg\") \u003e\u003e\u003e torch.stack([a, a]).label LinkedList([\u0027cfg\u0027, \u0027cfg\u0027]) \u003e\u003e\u003e m = Sample(x=torch.zeros(()), label=MetaData(\"cfg\")) \u003e\u003e\u003e torch.stack([m, m]).label \u0027cfg\u0027 LinkedList is a subclass of list. For the full rules of non-tensor values in tensordicts, see Non-tensor data and unbatched entries. Fields set to None# A field can be None at first and get a value later. The value that you assign decides how the field is stored: a tensor is stored as a tensor, and a string as NonTensorData: \u003e\u003e\u003e from typing import Any \u003e\u003e\u003e class Slots(TensorClass): ... X: Any ... y: Any \u003e\u003e\u003e slots = Slots(X=None, y=None, batch_size=[3, 4]) \u003e\u003e\u003e slots.X = torch.ones(3, 4, 5) \u003e\u003e\u003e slots.y = \"testing\" \u003e\u003e\u003e print(slots) Slots( X=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False), y=NonTensorData(data=testing, batch_size=torch.Size([3, 4]), device=None), batch_size=torch.Size([3, 4]), device=None, is_shared=False) A None field is a key missing from the tensor storage. Setting a field to None, or deleting it with del obj.field, obj.del_(\"field\") or obj.pop(\"field\"), removes its entry, and reading it gives None. to_dict(), repr and state_dict() list it as None. Comparison, item assignment, and concatenation# == and != compare two tensorclasses field by field, also the nested ones. The result is a tensorclass with a boolean tensor for each field. For a field that is not a tensor, the boolean tensor has the batch shape, and it is False where the values differ: \u003e\u003e\u003e print(data == data2) Reading( backup=Reading( count=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False), sensor=Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.bool, is_shared=False), signal=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.bool, is_shared=False), backup=None, batch_size=torch.Size([3, 4]), device=None, is_shared=False), count=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False), sensor=Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.bool, is_shared=False), signal=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.bool, is_shared=False), batch_size=torch.Size([3, 4]), device=None, is_shared=False) \u003e\u003e\u003e data2.sensor = \"camera\" \u003e\u003e\u003e (data == data2).sensor.any() tensor(False) An item assignment writes the values that are not tensors element by element, with no warning when they differ from the rest of the batch. The field then holds one value per element (a NonTensorStack), and attribute access returns a nested list of those values, with one level per batch dimension: \u003e\u003e\u003e data[0] = data2[0] \u003e\u003e\u003e [row[0] for row in data.sensor] [\u0027camera\u0027, \u0027lidar\u0027, \u0027lidar\u0027] torch.cat and torch.stack keep the non-tensor value of each element. If the inputs differ on a non-tensor field, the field of the result is a NonTensorStack, and attribute access returns the nested list of values. torch.stack does this even when all the inputs have the same value. torch.cat of inputs that have one same value keeps that value: \u003e\u003e\u003e cat_tc = torch.cat([data, data2], dim=0) \u003e\u003e\u003e [row[0] for row in cat_tc.sensor] [\u0027camera\u0027, \u0027lidar\u0027, \u0027lidar\u0027, \u0027camera\u0027, \u0027camera\u0027, \u0027camera\u0027] Class options# Flags change how a tensorclass converts and checks the values of its fields. You can set them in three forms, which have the same effect: \u003e\u003e\u003e from tensordict import tensorclass \u003e\u003e\u003e class Foo(TensorClass[\"autocast\"]): # bracket form ... x: int \u003e\u003e\u003e class Foo(TensorClass, autocast=True): # keyword form ... x: int \u003e\u003e\u003e @tensorclass(autocast=True) # decorator form ... class Foo: ... x: int To set more than one flag, list them in the brackets: \u003e\u003e\u003e class Foo(TensorClass[\"nocast\", \"frozen\"]): ... x: int mypy rejects the bracket form. See Static type checking. The flags are: autocastThe constructor and attribute assignment convert each value to the type annotation of its field. See Auto-casting. nocastPython numbers and NumPy arrays stay as they are. Without this flag, an int, float, bool, or NumPy array becomes a tensor. tensor_onlyEach field must have a tensor annotation: a tensor type, a tensor collection (TensorDict or a tensorclass), or an Optional or union of these. Any other annotation raises TypeError when the class is defined. Python numbers and NumPy arrays become tensors. A value that cannot become a tensor, for example a str, is stored as NonTensorData with no error, and attribute access returns the NonTensorData wrapper. Attribute access does not look in the storage for non-tensor values, so it does less work. On one CPU, reading a tensor field took 150 ns with tensor_only and 230 ns without it. benchmarks/tensorclass/test_tensorclass_speed.py measures it. frozenAssigning a field raises dataclasses.FrozenInstanceError, as with @dataclass(frozen=True). See Immutability with frozen. shadowAllows field names that are members of a tensorclass, for example batch_size, device, names, sum, keys, get, or to_dict. Without this flag, such a name raises AttributeError when the class is defined. A field named data or fields is allowed without the flag, and it replaces the member of that name. skip_post_init_on_rebuild__post_init__ runs only on the data that comes in (the generated __init__, from_tensordict, from_dict, the other constructors such as from_any or fromkeys, and loads), not each time tensordict makes a new instance from an existing one, as in clone, to, indexing, or torch.stack. See __post_init__. autocast, nocast, and tensor_only are mutually exclusive. A class with two of them raises TypeError. Auto-casting# Warning Auto-casting is experimental. Its behavior can change in a future release. With autocast, the constructor and attribute assignment convert each value to the annotation of its field: A dict becomes a TensorDict, or the tensorclass of the annotation. A value for an int, float, or str field becomes an int, float, or str. For example, torch.tensor(3) becomes 3. A value for a torch.Tensor field goes through torch.as_tensor(). A value that it cannot convert, for example a str, raises TypeError. In this example, the dict of td becomes a TensorDict, the dict of leaf becomes a Leaf, and the tensor of count becomes an int: \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e class Leaf(TensorClass): ... value: torch.Tensor \u003e\u003e\u003e class Node(TensorClass[\"autocast\"]): ... tensor: torch.Tensor ... td: TensorDict ... count: int ... leaf: Leaf \u003e\u003e\u003e node = Node( ... tensor=torch.zeros(()), ... td={\"a\": torch.zeros(())}, ... count=torch.tensor(3), ... leaf={\"value\": torch.ones(())}, ... ) \u003e\u003e\u003e type(node.td).__name__, type(node.leaf).__name__, node.count (\u0027TensorDict\u0027, \u0027Leaf\u0027, 3) update() and from_dict() also convert a dict into the TensorDict or tensorclass of its field. They do not convert values to int, float, or str. A field annotated with Optional[...], Union[...], or A | B is not auto-cast. A dict that you assign to it stays a dict, because a tensorclass can hold values that are not tensors. The other fields of the class are still auto-cast: \u003e\u003e\u003e class Pair(TensorClass[\"autocast\"]): ... left: Leaf = None ... right: Optional[Leaf] = None \u003e\u003e\u003e pair = Pair(left={\"value\": torch.ones(())}, right={\"value\": torch.ones(())}) \u003e\u003e\u003e type(pair.left).__name__, type(pair.right).__name__ (\u0027Leaf\u0027, \u0027dict\u0027) Auto-casting reads the annotations with typing.get_type_hints(). If one annotation of the class does not resolve, tensordict warns type_hints are none, cannot perform auto-casting and casts no field of the class. An annotation does not resolve when it names a class that is not visible from the module, and the annotation is a string (or the module uses from __future__ import annotations). The usual case is a tensorclass that is defined inside a function, and that another class refers to. Define such classes at module level. Immutability with frozen# With frozen, assigning a field raises dataclasses.FrozenInstanceError, as with @dataclass(frozen=True). The instance is also locked, so you cannot add entries to it (see Keys, nested keys, and locking): \u003e\u003e\u003e class State(TensorClass[\"frozen\"]): ... params: torch.Tensor ... step: torch.Tensor \u003e\u003e\u003e s = State(params=torch.zeros(3), step=torch.zeros((), dtype=torch.long)) \u003e\u003e\u003e s.step = s.step + 1 Traceback (most recent call last): ... dataclasses.FrozenInstanceError: cannot assign to field \u0027step\u0027 The tensors of a frozen instance are not read-only. An in-place operation on a field, or set_(), writes into the existing tensor: \u003e\u003e\u003e _ = s.step.add_(1) \u003e\u003e\u003e s.step tensor(1) A subclass of a frozen tensorclass is frozen, with or without the flag. A frozen class cannot subclass a tensorclass that is not frozen: this raises TypeError: cannot inherit frozen dataclass from a non-frozen one. Type checkers read a subclass without the flag as not frozen and report it, so repeat frozen=True on the subclass (for mypy, see Static type checking). Converting a dataclass# If you have a @dataclass, from_dataclass() makes a tensorclass type or instance from it. You do not change the class definition: \u003e\u003e\u003e from dataclasses import dataclass \u003e\u003e\u003e from tensordict import from_dataclass \u003e\u003e\u003e @dataclass ... class X: ... a: int ... b: torch.Tensor \u003e\u003e\u003e XTc = from_dataclass(X, autocast=True) # convert the type \u003e\u003e\u003e x_tc = from_dataclass(X(a=0, b=torch.zeros(()))) # convert an instance \u003e\u003e\u003e XTc(a=torch.tensor(1), b=torch.zeros(())).a 1 It accepts the flags of a tensorclass (autocast, nocast, frozen, tensor_only, shadow). When it applies them (not with dest_cls, and not to a type that is already a tensorclass), autocast with nocast, or tensor_only with either of them on a type, emits a FutureWarning. Starting with TensorDict 0.17, the default will change to raising the TypeError of the decorator. Saving and loading# The memmap() method saves a tensorclass instance to a directory. Tensors are written as memory-mapped tensors, and non-tensor values that JSON can encode are written as JSON. Other non-tensor values are written with Python pickle (to an other.pickle file, or pickle.pkl for stacked values). load_memmap() loads it. The result has the original class if the loading process can import that class: \u003e\u003e\u003e import tempfile \u003e\u003e\u003e with tempfile.TemporaryDirectory() as path: ... _ = data.memmap(path) ... data_loaded = TensorDict.load_memmap(path) ... assert isinstance(data_loaded, Reading) ... assert (data_loaded == data).all() The class is saved by its module and name. Another program cannot find a class that you defined in __main__ (a script or a notebook) under that name. To load such data, call load_memmap on the class itself, for example Reading.load_memmap(path). load_memmap uses the class that you call it on if its name matches the saved name. If the saved data has pickled non-tensor values and you do not pass allow_pickle, loading emits a FutureWarning in tensordict 0.14 and 0.15. In 0.16, the default becomes allow_pickle=False, which raises an error instead of loading them. Pass allow_pickle=True only for data that you trust. For the other formats, see Save and load tensordicts. Tensorclasses as module inputs and outputs# For a module whose inputs and outputs are tensorclasses, subclass TensorClassModuleBase. Its generic parameters declare the input and output types for type checkers and IDEs. Its as_td_module() method returns a module that you can put in a TensorDictSequential. See Modules: TensorDictModule and tensordict.nn for an example. torch.compile# Tensorclasses work with torch.compile(), torch.func, and torch.export.export(). The Particles example at the top of this page compiles a method with fullgraph=True. torch.compile, torch.func, torch.export, and CUDA graphs lists what makes a function recompile or break its graph, and the workarounds. Two of them concern tensorclasses: A function that returns a string field recompiles for each new string. A compiled function that flattens a pytree recompiles after a new tensorclass is defined. Static type checking# Type checkers read the fields of a TensorClass subclass as its constructor signature, as they do for a @dataclass. The keyword-only batch_size, device, names, and lock arguments follow the fields. A missing field, an unknown keyword argument, or a value of the wrong type is an error: \u003e\u003e\u003e class Obs(TensorClass): ... a: torch.Tensor ... label: str = \"x\" \u003e\u003e\u003e obs = Obs(torch.zeros(3), batch_size=[3]) # accepted \u003e\u003e\u003e obs = Obs(a=[0.0, 1.0, 2.0], batch_size=[3]) # error: a list is not a Tensor The constructor converts a list, a NumPy array, or a Python number that you pass to a torch.Tensor field. A type checker expects a tensor there, so pass torch.as_tensor(value). Tensordict methods such as reshape and an index return the type of the class. The three forms of the class options differ for type checkers: pyright accepts the bracket form (TensorClass[\"autocast\"]) and the keyword form (class Foo(TensorClass, autocast=True)). mypy does not evaluate __class_getitem__() in a list of base classes and rejects the bracket form. In code that mypy reads, use the keyword form. Type checkers do not understand the decorator form. They know the fields of a @tensorclass class, but not its tensordict methods or its batch_size and device arguments. In code that a type checker reads, use a subclass of TensorClass. mypy reports each frozen=True tensorclass as \u201cFrozen dataclass cannot inherit from a non-frozen dataclass\u201d. These statements hold for pyright 1.1.414 and mypy 2.4.0. Runtime type checking# A runtime type checker that decorates a class checks the methods in its namespace. Tensorclass marks the methods that it adds with __no_type_check__, the attribute that typing.no_type_check() sets, so the checkers that honor it, such as beartype and typeguard, check only the methods written in the class body. __init__ is not marked: it keeps the annotations of the fields, or those of a user-defined __init__. Some methods of a tensorclass have the names of builtins, such as bool, int, float, set, and type. With from __future__ import annotations, annotations are strings. A checker that evaluates them in the namespace of the class finds these methods there when the class uses the @tensorclass decorator, so an int annotation names the method. A subclass of TensorClass inherits these methods instead. With the decorator, write builtins.int. Legacy: the @tensorclass decorator# The tensorclass() decorator is the original way to declare a tensorclass. It is kept for backward compatibility, and it is the shortest way to convert a body of @dataclass code. In new code, subclass TensorClass instead: it has the same behavior, and type checkers understand it without a plugin. \u003e\u003e\u003e @tensorclass ... class LegacyReading: ... signal: torch.Tensor ... count: torch.Tensor ... sensor: str ... backup: Optional[\"LegacyReading\"] = None The decorator accepts each flag as a keyword argument: @tensorclass(autocast=True), @tensorclass(frozen=True, tensor_only=True). See also# tensorclass and non-tensor data: the reference of TensorClass, tensorclass(), from_dataclass(), and the non-tensor classes. TypedTensorDict: typed fields on a TensorDictBase subclass. Which container should I use?: which container to use. Containers on storage backends: tensorclasses on HDF5, Redis, lazy stacks, and memory-mapped tensordicts. The tutorials Using tensorclasses for datasets and Batched data loading with tensorclasses.",
+       "articleBody": "TensorClass: a dataclass of tensors# A tensorclass is a dataclass of tensors. You declare its fields with type annotations, as in a dataclass(), and it has the operations that such a class otherwise writes by hand: .to(device), pin_memory(), slicing of every field with batch[idx], torch.stack and torch.cat, and batching by the default collate_fn of a DataLoader (or by collate(), which can also pad). It is registered as a pytree, so torch.utils._pytree, torch.func and torch.compile() accept it. You write its methods once: a method runs on one item or on a batch of any shape, and compiles with torch.compile(fullgraph=True). The instances have the other operations of a TensorDict, such as reshaping and saving to disk. \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorClass \u003e\u003e\u003e class Particles(TensorClass): ... pos: torch.Tensor # [*batch, 3] ... vel: torch.Tensor # [*batch, 3] ... mass: torch.Tensor # [*batch] ... ... def step(self, force: torch.Tensor, dt: float) -\u003e \"Particles\": ... vel = self.vel + dt * force / self.mass.unsqueeze(-1) ... return Particles( ... pos=self.pos + dt * vel, vel=vel, mass=self.mass, batch_size=self.batch_size ... ) \u003e\u003e\u003e _ = torch.manual_seed(0) \u003e\u003e\u003e systems = Particles( # 64 systems of 1,000 particles each ... pos=torch.randn(64, 1000, 3), ... vel=torch.zeros(64, 1000, 3), ... mass=torch.ones(64, 1000), ... batch_size=[64, 1000], ... ) \u003e\u003e\u003e systems = systems.step(torch.randn(64, 1000, 3), dt=0.01) # all 64 systems \u003e\u003e\u003e one = systems[0].step(torch.randn(1000, 3), dt=0.01) # one system \u003e\u003e\u003e type(one).__name__, one.batch_size (\u0027Particles\u0027, torch.Size([1000])) \u003e\u003e\u003e grid = systems.reshape(8, 8, 1000).step(torch.randn(8, 8, 1000, 3), dt=0.01) \u003e\u003e\u003e grid.batch_size torch.Size([8, 8, 1000]) \u003e\u003e\u003e step = torch.compile(Particles.step, fullgraph=True) \u003e\u003e\u003e force = torch.randn(64, 1000, 3) \u003e\u003e\u003e torch.allclose(step(systems, force, 0.01).pos, systems.step(force, 0.01).pos) True step has no loop over the systems and no shape argument. The batch size ([64, 1000] here) is the leading dimensions that all the fields share (see Batch size, shapes, and indexing). An index or a reshape applies to these dimensions and returns a Particles. So the same method runs on one system or on a grid of systems. The compiled step gives the same result as the eager step. The class declares its fields, so your editor completes self.pos, and a type checker reads the fields as the signature of the constructor (see Static type checking). Read the quick start and Methods first. Each later section describes one feature: read it when you need that feature. To compare a tensorclass with a TensorDict and the other containers, see Which container should I use?. If you have a dataclass with a hand-written to, pin_memory, __getitem__ or collate function, Coming from a hand-written dataclass shows what replaces each one. Quick start# Subclass TensorClass and annotate each field. Then pass the values and the batch size to the constructor: \u003e\u003e\u003e from typing import Optional \u003e\u003e\u003e class Reading(TensorClass): ... signal: torch.Tensor ... count: torch.Tensor ... sensor: str ... backup: Optional[\"Reading\"] = None \u003e\u003e\u003e data = Reading( ... signal=torch.randn(3, 4, 5), ... count=torch.randint(10, (3, 4, 1)), ... sensor=\"lidar\", ... batch_size=[3, 4], # for example, 3 robots and 4 time steps ... ) \u003e\u003e\u003e print(data) Reading(batch_size=[3,4], fields={ count: i64[1], sensor: str, signal: f32[5], backup: None}) The backup annotation is a string because the class refers to itself. Another way is from __future__ import annotations at the top of the module. If you do not pass batch_size, it is torch.Size([]), and the tensorclass has no batch dimensions. Read and assign the fields as attributes. A field that is not a tensor (sensor here) returns its plain value: \u003e\u003e\u003e data.sensor \u0027lidar\u0027 \u003e\u003e\u003e data.backup = Reading( ... signal=torch.randn(3, 4, 5), ... count=torch.randint(10, (3, 4, 1)), ... sensor=\"radar\", ... batch_size=[3, 4], ... ) An index applies to the batch dimensions of every field, also in the nested tensorclass. Fields that are not tensors keep their value: \u003e\u003e\u003e sub = data[:2] \u003e\u003e\u003e sub.batch_size torch.Size([2, 4]) \u003e\u003e\u003e sub.backup.signal.shape torch.Size([2, 4, 5]) \u003e\u003e\u003e sub.backup.sensor \u0027radar\u0027 The shape and device operations of TensorDict work on a tensorclass: stack, cat, reshape, to, clone, apply, and the others. They return an instance of the same class: \u003e\u003e\u003e data2 = data.clone() \u003e\u003e\u003e cat_tc = torch.cat([data, data2], 0) \u003e\u003e\u003e type(cat_tc).__name__, cat_tc.batch_size (\u0027Reading\u0027, torch.Size([6, 4])) A tensorclass is not a TensorDictBase and not a Mapping. A string index raises an error, because an index always applies to the batch dimensions. To read a field by name, use get: \u003e\u003e\u003e data[\"count\"] Traceback (most recent call last): ... ValueError: Invalid indexing arguments: \u0027count\u0027. A tensorclass is indexed along its batch dimensions; to read a field, use the attribute or get(\u0027count\u0027). \u003e\u003e\u003e data.get(\"count\").shape torch.Size([3, 4, 1]) Assigning a name that is not a field, as an attribute or with set(), raises AttributeError. set_non_tensor(), setdefault(), create_nested(), rename_key_(), update() with a TensorDict or another tensorclass, and an indexed assignment of a TensorDict (data[idx] = td) still store such a key, and warn with a DeprecationWarning. Starting with TensorDict 0.17, they raise AttributeError too. To test whether an object is a tensordict or a tensorclass, use is_tensor_collection(). to_tensordict() returns a copy of the data as a TensorDict. Methods# A tensorclass is a Python class: you can add methods, properties, class methods, and class constants to it. Of the dataclass features, __post_init__, field defaults, InitVar, field(repr=False), the class option kw_only, and a custom __init__ work, with the rules below. Methods and properties# Methods and properties can read and assign the fields. A method that calls a tensordict operation, such as apply, returns an instance of the class. A property is not a field: it is not stored and not in keys(). Use typing.ClassVar for a constant of the class. It is not a field either: \u003e\u003e\u003e from typing import ClassVar \u003e\u003e\u003e class Logits(TensorClass): ... logits: torch.Tensor ... temperature: ClassVar[float] = 2.0 ... ... @classmethod ... def uniform(cls, batch, n): ... return cls(logits=torch.zeros(batch, n), batch_size=[batch]) ... ... @property ... def probs(self): ... return (self.logits / self.temperature).softmax(-1) ... ... @probs.setter ... def probs(self, value): ... self.logits = value.log() * self.temperature ... ... def detached(self): ... return self.apply(lambda t: t.detach()) \u003e\u003e\u003e x = Logits.uniform(2, 4) \u003e\u003e\u003e x.probs[0] tensor([0.2500, 0.2500, 0.2500, 0.2500]) \u003e\u003e\u003e x.probs = torch.tensor([0.4, 0.2, 0.2, 0.2]).expand(2, 4) \u003e\u003e\u003e x.probs[0] tensor([0.4000, 0.2000, 0.2000, 0.2000]) \u003e\u003e\u003e list(x.keys()) [\u0027logits\u0027] \u003e\u003e\u003e type(x.detached()).__name__, x[0].probs.shape (\u0027Logits\u0027, torch.Size([4])) Field defaults# A field can have a default, as in a dataclass. A tensor default, such as step: torch.Tensor = torch.tensor(0), is one tensor that every instance shares, and the class too: an in-place change on one instance, such as obj.step.add_(1), changes the others and the default. The same holds for a TensorDict or tensorclass default. Python 3.11 and later refuse most of these, as they refuse a list default (a TensorDict, a tensorclass that is not frozen), but accept a frozen tensorclass or a TensorDictParams default; Python 3.10 accepts them all. Creating a class with such a default emits a FutureWarning for each such field. Starting with TensorDict 0.17, the default will change to giving each instance its own copy (a clone) of the default. To get a copy for each instance now, use a default factory: \u003e\u003e\u003e import dataclasses \u003e\u003e\u003e class State(TensorClass): ... step: torch.Tensor = dataclasses.field( ... default_factory=lambda: torch.tensor(0) ... ) \u003e\u003e\u003e a, b = State(), State() \u003e\u003e\u003e a.step.add_(1) tensor(1) \u003e\u003e\u003e b.step tensor(0) __post_init__# As in a dataclass, __post_init__ runs after the generated __init__. Use it to compute a default value, or to make sure that the fields are valid: \u003e\u003e\u003e class Batch(TensorClass): ... obs: torch.Tensor ... mask: torch.Tensor = None ... ... def __post_init__(self): ... if self.mask is None: ... self.mask = torch.ones(self.batch_size, dtype=torch.bool) \u003e\u003e\u003e b = Batch(obs=torch.zeros(3, 2), batch_size=[3]) \u003e\u003e\u003e b.mask tensor([True, True, True]) __post_init__ also runs each time tensordict rebuilds an instance, that is, makes a new instance from the data of an existing one: an index, clone, to, torch.stack, apply, and the other operations that return a tensorclass. It runs as well on the data that from_tensordict, from_dict and a load (load_memmap, load) bring in. Do little work in it, and make sure that a second run gives the same result. In the example above, the second run finds a mask and keeps it. On a lazy stack (lazy_stack(), and the operations that return one), __post_init__ runs on each stacked instance, not on the stack, so it sees fields of the shape of that instance, even when the instances have different shapes. A lazy stack of N instances makes N calls. The fields that it sets go to the stacked instances. torch.stack makes one call, on the stacked result. __post_init__ does not run on the shells that tensordict builds without fields and fills afterwards: the result of empty(), the tensorclass entries of empty(recurse=True), and the output of pad_sequence(). A shell has no field, not even those that __post_init__ would fill. Under torch.compile, __post_init__ still runs on these shells. To validate the data once, when it comes in, set the skip_post_init_on_rebuild flag. __post_init__ then runs in the generated __init__, from_tensordict, from_dict, the other constructors (from_any, from_list, fromkeys, \u2026), and when the data is loaded or received from another process, but not when tensordict rebuilds an instance. Each class follows its own flag: a tensorclass without the flag that holds one with it runs only its own __post_init__ on clone(). Subclasses inherit the flag: \u003e\u003e\u003e class Ragged(TensorClass[\"skip_post_init_on_rebuild\"]): ... offsets: torch.Tensor ... indices: torch.Tensor ... ... def __post_init__(self): ... if int(self.offsets[-1]) != len(self.indices): ... raise ValueError(\"the last offset must be len(indices)\") \u003e\u003e\u003e r = Ragged(offsets=torch.tensor([0, 2, 3]), indices=torch.zeros(3)) \u003e\u003e\u003e r.clone().offsets # no check, and no device synchronization on CUDA tensor([0, 2, 3]) Field options, kw_only and InitVar# A field declared with dataclasses.field() keeps its default, default_factory and metadata, and repr=False leaves it out of the printed instance: the default, the compact and the notebook reprs. The class option kw_only=True (class Config(TensorClass, kw_only=True), or @tensorclass(kw_only=True)) makes the fields of the class keyword-only, as in a dataclass. The fields of a subclass take positional arguments, unless the subclass sets the option too: \u003e\u003e\u003e class Config(TensorClass, kw_only=True): ... weights: torch.Tensor ... note: str = dataclasses.field(default=\"\", repr=False) \u003e\u003e\u003e c = Config(weights=torch.zeros(2), note=\"tuned\", batch_size=[2]) \u003e\u003e\u003e \"note\" in repr(c), c.note (False, \u0027tuned\u0027) \u003e\u003e\u003e Config(torch.zeros(2)) Traceback (most recent call last): ... TypeError: Config.__init__() takes 1 positional arguments but 2 were given The other options are ignored, and the class warns about each when it is defined: init=False and kw_only=True on a field (__init__ still takes the field, by name or in order), and compare=False (== compares the fields elementwise and returns a tensorclass). Positional arguments go to the fields in the order they are declared, as in earlier releases, whereas the signature of __init__, which help() and IDEs show, leaves out the init=False and keyword-only fields, as in a dataclass. A call that the field order makes raise and that the signature allows follows the signature. A call that the signature maps differently emits a FutureWarning: starting with TensorDict 0.17, the default will change to positional arguments that follow the signature. Pass those fields by keyword to get the same result in every release: \u003e\u003e\u003e class Sample(TensorClass): ... label: torch.Tensor = dataclasses.field(default=None, kw_only=True) ... x: torch.Tensor = None \u003e\u003e\u003e Sample(torch.ones(2), label=torch.zeros(2), batch_size=[2]).x tensor([1., 1.]) \u003e\u003e\u003e Sample(torch.ones(2), batch_size=[2]).label # FutureWarning tensor([1., 1.]) \u003e\u003e\u003e Sample(x=torch.ones(2), batch_size=[2]).label is None True A dataclasses.InitVar is an argument of the generated __init__ that is not a field: __init__ passes it to __post_init__, as in a dataclass. The other calls to __post_init__ (rebuilds, from_tensordict, loads) pass the defaults of the InitVars, so give each a default, and set skip_post_init_on_rebuild if __post_init__ must not run again with the defaults: \u003e\u003e\u003e from dataclasses import InitVar \u003e\u003e\u003e class Scaled(TensorClass[\"skip_post_init_on_rebuild\"]): ... x: torch.Tensor ... scale: InitVar[float] = 1.0 ... ... def __post_init__(self, scale): ... self.x = self.x * scale \u003e\u003e\u003e s = Scaled(x=torch.ones(2), scale=3.0, batch_size=[2]) \u003e\u003e\u003e s.x tensor([3., 3.]) \u003e\u003e\u003e s.clone().x # no second call to __post_init__ tensor([3., 3.]) This holds for a class whose __post_init__ cannot be called without its InitVars. If __post_init__ gives them defaults of its own, it gets the InitVars only when they are given, and the other calls pass none. Without __post_init__, the InitVars are taken by name and dropped. In both cases, positional arguments go to the fields in order, as above, and warn where the signature, which takes the InitVars, maps them differently. A class whose __post_init__ does not take its InitVars does not accept them as arguments. A custom __init__# If the class defines __init__, it replaces the generated one. When it runs, the instance already exists, with the batch_size, device, and names that the caller passed as keyword arguments. Assign the fields as attributes. To set the batch size from the data, assign self.batch_size after the fields: \u003e\u003e\u003e class Points(TensorClass): ... xyz: torch.Tensor ... ... def __init__(self, n: int): ... self.xyz = torch.zeros(n, 3) ... self.batch_size = [n] \u003e\u003e\u003e Points(4).batch_size torch.Size([4]) \u003e\u003e\u003e Points(4)[:2].batch_size torch.Size([2]) These rules apply to a custom __init__: If it does not set a required field, the constructor raises TypeError: Points.__init__() did not set the required field \u0027xyz\u0027. Indexing, clone, torch.stack, and the other operations make new instances without a call to __init__. So __init__ must only fill the fields, and the fields must be enough to rebuild the instance. As in a dataclass, a custom __init__ does not call __post_init__. If you need it, call it yourself. super().__init__(...) with fields works when the parent class is a tensorclass with fields: it runs the generated __init__ of the parent. If the parent is TensorClass itself, a call with fields raises NotImplementedError. Assign the fields instead. Overriding __setattr__ and __getitem__# A __setattr__ or __getitem__ that the class defines replaces the one of the tensorclass. For the cases that you do not handle, call the method of super(). A custom __setattr__ also runs when the constructor sets the fields: \u003e\u003e\u003e class Clamped(TensorClass): ... x: torch.Tensor ... ... def __setattr__(self, key, value): ... if key == \"x\": ... value = value.clamp(0, 1) ... super().__setattr__(key, value) \u003e\u003e\u003e c = Clamped(x=torch.tensor([-1.0, 2.0]), batch_size=[2]) \u003e\u003e\u003e c.x tensor([0., 1.]) Fields that are not tensors# A field can hold a value that is not a tensor, such as a string. The tensorclass stores it in a wrapper. NonTensorData and MetaData# Two wrappers exist, and they differ when you stack instances: NonTensorData is the default. It keeps one value per batch element. Stacking instances gives a NonTensorStack, and attribute access returns a list of the values, even when all the values are equal. MetaData holds one value for the whole batch. Stacking MetaData(\"cfg\") with MetaData(\"cfg\") returns MetaData(\"cfg\"). Stacking items with different values returns a NonTensorStack, as for NonTensorData. Use MetaData for a value that is the same for every element, such as a label or a configuration dict. To use MetaData, assign a MetaData instance to the field: \u003e\u003e\u003e from tensordict import MetaData \u003e\u003e\u003e class Sample(TensorClass): ... x: torch.Tensor ... label: str \u003e\u003e\u003e a = Sample(x=torch.zeros(()), label=\"cfg\") \u003e\u003e\u003e torch.stack([a, a]).label LinkedList([\u0027cfg\u0027, \u0027cfg\u0027]) \u003e\u003e\u003e m = Sample(x=torch.zeros(()), label=MetaData(\"cfg\")) \u003e\u003e\u003e torch.stack([m, m]).label \u0027cfg\u0027 LinkedList is a subclass of list. For the full rules of non-tensor values in tensordicts, see Non-tensor data and unbatched entries. Fields set to None# A field can be None at first and get a value later. The value that you assign decides how the field is stored: a tensor is stored as a tensor, and a string as NonTensorData: \u003e\u003e\u003e from typing import Any \u003e\u003e\u003e class Slots(TensorClass): ... X: Any ... y: Any \u003e\u003e\u003e slots = Slots(X=None, y=None, batch_size=[3, 4]) \u003e\u003e\u003e slots.X = torch.ones(3, 4, 5) \u003e\u003e\u003e slots.y = \"testing\" \u003e\u003e\u003e print(slots) Slots(batch_size=[3,4], fields={X: f32[5], y: str}) A None field is a key missing from the tensor storage. Setting a field to None, or deleting it with del obj.field, obj.del_(\"field\") or obj.pop(\"field\"), removes its entry, and reading it gives None. to_dict(), repr and state_dict() list it as None. Comparison, item assignment, and concatenation# == and != compare two tensorclasses field by field, also the nested ones. The result is a tensorclass with a boolean tensor for each field. For a field that is not a tensor, the boolean tensor has the batch shape, and it is False where the values differ: \u003e\u003e\u003e print(data == data2) Reading(batch_size=[3,4], fields={ backup: Reading{ count: bool[1], sensor: bool[], signal: bool[5], backup: None}, count: bool[1], sensor: bool[], signal: bool[5]}) \u003e\u003e\u003e data2.sensor = \"camera\" \u003e\u003e\u003e (data == data2).sensor.any() tensor(False) An item assignment writes the values that are not tensors element by element, with no warning when they differ from the rest of the batch. The field then holds one value per element (a NonTensorStack), and attribute access returns a nested list of those values, with one level per batch dimension: \u003e\u003e\u003e data[0] = data2[0] \u003e\u003e\u003e [row[0] for row in data.sensor] [\u0027camera\u0027, \u0027lidar\u0027, \u0027lidar\u0027] torch.cat and torch.stack keep the non-tensor value of each element. If the inputs differ on a non-tensor field, the field of the result is a NonTensorStack, and attribute access returns the nested list of values. torch.stack does this even when all the inputs have the same value. torch.cat of inputs that have one same value keeps that value: \u003e\u003e\u003e cat_tc = torch.cat([data, data2], dim=0) \u003e\u003e\u003e [row[0] for row in cat_tc.sensor] [\u0027camera\u0027, \u0027lidar\u0027, \u0027lidar\u0027, \u0027camera\u0027, \u0027camera\u0027, \u0027camera\u0027] Class options# Flags change how a tensorclass converts and checks the values of its fields. You can set them in three forms, which have the same effect: \u003e\u003e\u003e from tensordict import tensorclass \u003e\u003e\u003e class Foo(TensorClass[\"autocast\"]): # bracket form ... x: int \u003e\u003e\u003e class Foo(TensorClass, autocast=True): # keyword form ... x: int \u003e\u003e\u003e @tensorclass(autocast=True) # decorator form ... class Foo: ... x: int To set more than one flag, list them in the brackets: \u003e\u003e\u003e class Foo(TensorClass[\"nocast\", \"frozen\"]): ... x: int mypy rejects the bracket form. See Static type checking. The flags are: autocastThe constructor and attribute assignment convert each value to the type annotation of its field. See Auto-casting. nocastPython numbers and NumPy arrays stay as they are. Without this flag, an int, float, bool, or NumPy array becomes a tensor. A number given to a field annotated int, float or bool (or an optional or union of these) is the exception: with a non-empty batch size it is stored as NonTensorData, and with an empty batch size it still becomes a 0-d tensor and emits a FutureWarning. Starting with TensorDict 0.17, the default will change to keeping the Python value of fields annotated int/float/bool, as NonTensorData. Annotate the field torch.Tensor to keep the tensor (#1199). tensor_onlyEach field must have a tensor annotation: a tensor type, a tensor collection (TensorDict or a tensorclass), or an Optional or union of these. Any other annotation raises TypeError when the class is defined. Python numbers and NumPy arrays become tensors. A value that cannot become a tensor, for example a str, is stored as NonTensorData with no error, and attribute access returns the NonTensorData wrapper. Attribute access does not look in the storage for non-tensor values, so it does less work. On one CPU, reading a tensor field took 150 ns with tensor_only and 230 ns without it. benchmarks/tensorclass/test_tensorclass_speed.py measures it. frozenAssigning a field raises dataclasses.FrozenInstanceError, as with @dataclass(frozen=True). See Immutability with frozen. shadowAllows field names that are members of a tensorclass, for example batch_size, device, names, sum, keys, get, or to_dict. Without this flag, such a name raises AttributeError when the class is defined. A field named data or fields is allowed without the flag, and it replaces the member of that name. skip_post_init_on_rebuild__post_init__ runs only on the data that comes in (the generated __init__, from_tensordict, from_dict, the other constructors such as from_any or fromkeys, and loads), not each time tensordict makes a new instance from an existing one, as in clone, to, indexing, or torch.stack. See __post_init__. autocast, nocast, and tensor_only are mutually exclusive. A class with two of them raises TypeError. Auto-casting# Warning Auto-casting is experimental. Its behavior can change in a future release. With autocast, the constructor and attribute assignment convert each value to the annotation of its field: A dict becomes a TensorDict, or the tensorclass of the annotation. A value for an int, float, or str field becomes an int, float, or str. For example, torch.tensor(3) becomes 3. A value for a torch.Tensor field goes through torch.as_tensor(). A value that it cannot convert, for example a str, raises TypeError. In this example, the dict of td becomes a TensorDict, the dict of leaf becomes a Leaf, and the tensor of count becomes an int: \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e class Leaf(TensorClass): ... value: torch.Tensor \u003e\u003e\u003e class Node(TensorClass[\"autocast\"]): ... tensor: torch.Tensor ... td: TensorDict ... count: int ... leaf: Leaf \u003e\u003e\u003e node = Node( ... tensor=torch.zeros(()), ... td={\"a\": torch.zeros(())}, ... count=torch.tensor(3), ... leaf={\"value\": torch.ones(())}, ... ) \u003e\u003e\u003e type(node.td).__name__, type(node.leaf).__name__, node.count (\u0027TensorDict\u0027, \u0027Leaf\u0027, 3) update() and from_dict() also convert a dict into the TensorDict or tensorclass of its field. They do not convert values to int, float, or str. A field annotated with Optional[...], Union[...], or A | B is not auto-cast. A dict that you assign to it stays a dict, because a tensorclass can hold values that are not tensors. The other fields of the class are still auto-cast: \u003e\u003e\u003e class Pair(TensorClass[\"autocast\"]): ... left: Leaf = None ... right: Optional[Leaf] = None \u003e\u003e\u003e pair = Pair(left={\"value\": torch.ones(())}, right={\"value\": torch.ones(())}) \u003e\u003e\u003e type(pair.left).__name__, type(pair.right).__name__ (\u0027Leaf\u0027, \u0027dict\u0027) Auto-casting reads the annotations with typing.get_type_hints(). If one annotation of the class does not resolve, tensordict warns type_hints are none, cannot perform auto-casting and casts no field of the class. An annotation does not resolve when it names a class that is not visible from the module, and the annotation is a string (or the module uses from __future__ import annotations). The usual case is a tensorclass that is defined inside a function, and that another class refers to. Define such classes at module level. Immutability with frozen# With frozen, assigning a field raises dataclasses.FrozenInstanceError, as with @dataclass(frozen=True). The instance is also locked, so you cannot add entries to it (see Keys, nested keys, and locking): \u003e\u003e\u003e class State(TensorClass[\"frozen\"]): ... params: torch.Tensor ... step: torch.Tensor \u003e\u003e\u003e s = State(params=torch.zeros(3), step=torch.zeros((), dtype=torch.long)) \u003e\u003e\u003e s.step = s.step + 1 Traceback (most recent call last): ... dataclasses.FrozenInstanceError: cannot assign to field \u0027step\u0027 The tensors of a frozen instance are not read-only. An in-place operation on a field, or set_(), writes into the existing tensor: \u003e\u003e\u003e _ = s.step.add_(1) \u003e\u003e\u003e s.step tensor(1) A subclass of a frozen tensorclass is frozen, with or without the flag. A frozen class cannot subclass a tensorclass that is not frozen: this raises TypeError: cannot inherit frozen dataclass from a non-frozen one. Type checkers read a subclass without the flag as not frozen and report it, so repeat frozen=True on the subclass (for mypy, see Static type checking). To change a field of a frozen instance, make a copy with new values. s.replace(step=...) (see replace()) writes the new values into a shallow copy. copy.replace() (Python 3.13 and later) builds the copy with __init__, as for a dataclass, and keeps the batch size and names of the instance unless you pass them, __init__ or __post_init__ sets the batch size, or the new values do not fit that batch size (the copy then has the default batch size, []); the device is always kept unless you pass it. dataclasses.replace() does not go through __replace__ on any Python version, so its result has the default batch size ([]), no device and no names: use s.replace(...) or copy.replace() instead. Converting a dataclass# If you have a @dataclass, from_dataclass() makes a tensorclass type or instance from it. You do not change the class definition: \u003e\u003e\u003e from dataclasses import dataclass \u003e\u003e\u003e from tensordict import from_dataclass \u003e\u003e\u003e @dataclass ... class X: ... a: int ... b: torch.Tensor \u003e\u003e\u003e XTc = from_dataclass(X, autocast=True) # convert the type \u003e\u003e\u003e x_tc = from_dataclass(X(a=0, b=torch.zeros(())), autocast=True) # convert an instance \u003e\u003e\u003e XTc(a=torch.tensor(1), b=torch.zeros(())).a 1 Without autocast or nocast, from_dataclass(X(a=0, ...)) casts a to a 0-d tensor and emits the FutureWarning of nocast above. It accepts the flags of a tensorclass (autocast, nocast, frozen, tensor_only, shadow). When it applies them (not with dest_cls, and not to a type that is already a tensorclass), autocast with nocast, or tensor_only with either of them on a type, emits a FutureWarning. Starting with TensorDict 0.17, the default will change to raising the TypeError of the decorator. Saving and loading# The memmap() method saves a tensorclass instance to a directory. Tensors are written as memory-mapped tensors, and non-tensor values that JSON can encode are written as JSON. Other non-tensor values are written with Python pickle (to an other.pickle file, or pickle.pkl for stacked values). load_memmap() loads it. The result has the original class if the loading process can import that class: \u003e\u003e\u003e import tempfile \u003e\u003e\u003e with tempfile.TemporaryDirectory() as path: ... _ = data.memmap(path) ... data_loaded = TensorDict.load_memmap(path) ... assert isinstance(data_loaded, Reading) ... assert (data_loaded == data).all() The class is saved by its module and name. Another program cannot find a class that you defined in __main__ (a script or a notebook) under that name. To load such data, call load_memmap on the class itself, for example Reading.load_memmap(path). load_memmap uses the class that you call it on if its name matches the saved name. If the saved data has pickled non-tensor values and you do not pass allow_pickle, loading emits a FutureWarning in tensordict 0.14 and 0.15. In 0.16, the default becomes allow_pickle=False, which raises an error instead of loading them. Pass allow_pickle=True only for data that you trust. For the other formats, see Save and load tensordicts. Tensorclasses as module inputs and outputs# For a module whose inputs and outputs are tensorclasses, subclass TensorClassModuleBase. Its generic parameters declare the input and output types for type checkers and IDEs. Its as_td_module() method returns a module that you can put in a TensorDictSequential. See Modules: TensorDictModule and tensordict.nn for an example. torch.compile# Tensorclasses work with torch.compile(), torch.func, and torch.export.export(). The Particles example at the top of this page compiles a method with fullgraph=True. torch.compile, torch.func, torch.export, and CUDA graphs lists what makes a function recompile or break its graph, and the workarounds. Two of them concern tensorclasses: A function that returns a string field recompiles for each new string. A compiled function that flattens a pytree recompiles after a new tensorclass is defined. Static type checking# Type checkers read the fields of a TensorClass subclass as its constructor signature, as they do for a @dataclass. The keyword-only batch_size, device, names, and lock arguments follow the fields. A missing field, an unknown keyword argument, or a value of the wrong type is an error: \u003e\u003e\u003e class Obs(TensorClass): ... a: torch.Tensor ... label: str = \"x\" \u003e\u003e\u003e obs = Obs(torch.zeros(3), batch_size=[3]) # accepted \u003e\u003e\u003e obs = Obs(a=[0.0, 1.0, 2.0], batch_size=[3]) # error: a list is not a Tensor The constructor converts a list, a NumPy array, or a Python number that you pass to a torch.Tensor field. A type checker expects a tensor there, so pass torch.as_tensor(value). Tensordict methods such as reshape and an index return the type of the class. The three forms of the class options differ for type checkers: pyright accepts the bracket form (TensorClass[\"autocast\"]) and the keyword form (class Foo(TensorClass, autocast=True)). mypy does not evaluate __class_getitem__() in a list of base classes and rejects the bracket form. In code that mypy reads, use the keyword form. Type checkers do not understand the decorator form. They know the fields of a @tensorclass class, but not its tensordict methods or its batch_size and device arguments. In code that a type checker reads, use a subclass of TensorClass. mypy reports each frozen=True tensorclass as \u201cFrozen dataclass cannot inherit from a non-frozen dataclass\u201d. These statements hold for pyright 1.1.414 and mypy 2.4.0. Runtime type checking# A runtime type checker that decorates a class checks the methods in its namespace. Tensorclass marks the methods that it adds with __no_type_check__, the attribute that typing.no_type_check() sets, so the checkers that honor it, such as beartype and typeguard, check only the methods written in the class body. __init__ is not marked: it keeps the annotations of the fields, or those of a user-defined __init__. Some methods of a tensorclass have the names of builtins, such as bool, int, float, set, and type. With from __future__ import annotations, annotations are strings. A checker that evaluates them in the namespace of the class finds these methods there when the class uses the @tensorclass decorator, so an int annotation names the method. A subclass of TensorClass inherits these methods instead. With the decorator, write builtins.int. A field can have a shape annotation from jaxtyping, such as Float[torch.Tensor, \"*batch 3\"]. The class accepts it, with every flag, and treats it as the array type that it wraps: tensor_only accepts it as a tensor annotation, and autocast casts to torch.Tensor. The shapes are not checked when the class is built or when a field is set. To check them, decorate a function that takes the class with @jaxtyped, and check the fields with isinstance in its body. The checks in one call share their dimension names (n below) with the annotations of the function: \u003e\u003e\u003e from beartype import beartype \u003e\u003e\u003e from jaxtyping import Float, jaxtyped \u003e\u003e\u003e class Points(TensorClass[\"tensor_only\"]): ... pos: Float[torch.Tensor, \"*batch 3\"] ... mass: Float[torch.Tensor, \"*batch\"] \u003e\u003e\u003e @jaxtyped(typechecker=beartype) ... def center(points: Points) -\u003e Float[torch.Tensor, \"3\"]: ... assert isinstance(points.pos, Float[torch.Tensor, \"n 3\"]) ... assert isinstance(points.mass, Float[torch.Tensor, \"n\"]) ... return (points.pos * points.mass[:, None]).sum(0) / points.mass.sum() \u003e\u003e\u003e points = Points(pos=torch.zeros(4, 3), mass=torch.ones(4), batch_size=[4]) \u003e\u003e\u003e center(points).shape torch.Size([3]) \u003e\u003e\u003e wrong = Points(pos=torch.zeros(4, 2), mass=torch.ones(4), batch_size=[4]) \u003e\u003e\u003e center(wrong) Traceback (most recent call last): ... AssertionError Legacy: the @tensorclass decorator# The tensorclass() decorator is the original way to declare a tensorclass. It is kept for backward compatibility, and it is the shortest way to convert a body of @dataclass code. In new code, subclass TensorClass instead: it has the same behavior, and type checkers understand it without a plugin. \u003e\u003e\u003e @tensorclass ... class LegacyReading: ... signal: torch.Tensor ... count: torch.Tensor ... sensor: str ... backup: Optional[\"LegacyReading\"] = None The decorator accepts each flag as a keyword argument: @tensorclass(autocast=True), @tensorclass(frozen=True, tensor_only=True). See also# tensorclass and non-tensor data: the reference of TensorClass, tensorclass(), from_dataclass(), and the non-tensor classes. TypedTensorDict: typed fields on a TensorDictBase subclass. Which container should I use?: which container to use. Coming from a hand-written dataclass: the methods of a hand-written dataclass of tensors, and the tensorclass operations that replace them. Coming from JAX pytrees: the JAX pytree idioms in tensorclass terms. Containers on storage backends: tensorclasses on HDF5, Redis, lazy stacks, and memory-mapped tensordicts. The tutorials Using tensorclasses for datasets, Batched data loading with tensorclasses, and Simulating particles with a tensorclass.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

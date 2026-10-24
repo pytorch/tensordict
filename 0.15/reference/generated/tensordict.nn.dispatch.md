@@ -11,8 +11,8 @@ named `tensordict`. When you call it with tensors, the wrapper puts them
 in a new tensordict at the keys of `source`, calls the function, and
 returns the entries at the keys of `dest`: one tensor if there is one
 key, else a tuple in the order of the keys. An output key `"_"` is
-skipped. When you call it with a tensordict as first argument, the
-wrapper passes it on unchanged.
+skipped. When you call it with a tensordict as first argument, or as the
+keyword argument `tensordict`, the wrapper passes it on unchanged.
 
 Tensors are matched to the input keys in two ways:
 
@@ -49,7 +49,9 @@ Raises:
 Note
 
 An input key cannot hold a tensordict passed as the first positional
-argument: that tensordict is taken as the input.
+argument: that tensordict is taken as the input. The keyword
+argument `tensordict` is taken as the input too, unless an input key
+is named `"tensordict"`.
 
 Note
 

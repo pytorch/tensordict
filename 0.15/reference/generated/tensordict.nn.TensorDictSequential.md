@@ -74,21 +74,14 @@ Examples
 ... )
 >>> # with tensordict input
 >>> print(module(TensorDict({"x": torch.zeros(3)}, [])))
-TensorDict(
- fields={
- w*(x+1)+b: Tensor(shape=torch.Size([4]), device=cpu, dtype=torch.float32, is_shared=False),
- x+1: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- x: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[], fields={w*(x+1)+b: f32[4], x+1: f32[3], x: f32[3]})
 >>> module.in_keys, module.out_keys
 (['x'], ['x+1', 'w*(x+1)+b'])
 >>> # with tensor input: returns all the output keys in the order of the modules, ie "x+1" and "w*(x+1)+b"
->>> module(x=torch.zeros(3))
-(tensor([1., 1., 1.]), tensor([-0.7214, -0.8748, 0.1571, -0.1138], grad_fn=<ViewBackward0>))
->>> module(torch.zeros(3))
-(tensor([1., 1., 1.]), tensor([-0.7214, -0.8748, 0.1571, -0.1138], grad_fn=<ViewBackward0>))
+>>> module(x=torch.zeros(3)) 
+(tensor([1., 1., 1.]), tensor([-0.7214, -0.8748, 0.1571, -0.1138], grad_fn=<...>))
+>>> module(torch.zeros(3)) 
+(tensor([1., 1., 1.]), tensor([-0.7214, -0.8748, 0.1571, -0.1138], grad_fn=<...>))
 ```
 
 A sequence can hold probabilistic modules, and be called with other
@@ -179,12 +172,7 @@ into it.
 ... ),
 ... inplace=True, )
 >>> print(model(obj))
-MyClass(
- input=Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- output=Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- batch_size=torch.Size([2]),
- device=None,
- is_shared=False)
+MyClass(batch_size=[2], fields={input: f32[3], output: f32[3]})
 ```
 
 *property*device*: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*

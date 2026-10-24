@@ -48,25 +48,9 @@ print(params)
 ```
 
 ```
-TensorDict(
- fields={
- 0: TensorDict(
- fields={
- bias: Parameter(shape=torch.Size([4]), device=cpu, dtype=torch.float32, is_shared=False),
- weight: Parameter(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False),
- 2: TensorDict(
- fields={
- bias: Parameter(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
- weight: Parameter(shape=torch.Size([1, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[], fields={
+ 0: {bias: f32[4], weight: f32[4,3]},
+ 2: {bias: f32[1], weight: f32[1,4]}})
 ```
 
 The [`TensorDict`](../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict) holds the same
@@ -242,7 +226,7 @@ the other modules of `tensordict.nn`.
 from [`TensorDictModule`](../reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule).
 - [tensordict.nn](../reference/nn.html#api-nn) lists all the classes of `tensordict.nn`.
 
-**Total running time of the script:** (0 minutes 0.010 seconds)
+**Total running time of the script:** (0 minutes 0.008 seconds)
 
 [`Download Jupyter notebook: functional.ipynb`](../_downloads/105b30183ad4a9afd272c38cb842a9b7/functional.ipynb)
 

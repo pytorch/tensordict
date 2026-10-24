@@ -1,6 +1,6 @@
 # TensorDictBase.memmap
 
-TensorDictBase.memmap_(*prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *copy_existing: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *num_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *return_early: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *share_non_tensor: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *existsok: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *robust_key: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = True*) → Self
+TensorDictBase.memmap_(*prefix: [str](https://docs.python.org/3/builtins/stdtypes.html#str) | [Path](https://docs.python.org/3/library/pathlib.html#pathlib.Path) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *copy_existing: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, ***, *num_threads: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *return_early: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *share_non_tensor: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*, *existsok: [bool](https://docs.python.org/3/builtins/functions.html#bool) = True*, *robust_key: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [None](https://docs.python.org/3/builtins/constants.html#None) = True*, *atomic: [bool](https://docs.python.org/3/builtins/functions.html#bool) = False*) → Self
 
 Writes every leaf to a memory-mapped file in place, and returns `self`.
 
@@ -50,6 +50,26 @@ in file and directory names (`"a/b"` is written to
 If `False`, keys are used as file names unchanged, as in the
 legacy layout: do not use it with keys you do not trust.
 `None` is the same as `True`. Defaults to `True`.
+- **atomic** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the files are written to a
+new directory next to `prefix`, which is then renamed to
+`prefix`, so that an error or a crash during the write
+leaves `prefix` as it was. The new directory is removed if
+the write fails (but not after a crash). An existing directory
+at `prefix` is replaced as a whole once the new one is
+complete, so files that the tensordict does not write are
+removed: it must be empty or hold a saved tensordict (a
+`meta.json` file). Readers see the old or the new directory,
+except for the short time between two renames, during which
+`prefix` is missing. The write needs about twice the disk
+space of the tensordict while it runs, and a leaf that is
+already memory-mapped to a file is copied, which needs
+`copy_existing=True`. The files are not synced to the disk,
+so this guards against a killed process, not against a power
+failure. If the write fails, the leaves already converted map
+deleted files, so a retry needs `copy_existing=True`. Not
+supported with `return_early=True`, nor on Windows, where a
+directory that holds open files cannot be renamed. Defaults
+to `False`.
 
 Returns:
 
@@ -58,7 +78,7 @@ Returns:
 
 Raises:
 
-[**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if a leaf already has a file elsewhere and
+- [**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if a leaf already has a file elsewhere and
  `copy_existing=False`, if a file exists and
  `existsok=False`, if the tensordict is in shared memory
  (see [`share_memory_()`](tensordict.TensorDictBase.share_memory_.html#tensordict.TensorDictBase.share_memory_)), or if it is a
@@ -66,7 +86,14 @@ Raises:
  [`TensorDictStore`](tensordict.store.TensorDictStore.html#tensordict.store.TensorDictStore), a
  [`LazyStackedTensorDictStore`](tensordict.store.LazyStackedTensorDictStore.html#tensordict.store.LazyStackedTensorDictStore) or one of
  their elements. Use [`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap) to make a memory-mapped
- copy of those.
+ copy of those. With `atomic=True`, also if `prefix` is a
+ non-empty directory and `existsok=False`, or if it holds no
+ saved tensordict.
+- [**NotADirectoryError**](https://docs.python.org/3/builtins/exceptions.html#NotADirectoryError) - if `atomic=True` and `prefix` is a file.
+- [**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if `atomic=True` and there is no directory to write
+ to.
+- [**NotImplementedError**](https://docs.python.org/3/builtins/exceptions.html#NotImplementedError) - if `return_early=True` with
+ `atomic=True`, or `atomic=True` on Windows.
 
 Examples
 

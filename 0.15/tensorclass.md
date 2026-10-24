@@ -1,11 +1,17 @@
-# TensorClass
+# TensorClass: a dataclass of tensors
 
-A *tensorclass* is a class for tensor data. You declare its fields with type
-annotations, as in a [`dataclass()`](https://docs.python.org/3/library/dataclasses.html#dataclasses.dataclass), and you write its methods
-once. A method then runs on one item or on a batch of any shape, and compiles
-with `torch.compile(fullgraph=True)`. The instances have the tensor
-operations of a [`TensorDict`](reference/generated/tensordict.TensorDict.html#tensordict.TensorDict): indexing, reshaping,
-`to(device)`, `torch.stack`, `torch.cat`, and saving to disk.
+A *tensorclass* is a dataclass of tensors. You declare its fields with type
+annotations, as in a [`dataclass()`](https://docs.python.org/3/library/dataclasses.html#dataclasses.dataclass), and it has the
+operations that such a class otherwise writes by hand: `.to(device)`,
+`pin_memory()`, slicing of every field with `batch[idx]`,
+`torch.stack` and `torch.cat`, and batching by the default
+`collate_fn` of a [`DataLoader`](https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader) (or by
+[`collate()`](reference/generated/tensordict.collate.html#tensordict.collate), which can also pad). It is
+registered as a pytree, so `torch.utils._pytree`, [`torch.func`](https://docs.pytorch.org/docs/stable/func.api.html#module-torch.func) and
+[`torch.compile()`](https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile) accept it. You write its methods once: a method runs
+on one item or on a batch of any shape, and compiles with
+`torch.compile(fullgraph=True)`. The instances have the other operations of
+a [`TensorDict`](reference/generated/tensordict.TensorDict.html#tensordict.TensorDict), such as reshaping and saving to disk.
 
 ```
 >>> import torch
@@ -52,7 +58,9 @@ constructor (see Static type checking).
 Read the quick start and Methods first. Each later section
 describes one feature: read it when you need that feature. To compare a
 tensorclass with a `TensorDict` and the other containers, see
-[Which container should I use?](choosing_a_container.html#choosing-a-container).
+[Which container should I use?](choosing_a_container.html#choosing-a-container). If you have a dataclass with a hand-written
+`to`, `pin_memory`, `__getitem__` or collate function,
+[Coming from a hand-written dataclass](coming_from_dataclass.html#coming-from-dataclass) shows what replaces each one.
 
 ## Quick start
 
@@ -73,14 +81,11 @@ the values and the batch size to the constructor:
 ... batch_size=[3, 4], # for example, 3 robots and 4 time steps
 ... )
 >>> print(data)
-Reading(
- count=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.int64, is_shared=False),
- sensor=NonTensorData(data=lidar, batch_size=torch.Size([3, 4]), device=None),
- signal=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
- backup=None,
- batch_size=torch.Size([3, 4]),
- device=None,
- is_shared=False)
+Reading(batch_size=[3,4], fields={
+ count: i64[1],
+ sensor: str,
+ signal: f32[5],
+ backup: None})
 ```
 
 The `backup` annotation is a string because the class refers to itself.
@@ -156,8 +161,9 @@ of the data as a [`TensorDict`](reference/generated/tensordict.TensorDict.html#t
 
 A tensorclass is a Python class: you can add methods, properties, class
 methods, and class constants to it. Of the dataclass features,
-`__post_init__`, field defaults, and a custom `__init__` work, with the
-rules below.
+`__post_init__`, field defaults, `InitVar`, `field(repr=False)`, the
+class option `kw_only`, and a custom `__init__` work, with the rules
+below.
 
 ### Methods and properties
 
@@ -197,6 +203,34 @@ tensor([0.4000, 0.2000, 0.2000, 0.2000])
 ['logits']
 >>> type(x.detached()).__name__, x[0].probs.shape
 ('Logits', torch.Size([4]))
+```
+
+### Field defaults
+
+A field can have a default, as in a dataclass. A tensor default, such as
+`step: torch.Tensor = torch.tensor(0)`, is one tensor that every instance
+shares, and the class too: an in-place change on one instance, such as
+`obj.step.add_(1)`, changes the others and the default. The same holds for
+a `TensorDict` or tensorclass default. Python 3.11 and later refuse most of
+these, as they refuse a `list` default (a `TensorDict`, a tensorclass that
+is not frozen), but accept a frozen tensorclass or a `TensorDictParams`
+default; Python 3.10 accepts them all. Creating a class
+with such a default emits a `FutureWarning` for each such field. Starting
+with TensorDict 0.17, the default will change to giving each instance its own
+copy (a clone) of the default. To get a copy for each instance now, use a
+default factory:
+
+```
+>>> import dataclasses
+>>> class State(TensorClass):
+... step: torch.Tensor = dataclasses.field(
+... default_factory=lambda: torch.tensor(0)
+... )
+>>> a, b = State(), State()
+>>> a.step.add_(1)
+tensor(1)
+>>> b.step
+tensor(0)
 ```
 
 ### `__post_init__`
@@ -260,6 +294,86 @@ its own `__post_init__` on `clone()`. Subclasses inherit the flag:
 >>> r.clone().offsets # no check, and no device synchronization on CUDA
 tensor([0, 2, 3])
 ```
+
+### Field options, `kw_only` and `InitVar`
+
+A field declared with [`dataclasses.field()`](https://docs.python.org/3/library/dataclasses.html#dataclasses.field) keeps its `default`,
+`default_factory` and `metadata`, and `repr=False` leaves it out of the
+printed instance: the default, the compact and the notebook reprs. The class
+option `kw_only=True` (`class Config(TensorClass, kw_only=True)`, or
+`@tensorclass(kw_only=True)`) makes the fields of the class keyword-only, as
+in a dataclass. The fields of a subclass take positional arguments, unless
+the subclass sets the option too:
+
+```
+>>> class Config(TensorClass, kw_only=True):
+... weights: torch.Tensor
+... note: str = dataclasses.field(default="", repr=False)
+>>> c = Config(weights=torch.zeros(2), note="tuned", batch_size=[2])
+>>> "note" in repr(c), c.note
+(False, 'tuned')
+>>> Config(torch.zeros(2))
+Traceback (most recent call last):
+ ...
+TypeError: Config.__init__() takes 1 positional arguments but 2 were given
+```
+
+The other options are ignored, and the class warns about each when it is
+defined: `init=False` and `kw_only=True` on a field (`__init__` still
+takes the field, by name or in order), and `compare=False` (`==` compares
+the fields elementwise and returns a tensorclass).
+
+Positional arguments go to the fields in the order they are declared, as in
+earlier releases, whereas the signature of `__init__`, which [`help()`](https://docs.python.org/3/builtins/functions.html#help)
+and IDEs show, leaves out the `init=False` and keyword-only fields, as in a
+dataclass. A call that the field order makes raise and that the signature
+allows follows the signature. A call that the signature maps differently
+emits a `FutureWarning`: starting with TensorDict 0.17, the default will
+change to positional arguments that follow the signature. Pass those fields by
+keyword to get the same result in every release:
+
+```
+>>> class Sample(TensorClass):
+... label: torch.Tensor = dataclasses.field(default=None, kw_only=True)
+... x: torch.Tensor = None
+>>> Sample(torch.ones(2), label=torch.zeros(2), batch_size=[2]).x
+tensor([1., 1.])
+>>> Sample(torch.ones(2), batch_size=[2]).label # FutureWarning
+tensor([1., 1.])
+>>> Sample(x=torch.ones(2), batch_size=[2]).label is None
+True
+```
+
+A [`dataclasses.InitVar`](https://docs.python.org/3/library/dataclasses.html#dataclasses.InitVar) is an argument of the generated `__init__`
+that is not a field: `__init__` passes it to `__post_init__`, as in a
+dataclass. The other calls to `__post_init__` (rebuilds,
+`from_tensordict`, loads) pass the defaults of the InitVars, so give each a
+default, and set `skip_post_init_on_rebuild` if `__post_init__` must not
+run again with the defaults:
+
+```
+>>> from dataclasses import InitVar
+>>> class Scaled(TensorClass["skip_post_init_on_rebuild"]):
+... x: torch.Tensor
+... scale: InitVar[float] = 1.0
+...
+... def __post_init__(self, scale):
+... self.x = self.x * scale
+>>> s = Scaled(x=torch.ones(2), scale=3.0, batch_size=[2])
+>>> s.x
+tensor([3., 3.])
+>>> s.clone().x # no second call to __post_init__
+tensor([3., 3.])
+```
+
+This holds for a class whose `__post_init__` cannot be called without its
+InitVars. If `__post_init__` gives them defaults of its own, it gets the
+InitVars only when they are given, and the other calls pass none. Without
+`__post_init__`, the InitVars are taken by name and dropped. In both
+cases, positional arguments go to the fields in order, as above, and warn
+where the signature, which takes the InitVars, maps them differently. A class
+whose `__post_init__` does not take its InitVars does not accept them as
+arguments.
 
 ### A custom `__init__`
 
@@ -368,12 +482,7 @@ string as `NonTensorData`:
 >>> slots.X = torch.ones(3, 4, 5)
 >>> slots.y = "testing"
 >>> print(slots)
-Slots(
- X=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.float32, is_shared=False),
- y=NonTensorData(data=testing, batch_size=torch.Size([3, 4]), device=None),
- batch_size=torch.Size([3, 4]),
- device=None,
- is_shared=False)
+Slots(batch_size=[3,4], fields={X: f32[5], y: str})
 ```
 
 A `None` field is a key missing from the tensor storage. Setting a field to
@@ -390,21 +499,15 @@ field that is not a tensor, the boolean tensor has the batch shape, and it is
 
 ```
 >>> print(data == data2)
-Reading(
- backup=Reading(
- count=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- sensor=Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.bool, is_shared=False),
- signal=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.bool, is_shared=False),
- backup=None,
- batch_size=torch.Size([3, 4]),
- device=None,
- is_shared=False),
- count=Tensor(shape=torch.Size([3, 4, 1]), device=cpu, dtype=torch.bool, is_shared=False),
- sensor=Tensor(shape=torch.Size([3, 4]), device=cpu, dtype=torch.bool, is_shared=False),
- signal=Tensor(shape=torch.Size([3, 4, 5]), device=cpu, dtype=torch.bool, is_shared=False),
- batch_size=torch.Size([3, 4]),
- device=None,
- is_shared=False)
+Reading(batch_size=[3,4], fields={
+ backup: Reading{
+ count: bool[1],
+ sensor: bool[],
+ signal: bool[5],
+ backup: None},
+ count: bool[1],
+ sensor: bool[],
+ signal: bool[5]})
 >>> data2.sensor = "camera"
 >>> (data == data2).sensor.any()
 tensor(False)
@@ -469,7 +572,15 @@ annotation of its field. See Auto-casting.
 `nocast`
 
 Python numbers and NumPy arrays stay as they are. Without this flag, an
-`int`, `float`, `bool`, or NumPy array becomes a tensor.
+`int`, `float`, `bool`, or NumPy array becomes a tensor. A number
+given to a field annotated `int`, `float` or `bool` (or an optional
+or union of these) is the exception: with a non-empty batch size it is
+stored as [`NonTensorData`](reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData), and with an empty batch size
+it still becomes a 0-d tensor and emits a [`FutureWarning`](https://docs.python.org/3/builtins/exceptions.html#FutureWarning). Starting
+with TensorDict 0.17, the default will change to keeping the Python value
+of fields annotated int/float/bool, as [`NonTensorData`](reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData).
+Annotate the field `torch.Tensor` to keep the tensor
+([#1199](https://github.com/pytorch/tensordict/issues/1199)).
 
 `tensor_only`
 
@@ -608,6 +719,18 @@ checkers read a subclass without the flag as not frozen and report it, so
 repeat `frozen=True` on the subclass (for mypy, see
 Static type checking).
 
+To change a field of a frozen instance, make a copy with new values.
+`s.replace(step=...)` (see [`replace()`](reference/generated/tensordict.TensorDictBase.replace.html#tensordict.TensorDictBase.replace))
+writes the new values into a shallow copy. [`copy.replace()`](https://docs.python.org/3/library/copy.html#copy.replace) (Python 3.13
+and later) builds the copy with `__init__`, as for a dataclass, and keeps
+the batch size and names of the instance unless you pass them,
+`__init__` or `__post_init__` sets the batch size, or the new values do
+not fit that batch size (the copy then has the default batch size, `[]`);
+the device is always kept unless you pass it.
+[`dataclasses.replace()`](https://docs.python.org/3/library/dataclasses.html#dataclasses.replace) does not go through `__replace__` on any Python
+version, so its result has the default batch size (`[]`), no device and no
+names: use `s.replace(...)` or [`copy.replace()`](https://docs.python.org/3/library/copy.html#copy.replace) instead.
+
 ## Converting a dataclass
 
 If you have a `@dataclass`, [`from_dataclass()`](reference/generated/tensordict.from_dataclass.html#tensordict.from_dataclass) makes a
@@ -621,10 +744,13 @@ tensorclass type or instance from it. You do not change the class definition:
 ... a: int
 ... b: torch.Tensor
 >>> XTc = from_dataclass(X, autocast=True) # convert the type
->>> x_tc = from_dataclass(X(a=0, b=torch.zeros(()))) # convert an instance
+>>> x_tc = from_dataclass(X(a=0, b=torch.zeros(())), autocast=True) # convert an instance
 >>> XTc(a=torch.tensor(1), b=torch.zeros(())).a
 1
 ```
+
+Without `autocast` or `nocast`, `from_dataclass(X(a=0, ...))` casts
+`a` to a 0-d tensor and emits the `FutureWarning` of `nocast` above.
 
 It accepts the flags of a tensorclass (`autocast`, `nocast`, `frozen`,
 `tensor_only`, `shadow`). When it applies them (not with `dest_cls`,
@@ -740,6 +866,36 @@ the class uses the `@tensorclass` decorator, so an `int` annotation names
 the method. A subclass of [`TensorClass`](reference/generated/tensordict.TensorClass.html#tensordict.TensorClass) inherits these
 methods instead. With the decorator, write `builtins.int`.
 
+A field can have a shape annotation from [jaxtyping](https://docs.kidger.site/jaxtyping/), such as
+`Float[torch.Tensor, "*batch 3"]`. The class accepts it, with every flag, and
+treats it as the array type that it wraps: `tensor_only` accepts it as a
+tensor annotation, and `autocast` casts to `torch.Tensor`. The shapes are
+not checked when the class is built or when a field is set. To check them,
+decorate a function that takes the class with `@jaxtyped`, and check the
+fields with `isinstance` in its body. The checks in one call share their
+dimension names (`n` below) with the annotations of the function:
+
+```
+>>> from beartype import beartype 
+>>> from jaxtyping import Float, jaxtyped 
+>>> class Points(TensorClass["tensor_only"]): 
+... pos: Float[torch.Tensor, "*batch 3"]
+... mass: Float[torch.Tensor, "*batch"]
+>>> @jaxtyped(typechecker=beartype) 
+... def center(points: Points) -> Float[torch.Tensor, "3"]:
+... assert isinstance(points.pos, Float[torch.Tensor, "n 3"])
+... assert isinstance(points.mass, Float[torch.Tensor, "n"])
+... return (points.pos * points.mass[:, None]).sum(0) / points.mass.sum()
+>>> points = Points(pos=torch.zeros(4, 3), mass=torch.ones(4), batch_size=[4]) 
+>>> center(points).shape 
+torch.Size([3])
+>>> wrong = Points(pos=torch.zeros(4, 2), mass=torch.ones(4), batch_size=[4]) 
+>>> center(wrong) 
+Traceback (most recent call last):
+...
+AssertionError
+```
+
 ## Legacy: the `@tensorclass` decorator
 
 The [`tensorclass()`](reference/generated/tensordict.tensorclass.html#tensordict.tensorclass) decorator is the original way to declare a
@@ -768,7 +924,11 @@ non-tensor classes.
 - [TypedTensorDict](typed_tensordict.html#typed-tensordict-guide): typed fields on a
 [`TensorDictBase`](reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase) subclass.
 - [Which container should I use?](choosing_a_container.html#choosing-a-container): which container to use.
+- [Coming from a hand-written dataclass](coming_from_dataclass.html#coming-from-dataclass): the methods of a hand-written dataclass of
+tensors, and the tensorclass operations that replace them.
+- [Coming from JAX pytrees](coming_from_jax.html#coming-from-jax): the JAX pytree idioms in tensorclass terms.
 - [Containers on storage backends](compatibility.html#compatibility): tensorclasses on HDF5, Redis, lazy stacks, and
 memory-mapped tensordicts.
-- The tutorials [Using tensorclasses for datasets](tutorials/tensorclass_fashion.html) and
-[Batched data loading with tensorclasses](tutorials/tensorclass_imagenet.html).
+- The tutorials [Using tensorclasses for datasets](tutorials/tensorclass_fashion.html),
+[Batched data loading with tensorclasses](tutorials/tensorclass_imagenet.html), and
+[Simulating particles with a tensorclass](tutorials/tensorclass_particles.html).

@@ -40,7 +40,7 @@ What you will learn:
 - How to pre-allocate a zarr buffer with
   :meth:`~tensordict.TensorDictBase.from_schema`.
 
-The zarr backend needs ``zarr>=3.0``. To install it, run
+The zarr backend needs ``zarr>=3.1.1``. To install it, run
 ``pip install "tensordict[zarr]"``.
 
 .. GENERATED FROM PYTHON SOURCE LINES 29-37
@@ -102,26 +102,14 @@ from it, as :meth:`~tensordict.TensorDictBase.to_h5` does for HDF5.
 
 
 
-.. rst-class:: sphx-glr-script-out
 
- .. code-block:: none
+.. raw:: html
 
-
-    PersistentTensorDict(
-        fields={
-            images: Tensor(shape=torch.Size([128, 3, 32, 32]), device=cpu, dtype=torch.float32, is_shared=False),
-            labels: Tensor(shape=torch.Size([128]), device=cpu, dtype=torch.int64, is_shared=False),
-            meta: PersistentTensorDict(
-                fields={
-                    description: NonTensorData(data=a small dataset, batch_size=torch.Size([128]), device=cpu)},
-                batch_size=torch.Size([128]),
-                device=None,
-                is_shared=False)},
-        batch_size=torch.Size([128]),
-        device=None,
-        is_shared=False)
-
-
+    <div class="output_subarea output_html rendered_html output_result">
+    <div style="font-family:monospace;line-height:1.4"><details open><summary><b>PersistentTensorDict</b> <span style="opacity:0.7">batch_size=[128]</span></summary><ul style="list-style:none;margin:0;padding-left:1.5em"><li>images: <span style="opacity:0.7">f32[3,32,32]</span></li><li>labels: <span style="opacity:0.7">i64[]</span></li><li><details open><summary>meta: <span style="opacity:0.7">PersistentTensorDict 1 entry</span></summary><ul style="list-style:none;margin:0;padding-left:1.5em"><li>description: <span style="opacity:0.7">NonTensorData</span></li></ul></details></li></ul></details></div>
+    </div>
+    <br />
+    <br />
 
 .. GENERATED FROM PYTHON SOURCE LINES 65-69
 
@@ -224,26 +212,14 @@ own. With chunks, the store is smaller and still supports partial reads.
 
 
 
-.. rst-class:: sphx-glr-script-out
 
- .. code-block:: none
+.. raw:: html
 
-
-    PersistentTensorDict(
-        fields={
-            images: Tensor(shape=torch.Size([128, 3, 32, 32]), device=cpu, dtype=torch.float32, is_shared=False),
-            labels: Tensor(shape=torch.Size([128]), device=cpu, dtype=torch.int64, is_shared=False),
-            meta: PersistentTensorDict(
-                fields={
-                    description: NonTensorData(data=a small dataset, batch_size=torch.Size([128]), device=cpu)},
-                batch_size=torch.Size([128]),
-                device=None,
-                is_shared=False)},
-        batch_size=torch.Size([128]),
-        device=None,
-        is_shared=False)
-
-
+    <div class="output_subarea output_html rendered_html output_result">
+    <div style="font-family:monospace;line-height:1.4"><details open><summary><b>PersistentTensorDict</b> <span style="opacity:0.7">batch_size=[128]</span></summary><ul style="list-style:none;margin:0;padding-left:1.5em"><li>images: <span style="opacity:0.7">f32[3,32,32]</span></li><li>labels: <span style="opacity:0.7">i64[]</span></li><li><details open><summary>meta: <span style="opacity:0.7">PersistentTensorDict 1 entry</span></summary><ul style="list-style:none;margin:0;padding-left:1.5em"><li>description: <span style="opacity:0.7">NonTensorData</span></li></ul></details></li></ul></details></div>
+    </div>
+    <br />
+    <br />
 
 .. GENERATED FROM PYTHON SOURCE LINES 117-139
 
@@ -351,7 +327,7 @@ Further reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.121 seconds)
+   **Total running time of the script:** (0 minutes 0.114 seconds)
 
 
 .. _sphx_glr_download_tutorials_zarr_storage.py:

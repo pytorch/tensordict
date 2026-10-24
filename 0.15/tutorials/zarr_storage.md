@@ -24,7 +24,7 @@ What you will learn:
 - How to pre-allocate a zarr buffer with
 [`from_schema()`](../reference/generated/tensordict.TensorDictBase.from_schema.html#tensordict.TensorDictBase.from_schema).
 
-The zarr backend needs `zarr>=3.0`. To install it, run
+The zarr backend needs `zarr>=3.1.1`. To install it, run
 `pip install "tensordict[zarr]"`.
 
 ## Why zarr?
@@ -65,21 +65,13 @@ td_zarr = td.to_zarr(root / "dataset.zarr")
 td_zarr
 ```
 
-```
-PersistentTensorDict(
- fields={
- images: Tensor(shape=torch.Size([128, 3, 32, 32]), device=cpu, dtype=torch.float32, is_shared=False),
- labels: Tensor(shape=torch.Size([128]), device=cpu, dtype=torch.int64, is_shared=False),
- meta: PersistentTensorDict(
- fields={
- description: NonTensorData(data=a small dataset, batch_size=torch.Size([128]), device=cpu)},
- batch_size=torch.Size([128]),
- device=None,
- is_shared=False)},
- batch_size=torch.Size([128]),
- device=None,
- is_shared=False)
-```
+**PersistentTensorDict** batch_size=[128]
+
+- images: f32[3,32,32]
+- labels: i64[]
+- meta: PersistentTensorDict 1 entry
+
+- description: NonTensorData
 
 The store keeps the batch size, the dimension names, and the non-tensor
 entries (like the `"description"` string above).
@@ -137,21 +129,13 @@ from zarr.codecs import ZstdCodec
 td.to_zarr(root / "compressed.zarr", chunks=(16, 3, 32, 32), compressors=ZstdCodec())
 ```
 
-```
-PersistentTensorDict(
- fields={
- images: Tensor(shape=torch.Size([128, 3, 32, 32]), device=cpu, dtype=torch.float32, is_shared=False),
- labels: Tensor(shape=torch.Size([128]), device=cpu, dtype=torch.int64, is_shared=False),
- meta: PersistentTensorDict(
- fields={
- description: NonTensorData(data=a small dataset, batch_size=torch.Size([128]), device=cpu)},
- batch_size=torch.Size([128]),
- device=None,
- is_shared=False)},
- batch_size=torch.Size([128]),
- device=None,
- is_shared=False)
-```
+**PersistentTensorDict** batch_size=[128]
+
+- images: f32[3,32,32]
+- labels: i64[]
+- meta: PersistentTensorDict 1 entry
+
+- description: NonTensorData
 
 ## Alternative stores
 
@@ -229,7 +213,7 @@ the other on-disk formats.
 - The [zarr documentation](https://zarr.readthedocs.io) covers stores,
 codecs, and the v3 format in depth.
 
-**Total running time of the script:** (0 minutes 0.121 seconds)
+**Total running time of the script:** (0 minutes 0.114 seconds)
 
 [`Download Jupyter notebook: zarr_storage.ipynb`](../_downloads/299d79c6946d13f056a08f21d56a241b/zarr_storage.ipynb)
 

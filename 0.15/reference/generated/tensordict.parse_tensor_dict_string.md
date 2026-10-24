@@ -9,10 +9,14 @@ dtypes, devices and batch sizes of a printed one, so that you can
 reproduce a tensordict from a log. The values are not in the repr, so
 every tensor of the result is filled with zeros.
 
+It reads both the compact repr, the default, and the one printed with
+`set_printoptions(compact=False)`.
+
 Parameters:
 
 **s** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)) - the repr of a tensordict, as printed with the default print
-options (see [`set_printoptions()`](tensordict.set_printoptions.html#tensordict.set_printoptions)).
+options or with `compact=False` (see
+[`set_printoptions()`](tensordict.set_printoptions.html#tensordict.set_printoptions)).
 
 Returns:
 

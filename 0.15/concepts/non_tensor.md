@@ -127,13 +127,7 @@ genome of the reads:
 ... },
 ... )
 >>> print(td)
-TensorDict(
- fields={
- genome: NonTensorData(data=hg38, batch_size=torch.Size([]), device=None),
- score: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[], fields={genome: str, score: f32[]})
 ```
 
 Indexing with a key (`td["genome"]`) returns the content of the
@@ -165,26 +159,14 @@ gets the batch size of the tensordict:
 ... batch_size=[3]
 ... )
 >>> print(td)
-TensorDict(
- fields={
- genome: NonTensorData(data=hg38, batch_size=torch.Size([3]), device=None),
- score: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[3], fields={genome: str, score: f32[]})
 ```
 
 All the elements of the batch have the same value:
 
 ```
 >>> print(td[0])
-TensorDict(
- fields={
- genome: NonTensorData(data=hg38, batch_size=torch.Size([]), device=None),
- score: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[], fields={genome: str, score: f32[]})
 ```
 
 If you write a different value into one element, the entry becomes a
@@ -227,16 +209,7 @@ To give each element of the batch its own value, use a
 ... batch_size=[3]
 ... )
 >>> print(td)
-TensorDict(
- fields={
- score: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float32, is_shared=False),
- seq: NonTensorStack(
- ['ACGT', 'GGCC', 'TTAG'],
- batch_size=torch.Size([3]),
- device=None)},
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[3], fields={score: f32[], seq: NonTensorStack})
 ```
 
 Index the tensordict to get one element. The first element has the first
@@ -244,19 +217,13 @@ sequence:
 
 ```
 >>> print(td[0])
-TensorDict(
- fields={
- score: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- seq: NonTensorData(data=ACGT, batch_size=torch.Size([]), device=None)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[], fields={score: f32[], seq: str})
 ```
 
 For a stack, `td["seq"]` returns a `tensordict.utils.LinkedList`. It is a
 subclass of [`list`](https://docs.python.org/3/builtins/stdtypes.html#list), and an assignment to one of its items writes into
-the tensordict. [`tolist()`](../reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack.tolist) returns a plain
-[`list`](https://docs.python.org/3/builtins/stdtypes.html#list):
+the tensordict. [`tolist()`](../reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack.tolist) and
+[`tolist()`](../reference/generated/tensordict.utils.LinkedList.html#tensordict.utils.LinkedList.tolist) return a plain [`list`](https://docs.python.org/3/builtins/stdtypes.html#list):
 
 ```
 >>> values = td["seq"]
@@ -266,6 +233,8 @@ True
 >>> td[1]["seq"]
 'CCGG'
 >>> td.get("seq").tolist()
+['ACGT', 'CCGG', 'TTAG']
+>>> td["seq"].tolist()
 ['ACGT', 'CCGG', 'TTAG']
 ```
 
@@ -282,13 +251,7 @@ list is one value for the whole batch:
 ... batch_size=[3]
 ... )
 >>> print(td[0])
-TensorDict(
- fields={
- score: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),
- seq: NonTensorData(data=['ACGT', 'GGCC', 'TTAG'], batch_size=torch.Size([]), device=None)},
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[], fields={score: f32[], seq: list})
 ```
 
 ### Stacking tensordicts with non-tensor data
@@ -305,16 +268,7 @@ same:
 ... },
 ... )
 >>> print(torch.stack([td, td]))
-TensorDict(
- fields={
- genome: NonTensorStack(
- ['hg38', 'hg38'],
- batch_size=torch.Size([2]),
- device=None),
- score: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([2]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[2], fields={genome: NonTensorStack, score: f32[]})
 ```
 
 For [`MetaData`](../reference/generated/tensordict.MetaData.html#tensordict.MetaData) entries, [`stack()`](https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack) returns one
@@ -331,13 +285,7 @@ a [`NonTensorStack`](../reference/generated/tensordict.NonTensorStack.html#tenso
 ... },
 ... )
 >>> print(torch.stack([td, td]))
-TensorDict(
- fields={
- genome: MetaData(data=hg38, batch_size=torch.Size([2]), device=None),
- score: Tensor(shape=torch.Size([2]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([2]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[2], fields={genome: MetaData, score: f32[]})
 >>> equal_lists = [TensorDict({"a": MetaData([1, 2])}), TensorDict({"a": MetaData([1, 2])})]
 >>> type(torch.stack(equal_lists).get("a")).__name__
 'NonTensorStack'
@@ -467,7 +415,7 @@ For a plain tensordict, both [`get()`](../reference/generated/tensordict.TensorD
 ```
 
 For a tensorclass, both attribute access and `get()` also return the
-[`UnbatchedTensor`](../reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor) wrapper (see [TensorClass](../tensorclass.html#tensorclass-guide)):
+[`UnbatchedTensor`](../reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor) wrapper (see [TensorClass: a dataclass of tensors](../tensorclass.html#tensorclass-guide)):
 
 ```
 >>> from tensordict import TensorClass
@@ -487,11 +435,17 @@ For a tensorclass, both attribute access and `get()` also return the
 
 ### Limitations
 
-- Memory-mapped serialization and consolidation do not support
-[`UnbatchedTensor`](../reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor) yet.
-[`memmap()`](../reference/generated/tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap) and
+- Memory-mapped serialization to a directory and consolidation do not
+support [`UnbatchedTensor`](../reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor) yet.
+[`memmap()`](../reference/generated/tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap) with a directory prefix and
 [`consolidate()`](../reference/generated/tensordict.TensorDictBase.consolidate.html#tensordict.TensorDictBase.consolidate) raise `NotImplementedError`
 when the tensordict contains one. [`torch.save()`](https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save) keeps them.
+- [`to_h5()`](../reference/generated/tensordict.TensorDictBase.to_h5.html#tensordict.TensorDictBase.to_h5),
+[`to_zarr()`](../reference/generated/tensordict.TensorDictBase.to_zarr.html#tensordict.TensorDictBase.to_zarr) and `.tdz` archives (written by
+[`memmap()`](../reference/generated/tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap) or
+[`save()`](../reference/generated/tensordict.TensorDictBase.save.html#tensordict.TensorDictBase.save) with a `.tdz` path) save
+[`UnbatchedTensor`](../reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor) entries as plain tensors, and they
+are read back as plain tensors. Such a save emits a `UserWarning`.
 - If you stack tensordicts whose [`UnbatchedTensor`](../reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor)
 entries have different data, the result keeps only the data of the first
 one, and it warns.
@@ -502,5 +456,5 @@ one, and it warns.
 [`NonTensorData`](../reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData), [`NonTensorStack`](../reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack),
 [`MetaData`](../reference/generated/tensordict.MetaData.html#tensordict.MetaData), and [`UnbatchedTensor`](../reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor).
 - [Stacking and variable-size data](stacking.html#stacking): stacks of tensordicts, and variable-size data.
-- [TensorClass](../tensorclass.html#tensorclass-guide): tensorclass fields that hold non-tensor values.
+- [TensorClass: a dataclass of tensors](../tensorclass.html#tensorclass-guide): tensorclass fields that hold non-tensor values.
 - [Save and load tensordicts](../saving.html#saving): how non-tensor entries are saved.

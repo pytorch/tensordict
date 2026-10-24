@@ -1,6 +1,6 @@
 # TensorDictBase.reduce
 
-TensorDictBase.reduce(*dst*, *op=None*, *async_op=False*, *return_premature=False*, *group=None*) → [None](https://docs.python.org/3/builtins/constants.html#None)
+TensorDictBase.reduce(*dst*, *op=None*, *async_op=False*, *return_premature=False*, *group=None*, ***, *bucket_bytes: [int](https://docs.python.org/3/builtins/functions.html#int) | [None](https://docs.python.org/3/builtins/constants.html#None) = None*) → [None](https://docs.python.org/3/builtins/constants.html#None)
 
 Reduces each leaf over all the ranks of the group, into the tensordict of rank `dst`.
 
@@ -35,10 +35,31 @@ result back. Defaults to `False`.
 - **group** (*torch.distributed.ProcessGroup**,**optional*) - the process group.
 Defaults to `None`, the default process group.
 
+Keyword Arguments:
+
+**bucket_bytes** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - if given, packs the leaves of each
+device and dtype into buckets of at most `bucket_bytes` bytes
+(a larger leaf is a bucket of its own), and runs one
+reduction per bucket instead of one per leaf, which is faster
+with many small leaves. Rank `dst` copies the results back
+into the leaves once each reduction completes, and with
+`return_premature=True`, the list holds one entry per
+bucket: a `Work`, or a [`torch.futures.Future`](https://docs.pytorch.org/docs/stable/futures.html#torch.futures.Future) that
+also copies the results back. Packing copies the leaves, so a
+`bucket_bytes` below the size of the large leaves keeps
+them out of the buckets: with `gloo` on CPU, packing leaves
+of 4 MB made the call several times slower. Non-contiguous
+and sparse leaves are never packed: each is reduced on its
+own. Every rank must hold the same keys, shapes and dtypes,
+as the buckets are built from the local leaves; if the
+layouts differ, the call can hang. Defaults to `None`, one
+reduction per leaf.
+
 Returns:
 
 With `async_op=True` and `return_premature=True`, a list of
-`Work` objects. Otherwise, `None`.
+`Work` objects (with `bucket_bytes`, `Work` or `Future`
+objects, one per bucket). Otherwise, `None`.
 
 Examples
 

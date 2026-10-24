@@ -15,6 +15,11 @@ result is an instance of a new `<name>_tc` tensorclass, or of
 converts a dataclass instance to a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict)
 instead.
 
+To write the class as a tensorclass, a dataclass of tensors with
+`to(device)`, `pin_memory()`, slicing and stacking for all its
+fields, see [TensorClass: a dataclass of tensors](../../tensorclass.html#tensorclass-guide). [Coming from a hand-written dataclass](../../coming_from_dataclass.html#coming-from-dataclass) shows
+what replaces each method of a hand-written dataclass of tensors.
+
 Parameters:
 
 **obj** (*Any*) - the dataclass instance or type to convert.
@@ -95,18 +100,8 @@ Examples
 >>> x = X(0, 0)
 >>> x2 = from_dataclass(x)
 >>> print(x2)
-X_tc(
- a=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
- b=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+X_tc(batch_size=[], fields={a: i64[], b: i64[]})
 >>> X2 = from_dataclass(X, autocast=True)
 >>> print(X2(a=0, b=0))
-X_tc(
- a=NonTensorData(data=0, batch_size=torch.Size([]), device=None),
- b=Tensor(shape=torch.Size([]), device=cpu, dtype=torch.int64, is_shared=False),
- batch_size=torch.Size([]),
- device=None,
- is_shared=False)
+X_tc(batch_size=[], fields={a: int, b: i64[]})
 ```

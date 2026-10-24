@@ -235,6 +235,22 @@ def reduce(rank, world_size):
  print(td["a"]) # with 2 ranks: tensor([3., 3., 3.])
 ```
 
+Both issue one collective per leaf. With many small leaves, pass
+`bucket_bytes` to pack the leaves of each device and dtype into buckets of
+at most that many bytes, and issue one collective per bucket, as DDP does for
+gradients: `td.all_reduce(bucket_bytes=2**20)`. With `async_op=True`,
+the list then holds one entry per bucket, and the results are in the leaves
+once you have waited on each entry. Packing copies each leaf into its bucket
+and back, which pays off for small leaves only: a leaf larger than
+`bucket_bytes` is reduced in place, without a copy. With `gloo`, world size
+2 to 4 and 100 leaves of 64 floats, `bucket_bytes=2**20` made
+`all_reduce` 40 to 70 times as fast. With 10 leaves of 4 MB, it made no
+difference, and `bucket_bytes=25 * 2**20`, which packs them, made the call 4
+to 7 times slower. Non-contiguous and sparse leaves, such as those of
+`td[::2]`, are never packed. Each rank builds its buckets from its own
+leaves, so every rank must hold the same keys, shapes and dtypes; if the
+layouts differ, the call can hang.
+
 ### all_gather, scatter, and gather_and_stack
 
 [`all_gather()`](reference/generated/tensordict.TensorDictBase.all_gather.html#tensordict.TensorDictBase.all_gather) returns a list with the
@@ -613,6 +629,8 @@ copy to the CPU.
 ## See also
 
 - [Load data and share it between processes](data_loading.html#data-loading): share tensordicts between processes on one node.
+- [Train at scale](training_at_scale.html#training-at-scale): checkpoints with `torch.distributed.checkpoint`,
+DTensor leaves, and the cost of each collective.
 - [Large datasets and storage backends](storage.html#storage): memory-mapped datasets, and Redis stores that processes on
 several nodes share.
 - [Save and load tensordicts](saving.html#saving): consolidated tensordicts.

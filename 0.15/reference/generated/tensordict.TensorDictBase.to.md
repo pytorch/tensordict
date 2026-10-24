@@ -84,26 +84,23 @@ declares one, and to casting every leaf otherwise; pass
 ([`float()`](tensordict.TensorDictBase.float.html#tensordict.TensorDictBase.float), [`bfloat16()`](tensordict.TensorDictBase.bfloat16.html#tensordict.TensorDictBase.bfloat16), ...) take it too.
 - **non_blocking_pin** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - 
 
-if `True`, pins the tensors
-before sending them to the device, in `num_threads`
-threads. Defaults to `False`.
+if `True`, pins each tensor
+before sending it to the device. Defaults to `False`.
 
 Note
 
-Each call starts and joins its pinning threads, which costs
-the same however little data there is. So
-`non_blocking_pin=True` pays off only for large
-tensordicts, with leaves of a MiB or more and tens of MiB
-in total. For smaller tensordicts, `td.to("cuda")` is
-usually the fastest, and
-`td.pin_memory().to("cuda", non_blocking=True)` is also
-faster than `non_blocking_pin=True`. Measure the
-crossover on your machine.
+`non_blocking_pin=True` pays off for leaves of about a
+MiB or more. For leaves of a few KiB, `td.to("cuda")`
+is usually faster, since pinning costs more than it saves.
+Measure the crossover on your machine.
 - **num_threads** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - with `non_blocking_pin=True`, the
 number of threads that pin the leaves, at most one per leaf.
-`0` pins them on the calling thread. Defaults to `None`,
-which starts up to `max(1, torch.get_num_threads() // 2)`
-threads.
+Defaults to `None`, which, like `0`, pins them on the
+calling thread. Threads start on every call, and the first
+pin on each new thread starts its own pool of
+`torch.get_num_threads()` OpenMP threads, so they are
+usually slower than the calling thread. Pass a positive
+number only if you have measured that it helps.
 - **inplace** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, writes the cast leaves into
 the tensordict, which keeps its identity and keys, and returns
 `self`. This can be faster when building a new tensordict is

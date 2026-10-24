@@ -181,12 +181,9 @@ loop moves each batch to the device.
 
  .. code-block:: none
 
-    FashionMNISTData(
-        images=MemoryMappedTensor(shape=torch.Size([60000, 28, 28]), device=cpu, dtype=torch.float32, is_shared=False),
-        targets=MemoryMappedTensor(shape=torch.Size([60000]), device=cpu, dtype=torch.int64, is_shared=False),
-        batch_size=torch.Size([60000]),
-        device=None,
-        is_shared=False)
+    FashionMNISTData(batch_size=[60000], fields={
+        images: f32[28,28],
+        targets: i64[]})
 
 
 
@@ -199,8 +196,8 @@ DataLoaders
 A tensorclass implements ``__len__``, ``__getitem__``, and ``__getitems__``,
 so you can use it as a map-style dataset. The ``DataLoader`` then reads each
 batch with one batched index, and the result is already a
-``FashionMNISTData`` batch. Pass ``collate_fn=lambda x: x``: the default
-collate function cannot read a tensorclass.
+``FashionMNISTData`` batch. Pass ``collate_fn=lambda x: x`` to keep that
+batch as it is; the default collate function also returns it unchanged.
 
 .. GENERATED FROM PYTHON SOURCE LINES 117-127
 
@@ -242,12 +239,7 @@ Each batch is a ``FashionMNISTData`` with ``batch_size=[64]``:
 
  .. code-block:: none
 
-    FashionMNISTData(
-        images=Tensor(shape=torch.Size([64, 28, 28]), device=cpu, dtype=torch.float32, is_shared=False),
-        targets=Tensor(shape=torch.Size([64]), device=cpu, dtype=torch.int64, is_shared=False),
-        batch_size=torch.Size([64]),
-        device=None,
-        is_shared=False)
+    FashionMNISTData(batch_size=[64], fields={images: f32[28,28], targets: i64[]})
 
 
 
@@ -400,7 +392,7 @@ Train the model for one epoch, and test it once:
     Test Error: 
      Accuracy: 49.5%, Avg loss: 2.162513 
 
-    Tensorclass training done! time:  1.8356 s
+    Tensorclass training done! time:  1.6107 s
 
 
 
@@ -430,7 +422,7 @@ Further reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.250 seconds)
+   **Total running time of the script:** (0 minutes 3.977 seconds)
 
 
 .. _sphx_glr_download_tutorials_tensorclass_fashion.py:

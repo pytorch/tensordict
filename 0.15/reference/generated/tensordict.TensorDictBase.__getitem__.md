@@ -15,7 +15,12 @@ returns a list. See [Keys, nested keys, and locking](../../concepts/keys.html#ke
 Any other index (an int, a slice, a tensor, a boolean mask, `...`,
 `None`, or a tuple of these) applies to the batch dimensions of every
 entry, as it would to a tensor of shape [`batch_size`](tensordict.TensorDictBase.batch_size.html#tensordict.TensorDictBase.batch_size), and
-returns a tensordict. See [Batch size, shapes, and indexing](../../concepts/batch_size.html#batch-size).
+returns a tensordict. See [Batch size, shapes, and indexing](../../concepts/batch_size.html#batch-size). An index that runs past
+the batch dimensions with ints, lists, tensors or masks indexes the
+leaves of a tensordict, and grows the batch size to cover their indexed
+dims, with a `FutureWarning`. Starting with TensorDict 0.17, the
+default will change to raising an `IndexError`: to index the leaves,
+write `td.apply(lambda x: x[:, idx])`, which keeps the batch size.
 
 Raises:
 

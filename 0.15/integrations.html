@@ -1,0 +1,2602 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="./" data-theme="auto">
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Use tensordict with other libraries &#8212; tensordict 0.15 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "auto";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "auto";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=a6c16915" />
+    <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="_static/sg_gallery.css?v=c83e6b79" />
+    <link rel="stylesheet" type="text/css" href="_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="_static/css/custom.css?v=450fa3cb" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+    <script src="_static/documentation_options.js?v=f41d0df0"></script>
+    <script src="_static/doctools.js?v=888ff710"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="_static/copybutton.js?v=ccdb6887"></script>
+    <script src="_static/js/search-tuning.js?v=87be1517"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'integrations';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.15.4';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://docs.pytorch.org/tensordict/_static/versions.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = '0.15';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner = true;
+        </script>
+    <script src="_static/js/tutorial_links.js?v=d30eabb1"></script>
+    <link rel="canonical" href="https://docs.pytorch.org/tensordict/stable/integrations.html" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Distributed tensordicts" href="distributed.html" />
+    <link rel="prev" title="Batch samples of different sizes without padding" href="variable_size_batches.html" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+<!-- LLM/AI Agent: See /llms.txt for comprehensive navigation guidance -->
+<!-- Machine-readable LLM metadata -->
+<meta name="llm:site-type" content="documentation">
+<meta name="llm:framework" content="PyTorch">
+
+<meta name="llm:description" content="A dict[str, torch.Tensor] that behaves like one tensor. - Use tensordict with other libraries">
+
+
+
+
+
+<meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
+<meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
+<meta name="llm:version" content="0.15">
+<meta name="llm:project" content="tensordict">
+<meta name="llm:page-type" content="documentation">
+<link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
+<script>
+  if (window.location.hostname === 'docs.pytorch.org' || window.location.hostname === 'docs-preview.pytorch.org') {
+    const script = document.createElement('script');
+    script.src = 'https://cmp.osano.com/16A0DbT9yDNIaQkvZ/31b1b91a-e0b6-47ea-bde2-7f2bd13dbe5c/osano.js?variant=one';
+    document.head.appendChild(script);
+  }
+</script>
+<script>
+  // Cookie banner for non-LF projects
+  document.addEventListener('DOMContentLoaded', function () {
+    // Hide cookie banner on local environments and LF owned docs
+    if (window.location.hostname === 'localhost' ||
+      window.location.hostname === '0.0.0.0' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname === 'docs.pytorch.org' ||
+      window.location.hostname === 'docs-preview.pytorch.org' ||
+      window.location.hostname.startsWith('192.168.')) {
+      const banner = document.querySelector('.cookie-banner-wrapper');
+      if (banner) {
+        banner.style.display = 'none';
+      }
+    }
+  });
+</script>
+<!-- Conditional CSS for header and footer height adjustment -->
+
+<style>
+  :root {
+    --header-height: 0px !important;
+    --header-height-desktop: 0px !important;
+  }
+  /* Ensure proper mobile layout when LF header is hidden */
+  @media (max-width: 960px) {
+    .bd-header {
+      top: 0 !important;
+      position: sticky !important;
+      z-index: 1020 !important;
+    }
+    .bd-main {
+      padding-top: 0 !important;
+      margin-top: 0 !important;
+    }
+    .bd-article-container {
+      padding-top: 0 !important;
+    }
+    .header-article__inner {
+      padding-top: 1rem !important;
+    }
+
+  }
+</style>
+
+
+<link rel="stylesheet" type="text/css" href="_static/css/theme.css" crossorigin="anonymous">
+<script type="text/javascript" src="_static/js/theme.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400&display=swap" rel="stylesheet">
+<meta property="og:image" content="https://docs.pytorch.org/docs/stable/_static/img/pytorch_seo.png" />
+<link rel="stylesheet" href="_static/webfonts/all.min.css" crossorigin="anonymous">
+<meta http-equiv="Content-Security-Policy"
+  content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline'; script-src * 'unsafe-inline' 'unsafe-eval' blob:;">
+<meta name="pytorch_project" content="tensordict">
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-T8XT4PS" height="0" width="0"
+    style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+<!-- Google Tag Manager -->
+<script>(function (w, d, s, l, i) {
+    w[l] = w[l] || []; w[l].push({
+      'gtm.start':
+        new Date().getTime(), event: 'gtm.js'
+    }); var f = d.getElementsByTagName(s)[0],
+      j = d.createElement(s), dl = l != 'dataLayer' ? '&l=' + l : ''; j.async = true; j.src =
+        'https://www.googletagmanager.com/gtm.js?id=' + i + dl; f.parentNode.insertBefore(j, f);
+    j.onload = function () {
+      window.dispatchEvent(new Event('gtm_loaded'));
+      console.log('GTM loaded successfully');
+    };
+  })(window, document, 'script', 'dataLayer', 'GTM-T8XT4PS');
+</script>
+<!-- End Google Tag Manager -->
+<!-- Facebook Pixel Code -->
+<script>
+  !function (f, b, e, v, n, t, s) {
+    if (f.fbq) return; n = f.fbq = function () {
+      n.callMethod ?
+        n.callMethod.apply(n, arguments) : n.queue.push(arguments)
+    };
+    if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = '2.0';
+    n.queue = []; t = b.createElement(e); t.async = !0;
+    t.src = v; s = b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t, s)
+  }(window, document, 'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '243028289693773');
+  fbq('track', 'PageView');
+</script>
+<script>
+  document.documentElement.setAttribute('data-version', '0.15');
+</script>
+<noscript>
+  <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
+</noscript>
+<script>
+  function gtag() {
+    window.dataLayer.push(arguments);
+  }
+</script>
+<!-- End Facebook Pixel Code -->
+<!-- Repository configuration for tutorials -->
+
+<script>
+  // Define repository configuration for tutorial buttons using existing html_context variables
+  // Only injected when tutorial buttons are shown AND github variables are defined
+  // If either condition is false, JavaScript will fallback to default PyTorch tutorial links
+  window.repoConfig = {
+    github_repo: "pytorch/tensordict",
+    github_branch: "main",
+    colab_repo: "pytorch/tensordict",
+    colab_branch: "gh-pages/0.15"
+  };
+</script>
+
+
+<!-- Script to Fix scrolling with fast fixed-duration animation -->
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const SCROLL_DURATION = 150; // Fixed duration in ms regardless of distance
+    let lockedTargetId = null; // Lock the TOC to this target until user scrolls manually
+    let isUpdatingToc = false; // Guard against infinite loops
+
+    function smoothScrollTo(targetY, duration, onComplete) {
+      const startY = window.pageYOffset;
+      const difference = targetY - startY;
+      const startTime = performance.now();
+
+      function step(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        // Ease-out cubic for smooth deceleration
+        const easeOut = 1 - Math.pow(1 - progress, 3);
+        window.scrollTo(0, startY + difference * easeOut);
+        if (progress < 1) {
+          requestAnimationFrame(step);
+        } else if (onComplete) {
+          onComplete();
+        }
+      }
+      requestAnimationFrame(step);
+    }
+
+    function updateTocHighlight(targetId) {
+      if (isUpdatingToc) return; // Prevent infinite loop
+      isUpdatingToc = true;
+
+      // Find the TOC link that points to this target
+      const tocNav = document.querySelector('.bd-toc-nav');
+      if (!tocNav) {
+        isUpdatingToc = false;
+        return;
+      }
+
+      // Remove active class from all TOC items
+      tocNav.querySelectorAll('.nav-link').forEach(link => {
+        link.classList.remove('active');
+        link.parentElement.classList.remove('active');
+      });
+
+      // Add active class to the matching link and all its ancestor TOC items
+      const matchingLink = tocNav.querySelector(`a[href="#${CSS.escape(targetId)}"]`);
+      if (matchingLink) {
+        matchingLink.classList.add('active');
+        matchingLink.parentElement.classList.add('active');
+
+        // Walk up the DOM to activate parent TOC entries (e.g. h2 parent of h3)
+        let ancestor = matchingLink.parentElement.parentElement;
+        while (ancestor && ancestor !== tocNav) {
+          if (ancestor.classList.contains('toc-entry')) {
+            ancestor.classList.add('active');
+            const parentLink = ancestor.querySelector(':scope > a.nav-link');
+            if (parentLink) {
+              parentLink.classList.add('active');
+            }
+          }
+          ancestor = ancestor.parentElement;
+        }
+      }
+
+      // Use setTimeout to reset the guard after the current call stack
+      setTimeout(function() {
+        isUpdatingToc = false;
+      }, 0);
+    }
+
+    // Watch for ScrollSpy trying to change the active state and override it
+    const tocNav = document.querySelector('.bd-toc-nav');
+    if (tocNav) {
+      const observer = new MutationObserver(function(mutations) {
+        if (lockedTargetId && !isUpdatingToc) {
+          // Force our target to stay highlighted
+          updateTocHighlight(lockedTargetId);
+        }
+      });
+      observer.observe(tocNav, {
+        attributes: true,
+        attributeFilter: ['class'],
+        subtree: true
+      });
+    }
+
+    // Release the lock when user scrolls manually (not programmatically)
+    window.addEventListener('wheel', function() {
+      lockedTargetId = null;
+    });
+    window.addEventListener('touchmove', function() {
+      lockedTargetId = null;
+    });
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        const targetId = this.getAttribute('href').substring(1);
+        if (!targetId) return; // Skip empty hash links
+        const targetElement = document.getElementById(targetId);
+
+        if (targetElement) {
+          e.preventDefault();
+
+          // Lock the TOC to this target
+          lockedTargetId = targetId;
+
+          const headerHeight =
+            (document.querySelector('.header-holder') ? document.querySelector('.header-holder').offsetHeight : 0) +
+            (document.querySelector('.bd-header') ? document.querySelector('.bd-header').offsetHeight : 0) + 20;
+
+          const targetPosition = targetElement.getBoundingClientRect().top + window.pageYOffset - headerHeight;
+
+          // Update TOC highlight immediately
+          updateTocHighlight(targetId);
+
+          smoothScrollTo(targetPosition, SCROLL_DURATION, function() {
+            // Keep it highlighted after scroll
+            updateTocHighlight(targetId);
+          });
+
+          // Update URL hash without scrolling
+          history.pushState(null, null, '#' + targetId);
+        }
+      });
+    });
+  });
+</script>
+
+<script async src="https://cse.google.com/cse.js?cx=e65585f8c3ea1440e"></script>
+<!-- RunLLM Widget Configuration -->
+
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+  </head>
+
+<body data-feedback-url="https://github.com/pytorch/tensordict" class="pytorch-body">
+  
+
+
+  
+  
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="auto">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+
+  
+  <div class="navbar-header-items__mobile-logo">
+    
+
+
+
+
+
+
+
+  
+  
+  
+
+
+<a class="navbar-brand logo" href="index.html">
+  
+    <span class="logo__title">tensordict</span>
+  
+</a>
+  </div>
+
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      
+      
+        <div class="navbar-item">
+          
+
+
+
+
+
+
+
+  
+  
+  
+
+
+<a class="navbar-brand logo" href="index.html">
+  
+    <span class="logo__title">tensordict</span>
+  
+</a>
+        </div>
+      
+    
+      
+      
+        
+        <div class="navbar-item desktop-only-version">
+          
+<script>
+document.write(`
+  <div class="version-switcher__container dropdown">
+    <button id="pst-version-switcher-button-2"
+      type="button"
+      class="version-switcher__button btn btn-sm dropdown-toggle"
+      data-bs-toggle="dropdown"
+      aria-haspopup="listbox"
+      aria-controls="pst-version-switcher-list-2"
+      aria-label="Version switcher list"
+    >
+      Choose version  <!-- this text may get changed later by javascript -->
+      <span class="caret"></span>
+    </button>
+    <div id="pst-version-switcher-list-2"
+      class="version-switcher__menu dropdown-menu list-group-flush py-0"
+      role="listbox" aria-labelledby="pst-version-switcher-button-2">
+      <!-- dropdown will be populated by javascript on page load -->
+    </div>
+  </div>
+`);
+</script>
+        </div>
+      
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="installation.html">
+              Get started
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-1">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="installation.html">
+                  Installation
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="getting_started.html">
+                  Getting started
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="coming_from_jax.html">
+                  Coming from JAX pytrees
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="coming_from_dataclass.html">
+                  Coming from a hand-written dataclass
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="overview.html">
+              User guide
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-2">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="overview.html">
+                  What is TensorDict?
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="pitfalls.html">
+                  Common surprises
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="concepts/batch_size.html">
+                  Batch size, shapes, and indexing
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="concepts/keys.html">
+                  Keys, nested keys, and locking
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="concepts/stacking.html">
+                  Stacking and variable-size data
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="concepts/operations.html">
+                  Arithmetic, apply, reductions, and gradients
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="concepts/devices.html">
+                  Devices, dtypes, and memory
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="concepts/non_tensor.html">
+                  Non-tensor data and unbatched entries
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tensorclass.html">
+                  TensorClass: a dataclass of tensors
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="typed_tensordict.html">
+                  TypedTensorDict
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="choosing_a_container.html">
+                  Which container should I use?
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="modules.html">
+                  Modules: TensorDictModule and tensordict.nn
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+      <li class="nav-item dropdown current active">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal active" href="cookbook.html">
+              How-to guides
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-3">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="cookbook.html">
+                  How-to recipes
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="saving.html">
+                  Save and load tensordicts
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="saving_format.html">
+                  The on-disk format
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="storage.html">
+                  Large datasets and storage backends
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="data_loading.html">
+                  Load data and share it between processes
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="variable_size_batches.html">
+                  Batch samples of different sizes without padding
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="#">
+                  Use tensordict with other libraries
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="distributed.html">
+                  Distributed tensordicts
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="training_at_scale.html">
+                  Train at scale
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="compile.html">
+                  torch.compile, torch.func, torch.export, and CUDA graphs
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="printing.html">
+                  Printing and display
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="compatibility.html">
+                  Containers on storage backends
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="fx.html">
+                  FX tracing (prototype)
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="tutorials/index.html">
+              Tutorials
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-4">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/tensordict_keys.html">
+                  Getting, setting, and nesting keys
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/tensordict_slicing.html">
+                  Slicing, indexing, and masking
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/tensordict_shapes.html">
+                  Changing the shape of a TensorDict
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/tensordict_preallocation.html">
+                  Filling a TensorDict row by row
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/streamed_tensordict.html">
+                  Building tensordicts from streams
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/tensordict_memory.html">
+                  Devices and memory-mapped tensors
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/zarr_storage.html">
+                  Storing TensorDicts in zarr
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/serialization_speed.html">
+                  Benchmarking TensorDict serialization speed
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/tensordict_module.html">
+                  Building models with TensorDictModule
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/functional.html">
+                  Functional calls and ensembles with TensorDict
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/export.html">
+                  Exporting tensordict modules
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/data_fashion.html">
+                  Using TensorDict for datasets
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/tensorclass_fashion.html">
+                  Using tensorclasses for datasets
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/tensorclass_imagenet.html">
+                  Batched data loading with tensorclasses
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/tensorclass_particles.html">
+                  Simulating particles with a tensorclass
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="reference/index.html">
+              API reference
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-5">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="reference/td.html">
+                  tensordict: containers and functions
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="reference/tc.html">
+                  tensorclass and non-tensor data
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="reference/ttd.html">
+                  TypedTensorDict
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="reference/nn.html">
+                  tensordict.nn
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="reference/storage.html">
+                  Key-value stores and UCXX
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="reference/utils.html">
+                  Utilities
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+
+    
+    
+  </ul>
+</nav>
+</div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+      
+      
+        <div class="navbar-item"><!-- PyTorch.org site link - desktop only, two-line layout -->
+<!-- Note: The show_pytorch_org_link check is handled in layout.html's navbar_end block -->
+<a href="https://pytorch.org" class="pytorch-site-link nav-link nav-external" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Go to PyTorch.org">
+  <span class="pytorch-site-link-text">
+    <span>Go to</span>
+    <span>pytorch.org <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i></span>
+  </span>
+</a></div>
+      
+      
+        <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pytorch/tensordict" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/tensordict/" title="PyPI" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPI</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://discuss.pytorch.org/" title="PyTorch Forum" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-discourse fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyTorch Forum</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+
+
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    <div class="sidebar-header-items__start">
+      <div class="navbar-item">
+        
+<script>
+document.write(`
+  <div class="version-switcher__container dropdown">
+    <button id="pst-version-switcher-button-3"
+      type="button"
+      class="version-switcher__button btn btn-sm dropdown-toggle"
+      data-bs-toggle="dropdown"
+      aria-haspopup="listbox"
+      aria-controls="pst-version-switcher-list-3"
+      aria-label="Version switcher list"
+    >
+      Choose version  <!-- this text may get changed later by javascript -->
+      <span class="caret"></span>
+    </button>
+    <div id="pst-version-switcher-list-3"
+      class="version-switcher__menu dropdown-menu list-group-flush py-0"
+      role="listbox" aria-labelledby="pst-version-switcher-button-3">
+      <!-- dropdown will be populated by javascript on page load -->
+    </div>
+  </div>
+`);
+</script>
+      </div>
+    </div>
+    
+
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="installation.html">
+              Get started
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-1">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="installation.html">
+                  Installation
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="getting_started.html">
+                  Getting started
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="coming_from_jax.html">
+                  Coming from JAX pytrees
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="coming_from_dataclass.html">
+                  Coming from a hand-written dataclass
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="overview.html">
+              User guide
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-2">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="overview.html">
+                  What is TensorDict?
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="pitfalls.html">
+                  Common surprises
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="concepts/batch_size.html">
+                  Batch size, shapes, and indexing
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="concepts/keys.html">
+                  Keys, nested keys, and locking
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="concepts/stacking.html">
+                  Stacking and variable-size data
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="concepts/operations.html">
+                  Arithmetic, apply, reductions, and gradients
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="concepts/devices.html">
+                  Devices, dtypes, and memory
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="concepts/non_tensor.html">
+                  Non-tensor data and unbatched entries
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tensorclass.html">
+                  TensorClass: a dataclass of tensors
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="typed_tensordict.html">
+                  TypedTensorDict
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="choosing_a_container.html">
+                  Which container should I use?
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="modules.html">
+                  Modules: TensorDictModule and tensordict.nn
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+      <li class="nav-item dropdown current active">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal active" href="cookbook.html">
+              How-to guides
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-3">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="cookbook.html">
+                  How-to recipes
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="saving.html">
+                  Save and load tensordicts
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="saving_format.html">
+                  The on-disk format
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="storage.html">
+                  Large datasets and storage backends
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="data_loading.html">
+                  Load data and share it between processes
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="variable_size_batches.html">
+                  Batch samples of different sizes without padding
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="#">
+                  Use tensordict with other libraries
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="distributed.html">
+                  Distributed tensordicts
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="training_at_scale.html">
+                  Train at scale
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="compile.html">
+                  torch.compile, torch.func, torch.export, and CUDA graphs
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="printing.html">
+                  Printing and display
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="compatibility.html">
+                  Containers on storage backends
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="fx.html">
+                  FX tracing (prototype)
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="tutorials/index.html">
+              Tutorials
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-4">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/tensordict_keys.html">
+                  Getting, setting, and nesting keys
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/tensordict_slicing.html">
+                  Slicing, indexing, and masking
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/tensordict_shapes.html">
+                  Changing the shape of a TensorDict
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/tensordict_preallocation.html">
+                  Filling a TensorDict row by row
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/streamed_tensordict.html">
+                  Building tensordicts from streams
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/tensordict_memory.html">
+                  Devices and memory-mapped tensors
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/zarr_storage.html">
+                  Storing TensorDicts in zarr
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/serialization_speed.html">
+                  Benchmarking TensorDict serialization speed
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/tensordict_module.html">
+                  Building models with TensorDictModule
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/functional.html">
+                  Functional calls and ensembles with TensorDict
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/export.html">
+                  Exporting tensordict modules
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/data_fashion.html">
+                  Using TensorDict for datasets
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/tensorclass_fashion.html">
+                  Using tensorclasses for datasets
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/tensorclass_imagenet.html">
+                  Batched data loading with tensorclasses
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/tensorclass_particles.html">
+                  Simulating particles with a tensorclass
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="reference/index.html">
+              API reference
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-5">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="reference/td.html">
+                  tensordict: containers and functions
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="reference/tc.html">
+                  tensorclass and non-tensor data
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="reference/ttd.html">
+                  TypedTensorDict
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="reference/nn.html">
+                  tensordict.nn
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="reference/storage.html">
+                  Key-value stores and UCXX
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="reference/utils.html">
+                  Utilities
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+
+    
+    
+  </ul>
+</nav>
+</div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+        
+          <div class="navbar-item"><!-- PyTorch.org site link - desktop only, two-line layout -->
+<!-- Note: The show_pytorch_org_link check is handled in layout.html's navbar_end block -->
+<a href="https://pytorch.org" class="pytorch-site-link nav-link nav-external" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Go to PyTorch.org">
+  <span class="pytorch-site-link-text">
+    <span>Go to</span>
+    <span>pytorch.org <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i></span>
+  </span>
+</a></div>
+        
+        
+          <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pytorch/tensordict" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/tensordict/" title="PyPI" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPI</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://discuss.pytorch.org/" title="PyTorch Forum" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-discourse fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyTorch Forum</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links" aria-label="Site navigation">
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">Get started</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="coming_from_jax.html">Coming from JAX pytrees</a></li>
+<li class="toctree-l1"><a class="reference internal" href="coming_from_dataclass.html">Coming from a hand-written dataclass</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">User guide</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="overview.html">What is TensorDict?</a></li>
+<li class="toctree-l1"><a class="reference internal" href="pitfalls.html">Common surprises</a></li>
+<li class="toctree-l1"><a class="reference internal" href="concepts/batch_size.html">Batch size, shapes, and indexing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="concepts/keys.html">Keys, nested keys, and locking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="concepts/stacking.html">Stacking and variable-size data</a></li>
+<li class="toctree-l1"><a class="reference internal" href="concepts/operations.html">Arithmetic, apply, reductions, and gradients</a></li>
+<li class="toctree-l1"><a class="reference internal" href="concepts/devices.html">Devices, dtypes, and memory</a></li>
+<li class="toctree-l1"><a class="reference internal" href="concepts/non_tensor.html">Non-tensor data and unbatched entries</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tensorclass.html">TensorClass: a dataclass of tensors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="typed_tensordict.html">TypedTensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="choosing_a_container.html">Which container should I use?</a></li>
+<li class="toctree-l1"><a class="reference internal" href="modules.html">Modules: TensorDictModule and tensordict.nn</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">How-to guides</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="cookbook.html">How-to recipes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="saving.html">Save and load tensordicts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="saving_format.html">The on-disk format</a></li>
+<li class="toctree-l1"><a class="reference internal" href="storage.html">Large datasets and storage backends</a></li>
+<li class="toctree-l1"><a class="reference internal" href="data_loading.html">Load data and share it between processes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="variable_size_batches.html">Batch samples of different sizes without padding</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Use tensordict with other libraries</a></li>
+<li class="toctree-l1"><a class="reference internal" href="distributed.html">Distributed tensordicts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="training_at_scale.html">Train at scale</a></li>
+<li class="toctree-l1"><a class="reference internal" href="compile.html">torch.compile, torch.func, torch.export, and CUDA graphs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="printing.html">Printing and display</a></li>
+<li class="toctree-l1"><a class="reference internal" href="compatibility.html">Containers on storage backends</a></li>
+<li class="toctree-l1"><a class="reference internal" href="fx.html">FX tracing (prototype)</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Tutorials: basics</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_keys.html">Getting, setting, and nesting keys</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_slicing.html">Slicing, indexing, and masking</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_shapes.html">Changing the shape of a TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_preallocation.html">Filling a TensorDict row by row</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/streamed_tensordict.html">Building tensordicts from streams</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Tutorials: storage</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_memory.html">Devices and memory-mapped tensors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/zarr_storage.html">Storing TensorDicts in zarr</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/serialization_speed.html">Benchmarking TensorDict serialization speed</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Tutorials: tensordict.nn</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensordict_module.html">Building models with TensorDictModule</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/functional.html">Functional calls and ensembles with TensorDict</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/export.html">Exporting tensordict modules</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Tutorials: data loading</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="tutorials/data_fashion.html">Using TensorDict for datasets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensorclass_fashion.html">Using tensorclasses for datasets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensorclass_imagenet.html">Batched data loading with tensorclasses</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Tutorials: scientific computing</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensorclass_particles.html">Simulating particles with a tensorclass</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">API reference</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="reference/index.html">API reference</a></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+
+
+
+<div id="rtd-footer-container"></div>
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page">Use...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+</div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="searchbox"></div>
+<div id="pytorch-article">
+  <!-- Hidden breadcrumb schema for SEO only -->
+  <div style="display:none;" itemscope itemtype="https://schema.org/BreadcrumbList">
+    
+    <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+      <meta itemprop="name" content="Use tensordict with other libraries">
+      <meta itemprop="position" content="1">
+    </div>
+  </div>
+
+  
+  
+  <div class="pytorch-call-to-action-links">
+    <div id="tutorial-type">integrations</div>
+    <a id="colab-link" data-behavior="call-to-action-event" data-response="Run in Google Colab" target="_blank">
+      <div id="google-colab-link">
+        <img class="call-to-action-img" src="_static/img/pytorch-colab.svg" />
+        <div class="call-to-action-desktop-view">Run in Google Colab</div>
+        <div class="call-to-action-mobile-view">Colab</div>
+      </div>
+    </a>
+    <a id="notebook-link" data-behavior="call-to-action-event" data-response="Download Notebook">
+      <div id="download-notebook-link">
+        <img class="call-to-action-notebook-img" src="_static/img/pytorch-download.svg" />
+        <div class="call-to-action-desktop-view">Download Notebook</div>
+        <div class="call-to-action-mobile-view">Notebook</div>
+      </div>
+    </a>
+    <a id="github-link" data-behavior="call-to-action-event" data-response="View on Github" target="_blank">
+      <div id="github-view-link">
+        <img class="call-to-action-img" src="_static/img/pytorch-github.svg" />
+        <div class="call-to-action-desktop-view">View on GitHub</div>
+        <div class="call-to-action-mobile-view">GitHub</div>
+      </div>
+    </a>
+  </div>
+  
+
+  
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="use-tensordict-with-other-libraries">
+<span id="integrations"></span><h1>Use tensordict with other libraries<a class="headerlink" href="#use-tensordict-with-other-libraries" title="Link to this heading">#</a></h1>
+<p>Many libraries accept a tensordict without any glue code. A
+<a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> is a pytree (<code class="docutils literal notranslate"><span class="pre">torch.utils._pytree</span></code>) and a
+<a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Mapping" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Mapping</span></code></a>, and it has a
+<a class="reference internal" href="reference/generated/tensordict.TensorDictBase.to.html#tensordict.TensorDictBase.to" title="tensordict.TensorDictBase.to"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to()</span></code></a> method. Each section of this page shows
+one library, with a short example.</p>
+<p>The examples need the other libraries, which tensordict does not install, so
+they are not run when this page is tested. They were run with torch 2.14,
+torchvision 0.29, Lightning 2.6, Accelerate 1.15, Transformers 5.20, Datasets
+5.1, Pandera 0.34, JAX 0.12 and xarray 2026.9.</p>
+<section id="torchvision-transforms">
+<h2>torchvision transforms<a class="headerlink" href="#torchvision-transforms" title="Link to this heading">#</a></h2>
+<p>The transforms of <code class="docutils literal notranslate"><span class="pre">torchvision.transforms.v2</span></code> accept any pytree, so they
+accept a tensordict or a tensorclass. They return the same type, and the
+leaves keep their <code class="docutils literal notranslate"><span class="pre">tv_tensors</span></code> types. In this example, the boxes follow the
+image through a flip and a resize:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchvision</span><span class="w"> </span><span class="kn">import</span> <span class="n">tv_tensors</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torchvision.transforms</span><span class="w"> </span><span class="kn">import</span> <span class="n">v2</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">sample</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>  
+<span class="gp">... </span>    <span class="n">image</span><span class="o">=</span><span class="n">tv_tensors</span><span class="o">.</span><span class="n">Image</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">32</span><span class="p">,</span> <span class="mi">48</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">)),</span>
+<span class="gp">... </span>    <span class="n">boxes</span><span class="o">=</span><span class="n">tv_tensors</span><span class="o">.</span><span class="n">BoundingBoxes</span><span class="p">(</span>
+<span class="gp">... </span>        <span class="p">[[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="mi">30</span><span class="p">],</span> <span class="p">[</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">40</span><span class="p">,</span> <span class="mi">28</span><span class="p">]],</span> <span class="nb">format</span><span class="o">=</span><span class="s2">"XYXY"</span><span class="p">,</span> <span class="n">canvas_size</span><span class="o">=</span><span class="p">(</span><span class="mi">32</span><span class="p">,</span> <span class="mi">48</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="p">),</span>
+<span class="gp">... </span>    <span class="n">label</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">3</span><span class="p">,</span> <span class="mi">7</span><span class="p">]),</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">transform</span> <span class="o">=</span> <span class="n">v2</span><span class="o">.</span><span class="n">Compose</span><span class="p">([</span><span class="n">v2</span><span class="o">.</span><span class="n">RandomHorizontalFlip</span><span class="p">(</span><span class="n">p</span><span class="o">=</span><span class="mf">1.0</span><span class="p">),</span> <span class="n">v2</span><span class="o">.</span><span class="n">Resize</span><span class="p">((</span><span class="mi">16</span><span class="p">,</span> <span class="mi">24</span><span class="p">))])</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">out</span> <span class="o">=</span> <span class="n">transform</span><span class="p">(</span><span class="n">sample</span><span class="p">)</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">type</span><span class="p">(</span><span class="n">out</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">"image"</span><span class="p">])</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">out</span><span class="p">[</span><span class="s2">"image"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>  
+<span class="go">('TensorDict', 'Image', torch.Size([3, 16, 24]))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">out</span><span class="p">[</span><span class="s2">"boxes"</span><span class="p">]</span><span class="o">.</span><span class="n">canvas_size</span><span class="p">,</span> <span class="n">out</span><span class="p">[</span><span class="s2">"boxes"</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>  
+<span class="go">((16, 24), [[14, 2, 23, 15], [4, 5, 19, 14]])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">out</span><span class="p">[</span><span class="s2">"label"</span><span class="p">]</span>  
+<span class="go">tensor([3, 7])</span>
+</pre></div>
+</div>
+<p>Wrap the image in <code class="docutils literal notranslate"><span class="pre">tv_tensors.Image</span></code>. Without it, a transform takes the
+first plain tensor of the tensordict as the image, in the order of the keys.
+Here it flips the labels:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">plain</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">label</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">3</span><span class="p">,</span> <span class="mi">7</span><span class="p">]),</span> <span class="n">image</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">32</span><span class="p">,</span> <span class="mi">48</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">v2</span><span class="o">.</span><span class="n">RandomHorizontalFlip</span><span class="p">(</span><span class="n">p</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)(</span><span class="n">plain</span><span class="p">)[</span><span class="s2">"label"</span><span class="p">]</span>  
+<span class="go">tensor([7, 3])</span>
+</pre></div>
+</div>
+<p>Keep the image dimensions out of the batch size: give one sample
+<code class="docutils literal notranslate"><span class="pre">batch_size=[]</span></code>, and a batch of images <code class="docutils literal notranslate"><span class="pre">batch_size=[N]</span></code>. A transform
+applied to a batch draws one set of random parameters for all its images:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">images</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>  
+<span class="gp">... </span>    <span class="n">image</span><span class="o">=</span><span class="n">tv_tensors</span><span class="o">.</span><span class="n">Image</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">32</span><span class="p">,</span> <span class="mi">48</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">)),</span>
+<span class="gp">... </span>    <span class="n">label</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">v2</span><span class="o">.</span><span class="n">RandomCrop</span><span class="p">((</span><span class="mi">16</span><span class="p">,</span> <span class="mi">16</span><span class="p">))(</span><span class="n">images</span><span class="p">)[</span><span class="s2">"image"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>  
+<span class="go">torch.Size([4, 3, 16, 16])</span>
+</pre></div>
+</div>
+<p>To give each sample its own random parameters, transform the samples in the
+dataset, before the batch is built. Samples for object detection have
+different numbers of boxes, so <code class="docutils literal notranslate"><span class="pre">torch.stack</span></code> cannot stack them. Pass
+<a class="reference internal" href="reference/generated/tensordict.lazy_stack.html#tensordict.lazy_stack" title="tensordict.lazy_stack"><code class="xref py py-func docutils literal notranslate"><span class="pre">lazy_stack()</span></code></a> as the <code class="docutils literal notranslate"><span class="pre">collate_fn</span></code> of the
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataLoader</span></code></a> instead (see <a class="reference internal" href="data_loading.html#data-loading"><span class="std std-ref">Load data and share it between processes</span></a>):</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">lazy_stack</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">one_box</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>  
+<span class="gp">... </span>    <span class="n">image</span><span class="o">=</span><span class="n">tv_tensors</span><span class="o">.</span><span class="n">Image</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">32</span><span class="p">,</span> <span class="mi">48</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">)),</span>
+<span class="gp">... </span>    <span class="n">boxes</span><span class="o">=</span><span class="n">tv_tensors</span><span class="o">.</span><span class="n">BoundingBoxes</span><span class="p">([[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">]],</span> <span class="nb">format</span><span class="o">=</span><span class="s2">"XYXY"</span><span class="p">,</span> <span class="n">canvas_size</span><span class="o">=</span><span class="p">(</span><span class="mi">32</span><span class="p">,</span> <span class="mi">48</span><span class="p">)),</span>
+<span class="gp">... </span>    <span class="n">label</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">1</span><span class="p">]),</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">([</span><span class="n">transform</span><span class="p">(</span><span class="n">sample</span><span class="p">),</span> <span class="n">transform</span><span class="p">(</span><span class="n">one_box</span><span class="p">)])</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="p">[</span><span class="n">boxes</span><span class="o">.</span><span class="n">shape</span> <span class="k">for</span> <span class="n">boxes</span> <span class="ow">in</span> <span class="n">batch</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"boxes"</span><span class="p">,</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">)]</span>  
+<span class="go">[torch.Size([2, 4]), torch.Size([1, 4])]</span>
+</pre></div>
+</div>
+</section>
+<section id="lightning">
+<h2>Lightning<a class="headerlink" href="#lightning" title="Link to this heading">#</a></h2>
+<p>A tensordict or a tensorclass can be the batch of a Lightning <code class="docutils literal notranslate"><span class="pre">Trainer</span></code>.
+Lightning moves the batch to the device with one call to <code class="docutils literal notranslate"><span class="pre">batch.to(device)</span></code>.
+It passes <code class="docutils literal notranslate"><span class="pre">non_blocking=True</span></code> only to plain tensors, but you do not need to
+override <code class="docutils literal notranslate"><span class="pre">transfer_batch_to_device</span></code> for that: by default, <code class="docutils literal notranslate"><span class="pre">to()</span></code> copies
+each leaf with <code class="docutils literal notranslate"><span class="pre">non_blocking=True</span></code> (see <a class="reference internal" href="concepts/devices.html#devices"><span class="std std-ref">Devices, dtypes, and memory</span></a>). For copies from
+pinned memory, pass <code class="docutils literal notranslate"><span class="pre">pin_memory=True</span></code> to the <code class="docutils literal notranslate"><span class="pre">DataLoader</span></code> (see
+<a class="reference internal" href="data_loading.html#data-loading"><span class="std std-ref">Load data and share it between processes</span></a>).</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">lightning</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">L</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torch.utils.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataLoader</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Regression</span><span class="p">(</span><span class="n">L</span><span class="o">.</span><span class="n">LightningModule</span><span class="p">):</span>  
+<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="gp">... </span>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+<span class="gp">... </span>        <span class="bp">self</span><span class="o">.</span><span class="n">net</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+<span class="gp">...</span>
+<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="nf">training_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">):</span>
+<span class="gp">... </span>        <span class="n">pred</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">net</span><span class="p">(</span><span class="n">batch</span><span class="p">[</span><span class="s2">"x"</span><span class="p">])</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+<span class="gp">... </span>        <span class="n">loss</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">mse_loss</span><span class="p">(</span><span class="n">pred</span><span class="p">,</span> <span class="n">batch</span><span class="p">[</span><span class="s2">"y"</span><span class="p">])</span>
+<span class="gp">... </span>        <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s2">"loss"</span><span class="p">,</span> <span class="n">loss</span><span class="p">,</span> <span class="n">on_epoch</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="gp">... </span>        <span class="k">return</span> <span class="n">loss</span>
+<span class="gp">...</span>
+<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="nf">configure_optimizers</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="gp">... </span>        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">SGD</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">parameters</span><span class="p">(),</span> <span class="n">lr</span><span class="o">=</span><span class="mf">0.1</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">64</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">y</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">64</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">64</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loader</span> <span class="o">=</span> <span class="n">DataLoader</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span> <span class="n">collate_fn</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">trainer</span> <span class="o">=</span> <span class="n">L</span><span class="o">.</span><span class="n">Trainer</span><span class="p">(</span>  
+<span class="gp">... </span>    <span class="n">max_epochs</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">logger</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">enable_checkpointing</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">enable_progress_bar</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">enable_model_summary</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">trainer</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">Regression</span><span class="p">(),</span> <span class="n">loader</span><span class="p">)</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">sorted</span><span class="p">(</span><span class="n">trainer</span><span class="o">.</span><span class="n">callback_metrics</span><span class="p">)</span>  
+<span class="go">['loss', 'loss_epoch', 'loss_step']</span>
+</pre></div>
+</div>
+<p>Pass <code class="docutils literal notranslate"><span class="pre">batch_size</span></code> to <code class="docutils literal notranslate"><span class="pre">self.log</span></code> when it averages a value over the epoch
+(<code class="docutils literal notranslate"><span class="pre">on_epoch=True</span></code>, the default in <code class="docutils literal notranslate"><span class="pre">validation_step</span></code>) and the batch is a
+tensorclass, or a tensordict that holds one non-tensor value for the whole
+batch, such as a string. Lightning finds the batch size by iterating over the
+batch, and over the values of a mapping. A tensorclass and a non-tensor
+value iterate over their rows, and a row without batch dimensions raises a
+<code class="docutils literal notranslate"><span class="pre">TypeError</span></code> when Lightning iterates over it in turn:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">lightning.pytorch.utilities.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">extract_batch_size</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">extract_batch_size</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">16</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">16</span><span class="p">]))</span>  
+<span class="go">16</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">extract_batch_size</span><span class="p">(</span>  
+<span class="gp">... </span>    <span class="n">TensorDict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">16</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s2">"run-1"</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">16</span><span class="p">])</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gt">Traceback (most recent call last):</span>
+<span class="c">...</span>
+<span class="gr">TypeError</span>: <span class="n">iteration over a 0-d tensordict. ...</span>
+</pre></div>
+</div>
+<p>Write, for example,
+<code class="docutils literal notranslate"><span class="pre">self.log(&quot;loss&quot;,</span> <span class="pre">loss,</span> <span class="pre">on_epoch=True,</span> <span class="pre">batch_size=batch.batch_size[0])</span></code>.</p>
+</section>
+<section id="hugging-face-accelerate">
+<h2>Hugging Face Accelerate<a class="headerlink" href="#hugging-face-accelerate" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">Accelerator.prepare</span></code> accepts a <code class="docutils literal notranslate"><span class="pre">DataLoader</span></code> of tensorclasses or
+tensordicts, and moves each batch to the device with <code class="docutils literal notranslate"><span class="pre">batch.to(device)</span></code>.
+In this example, a tensorclass is the dataset (see <a class="reference internal" href="data_loading.html#data-loading"><span class="std std-ref">Load data and share it between processes</span></a>):</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">tensordict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">accelerate</span><span class="w"> </span><span class="kn">import</span> <span class="n">Accelerator</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorClass</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Sample</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">x</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">... </span>    <span class="n">y</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">... </span>    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">Sample</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">64</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">y</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">64</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s2">"train"</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">64</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">accelerator</span> <span class="o">=</span> <span class="n">Accelerator</span><span class="p">()</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">model</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">optimizer</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">SGD</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">parameters</span><span class="p">(),</span> <span class="n">lr</span><span class="o">=</span><span class="mf">0.1</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loader</span> <span class="o">=</span> <span class="n">DataLoader</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span> <span class="n">collate_fn</span><span class="o">=</span><span class="n">tensordict</span><span class="o">.</span><span class="n">collate</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">model</span><span class="p">,</span> <span class="n">optimizer</span><span class="p">,</span> <span class="n">loader</span> <span class="o">=</span> <span class="n">accelerator</span><span class="o">.</span><span class="n">prepare</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">optimizer</span><span class="p">,</span> <span class="n">loader</span><span class="p">)</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">loader</span><span class="p">:</span>  
+<span class="gp">... </span>    <span class="n">loss</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">mse_loss</span><span class="p">(</span><span class="n">model</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">x</span><span class="p">)</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="n">batch</span><span class="o">.</span><span class="n">y</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="n">accelerator</span><span class="o">.</span><span class="n">backward</span><span class="p">(</span><span class="n">loss</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="n">optimizer</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
+<span class="gp">... </span>    <span class="n">optimizer</span><span class="o">.</span><span class="n">zero_grad</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">type</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">batch_size</span>  
+<span class="go">('Sample', torch.Size([16]))</span>
+</pre></div>
+</div>
+<p>For an <code class="docutils literal notranslate"><span class="pre">IterableDataset</span></code>, Accelerate uses <code class="docutils literal notranslate"><span class="pre">dispatch_batches=True</span></code> by
+default: the main process reads each batch and sends a slice of it to each
+process. Accelerate can find the batch size of tensors, lists, tuples and
+dicts only, so a tensorclass or a tensordict batch then raises an error, even
+in a single process. Pass <code class="docutils literal notranslate"><span class="pre">dispatch_batches=False</span></code>, so that each process
+reads its own batches:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">accelerate.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataLoaderConfiguration</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torch.utils.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">IterableDataset</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Stream</span><span class="p">(</span><span class="n">IterableDataset</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="gp">... </span>        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">64</span><span class="p">):</span>
+<span class="gp">... </span>            <span class="k">yield</span> <span class="n">Sample</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span> <span class="n">y</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(()),</span> <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">"sample-</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">accelerator</span> <span class="o">=</span> <span class="n">Accelerator</span><span class="p">(</span>  
+<span class="gp">... </span>    <span class="n">dataloader_config</span><span class="o">=</span><span class="n">DataLoaderConfiguration</span><span class="p">(</span><span class="n">dispatch_batches</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">stream</span> <span class="o">=</span> <span class="n">DataLoader</span><span class="p">(</span><span class="n">Stream</span><span class="p">(),</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span> <span class="n">collate_fn</span><span class="o">=</span><span class="n">tensordict</span><span class="o">.</span><span class="n">collate</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">[</span><span class="n">batch</span><span class="o">.</span><span class="n">batch_size</span> <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">accelerator</span><span class="o">.</span><span class="n">prepare</span><span class="p">(</span><span class="n">stream</span><span class="p">)]</span>  
+<span class="go">[torch.Size([16]), torch.Size([16]), torch.Size([16]), torch.Size([16])]</span>
+</pre></div>
+</div>
+<p>Gather tensors with <code class="docutils literal notranslate"><span class="pre">accelerator.gather_for_metrics</span></code>, such as the
+predictions and the targets. Accelerate gathers a tensorclass, or a
+tensordict with a non-tensor value, as a Python object: in a run with
+several processes it returns a list of the rows of all the processes.
+<code class="docutils literal notranslate"><span class="pre">torch.stack(list(...))</span></code> makes one batch of the result, with one process
+or several:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">gathered</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">accelerator</span><span class="o">.</span><span class="n">gather_for_metrics</span><span class="p">(</span><span class="n">batch</span><span class="p">)))</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">type</span><span class="p">(</span><span class="n">gathered</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">gathered</span><span class="o">.</span><span class="n">batch_size</span>  
+<span class="go">('Sample', torch.Size([16]))</span>
+</pre></div>
+</div>
+<p>A tensordict that holds only tensors is gathered one tensor at a time. In a
+run with several processes, the tensordict that Accelerate returns has no
+batch dimensions: <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.auto_batch_size_.html#tensordict.TensorDictBase.auto_batch_size_" title="tensordict.TensorDict.auto_batch_size_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">auto_batch_size_()</span></code></a> sets them
+again:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">preds</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">16</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">16</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">gathered</span> <span class="o">=</span> <span class="n">accelerator</span><span class="o">.</span><span class="n">gather_for_metrics</span><span class="p">(</span><span class="n">preds</span><span class="p">)</span><span class="o">.</span><span class="n">auto_batch_size_</span><span class="p">(</span><span class="n">batch_dims</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">gathered</span><span class="o">.</span><span class="n">batch_size</span>  
+<span class="go">torch.Size([16])</span>
+</pre></div>
+</div>
+</section>
+<section id="hugging-face-transformers-and-datasets">
+<h2>Hugging Face Transformers and Datasets<a class="headerlink" href="#hugging-face-transformers-and-datasets" title="Link to this heading">#</a></h2>
+<p>The output of a tokenizer is a mapping of tensors with one row for each text,
+so a tensordict holds it with <code class="docutils literal notranslate"><span class="pre">batch_size=[len(texts)]</span></code>. You can then index,
+split, stack, and move the tokens as one object. <code class="docutils literal notranslate"><span class="pre">model(**tokens)</span></code> passes
+each entry as a keyword argument, as for a <code class="docutils literal notranslate"><span class="pre">dict</span></code>. The model in this
+example is small and untrained:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">transformers</span><span class="w"> </span><span class="kn">import</span> <span class="n">AutoTokenizer</span><span class="p">,</span> <span class="n">GPT2Config</span><span class="p">,</span> <span class="n">GPT2LMHeadModel</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">tokenizer</span> <span class="o">=</span> <span class="n">AutoTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="s2">"gpt2"</span><span class="p">)</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">tokenizer</span><span class="o">.</span><span class="n">pad_token</span> <span class="o">=</span> <span class="n">tokenizer</span><span class="o">.</span><span class="n">eos_token</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">texts</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"Hello world"</span><span class="p">,</span> <span class="s2">"A longer sentence than the first"</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">encoded</span> <span class="o">=</span> <span class="n">tokenizer</span><span class="p">(</span><span class="n">texts</span><span class="p">,</span> <span class="n">padding</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">return_tensors</span><span class="o">=</span><span class="s2">"pt"</span><span class="p">)</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">tokens</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">encoded</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">texts</span><span class="p">)])</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">tokens</span>  
+<span class="go">TensorDict(batch_size=[2], fields={attention_mask: i64[6], input_ids: i64[6]})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">model</span> <span class="o">=</span> <span class="n">GPT2LMHeadModel</span><span class="p">(</span><span class="n">GPT2Config</span><span class="p">(</span><span class="n">n_layer</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">n_head</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">n_embd</span><span class="o">=</span><span class="mi">16</span><span class="p">))</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">model</span><span class="p">(</span><span class="o">**</span><span class="n">tokens</span><span class="p">)</span><span class="o">.</span><span class="n">logits</span><span class="o">.</span><span class="n">shape</span>  
+<span class="go">torch.Size([2, 6, 50257])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">model</span><span class="p">(</span><span class="o">**</span><span class="n">tokens</span><span class="p">[:</span><span class="mi">1</span><span class="p">])</span><span class="o">.</span><span class="n">logits</span><span class="o">.</span><span class="n">shape</span>  
+<span class="go">torch.Size([1, 6, 50257])</span>
+</pre></div>
+</div>
+<p>A dataset of the <code class="docutils literal notranslate"><span class="pre">datasets</span></code> library with <code class="docutils literal notranslate"><span class="pre">with_format(&quot;torch&quot;)</span></code> returns
+a <code class="docutils literal notranslate"><span class="pre">dict</span></code> of tensors for a slice of rows. A column of strings becomes a
+<a class="reference internal" href="reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack" title="tensordict.NonTensorStack"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorStack</span></code></a> (see <a class="reference internal" href="concepts/non_tensor.html#non-tensor-data"><span class="std std-ref">Non-tensor data and unbatched entries</span></a>):</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">datasets</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dataset</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ds</span> <span class="o">=</span> <span class="n">Dataset</span><span class="o">.</span><span class="n">from_dict</span><span class="p">(</span>  
+<span class="gp">... </span>    <span class="p">{</span><span class="s2">"x"</span><span class="p">:</span> <span class="p">[[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">],</span> <span class="p">[</span><span class="mf">2.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">],</span> <span class="p">[</span><span class="mf">4.0</span><span class="p">,</span> <span class="mf">5.0</span><span class="p">]],</span> <span class="s2">"label"</span><span class="p">:</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="s2">"text"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"a"</span><span class="p">,</span> <span class="s2">"b"</span><span class="p">,</span> <span class="s2">"c"</span><span class="p">]}</span>
+<span class="gp">... </span><span class="p">)</span><span class="o">.</span><span class="n">with_format</span><span class="p">(</span><span class="s2">"torch"</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">ds</span><span class="p">[:</span><span class="mi">2</span><span class="p">],</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span><span class="p">[</span><span class="s2">"x"</span><span class="p">]</span>  
+<span class="go">tensor([[0., 1.],</span>
+<span class="go">        [2., 3.]])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="s2">"text"</span><span class="p">]</span>  
+<span class="go">'b'</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">TensorDict(ds[:],</span> <span class="pre">batch_size=[len(ds)])</span></code> loads the whole dataset in
+memory, as one tensordict that a <code class="docutils literal notranslate"><span class="pre">DataLoader</span></code> reads (see
+<a class="reference internal" href="data_loading.html#data-loading"><span class="std std-ref">Load data and share it between processes</span></a>). To read batches from the dataset instead, give the
+<code class="docutils literal notranslate"><span class="pre">DataLoader</span></code> a <code class="docutils literal notranslate"><span class="pre">collate_fn</span></code> that stacks the rows:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">loader</span> <span class="o">=</span> <span class="n">DataLoader</span><span class="p">(</span>  
+<span class="gp">... </span>    <span class="n">ds</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">collate_fn</span><span class="o">=</span><span class="k">lambda</span> <span class="n">rows</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">row</span><span class="p">)</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">])</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">[</span><span class="n">batch</span><span class="o">.</span><span class="n">batch_size</span> <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">loader</span><span class="p">]</span>  
+<span class="go">[torch.Size([2]), torch.Size([1])]</span>
+</pre></div>
+</div>
+<p>A column of lists with different lengths comes out as a list of tensors, and
+the tensordict stores that list as a <code class="docutils literal notranslate"><span class="pre">NonTensorStack</span></code> too. Pad the lists in
+the dataset, or put them in a lazy stack (see <a class="reference internal" href="concepts/stacking.html#stacking-variable-size"><span class="std std-ref">Variable-size data</span></a>):</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">ragged</span> <span class="o">=</span> <span class="n">Dataset</span><span class="o">.</span><span class="n">from_dict</span><span class="p">({</span><span class="s2">"tokens"</span><span class="p">:</span> <span class="p">[[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span> <span class="p">[</span><span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">]]})</span><span class="o">.</span><span class="n">with_format</span><span class="p">(</span><span class="s2">"torch"</span><span class="p">)</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">seqs</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">([</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">tokens</span><span class="o">=</span><span class="n">t</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">ragged</span><span class="p">[:][</span><span class="s2">"tokens"</span><span class="p">]])</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">seqs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"tokens"</span><span class="p">,</span> <span class="n">as_padded_tensor</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>  
+<span class="go">tensor([[1, 2, 3],</span>
+<span class="go">        [4, 5, 0]])</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">transformers.Trainer</span></code> trains on tensorclass batches with two changes.
+Its default collator expects a <code class="docutils literal notranslate"><span class="pre">dict</span></code> for each sample, so pass
+<code class="docutils literal notranslate"><span class="pre">data_collator=tensordict.collate</span></code>. Its default <code class="docutils literal notranslate"><span class="pre">compute_loss</span></code> calls
+<code class="docutils literal notranslate"><span class="pre">model(**inputs)</span></code>, which needs a mapping, so override it to pass the batch
+to the model. Here the tensorclass <code class="docutils literal notranslate"><span class="pre">data</span></code> of the Accelerate section is the
+dataset:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">transformers</span><span class="w"> </span><span class="kn">import</span> <span class="n">Trainer</span><span class="p">,</span> <span class="n">TrainingArguments</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Regressor</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="gp">... </span>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+<span class="gp">... </span>        <span class="bp">self</span><span class="o">.</span><span class="n">net</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+<span class="gp">...</span>
+<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">):</span>
+<span class="gp">... </span>        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">mse_loss</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">net</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">x</span><span class="p">)</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="n">batch</span><span class="o">.</span><span class="n">y</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">TensorClassTrainer</span><span class="p">(</span><span class="n">Trainer</span><span class="p">):</span>  
+<span class="gp">... </span>    <span class="k">def</span><span class="w"> </span><span class="nf">compute_loss</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">inputs</span><span class="p">,</span> <span class="n">return_outputs</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">num_items_in_batch</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="gp">... </span>        <span class="n">loss</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">inputs</span><span class="p">)</span>
+<span class="gp">... </span>        <span class="k">return</span> <span class="p">(</span><span class="n">loss</span><span class="p">,</span> <span class="p">{</span><span class="s2">"loss"</span><span class="p">:</span> <span class="n">loss</span><span class="p">})</span> <span class="k">if</span> <span class="n">return_outputs</span> <span class="k">else</span> <span class="n">loss</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">args</span> <span class="o">=</span> <span class="n">TrainingArguments</span><span class="p">(</span>  
+<span class="gp">... </span>    <span class="n">output_dir</span><span class="o">=</span><span class="s2">"trainer-out"</span><span class="p">,</span> <span class="n">max_steps</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">per_device_train_batch_size</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span> <span class="n">report_to</span><span class="o">=</span><span class="p">[]</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">trainer</span> <span class="o">=</span> <span class="n">TensorClassTrainer</span><span class="p">(</span>  
+<span class="gp">... </span>    <span class="n">model</span><span class="o">=</span><span class="n">Regressor</span><span class="p">(),</span> <span class="n">args</span><span class="o">=</span><span class="n">args</span><span class="p">,</span> <span class="n">train_dataset</span><span class="o">=</span><span class="n">data</span><span class="p">,</span> <span class="n">data_collator</span><span class="o">=</span><span class="n">tensordict</span><span class="o">.</span><span class="n">collate</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">trainer</span><span class="o">.</span><span class="n">train</span><span class="p">()</span><span class="o">.</span><span class="n">global_step</span>  
+<span class="go">{'train_runtime': ...}</span>
+<span class="go">4</span>
+</pre></div>
+</div>
+<p>Use a tensorclass for the batch, not a tensordict. The <code class="docutils literal notranslate"><span class="pre">Trainer</span></code> rebuilds
+a mapping batch with <code class="docutils literal notranslate"><span class="pre">type(batch)({...})</span></code>, which gives a tensordict without
+batch dimensions, and then raises because the batch looks empty.</p>
+</section>
+<section id="distributeddataparallel-and-pytrees">
+<h2>DistributedDataParallel and pytrees<a class="headerlink" href="#distributeddataparallel-and-pytrees" title="Link to this heading">#</a></h2>
+<p><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html#torch.nn.parallel.DistributedDataParallel" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">DistributedDataParallel</span></code></a> passes a tensorclass or a
+tensordict to the <code class="docutils literal notranslate"><span class="pre">forward</span></code> of the module, and returns one if <code class="docutils literal notranslate"><span class="pre">forward</span></code>
+does. Here, with one process, it trains the <code class="docutils literal notranslate"><span class="pre">Regressor</span></code> of the previous
+section:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch.distributed</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">dist</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">dist</span><span class="o">.</span><span class="n">init_process_group</span><span class="p">(</span>  
+<span class="gp">... </span>    <span class="s2">"gloo"</span><span class="p">,</span> <span class="n">init_method</span><span class="o">=</span><span class="s2">"tcp://127.0.0.1:29500"</span><span class="p">,</span> <span class="n">rank</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">world_size</span><span class="o">=</span><span class="mi">1</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ddp</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">parallel</span><span class="o">.</span><span class="n">DistributedDataParallel</span><span class="p">(</span><span class="n">Regressor</span><span class="p">())</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ddp</span><span class="p">(</span><span class="n">data</span><span class="p">[:</span><span class="mi">16</span><span class="p">])</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ddp</span><span class="o">.</span><span class="n">module</span><span class="o">.</span><span class="n">net</span><span class="o">.</span><span class="n">weight</span><span class="o">.</span><span class="n">grad</span><span class="o">.</span><span class="n">shape</span>  
+<span class="go">torch.Size([1, 2])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">dist</span><span class="o">.</span><span class="n">destroy_process_group</span><span class="p">()</span>  
+</pre></div>
+</div>
+<p>A tensorclass is a pytree. The functions of <code class="docutils literal notranslate"><span class="pre">torch.utils._pytree</span></code> go
+through its tensors, keep its non-tensor fields, and return the same type:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch.utils._pytree</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pytree</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">leaves</span><span class="p">,</span> <span class="n">spec</span> <span class="o">=</span> <span class="n">pytree</span><span class="o">.</span><span class="n">tree_flatten</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="p">[</span><span class="n">leaf</span><span class="o">.</span><span class="n">shape</span> <span class="k">for</span> <span class="n">leaf</span> <span class="ow">in</span> <span class="n">leaves</span><span class="p">]</span>
+<span class="go">[torch.Size([64, 2]), torch.Size([64])]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">zeros</span> <span class="o">=</span> <span class="n">pytree</span><span class="o">.</span><span class="n">tree_map</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">type</span><span class="p">(</span><span class="n">zeros</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">zeros</span><span class="o">.</span><span class="n">name</span>
+<span class="go">('Sample', 'train')</span>
+</pre></div>
+</div>
+</section>
+<section id="validate-with-pandera">
+<h2>Validate with Pandera<a class="headerlink" href="#validate-with-pandera" title="Link to this heading">#</a></h2>
+<p>Pandera (0.34 or later) validates tensordicts and tensorclasses with the
+<code class="docutils literal notranslate"><span class="pre">pandera.tensordict</span></code> module. A schema lists the keys, with the dtype, the
+shape and the checks of each, and the batch size. <code class="docutils literal notranslate"><span class="pre">None</span></code> accepts any size
+for a dimension. <code class="docutils literal notranslate"><span class="pre">validate</span></code> returns a copy of the data, or raises a
+<code class="docutils literal notranslate"><span class="pre">SchemaError</span></code>. With <code class="docutils literal notranslate"><span class="pre">inplace=True</span></code>, it returns the data without a copy:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pandera.tensordict</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pa</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">pandera</span><span class="w"> </span><span class="kn">import</span> <span class="n">Check</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">schema</span> <span class="o">=</span> <span class="n">pa</span><span class="o">.</span><span class="n">TensorDictSchema</span><span class="p">(</span>  
+<span class="gp">... </span>    <span class="n">keys</span><span class="o">=</span><span class="p">{</span>
+<span class="gp">... </span>        <span class="s2">"image"</span><span class="p">:</span> <span class="n">pa</span><span class="o">.</span><span class="n">Tensor</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">)),</span>
+<span class="gp">... </span>        <span class="s2">"label"</span><span class="p">:</span> <span class="n">pa</span><span class="o">.</span><span class="n">Tensor</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="kc">None</span><span class="p">,),</span> <span class="n">checks</span><span class="o">=</span><span class="n">Check</span><span class="o">.</span><span class="n">ge</span><span class="p">(</span><span class="mi">0</span><span class="p">)),</span>
+<span class="gp">... </span>    <span class="p">},</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">(</span><span class="kc">None</span><span class="p">,),</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">image</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">),</span> <span class="n">label</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">schema</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="ow">is</span> <span class="n">batch</span>  
+<span class="go">True</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">schema</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">batch</span><span class="o">.</span><span class="n">float</span><span class="p">())</span>  
+<span class="gt">Traceback (most recent call last):</span>
+<span class="c">...</span>
+<span class="gr">pandera.errors.SchemaError</span>: <span class="n">Key 'label': expected dtype torch.int64, got torch.float32</span>
+</pre></div>
+</div>
+<p>The same schema can be written as a class, as for a dataclass, and it
+validates a tensorclass too:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorClass</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">ImageSchema</span><span class="p">(</span><span class="n">pa</span><span class="o">.</span><span class="n">TensorDictModel</span><span class="p">):</span>  
+<span class="gp">... </span>    <span class="n">image</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span> <span class="o">=</span> <span class="n">pa</span><span class="o">.</span><span class="n">Field</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">))</span>
+<span class="gp">... </span>    <span class="n">label</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">int64</span> <span class="o">=</span> <span class="n">pa</span><span class="o">.</span><span class="n">Field</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="kc">None</span><span class="p">,),</span> <span class="n">ge</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="gp">...</span>
+<span class="gp">... </span>    <span class="k">class</span><span class="w"> </span><span class="nc">Config</span><span class="p">:</span>
+<span class="gp">... </span>        <span class="n">batch_size</span> <span class="o">=</span> <span class="p">(</span><span class="kc">None</span><span class="p">,)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Images</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">image</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">... </span>    <span class="n">label</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">images</span> <span class="o">=</span> <span class="n">Images</span><span class="p">(</span><span class="n">image</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">),</span> <span class="n">label</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ImageSchema</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">images</span><span class="p">)</span>  
+<span class="gt">Traceback (most recent call last):</span>
+<span class="c">...</span>
+<span class="gr">pandera.errors.SchemaError</span>: <span class="n">Check '&lt;Check greater_than_or_equal_to: greater_than_or_equal_to(0)&gt;' failed for key 'label': check failed</span>
+</pre></div>
+</div>
+<p>With <code class="docutils literal notranslate"><span class="pre">validate(...,</span> <span class="pre">lazy=True)</span></code>, Pandera reports every error at once, in a
+<code class="docutils literal notranslate"><span class="pre">SchemaErrors</span></code> exception. See the <a class="reference external" href="https://pandera.readthedocs.io/">Pandera documentation</a> for the other checks.</p>
+</section>
+<section id="arrays-from-jax">
+<h2>Arrays from JAX<a class="headerlink" href="#arrays-from-jax" title="Link to this heading">#</a></h2>
+<p>A JAX simulator returns a pytree of JAX arrays. Convert each array with
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.from_dlpack.html#torch.from_dlpack" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.from_dlpack()</span></code></a>, then build the tensordict. On the same device,
+DLPack shares the memory of the array, without a copy. Pass the tensors back
+to JAX the same way, with <code class="docutils literal notranslate"><span class="pre">jax.numpy.from_dlpack</span></code>:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">jax</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">jax.numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">jnp</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">state</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"qpos"</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">4</span><span class="p">,</span> <span class="mi">7</span><span class="p">)),</span> <span class="s2">"done"</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)}</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">jax</span><span class="o">.</span><span class="n">tree</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">from_dlpack</span><span class="p">,</span> <span class="n">state</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">])</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span><span class="p">[</span><span class="s2">"qpos"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">td</span><span class="p">[</span><span class="s2">"done"</span><span class="p">]</span><span class="o">.</span><span class="n">dtype</span>  
+<span class="go">(torch.Size([4, 7]), torch.bool)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">back</span> <span class="o">=</span> <span class="n">jax</span><span class="o">.</span><span class="n">tree</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">jnp</span><span class="o">.</span><span class="n">from_dlpack</span><span class="p">,</span> <span class="n">td</span><span class="o">.</span><span class="n">to_dict</span><span class="p">())</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">back</span><span class="p">[</span><span class="s2">"qpos"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">back</span><span class="p">[</span><span class="s2">"done"</span><span class="p">]</span><span class="o">.</span><span class="n">dtype</span>  
+<span class="go">((4, 7), dtype('bool'))</span>
+</pre></div>
+</div>
+<p>Convert the arrays before you build the tensordict. A tensordict keeps a JAX
+array as non-tensor data, which tensor operations skip:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nb">type</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">])[</span><span class="s2">"qpos"</span><span class="p">])</span><span class="o">.</span><span class="vm">__name__</span>  
+<span class="go">'ArrayImpl'</span>
+</pre></div>
+</div>
+<p>JAX arrays are immutable, but a tensor from DLPack is not, and a write into
+it changes the JAX array too. Clone the tensor before an in-place write.</p>
+</section>
+<section id="xarray">
+<h2>xarray<a class="headerlink" href="#xarray" title="Link to this heading">#</a></h2>
+<p>Convert an xarray <code class="docutils literal notranslate"><span class="pre">Dataset</span></code> one variable at a time. Choose the batch
+dimensions, which the variables share, and transpose each variable so that
+they come first. Pass their names as <code class="docutils literal notranslate"><span class="pre">names</span></code> (see <a class="reference internal" href="concepts/batch_size.html#batch-size"><span class="std std-ref">Batch size, shapes, and indexing</span></a>):</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">xarray</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">xr</span>  
+<span class="gp">&gt;&gt;&gt; </span><span class="n">ds</span> <span class="o">=</span> <span class="n">xr</span><span class="o">.</span><span class="n">Dataset</span><span class="p">(</span>  
+<span class="gp">... </span>    <span class="p">{</span>
+<span class="gp">... </span>        <span class="s2">"t2m"</span><span class="p">:</span> <span class="p">((</span><span class="s2">"time"</span><span class="p">,</span> <span class="s2">"lat"</span><span class="p">,</span> <span class="s2">"lon"</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">8</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)),</span>
+<span class="gp">... </span>        <span class="s2">"u10"</span><span class="p">:</span> <span class="p">((</span><span class="s2">"time"</span><span class="p">,</span> <span class="s2">"lat"</span><span class="p">,</span> <span class="s2">"lon"</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">8</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)),</span>
+<span class="gp">... </span>        <span class="s2">"z"</span><span class="p">:</span> <span class="p">((</span><span class="s2">"level"</span><span class="p">,</span> <span class="s2">"time"</span><span class="p">,</span> <span class="s2">"lat"</span><span class="p">,</span> <span class="s2">"lon"</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)),</span>
+<span class="gp">... </span>        <span class="s2">"lsm"</span><span class="p">:</span> <span class="p">((</span><span class="s2">"lat"</span><span class="p">,</span> <span class="s2">"lon"</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">4</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)),</span>
+<span class="gp">... </span>    <span class="p">}</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">batch_dims</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"time"</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">weather</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>  
+<span class="gp">... </span>    <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">ds</span><span class="p">[</span><span class="n">k</span><span class="p">]</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">*</span><span class="n">batch_dims</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span><span class="o">.</span><span class="n">values</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">"t2m"</span><span class="p">,</span> <span class="s2">"u10"</span><span class="p">,</span> <span class="s2">"z"</span><span class="p">]},</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="n">ds</span><span class="o">.</span><span class="n">sizes</span><span class="p">[</span><span class="n">d</span><span class="p">]</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">batch_dims</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="n">names</span><span class="o">=</span><span class="n">batch_dims</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">weather</span><span class="p">[</span><span class="s2">"z"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">weather</span><span class="o">.</span><span class="n">names</span>  
+<span class="go">(torch.Size([8, 3, 4, 6]), ['time'])</span>
+</pre></div>
+</div>
+<p>Models often take one tensor for each group of variables, with the variables
+as channels. <code class="docutils literal notranslate"><span class="pre">to_array(&quot;channel&quot;)</span></code> stacks them along a new first
+dimension, so transpose the batch dimensions in front of it:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">def</span><span class="w"> </span><span class="nf">stack</span><span class="p">(</span><span class="n">ds</span><span class="p">,</span> <span class="n">variables</span><span class="p">,</span> <span class="n">batch_dims</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">stacked</span> <span class="o">=</span> <span class="n">ds</span><span class="p">[</span><span class="n">variables</span><span class="p">]</span><span class="o">.</span><span class="n">to_array</span><span class="p">(</span><span class="s2">"channel"</span><span class="p">)</span>
+<span class="gp">... </span>    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">stacked</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">*</span><span class="n">batch_dims</span><span class="p">,</span> <span class="s2">"channel"</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span><span class="o">.</span><span class="n">values</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">groups</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>  
+<span class="gp">... </span>    <span class="n">surface</span><span class="o">=</span><span class="n">stack</span><span class="p">(</span><span class="n">ds</span><span class="p">,</span> <span class="p">[</span><span class="s2">"t2m"</span><span class="p">,</span> <span class="s2">"u10"</span><span class="p">],</span> <span class="n">batch_dims</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">upper</span><span class="o">=</span><span class="n">stack</span><span class="p">(</span><span class="n">ds</span><span class="p">,</span> <span class="p">[</span><span class="s2">"z"</span><span class="p">],</span> <span class="n">batch_dims</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="n">ds</span><span class="o">.</span><span class="n">sizes</span><span class="p">[</span><span class="n">d</span><span class="p">]</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">batch_dims</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="n">names</span><span class="o">=</span><span class="n">batch_dims</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">groups</span><span class="p">[</span><span class="s2">"surface"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">groups</span><span class="p">[</span><span class="s2">"upper"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>  
+<span class="go">(torch.Size([8, 2, 4, 6]), torch.Size([8, 1, 3, 4, 6]))</span>
+</pre></div>
+</div>
+<p>These rules apply:</p>
+<ul class="simple">
+<li><p>A variable without the batch dimensions, such as <code class="docutils literal notranslate"><span class="pre">lsm</span></code> here, cannot go in
+the tensordict, not even in a nested tensordict with <code class="docutils literal notranslate"><span class="pre">batch_size=[]</span></code>: a
+nested tensordict has the batch dimensions of its parent. Keep it in a
+separate tensordict, or expand it to the batch dimensions with
+<code class="docutils literal notranslate"><span class="pre">torch.as_tensor(ds[&quot;lsm&quot;].values).expand(8,</span> <span class="pre">4,</span> <span class="pre">6)</span></code>. The expanded tensor
+is a view, without a copy, but <code class="docutils literal notranslate"><span class="pre">clone()</span></code> and
+<a class="reference internal" href="reference/generated/tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap" title="tensordict.TensorDictBase.memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap()</span></code></a> copy it in full.</p></li>
+<li><p>If the <code class="docutils literal notranslate"><span class="pre">Dataset</span></code> is backed by dask, <code class="docutils literal notranslate"><span class="pre">.values</span></code> loads the data in memory.</p></li>
+<li><p>The tensordict keeps the names of the batch dimensions only. The names of
+the other dimensions, such as <code class="docutils literal notranslate"><span class="pre">level</span></code>, and the coordinates are lost.</p></li>
+</ul>
+</section>
+</section>
+
+
+                </article>
+              
+</div>
+
+              
+              
+                <footer class="bd-footer-article">
+                  <div class="footer-article-items footer-article__inner">
+  
+    <div class="footer-article-item">
+<div class="feedback">
+  
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+
+  <div class="feedback-send">
+    <button class="feedback-btn"
+            onclick="openGitHubIssue()"
+            data-bs-title="Create a GitHub Issue"
+            data-bs-placement="bottom"
+            data-bs-toggle="tooltip"
+            data-gtm="feedback-btn-click">Send Feedback
+    </button>
+  </div>
+</div>
+
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="variable_size_batches.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Batch samples of different sizes without padding</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="distributed.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Distributed tensordicts</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+
+<div class="footer-info">
+  <p class="copyright">
+    
+  </p>
+
+  <p class="theme-version">
+    Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+  </p>
+</div>
+</div>
+  
+</div>
+                </footer>
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="variable_size_batches.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Batch samples of different sizes without padding</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="distributed.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Distributed tensordicts</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc">
+<div class="sidebar-secondary-items sidebar-secondary__inner">
+    
+       <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#torchvision-transforms">torchvision transforms</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#lightning">Lightning</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hugging-face-accelerate">Hugging Face Accelerate</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hugging-face-transformers-and-datasets">Hugging Face Transformers and Datasets</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#distributeddataparallel-and-pytrees">DistributedDataParallel and pytrees</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#validate-with-pandera">Validate with Pandera</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#arrays-from-jax">Arrays from JAX</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#xarray">xarray</a></li>
+</ul>
+  </nav></div>
+    
+       <div class="sidebar-secondary-item">
+
+  
+
+  
+  <div class="tocsection editthispage">
+    <a href="https://github.com/pytorch/tensordict/edit/main/docs/source/integrations.rst">
+      <i class="fa-solid fa-pencil"></i>
+      
+      
+        
+          Edit on GitHub
+        
+      
+    </a>
+  </div>
+
+</div>
+    
+       <div class="sidebar-secondary-item">
+    <div class="tocsection sourcelink">
+      <a href="_sources/integrations.rst.txt">
+        <i class="fa-solid fa-file-lines"></i> Show Source
+      </a>
+    </div>
+</div>
+    
+
+
+
+
+<div class="sidebar-secondary-item">
+  <div class="sidebar-heading">PyTorch Libraries</div>
+  <ul style="list-style-type: none; padding: 0; padding-bottom: 80px;">
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/executorch" style="color: var(--pst-color-text-muted)">ExecuTorch</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/helion" style="color: var(--pst-color-text-muted)">Helion</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/ao" style="color: var(--pst-color-text-muted)">torchao</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://github.com/pytorch/kineto" style="color: var(--pst-color-text-muted)">kineto</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://github.com/pytorch/torchtitan" style="color: var(--pst-color-text-muted)">torchtitan</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/rl" style="color: var(--pst-color-text-muted)">TorchRL</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/vision" style="color: var(--pst-color-text-muted)">torchvision</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/audio" style="color: var(--pst-color-text-muted)">torchaudio</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/tensordict" style="color: var(--pst-color-text-muted)">tensordict</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/xla" style="color: var(--pst-color-text-muted)">PyTorch on XLA Devices</a></li>
+  
+  </ul>
+</div>
+
+</div>
+</div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+  
+
+<div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+  <div class="container">
+    <div class="row">
+      <div class="col-md-4">
+        <h2>Docs</h2>
+        <p>Access comprehensive developer documentation for PyTorch</p>
+        <a class="with-right-arrow" href="https://docs.pytorch.org/docs/stable/index.html">View Docs</a>
+      </div>
+
+      <div class="col-md-4">
+        <h2>Tutorials</h2>
+        <p>Get in-depth tutorials for beginners and advanced developers</p>
+        <a class="with-right-arrow" href="https://docs.pytorch.org/tutorials">View Tutorials</a>
+      </div>
+
+      <div class="col-md-4">
+        <h2>Resources</h2>
+        <p>Find development resources and get your questions answered</p>
+        <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+
+<footer class="site-footer">
+
+  <div class="container footer-container">
+
+    <div class="newsletter" id="newsletter">
+
+      <p class="newsletter__title is-style-max-width-800"><strong>Stay in touch</strong> for updates, event info, and
+        the latest news</p>
+
+
+      <script charset="utf-8" type="text/javascript" src="//js.hsforms.net/forms/embed/v2.js"></script>
+      <script>
+        hbspt.forms.create({
+          region: "na1",
+          portalId: "8112310",
+          formId: "2fb2231c-000b-4ec5-88a0-1ab242549c9e"
+        });
+      </script>
+
+
+      <p class="newsletter__privacy">By submitting this form, I consent to receive marketing emails from the LF and its
+        projects regarding their events, training, research, developments, and related announcements. I understand that
+        I can unsubscribe at any time using the links in the footers of the emails I receive. <a
+          href="https://www.linuxfoundation.org/privacy/">Privacy Policy</a>.</p>
+
+    </div>
+
+    <div class="lf-grid">
+      <ul class="social-links">
+        <li><a href="https://www.facebook.com/pytorch" target="_blank" title="PyTorch on Facebook">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="-0.51 -0.26 26.45 26.45" aria-label="Facebook">
+              <path fill="currentColor"
+                d="M25.497 13.075c0-2.45-.698-4.848-2.011-6.911a12.765 12.765 0 0 0-5.398-4.73A12.671 12.671 0 0 0 11.008.38a12.705 12.705 0 0 0-6.529 2.95A12.827 12.827 0 0 0 .563 9.358a12.896 12.896 0 0 0-.07 7.201 12.831 12.831 0 0 0 3.801 6.103 12.709 12.709 0 0 0 6.471 3.078v-8.957H7.53v-3.708h3.235v-2.824c0-3.213 1.903-4.988 4.813-4.988.956.014 1.909.097 2.852.25V8.67h-1.607a1.83 1.83 0 0 0-1.518.497 1.854 1.854 0 0 0-.561 1.505v2.404h3.535l-.563 3.708h-2.97v8.957a12.725 12.725 0 0 0 7.697-4.337 12.87 12.87 0 0 0 3.054-8.328z" />
+            </svg>
+          </a></li>
+        <li><a href="https://twitter.com/pytorch" target="_blank" title="PyTorch on X">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="0 0 300 300" aria-label="X">
+              <path fill="currentColor"
+                d="M178.57 127.15 290.27 0h-26.46l-97.03 110.38L89.34 0H0l117.13 166.93L0 300.25h26.46l102.4-116.59 81.8 116.59h89.34M36.01 19.54H76.66l187.13 262.13h-40.66" />
+            </svg>
+          </a></li>
+        <li><a href="https://www.youtube.com/pytorch" target="_blank" title="PyTorch on YouTube">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="0.21 0.27 34.45 25.07" aria-label="YouTube">
+              <path fill="currentColor"
+                d="M33.729 6.084s-.327-2.33-1.317-3.356a4.691 4.691 0 0 0-3.32-1.432c-4.634-.34-11.589-.34-11.589-.34h-.014s-6.954 0-11.59.342a4.692 4.692 0 0 0-3.32 1.432c-.993 1.025-1.315 3.354-1.315 3.354a52.189 52.189 0 0 0-.331 5.473v2.566c.014 1.829.125 3.656.331 5.472 0 0 .322 2.33 1.316 3.36 1.26 1.345 2.916 1.3 3.653 1.445 2.65.26 11.263.34 11.263.34s6.96-.01 11.597-.353a4.691 4.691 0 0 0 3.32-1.432c.993-1.026 1.316-3.356 1.316-3.356.206-1.817.316-3.644.33-5.473v-2.57a52.26 52.26 0 0 0-.33-5.472zM14.076 17.232V7.729l8.951 4.768-8.95 4.735z" />
+            </svg>
+          </a></li>
+        <li><a href="https://www.linkedin.com/company/pytorch" target="_blank" title="PyTorch on LinkedIn">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="-10.23 -10.23 531.96 531.96" aria-label="LinkedIn">
+              <rect width="512" height="512" rx="0" fill="currentColor" />
+              <circle fill="#000" cx="142" cy="138" r="37" />
+              <path stroke="#000" stroke-width="66" d="M244 194v198M142 194v198" />
+              <path fill="#000"
+                d="M276 282c0-20 13-40 36-40 24 0 33 18 33 45v105h66V279c0-61-32-89-76-89-34 0-51 19-59 32" />
+            </svg>
+          </a></li>
+        <li><a href="https://pytorch.slack.com" target="_blank" title="PyTorch Slack">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.16 -0.03 21.19 21.19" aria-label="Slack">
+              <path fill="currentColor"
+                d="M4.896 13.27a2.147 2.147 0 0 1-2.141 2.142A2.147 2.147 0 0 1 .613 13.27c0-1.178.963-2.141 2.142-2.141h2.141v2.141zm1.08 0c0-1.178.962-2.141 2.141-2.141s2.142.963 2.142 2.141v5.363a2.147 2.147 0 0 1-2.142 2.141 2.147 2.147 0 0 1-2.141-2.142V13.27zm2.141-8.6a2.147 2.147 0 0 1-2.141-2.14c0-1.18.962-2.142 2.141-2.142s2.142.963 2.142 2.141v2.142H8.117zm0 1.08c1.179 0 2.141.962 2.141 2.141a2.147 2.147 0 0 1-2.141 2.142H2.755A2.147 2.147 0 0 1 .613 7.89c0-1.179.963-2.141 2.142-2.141h5.362zm8.599 2.141c0-1.179.963-2.141 2.141-2.141 1.179 0 2.143.962 2.143 2.14a2.147 2.147 0 0 1-2.142 2.142h-2.141V7.89zm-1.08 0a2.147 2.147 0 0 1-2.141 2.142 2.147 2.147 0 0 1-2.141-2.142V2.53c0-1.178.962-2.141 2.141-2.141s2.142.963 2.142 2.141v5.362zm-2.141 8.6c1.179 0 2.142.962 2.142 2.14a2.147 2.147 0 0 1-2.142 2.142 2.147 2.147 0 0 1-2.141-2.141V16.49h2.141zm0-1.08a2.147 2.147 0 0 1-2.141-2.141c0-1.179.962-2.142 2.141-2.142h5.362c1.179 0 2.142.963 2.142 2.142a2.147 2.147 0 0 1-2.142 2.142h-5.362z">
+              </path>
+            </svg>
+          </a></li>
+        <li><a href="https://pytorch.org/wechat" title="PyTorch on WeChat">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.14 -0.17 38.02 33.02" aria-label="WeChat">
+              <path fill="currentColor"
+                d="M26.289 10.976a12.972 12.972 0 0 0-8.742 3.53 10.386 10.386 0 0 0-3.224 8.795c-1.326-.164-2.535-.345-3.75-.448a2.332 2.332 0 0 0-1.273.216c-1.18.666-2.311 1.418-3.652 2.255.246-1.112.405-2.087.687-3.024a1.15 1.15 0 0 0-.523-1.52C1.737 17.902.02 13.601 1.307 9.165c1.189-4.1 4.11-6.587 8.077-7.884A13.54 13.54 0 0 1 24.18 5.617a10.135 10.135 0 0 1 2.109 5.359zM10.668 9.594a1.564 1.564 0 0 0-2.095-1.472 1.52 1.52 0 0 0-.895 1.964 1.502 1.502 0 0 0 1.391.966 1.545 1.545 0 0 0 1.598-1.46v.002zm8.15-1.566a1.567 1.567 0 0 0-1.528 1.543 1.528 1.528 0 0 0 1.571 1.492 1.52 1.52 0 0 0 1.375-2.117 1.518 1.518 0 0 0-1.415-.919l-.003.001z">
+              </path>
+              <path fill="currentColor"
+                d="M33.914 32.137c-1.075-.478-2.062-1.196-3.11-1.306-1.049-.11-2.145.494-3.24.605a10.821 10.821 0 0 1-8.781-2.864c-4.682-4.33-4.013-10.97 1.403-14.518 4.811-3.154 11.874-2.102 15.268 2.273a8.671 8.671 0 0 1-1.002 12.095c-1.046.929-1.422 1.693-.751 2.917.102.257.174.525.213.798zM21.68 20.292a1.264 1.264 0 1 0 .01-2.528 1.264 1.264 0 0 0-.01 2.528zm7.887-2.526a1.266 1.266 0 0 0-1.256 1.21 1.247 1.247 0 1 0 1.256-1.21z">
+              </path>
+            </svg>
+          </a></li>
+      </ul>
+    </div>
+    
+    <div class="privacy-policy">
+      <div class="copyright">
+      
+        <p>
+          &copy; PyTorch. Copyright © The Linux Foundation®. All rights reserved. The Linux Foundation has registered
+          trademarks and uses trademarks. For more information, including terms of use, privacy policy, and trademark
+          usage, please see our <a href="https://www.linuxfoundation.org/legal/policies">Policies</a> page. <a
+            href="https://www.linuxfoundation.org/trademark-usage">Trademark Usage</a>. <a
+            href="http://www.linuxfoundation.org/privacy">Privacy Policy</a>.
+        </p>
+        
+      </div>
+    </div>
+
+
+  </div>
+</footer>
+
+<div class="cookie-banner-wrapper" data-nosnippet>
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://opensource.fb.com/legal/cookie-policy">Cookies Policy</a>.</p>
+    <button class="close-button" aria-label="Close cookie banner"></button>
+  </div>
+</div>
+  
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2022, Meta.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.2.6.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  <script type="application/ld+json">
+    {
+       "@context": "https://schema.org",
+       "@type": "Article",
+       "name": "Use tensordict with other libraries",
+       "headline": "Use tensordict with other libraries",
+       "description": "A dict[str, torch.Tensor] that behaves like one tensor. - Use tensordict with other libraries",
+       "url": "/integrations.html",
+       "articleBody": "Use tensordict with other libraries# Many libraries accept a tensordict without any glue code. A TensorDict is a pytree (torch.utils._pytree) and a Mapping, and it has a to() method. Each section of this page shows one library, with a short example. The examples need the other libraries, which tensordict does not install, so they are not run when this page is tested. They were run with torch 2.14, torchvision 0.29, Lightning 2.6, Accelerate 1.15, Transformers 5.20, Datasets 5.1, Pandera 0.34, JAX 0.12 and xarray 2026.9. torchvision transforms# The transforms of torchvision.transforms.v2 accept any pytree, so they accept a tensordict or a tensorclass. They return the same type, and the leaves keep their tv_tensors types. In this example, the boxes follow the image through a flip and a resize: \u003e\u003e\u003e import torch \u003e\u003e\u003e from torchvision import tv_tensors \u003e\u003e\u003e from torchvision.transforms import v2 \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e sample = TensorDict( ... image=tv_tensors.Image(torch.zeros(3, 32, 48, dtype=torch.uint8)), ... boxes=tv_tensors.BoundingBoxes( ... [[2, 4, 20, 30], [10, 10, 40, 28]], format=\"XYXY\", canvas_size=(32, 48) ... ), ... label=torch.tensor([3, 7]), ... ) \u003e\u003e\u003e transform = v2.Compose([v2.RandomHorizontalFlip(p=1.0), v2.Resize((16, 24))]) \u003e\u003e\u003e out = transform(sample) \u003e\u003e\u003e type(out).__name__, type(out[\"image\"]).__name__, out[\"image\"].shape (\u0027TensorDict\u0027, \u0027Image\u0027, torch.Size([3, 16, 24])) \u003e\u003e\u003e out[\"boxes\"].canvas_size, out[\"boxes\"].tolist() ((16, 24), [[14, 2, 23, 15], [4, 5, 19, 14]]) \u003e\u003e\u003e out[\"label\"] tensor([3, 7]) Wrap the image in tv_tensors.Image. Without it, a transform takes the first plain tensor of the tensordict as the image, in the order of the keys. Here it flips the labels: \u003e\u003e\u003e plain = TensorDict(label=torch.tensor([3, 7]), image=torch.zeros(3, 32, 48)) \u003e\u003e\u003e v2.RandomHorizontalFlip(p=1.0)(plain)[\"label\"] tensor([7, 3]) Keep the image dimensions out of the batch size: give one sample batch_size=[], and a batch of images batch_size=[N]. A transform applied to a batch draws one set of random parameters for all its images: \u003e\u003e\u003e images = TensorDict( ... image=tv_tensors.Image(torch.zeros(4, 3, 32, 48, dtype=torch.uint8)), ... label=torch.arange(4), ... batch_size=[4], ... ) \u003e\u003e\u003e v2.RandomCrop((16, 16))(images)[\"image\"].shape torch.Size([4, 3, 16, 16]) To give each sample its own random parameters, transform the samples in the dataset, before the batch is built. Samples for object detection have different numbers of boxes, so torch.stack cannot stack them. Pass lazy_stack() as the collate_fn of the DataLoader instead (see Load data and share it between processes): \u003e\u003e\u003e from tensordict import lazy_stack \u003e\u003e\u003e one_box = TensorDict( ... image=tv_tensors.Image(torch.zeros(3, 32, 48, dtype=torch.uint8)), ... boxes=tv_tensors.BoundingBoxes([[0, 0, 8, 8]], format=\"XYXY\", canvas_size=(32, 48)), ... label=torch.tensor([1]), ... ) \u003e\u003e\u003e batch = lazy_stack([transform(sample), transform(one_box)]) \u003e\u003e\u003e [boxes.shape for boxes in batch.get(\"boxes\", as_list=True)] [torch.Size([2, 4]), torch.Size([1, 4])] Lightning# A tensordict or a tensorclass can be the batch of a Lightning Trainer. Lightning moves the batch to the device with one call to batch.to(device). It passes non_blocking=True only to plain tensors, but you do not need to override transfer_batch_to_device for that: by default, to() copies each leaf with non_blocking=True (see Devices, dtypes, and memory). For copies from pinned memory, pass pin_memory=True to the DataLoader (see Load data and share it between processes). \u003e\u003e\u003e import lightning as L \u003e\u003e\u003e from torch.utils.data import DataLoader \u003e\u003e\u003e class Regression(L.LightningModule): ... def __init__(self): ... super().__init__() ... self.net = torch.nn.Linear(2, 1) ... ... def training_step(self, batch, batch_idx): ... pred = self.net(batch[\"x\"]).squeeze(-1) ... loss = torch.nn.functional.mse_loss(pred, batch[\"y\"]) ... self.log(\"loss\", loss, on_epoch=True) ... return loss ... ... def configure_optimizers(self): ... return torch.optim.SGD(self.parameters(), lr=0.1) \u003e\u003e\u003e data = TensorDict(x=torch.randn(64, 2), y=torch.randn(64), batch_size=[64]) \u003e\u003e\u003e loader = DataLoader(data, batch_size=16, collate_fn=lambda x: x) \u003e\u003e\u003e trainer = L.Trainer( ... max_epochs=1, ... logger=False, ... enable_checkpointing=False, ... enable_progress_bar=False, ... enable_model_summary=False, ... ) \u003e\u003e\u003e trainer.fit(Regression(), loader) \u003e\u003e\u003e sorted(trainer.callback_metrics) [\u0027loss\u0027, \u0027loss_epoch\u0027, \u0027loss_step\u0027] Pass batch_size to self.log when it averages a value over the epoch (on_epoch=True, the default in validation_step) and the batch is a tensorclass, or a tensordict that holds one non-tensor value for the whole batch, such as a string. Lightning finds the batch size by iterating over the batch, and over the values of a mapping. A tensorclass and a non-tensor value iterate over their rows, and a row without batch dimensions raises a TypeError when Lightning iterates over it in turn: \u003e\u003e\u003e from lightning.pytorch.utilities.data import extract_batch_size \u003e\u003e\u003e extract_batch_size(TensorDict(x=torch.zeros(16, 2), batch_size=[16])) 16 \u003e\u003e\u003e extract_batch_size( ... TensorDict(x=torch.zeros(16, 2), name=\"run-1\", batch_size=[16]) ... ) Traceback (most recent call last): ... TypeError: iteration over a 0-d tensordict. ... Write, for example, self.log(\"loss\", loss, on_epoch=True, batch_size=batch.batch_size[0]). Hugging Face Accelerate# Accelerator.prepare accepts a DataLoader of tensorclasses or tensordicts, and moves each batch to the device with batch.to(device). In this example, a tensorclass is the dataset (see Load data and share it between processes): \u003e\u003e\u003e import tensordict \u003e\u003e\u003e from accelerate import Accelerator \u003e\u003e\u003e from tensordict import TensorClass \u003e\u003e\u003e class Sample(TensorClass): ... x: torch.Tensor ... y: torch.Tensor ... name: str \u003e\u003e\u003e data = Sample(x=torch.randn(64, 2), y=torch.randn(64), name=\"train\", batch_size=[64]) \u003e\u003e\u003e accelerator = Accelerator() \u003e\u003e\u003e model = torch.nn.Linear(2, 1) \u003e\u003e\u003e optimizer = torch.optim.SGD(model.parameters(), lr=0.1) \u003e\u003e\u003e loader = DataLoader(data, batch_size=16, collate_fn=tensordict.collate) \u003e\u003e\u003e model, optimizer, loader = accelerator.prepare(model, optimizer, loader) \u003e\u003e\u003e for batch in loader: ... loss = torch.nn.functional.mse_loss(model(batch.x).squeeze(-1), batch.y) ... accelerator.backward(loss) ... optimizer.step() ... optimizer.zero_grad() \u003e\u003e\u003e type(batch).__name__, batch.batch_size (\u0027Sample\u0027, torch.Size([16])) For an IterableDataset, Accelerate uses dispatch_batches=True by default: the main process reads each batch and sends a slice of it to each process. Accelerate can find the batch size of tensors, lists, tuples and dicts only, so a tensorclass or a tensordict batch then raises an error, even in a single process. Pass dispatch_batches=False, so that each process reads its own batches: \u003e\u003e\u003e from accelerate.utils import DataLoaderConfiguration \u003e\u003e\u003e from torch.utils.data import IterableDataset \u003e\u003e\u003e class Stream(IterableDataset): ... def __iter__(self): ... for i in range(64): ... yield Sample(x=torch.randn(2), y=torch.randn(()), name=f\"sample-{i}\") \u003e\u003e\u003e accelerator = Accelerator( ... dataloader_config=DataLoaderConfiguration(dispatch_batches=False) ... ) \u003e\u003e\u003e stream = DataLoader(Stream(), batch_size=16, collate_fn=tensordict.collate) \u003e\u003e\u003e [batch.batch_size for batch in accelerator.prepare(stream)] [torch.Size([16]), torch.Size([16]), torch.Size([16]), torch.Size([16])] Gather tensors with accelerator.gather_for_metrics, such as the predictions and the targets. Accelerate gathers a tensorclass, or a tensordict with a non-tensor value, as a Python object: in a run with several processes it returns a list of the rows of all the processes. torch.stack(list(...)) makes one batch of the result, with one process or several: \u003e\u003e\u003e gathered = torch.stack(list(accelerator.gather_for_metrics(batch))) \u003e\u003e\u003e type(gathered).__name__, gathered.batch_size (\u0027Sample\u0027, torch.Size([16])) A tensordict that holds only tensors is gathered one tensor at a time. In a run with several processes, the tensordict that Accelerate returns has no batch dimensions: auto_batch_size_() sets them again: \u003e\u003e\u003e preds = TensorDict(x=torch.randn(16, 2), batch_size=[16]) \u003e\u003e\u003e gathered = accelerator.gather_for_metrics(preds).auto_batch_size_(batch_dims=1) \u003e\u003e\u003e gathered.batch_size torch.Size([16]) Hugging Face Transformers and Datasets# The output of a tokenizer is a mapping of tensors with one row for each text, so a tensordict holds it with batch_size=[len(texts)]. You can then index, split, stack, and move the tokens as one object. model(**tokens) passes each entry as a keyword argument, as for a dict. The model in this example is small and untrained: \u003e\u003e\u003e from transformers import AutoTokenizer, GPT2Config, GPT2LMHeadModel \u003e\u003e\u003e tokenizer = AutoTokenizer.from_pretrained(\"gpt2\") \u003e\u003e\u003e tokenizer.pad_token = tokenizer.eos_token \u003e\u003e\u003e texts = [\"Hello world\", \"A longer sentence than the first\"] \u003e\u003e\u003e encoded = tokenizer(texts, padding=True, return_tensors=\"pt\") \u003e\u003e\u003e tokens = TensorDict(encoded, batch_size=[len(texts)]) \u003e\u003e\u003e tokens TensorDict(batch_size=[2], fields={attention_mask: i64[6], input_ids: i64[6]}) \u003e\u003e\u003e model = GPT2LMHeadModel(GPT2Config(n_layer=1, n_head=2, n_embd=16)) \u003e\u003e\u003e model(**tokens).logits.shape torch.Size([2, 6, 50257]) \u003e\u003e\u003e model(**tokens[:1]).logits.shape torch.Size([1, 6, 50257]) A dataset of the datasets library with with_format(\"torch\") returns a dict of tensors for a slice of rows. A column of strings becomes a NonTensorStack (see Non-tensor data and unbatched entries): \u003e\u003e\u003e from datasets import Dataset \u003e\u003e\u003e ds = Dataset.from_dict( ... {\"x\": [[0.0, 1.0], [2.0, 3.0], [4.0, 5.0]], \"label\": [0, 1, 0], \"text\": [\"a\", \"b\", \"c\"]} ... ).with_format(\"torch\") \u003e\u003e\u003e batch = TensorDict(ds[:2], batch_size=[2]) \u003e\u003e\u003e batch[\"x\"] tensor([[0., 1.], [2., 3.]]) \u003e\u003e\u003e batch[1][\"text\"] \u0027b\u0027 TensorDict(ds[:], batch_size=[len(ds)]) loads the whole dataset in memory, as one tensordict that a DataLoader reads (see Load data and share it between processes). To read batches from the dataset instead, give the DataLoader a collate_fn that stacks the rows: \u003e\u003e\u003e loader = DataLoader( ... ds, batch_size=2, collate_fn=lambda rows: torch.stack([TensorDict(row) for row in rows]) ... ) \u003e\u003e\u003e [batch.batch_size for batch in loader] [torch.Size([2]), torch.Size([1])] A column of lists with different lengths comes out as a list of tensors, and the tensordict stores that list as a NonTensorStack too. Pad the lists in the dataset, or put them in a lazy stack (see Variable-size data): \u003e\u003e\u003e ragged = Dataset.from_dict({\"tokens\": [[1, 2, 3], [4, 5]]}).with_format(\"torch\") \u003e\u003e\u003e seqs = lazy_stack([TensorDict(tokens=t) for t in ragged[:][\"tokens\"]]) \u003e\u003e\u003e seqs.get(\"tokens\", as_padded_tensor=True) tensor([[1, 2, 3], [4, 5, 0]]) transformers.Trainer trains on tensorclass batches with two changes. Its default collator expects a dict for each sample, so pass data_collator=tensordict.collate. Its default compute_loss calls model(**inputs), which needs a mapping, so override it to pass the batch to the model. Here the tensorclass data of the Accelerate section is the dataset: \u003e\u003e\u003e from transformers import Trainer, TrainingArguments \u003e\u003e\u003e class Regressor(torch.nn.Module): ... def __init__(self): ... super().__init__() ... self.net = torch.nn.Linear(2, 1) ... ... def forward(self, batch): ... return torch.nn.functional.mse_loss(self.net(batch.x).squeeze(-1), batch.y) \u003e\u003e\u003e class TensorClassTrainer(Trainer): ... def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None): ... loss = model(inputs) ... return (loss, {\"loss\": loss}) if return_outputs else loss \u003e\u003e\u003e args = TrainingArguments( ... output_dir=\"trainer-out\", max_steps=4, per_device_train_batch_size=16, report_to=[] ... ) \u003e\u003e\u003e trainer = TensorClassTrainer( ... model=Regressor(), args=args, train_dataset=data, data_collator=tensordict.collate ... ) \u003e\u003e\u003e trainer.train().global_step {\u0027train_runtime\u0027: ...} 4 Use a tensorclass for the batch, not a tensordict. The Trainer rebuilds a mapping batch with type(batch)({...}), which gives a tensordict without batch dimensions, and then raises because the batch looks empty. DistributedDataParallel and pytrees# DistributedDataParallel passes a tensorclass or a tensordict to the forward of the module, and returns one if forward does. Here, with one process, it trains the Regressor of the previous section: \u003e\u003e\u003e import torch.distributed as dist \u003e\u003e\u003e dist.init_process_group( ... \"gloo\", init_method=\"tcp://127.0.0.1:29500\", rank=0, world_size=1 ... ) \u003e\u003e\u003e ddp = torch.nn.parallel.DistributedDataParallel(Regressor()) \u003e\u003e\u003e ddp(data[:16]).backward() \u003e\u003e\u003e ddp.module.net.weight.grad.shape torch.Size([1, 2]) \u003e\u003e\u003e dist.destroy_process_group() A tensorclass is a pytree. The functions of torch.utils._pytree go through its tensors, keep its non-tensor fields, and return the same type: \u003e\u003e\u003e import torch.utils._pytree as pytree \u003e\u003e\u003e leaves, spec = pytree.tree_flatten(data) \u003e\u003e\u003e [leaf.shape for leaf in leaves] [torch.Size([64, 2]), torch.Size([64])] \u003e\u003e\u003e zeros = pytree.tree_map(torch.zeros_like, data) \u003e\u003e\u003e type(zeros).__name__, zeros.name (\u0027Sample\u0027, \u0027train\u0027) Validate with Pandera# Pandera (0.34 or later) validates tensordicts and tensorclasses with the pandera.tensordict module. A schema lists the keys, with the dtype, the shape and the checks of each, and the batch size. None accepts any size for a dimension. validate returns a copy of the data, or raises a SchemaError. With inplace=True, it returns the data without a copy: \u003e\u003e\u003e import pandera.tensordict as pa \u003e\u003e\u003e from pandera import Check \u003e\u003e\u003e schema = pa.TensorDictSchema( ... keys={ ... \"image\": pa.Tensor(dtype=torch.float32, shape=(None, 3, 8, 8)), ... \"label\": pa.Tensor(dtype=torch.int64, shape=(None,), checks=Check.ge(0)), ... }, ... batch_size=(None,), ... ) \u003e\u003e\u003e batch = TensorDict(image=torch.randn(4, 3, 8, 8), label=torch.arange(4), batch_size=[4]) \u003e\u003e\u003e schema.validate(batch, inplace=True) is batch True \u003e\u003e\u003e schema.validate(batch.float()) Traceback (most recent call last): ... pandera.errors.SchemaError: Key \u0027label\u0027: expected dtype torch.int64, got torch.float32 The same schema can be written as a class, as for a dataclass, and it validates a tensorclass too: \u003e\u003e\u003e from tensordict import TensorClass \u003e\u003e\u003e class ImageSchema(pa.TensorDictModel): ... image: torch.float32 = pa.Field(shape=(None, 3, 8, 8)) ... label: torch.int64 = pa.Field(shape=(None,), ge=0) ... ... class Config: ... batch_size = (None,) \u003e\u003e\u003e class Images(TensorClass): ... image: torch.Tensor ... label: torch.Tensor \u003e\u003e\u003e images = Images(image=torch.randn(4, 3, 8, 8), label=torch.tensor([0, 1, -2, 3]), batch_size=[4]) \u003e\u003e\u003e ImageSchema.validate(images) Traceback (most recent call last): ... pandera.errors.SchemaError: Check \u0027\u003cCheck greater_than_or_equal_to: greater_than_or_equal_to(0)\u003e\u0027 failed for key \u0027label\u0027: check failed With validate(..., lazy=True), Pandera reports every error at once, in a SchemaErrors exception. See the Pandera documentation for the other checks. Arrays from JAX# A JAX simulator returns a pytree of JAX arrays. Convert each array with torch.from_dlpack(), then build the tensordict. On the same device, DLPack shares the memory of the array, without a copy. Pass the tensors back to JAX the same way, with jax.numpy.from_dlpack: \u003e\u003e\u003e import jax \u003e\u003e\u003e import jax.numpy as jnp \u003e\u003e\u003e state = {\"qpos\": jnp.zeros((4, 7)), \"done\": jnp.zeros(4, dtype=bool)} \u003e\u003e\u003e td = TensorDict(jax.tree.map(torch.from_dlpack, state), batch_size=[4]) \u003e\u003e\u003e td[\"qpos\"].shape, td[\"done\"].dtype (torch.Size([4, 7]), torch.bool) \u003e\u003e\u003e back = jax.tree.map(jnp.from_dlpack, td.to_dict()) \u003e\u003e\u003e back[\"qpos\"].shape, back[\"done\"].dtype ((4, 7), dtype(\u0027bool\u0027)) Convert the arrays before you build the tensordict. A tensordict keeps a JAX array as non-tensor data, which tensor operations skip: \u003e\u003e\u003e type(TensorDict(state, batch_size=[4])[\"qpos\"]).__name__ \u0027ArrayImpl\u0027 JAX arrays are immutable, but a tensor from DLPack is not, and a write into it changes the JAX array too. Clone the tensor before an in-place write. xarray# Convert an xarray Dataset one variable at a time. Choose the batch dimensions, which the variables share, and transpose each variable so that they come first. Pass their names as names (see Batch size, shapes, and indexing): \u003e\u003e\u003e import numpy as np \u003e\u003e\u003e import xarray as xr \u003e\u003e\u003e ds = xr.Dataset( ... { ... \"t2m\": ((\"time\", \"lat\", \"lon\"), np.zeros((8, 4, 6), dtype=np.float32)), ... \"u10\": ((\"time\", \"lat\", \"lon\"), np.zeros((8, 4, 6), dtype=np.float32)), ... \"z\": ((\"level\", \"time\", \"lat\", \"lon\"), np.zeros((3, 8, 4, 6), dtype=np.float32)), ... \"lsm\": ((\"lat\", \"lon\"), np.zeros((4, 6), dtype=np.float32)), ... } ... ) \u003e\u003e\u003e batch_dims = [\"time\"] \u003e\u003e\u003e weather = TensorDict( ... {k: torch.as_tensor(ds[k].transpose(*batch_dims, ...).values) for k in [\"t2m\", \"u10\", \"z\"]}, ... batch_size=[ds.sizes[d] for d in batch_dims], ... names=batch_dims, ... ) \u003e\u003e\u003e weather[\"z\"].shape, weather.names (torch.Size([8, 3, 4, 6]), [\u0027time\u0027]) Models often take one tensor for each group of variables, with the variables as channels. to_array(\"channel\") stacks them along a new first dimension, so transpose the batch dimensions in front of it: \u003e\u003e\u003e def stack(ds, variables, batch_dims): ... stacked = ds[variables].to_array(\"channel\") ... return torch.as_tensor(stacked.transpose(*batch_dims, \"channel\", ...).values) \u003e\u003e\u003e groups = TensorDict( ... surface=stack(ds, [\"t2m\", \"u10\"], batch_dims), ... upper=stack(ds, [\"z\"], batch_dims), ... batch_size=[ds.sizes[d] for d in batch_dims], ... names=batch_dims, ... ) \u003e\u003e\u003e groups[\"surface\"].shape, groups[\"upper\"].shape (torch.Size([8, 2, 4, 6]), torch.Size([8, 1, 3, 4, 6])) These rules apply: A variable without the batch dimensions, such as lsm here, cannot go in the tensordict, not even in a nested tensordict with batch_size=[]: a nested tensordict has the batch dimensions of its parent. Keep it in a separate tensordict, or expand it to the batch dimensions with torch.as_tensor(ds[\"lsm\"].values).expand(8, 4, 6). The expanded tensor is a view, without a copy, but clone() and memmap() copy it in full. If the Dataset is backed by dask, .values loads the data in memory. The tensordict keeps the names of the batch dimensions only. The names of the other dimensions, such as level, and the coordinates are lost.",
+       "author": {
+         "@type": "Organization",
+         "name": "PyTorch Contributors",
+         "url": "https://pytorch.org"
+       },
+       "image": "https://pytorch.org/docs/stable/_static/img/pytorch_seo.png",
+       "mainEntityOfPage": {
+         "@type": "WebPage",
+         "@id": "/integrations.html"
+       },
+       "datePublished": "2023-01-01T00:00:00Z",
+       "dateModified": "2023-01-01T00:00:00Z"
+     }
+ </script>
+  <script>
+    // Tutorials Call to action event tracking
+    $("[data-behavior='call-to-action-event']").on('click', function () {
+      fbq('trackCustom', "Download", {
+        tutorialTitle: $('h1:first').text(),
+        downloadLink: this.href,
+        tutorialLink: window.location.href,
+        downloadTitle: $(this).attr("data-response")
+      });
+      if (typeof gtag === 'function') {
+        gtag('event', 'click', {
+          'event_category': $(this).attr("data-response"),
+          'event_label': $("h1").first().text(),
+          'tutorial_link': window.location.href
+        });
+      }
+    });
+  </script>
+  
+  </body>
+</html>

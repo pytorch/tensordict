@@ -60,7 +60,7 @@
     <link rel="canonical" href="https://docs.pytorch.org/tensordict/stable/data_loading.html" />
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Distributed tensordicts" href="distributed.html" />
+    <link rel="next" title="Batch samples of different sizes without padding" href="variable_size_batches.html" />
     <link rel="prev" title="Large datasets and storage backends" href="storage.html" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -539,6 +539,18 @@ document.write(`
                 </a>
               </li>
             
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="coming_from_jax.html">
+                  Coming from JAX pytrees
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="coming_from_dataclass.html">
+                  Coming from a hand-written dataclass
+                </a>
+              </li>
+            
           </ul>
         
       </li>
@@ -556,6 +568,12 @@ document.write(`
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="overview.html">
                   What is TensorDict?
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="pitfalls.html">
+                  Common surprises
                 </a>
               </li>
             
@@ -597,7 +615,7 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="tensorclass.html">
-                  TensorClass
+                  TensorClass: a dataclass of tensors
                 </a>
               </li>
             
@@ -627,15 +645,27 @@ document.write(`
         
           
           <div class="nav-item-with-toggle">
-            <a class="nav-link nav-internal active" href="saving.html">
+            <a class="nav-link nav-internal active" href="cookbook.html">
               How-to guides
             </a>
           </div>
           <ul class="dropdown-menu" id="dropdown-3">
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="cookbook.html">
+                  How-to recipes
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="saving.html">
                   Save and load tensordicts
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="saving_format.html">
+                  The on-disk format
                 </a>
               </li>
             
@@ -652,8 +682,26 @@ document.write(`
               </li>
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="variable_size_batches.html">
+                  Batch samples of different sizes without padding
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="integrations.html">
+                  Use tensordict with other libraries
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="distributed.html">
                   Distributed tensordicts
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="training_at_scale.html">
+                  Train at scale
                 </a>
               </li>
             
@@ -776,6 +824,12 @@ document.write(`
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="tutorials/tensorclass_imagenet.html">
                   Batched data loading with tensorclasses
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/tensorclass_particles.html">
+                  Simulating particles with a tensorclass
                 </a>
               </li>
             
@@ -1036,6 +1090,18 @@ document.write(`
                 </a>
               </li>
             
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="coming_from_jax.html">
+                  Coming from JAX pytrees
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="coming_from_dataclass.html">
+                  Coming from a hand-written dataclass
+                </a>
+              </li>
+            
           </ul>
         
       </li>
@@ -1053,6 +1119,12 @@ document.write(`
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="overview.html">
                   What is TensorDict?
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="pitfalls.html">
+                  Common surprises
                 </a>
               </li>
             
@@ -1094,7 +1166,7 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="tensorclass.html">
-                  TensorClass
+                  TensorClass: a dataclass of tensors
                 </a>
               </li>
             
@@ -1124,15 +1196,27 @@ document.write(`
         
           
           <div class="nav-item-with-toggle">
-            <a class="nav-link nav-internal active" href="saving.html">
+            <a class="nav-link nav-internal active" href="cookbook.html">
               How-to guides
             </a>
           </div>
           <ul class="dropdown-menu" id="dropdown-3">
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="cookbook.html">
+                  How-to recipes
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="saving.html">
                   Save and load tensordicts
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="saving_format.html">
+                  The on-disk format
                 </a>
               </li>
             
@@ -1149,8 +1233,26 @@ document.write(`
               </li>
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="variable_size_batches.html">
+                  Batch samples of different sizes without padding
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="integrations.html">
+                  Use tensordict with other libraries
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="distributed.html">
                   Distributed tensordicts
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="training_at_scale.html">
+                  Train at scale
                 </a>
               </li>
             
@@ -1273,6 +1375,12 @@ document.write(`
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="tutorials/tensorclass_imagenet.html">
                   Batched data loading with tensorclasses
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/tensorclass_particles.html">
+                  Simulating particles with a tensorclass
                 </a>
               </li>
             
@@ -1438,27 +1546,35 @@ document.write(`
 <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="coming_from_jax.html">Coming from JAX pytrees</a></li>
+<li class="toctree-l1"><a class="reference internal" href="coming_from_dataclass.html">Coming from a hand-written dataclass</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">User guide</span></p>
 <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="overview.html">What is TensorDict?</a></li>
+<li class="toctree-l1"><a class="reference internal" href="pitfalls.html">Common surprises</a></li>
 <li class="toctree-l1"><a class="reference internal" href="concepts/batch_size.html">Batch size, shapes, and indexing</a></li>
 <li class="toctree-l1"><a class="reference internal" href="concepts/keys.html">Keys, nested keys, and locking</a></li>
 <li class="toctree-l1"><a class="reference internal" href="concepts/stacking.html">Stacking and variable-size data</a></li>
 <li class="toctree-l1"><a class="reference internal" href="concepts/operations.html">Arithmetic, apply, reductions, and gradients</a></li>
 <li class="toctree-l1"><a class="reference internal" href="concepts/devices.html">Devices, dtypes, and memory</a></li>
 <li class="toctree-l1"><a class="reference internal" href="concepts/non_tensor.html">Non-tensor data and unbatched entries</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tensorclass.html">TensorClass</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tensorclass.html">TensorClass: a dataclass of tensors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="typed_tensordict.html">TypedTensorDict</a></li>
 <li class="toctree-l1"><a class="reference internal" href="choosing_a_container.html">Which container should I use?</a></li>
 <li class="toctree-l1"><a class="reference internal" href="modules.html">Modules: TensorDictModule and tensordict.nn</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">How-to guides</span></p>
 <ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="cookbook.html">How-to recipes</a></li>
 <li class="toctree-l1"><a class="reference internal" href="saving.html">Save and load tensordicts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="saving_format.html">The on-disk format</a></li>
 <li class="toctree-l1"><a class="reference internal" href="storage.html">Large datasets and storage backends</a></li>
 <li class="toctree-l1 current active"><a class="current reference internal" href="#">Load data and share it between processes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="variable_size_batches.html">Batch samples of different sizes without padding</a></li>
+<li class="toctree-l1"><a class="reference internal" href="integrations.html">Use tensordict with other libraries</a></li>
 <li class="toctree-l1"><a class="reference internal" href="distributed.html">Distributed tensordicts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="training_at_scale.html">Train at scale</a></li>
 <li class="toctree-l1"><a class="reference internal" href="compile.html">torch.compile, torch.func, torch.export, and CUDA graphs</a></li>
 <li class="toctree-l1"><a class="reference internal" href="printing.html">Printing and display</a></li>
 <li class="toctree-l1"><a class="reference internal" href="compatibility.html">Containers on storage backends</a></li>
@@ -1489,6 +1605,10 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="tutorials/data_fashion.html">Using TensorDict for datasets</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorials/tensorclass_fashion.html">Using tensorclasses for datasets</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorials/tensorclass_imagenet.html">Batched data loading with tensorclasses</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Tutorials: scientific computing</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensorclass_particles.html">Simulating particles with a tensorclass</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">API reference</span></p>
 <ul class="nav bd-sidenav">
@@ -1617,7 +1737,9 @@ document.write(`
 <a class="reference external" href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataLoader</span></code></a> reads each batch from it with one index
 operation, and the batch is a tensordict. Processes on one node can also share
 one tensordict, in shared memory or in memory-mapped files, and see the writes
-of the other processes.</p>
+of the other processes.
+For data from Hugging Face <code class="docutils literal notranslate"><span class="pre">datasets</span></code> and for training with Lightning,
+see <a class="reference internal" href="integrations.html#integrations"><span class="std std-ref">Use tensordict with other libraries</span></a>.</p>
 <section id="use-a-tensordict-as-a-dataset">
 <h2>Use a tensordict as a dataset<a class="headerlink" href="#use-a-tensordict-as-a-dataset" title="Link to this heading">#</a></h2>
 <p>A tensordict is a map-style dataset: <code class="docutils literal notranslate"><span class="pre">len(td)</span></code> is the size of its first
@@ -1639,12 +1761,9 @@ Pass <code class="docutils literal notranslate"><span class="pre">collate_fn=lam
 <span class="go">('TensorDict', torch.Size([4]))</span>
 </pre></div>
 </div>
-<p>The default <code class="docutils literal notranslate"><span class="pre">collate_fn</span></code> cannot read a tensordict. It raises
-<code class="docutils literal notranslate"><span class="pre">TypeError:</span> <span class="pre">iteration</span> <span class="pre">over</span> <span class="pre">a</span> <span class="pre">0-d</span> <span class="pre">tensordict</span></code>:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">DataLoader</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">4</span><span class="p">)))</span>
-<span class="gt">Traceback (most recent call last):</span>
-<span class="c">...</span>
-<span class="gr">TypeError</span>: <span class="n">iteration over a 0-d tensordict. Use keys(), values() or items() to iterate over its entries.</span>
+<p>The default <code class="docutils literal notranslate"><span class="pre">collate_fn</span></code> returns that batch as it is too:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">DataLoader</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">4</span><span class="p">)))</span><span class="o">.</span><span class="n">batch_size</span>
+<span class="go">torch.Size([4])</span>
 </pre></div>
 </div>
 <p>The same works for a memory-mapped tensordict (see <a class="reference internal" href="saving.html#saving"><span class="std std-ref">Save and load tensordicts</span></a>). Each batch
@@ -1663,10 +1782,26 @@ worker processes, this gives the same batches:</p>
 <p>A dataset can return one tensordict for each sample, for example a list of
 tensordicts, or a <a class="reference external" href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.Dataset" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Dataset</span></code></a> whose <code class="docutils literal notranslate"><span class="pre">__getitem__</span></code>
 builds a tensordict. The <code class="docutils literal notranslate"><span class="pre">DataLoader</span></code> then gets a list of tensordicts for
-each batch, and the default <code class="docutils literal notranslate"><span class="pre">collate_fn</span></code> raises the same <code class="docutils literal notranslate"><span class="pre">TypeError</span></code>.
-Pass <code class="docutils literal notranslate"><span class="pre">collate_fn=torch.stack</span></code> to stack the list into one tensordict:</p>
+each batch. The default <code class="docutils literal notranslate"><span class="pre">collate_fn</span></code> stacks them into one tensordict, as
+<a class="reference internal" href="reference/generated/tensordict.collate.html#tensordict.collate" title="tensordict.collate"><code class="xref py py-func docutils literal notranslate"><span class="pre">collate()</span></code></a> does (see below). A batch of tensorclasses keeps
+its class:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">samples</span> <span class="o">=</span> <span class="p">[</span><span class="n">TensorDict</span><span class="p">({</span><span class="s2">"features"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="s2">"label"</span><span class="p">:</span> <span class="n">i</span><span class="p">})</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">)]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">DataLoader</span><span class="p">(</span><span class="n">samples</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">collate_fn</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">)))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">DataLoader</span><span class="p">(</span><span class="n">samples</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">4</span><span class="p">)))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">batch</span><span class="p">[</span><span class="s2">"label"</span><span class="p">]</span>
+<span class="go">(torch.Size([4]), tensor([0, 1, 2, 3]))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorClass</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Sample</span><span class="p">(</span><span class="n">TensorClass</span><span class="p">):</span>
+<span class="gp">... </span>    <span class="n">features</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">DataLoader</span><span class="p">([</span><span class="n">Sample</span><span class="p">(</span><span class="n">features</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">)],</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">4</span><span class="p">)))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">type</span><span class="p">(</span><span class="n">batch</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">batch</span><span class="o">.</span><span class="n">features</span><span class="o">.</span><span class="n">shape</span>
+<span class="go">('Sample', torch.Size([4, 3]))</span>
+</pre></div>
+</div>
+<p>A batch that mixes different tensorclasses raises a <code class="docutils literal notranslate"><span class="pre">TypeError</span></code>, unless
+one class is a base of the others and has the same fields. The batch then
+takes the class of its first sample.</p>
+<p><code class="docutils literal notranslate"><span class="pre">collate_fn=torch.stack</span></code> gives the same batches:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">DataLoader</span><span class="p">(</span><span class="n">samples</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">collate_fn</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">)))</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">batch</span><span class="p">[</span><span class="s2">"label"</span><span class="p">]</span>
 <span class="go">(torch.Size([4]), tensor([0, 1, 2, 3]))</span>
 </pre></div>
@@ -1699,19 +1834,44 @@ pairs, which <code class="docutils literal notranslate"><span class="pre">torch.
 <span class="go">'LazyStackedTensorDict'</span>
 </pre></div>
 </div>
+<p>The default <code class="docutils literal notranslate"><span class="pre">collate_fn</span></code> gives the same batches, so you need to pass
+<a class="reference internal" href="reference/generated/tensordict.collate.html#tensordict.collate" title="tensordict.collate"><code class="xref py py-func docutils literal notranslate"><span class="pre">collate()</span></code></a> only for its keyword arguments, shown below:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">features</span><span class="p">,</span> <span class="n">labels</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">DataLoader</span><span class="p">(</span><span class="n">pairs</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">4</span><span class="p">)))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">type</span><span class="p">(</span><span class="n">features</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">labels</span>
+<span class="go">('TensorDict', tensor([0, 1, 2, 3]))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">type</span><span class="p">(</span><span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">DataLoader</span><span class="p">(</span><span class="n">clouds</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">4</span><span class="p">))))</span><span class="o">.</span><span class="vm">__name__</span>
+<span class="go">'LazyStackedTensorDict'</span>
+</pre></div>
+</div>
+<p>To pad some entries instead, each with its own value, or to stack them as
+jagged nested tensors, pass the keyword arguments of
+<a class="reference internal" href="reference/generated/tensordict.collate.html#tensordict.collate" title="tensordict.collate"><code class="xref py py-func docutils literal notranslate"><span class="pre">collate()</span></code></a> with <a class="reference external" href="https://docs.python.org/3/library/functools.html#functools.partial" title="(in Python v3.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">functools.partial()</span></code></a>. The other
+entries are collated as above:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">partial</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">tokens</span> <span class="o">=</span> <span class="p">[</span><span class="n">TensorDict</span><span class="p">({</span><span class="s2">"ids"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">),</span> <span class="s2">"points"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mi">3</span><span class="p">)})</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">)]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">collate_fn</span> <span class="o">=</span> <span class="n">partial</span><span class="p">(</span><span class="n">collate</span><span class="p">,</span> <span class="n">pad_keys</span><span class="o">=</span><span class="p">{</span><span class="s2">"ids"</span><span class="p">:</span> <span class="mi">7</span><span class="p">},</span> <span class="n">nested_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">"points"</span><span class="p">],</span> <span class="n">mask_key</span><span class="o">=</span><span class="s2">"mask"</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">DataLoader</span><span class="p">(</span><span class="n">tokens</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">collate_fn</span><span class="o">=</span><span class="n">collate_fn</span><span class="p">)))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span><span class="p">[</span><span class="s2">"ids"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">batch</span><span class="p">[</span><span class="s2">"mask"</span><span class="p">,</span> <span class="s2">"ids"</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="n">batch</span><span class="p">[</span><span class="s2">"points"</span><span class="p">]</span><span class="o">.</span><span class="n">is_nested</span>
+<span class="go">(torch.Size([3, 4]), tensor([2, 4, 3]), True)</span>
+</pre></div>
+</div>
 </section>
 <section id="batch-samplers">
 <h2>Batch samplers<a class="headerlink" href="#batch-samplers" title="Link to this heading">#</a></h2>
-<p>A batch sampler gives the indices of a whole batch. Pass it as <code class="docutils literal notranslate"><span class="pre">sampler</span></code>,
-with <code class="docutils literal notranslate"><span class="pre">batch_size=None</span></code>. The <code class="docutils literal notranslate"><span class="pre">DataLoader</span></code> then calls <code class="docutils literal notranslate"><span class="pre">data[indices]</span></code> with
+<p>A batch sampler gives the indices of a whole batch. Pass it as
+<code class="docutils literal notranslate"><span class="pre">batch_sampler</span></code>. The <code class="docutils literal notranslate"><span class="pre">DataLoader</span></code> then calls <code class="docutils literal notranslate"><span class="pre">data.__getitems__</span></code> with
 the list of indices of each batch, and <code class="docutils literal notranslate"><span class="pre">collate_fn</span></code> gets the tensordict:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">torch.utils.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">BatchSampler</span><span class="p">,</span> <span class="n">SequentialSampler</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">sampler</span> <span class="o">=</span> <span class="n">BatchSampler</span><span class="p">(</span><span class="n">SequentialSampler</span><span class="p">(</span><span class="n">data</span><span class="p">),</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">drop_last</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">loader</span> <span class="o">=</span> <span class="n">DataLoader</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">sampler</span><span class="o">=</span><span class="n">sampler</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">collate_fn</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">loader</span> <span class="o">=</span> <span class="n">DataLoader</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">batch_sampler</span><span class="o">=</span><span class="n">sampler</span><span class="p">,</span> <span class="n">collate_fn</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="p">[</span><span class="n">batch</span><span class="p">[</span><span class="s2">"label"</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span> <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">loader</span><span class="p">]</span>
 <span class="go">[[0, 1, 2, 3], [4, 5, 6, 7]]</span>
 </pre></div>
 </div>
+<p>Passing it as <code class="docutils literal notranslate"><span class="pre">sampler</span></code>, with <code class="docutils literal notranslate"><span class="pre">batch_size=None</span></code>, gives the same batches
+through <code class="docutils literal notranslate"><span class="pre">data[indices]</span></code>, but the workers of the <code class="docutils literal notranslate"><span class="pre">DataLoader</span></code> then send
+an HDF5 or zarr <a class="reference internal" href="reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict" title="tensordict.PersistentTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">PersistentTensorDict</span></code></a> batch as a lazy
+view, which the main process reads.</p>
 </section>
 <section id="worker-processes-and-pinned-memory">
 <h2>Worker processes and pinned memory<a class="headerlink" href="#worker-processes-and-pinned-memory" title="Link to this heading">#</a></h2>
@@ -1727,6 +1887,24 @@ the workers open the same files and do not copy the data. Pickle cannot
 send a <code class="docutils literal notranslate"><span class="pre">lambda</span></code>, so define <code class="docutils literal notranslate"><span class="pre">collate_fn</span></code> as a function at the top level
 of a module.</p></li>
 </ul>
+<p>In a worker, <code class="docutils literal notranslate"><span class="pre">__getitems__</span></code> of an HDF5 or zarr
+<a class="reference internal" href="reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict" title="tensordict.PersistentTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">PersistentTensorDict</span></code></a> reads the rows into a
+<a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> in memory, so the batch is not a view that
+writes to the file, as it is without workers. With
+<code class="docutils literal notranslate"><span class="pre">persistent_workers=True</span></code>, each worker keeps its own HDF5 file handle
+across epochs, so it may not see writes that the main process makes to the
+file between epochs: HDF5 does not support writes across processes without
+SWMR mode.</p>
+<p>With <code class="docutils literal notranslate"><span class="pre">spawn</span></code> or <code class="docutils literal notranslate"><span class="pre">forkserver</span></code>, each worker opens the HDF5 file again.
+While the main process has the file open for writing (<code class="docutils literal notranslate"><span class="pre">mode=&quot;r+&quot;</span></code>,
+<code class="docutils literal notranslate"><span class="pre">&quot;a&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;w&quot;</span></code>), HDF5’s file lock stops the workers from opening it, so
+they fail with <code class="docutils literal notranslate"><span class="pre">BlockingIOError</span></code>, and the <code class="docutils literal notranslate"><span class="pre">DataLoader</span></code> raises
+<code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code> saying that a worker exited unexpectedly. Give the
+<code class="docutils literal notranslate"><span class="pre">DataLoader</span></code> a tensordict opened with <code class="docutils literal notranslate"><span class="pre">mode=&quot;r&quot;</span></code>, and don’t keep the file
+open for writing while the workers run; or use <code class="docutils literal notranslate"><span class="pre">fork</span></code>. With
+<code class="docutils literal notranslate"><span class="pre">persistent_workers=True</span></code>, the workers keep the file open for reading
+across epochs, so the main process cannot open it for writing between epochs
+either.</p>
 <p>The worker examples start processes, so they are complete scripts. Save one
 to a file and run it with <code class="docutils literal notranslate"><span class="pre">python</span></code>:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
@@ -1766,9 +1944,9 @@ when this page is tested:</p>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">loader</span><span class="p">))</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">"cuda"</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>  
 </pre></div>
 </div>
-<p>Without a <code class="docutils literal notranslate"><span class="pre">DataLoader</span></code>, <code class="docutils literal notranslate"><span class="pre">td.to(&quot;cuda&quot;,</span> <span class="pre">non_blocking_pin=True)</span></code> pins the
-leaves with several threads (<code class="docutils literal notranslate"><span class="pre">num_threads</span></code>), and copies them to the GPU
-(see <a class="reference internal" href="concepts/devices.html#devices"><span class="std std-ref">Devices, dtypes, and memory</span></a>).</p>
+<p>Without a <code class="docutils literal notranslate"><span class="pre">DataLoader</span></code>, <code class="docutils literal notranslate"><span class="pre">td.to(&quot;cuda&quot;,</span> <span class="pre">non_blocking_pin=True)</span></code> pins each
+leaf on the calling thread and copies it to the GPU (see <a class="reference internal" href="concepts/devices.html#devices"><span class="std std-ref">Devices, dtypes, and memory</span></a>).
+For leaves of a few KiB, a plain <code class="docutils literal notranslate"><span class="pre">td.to(&quot;cuda&quot;)</span></code> is usually faster.</p>
 </section>
 <section id="share-a-tensordict-between-processes">
 <h2>Share a tensordict between processes<a class="headerlink" href="#share-a-tensordict-between-processes" title="Link to this heading">#</a></h2>
@@ -1937,6 +2115,8 @@ backends.</p></li>
 <li><p><a class="reference internal" href="saving.html#saving"><span class="std std-ref">Save and load tensordicts</span></a>: memory-mapped directories and the <code class="docutils literal notranslate"><span class="pre">mode</span></code> of
 <code class="docutils literal notranslate"><span class="pre">load_memmap</span></code>.</p></li>
 <li><p><a class="reference internal" href="distributed.html#distributed"><span class="std std-ref">Distributed tensordicts</span></a>: send tensordicts between nodes.</p></li>
+<li><p><a class="reference internal" href="training_at_scale.html#training-at-scale"><span class="std std-ref">Train at scale</span></a>: prefetch batches to the GPU, and resume a data
+loader.</p></li>
 <li><p>The reference of <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.share_memory_.html#tensordict.TensorDictBase.share_memory_" title="tensordict.TensorDictBase.share_memory_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">share_memory_()</span></code></a>,
 <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.pin_memory.html#tensordict.TensorDictBase.pin_memory" title="tensordict.TensorDictBase.pin_memory"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pin_memory()</span></code></a>,
 <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.map.html#tensordict.TensorDictBase.map" title="tensordict.TensorDictBase.map"><code class="xref py py-meth docutils literal notranslate"><span class="pre">map()</span></code></a>, and <a class="reference internal" href="reference/generated/tensordict.lazy_stack.html#tensordict.lazy_stack" title="tensordict.lazy_stack"><code class="xref py py-func docutils literal notranslate"><span class="pre">lazy_stack()</span></code></a>.</p></li>
@@ -1999,11 +2179,11 @@ backends.</p></li>
       </div>
     </a>
     <a class="right-next"
-       href="distributed.html"
+       href="variable_size_batches.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Distributed tensordicts</p>
+        <p class="prev-next-title">Batch samples of different sizes without padding</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -2038,11 +2218,11 @@ backends.</p></li>
       </div>
     </a>
     <a class="right-next"
-       href="distributed.html"
+       href="variable_size_batches.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Distributed tensordicts</p>
+        <p class="prev-next-title">Batch samples of different sizes without padding</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -2327,7 +2507,7 @@ backends.</p></li>
        "headline": "Load data and share it between processes",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - Load data and share it between processes",
        "url": "/data_loading.html",
-       "articleBody": "Load data and share it between processes# A tensordict with a batch dimension is a dataset. A DataLoader reads each batch from it with one index operation, and the batch is a tensordict. Processes on one node can also share one tensordict, in shared memory or in memory-mapped files, and see the writes of the other processes. Use a tensordict as a dataset# A tensordict is a map-style dataset: len(td) is the size of its first batch dimension, and td[i] is one sample (see Batch size, shapes, and indexing). It also has __getitems__, which reads a whole batch with one index operation. Pass collate_fn=lambda x: x to keep that batch as it is: \u003e\u003e\u003e import torch \u003e\u003e\u003e from torch.utils.data import DataLoader \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e _ = torch.manual_seed(0) \u003e\u003e\u003e data = TensorDict( ... {\"image\": torch.randn(10, 1, 8, 8), \"label\": torch.arange(10)}, batch_size=[10] ... ) \u003e\u003e\u003e loader = DataLoader(data, batch_size=4, shuffle=True, collate_fn=lambda x: x) \u003e\u003e\u003e batches = list(loader) \u003e\u003e\u003e [batch[\"label\"].tolist() for batch in batches] [[5, 1, 2, 7], [9, 4, 6, 3], [0, 8]] \u003e\u003e\u003e type(batches[0]).__name__, batches[0].batch_size (\u0027TensorDict\u0027, torch.Size([4])) The default collate_fn cannot read a tensordict. It raises TypeError: iteration over a 0-d tensordict: \u003e\u003e\u003e next(iter(DataLoader(data, batch_size=4))) Traceback (most recent call last): ... TypeError: iteration over a 0-d tensordict. Use keys(), values() or items() to iterate over its entries. The same works for a memory-mapped tensordict (see Save and load tensordicts). Each batch then reads only its rows from disk. Without a DataLoader, index the tensordict with a permutation. With no worker processes, this gives the same batches: \u003e\u003e\u003e for idx in torch.randperm(len(data)).split(4): ... batch = data[idx] \u003e\u003e\u003e batch.batch_size torch.Size([2]) A dataset that returns tensordicts# A dataset can return one tensordict for each sample, for example a list of tensordicts, or a Dataset whose __getitem__ builds a tensordict. The DataLoader then gets a list of tensordicts for each batch, and the default collate_fn raises the same TypeError. Pass collate_fn=torch.stack to stack the list into one tensordict: \u003e\u003e\u003e samples = [TensorDict({\"features\": torch.randn(3), \"label\": i}) for i in range(10)] \u003e\u003e\u003e batch = next(iter(DataLoader(samples, batch_size=4, collate_fn=torch.stack))) \u003e\u003e\u003e batch.batch_size, batch[\"label\"] (torch.Size([4]), tensor([0, 1, 2, 3])) If the samples have different shapes, torch.stack raises an error. Pass lazy_stack() instead. It returns a LazyStackedTensorDict, which keeps each sample as it is (see Stacking and variable-size data). This example loads point clouds with different numbers of points: \u003e\u003e\u003e from tensordict import lazy_stack \u003e\u003e\u003e clouds = [TensorDict({\"points\": torch.randn(n, 3)}) for n in (5, 2, 7, 3)] \u003e\u003e\u003e batch = next(iter(DataLoader(clouds, batch_size=4, collate_fn=lazy_stack))) \u003e\u003e\u003e type(batch).__name__, batch.batch_size (\u0027LazyStackedTensorDict\u0027, torch.Size([4])) \u003e\u003e\u003e [cloud[\"points\"].shape for cloud in batch.unbind(0)] [torch.Size([5, 3]), torch.Size([2, 3]), torch.Size([7, 3]), torch.Size([3, 3])] collate() does both: it stacks the samples densely if their shapes match, and lazily otherwise. It also reads samples that hold tensordicts or tensorclasses in a tuple or a dict, such as (td, label) pairs, which torch.stack cannot stack: \u003e\u003e\u003e from tensordict import collate \u003e\u003e\u003e pairs = [(TensorDict({\"features\": torch.randn(3)}), i) for i in range(10)] \u003e\u003e\u003e features, labels = next(iter(DataLoader(pairs, batch_size=4, collate_fn=collate))) \u003e\u003e\u003e type(features).__name__, features.batch_size, labels (\u0027TensorDict\u0027, torch.Size([4]), tensor([0, 1, 2, 3])) \u003e\u003e\u003e batch = next(iter(DataLoader(clouds, batch_size=4, collate_fn=collate))) \u003e\u003e\u003e type(batch).__name__ \u0027LazyStackedTensorDict\u0027 Batch samplers# A batch sampler gives the indices of a whole batch. Pass it as sampler, with batch_size=None. The DataLoader then calls data[indices] with the list of indices of each batch, and collate_fn gets the tensordict: \u003e\u003e\u003e from torch.utils.data import BatchSampler, SequentialSampler \u003e\u003e\u003e sampler = BatchSampler(SequentialSampler(data), batch_size=4, drop_last=True) \u003e\u003e\u003e loader = DataLoader(data, sampler=sampler, batch_size=None, collate_fn=lambda x: x) \u003e\u003e\u003e [batch[\"label\"].tolist() for batch in loader] [[0, 1, 2, 3], [4, 5, 6, 7]] Worker processes and pinned memory# With num_workers greater than 0, the DataLoader reads the batches in worker processes. Each worker gets the dataset when it starts: With the fork start method (the default on Linux up to Python 3.13), the worker inherits a copy-on-write view of the memory of the main process. With spawn (the default on macOS and Windows) and forkserver (the default on Linux from Python 3.14), the DataLoader pickles the dataset to each worker. A memory-mapped tensordict pickles as its file names, so the workers open the same files and do not copy the data. Pickle cannot send a lambda, so define collate_fn as a function at the top level of a module. The worker examples start processes, so they are complete scripts. Save one to a file and run it with python: import tempfile import torch from torch.utils.data import DataLoader from tensordict import TensorDict def keep_batch(batch): return batch if __name__ == \"__main__\": with tempfile.TemporaryDirectory() as path: data = TensorDict( { \"image\": torch.randn(1_000, 1, 8, 8), \"label\": torch.arange(1_000), }, batch_size=[1_000], ).memmap_(path) loader = DataLoader( data, batch_size=100, shuffle=True, num_workers=2, collate_fn=keep_batch ) total = sum(batch[\"label\"].sum().item() for batch in loader) print(total) # 499500 With pin_memory=True, the DataLoader calls pin_memory() on each batch, which pins every leaf. From pinned memory, to(device, non_blocking=True) copies the batch to the GPU while the CPU goes on. These lines need a GPU, so they are not run when this page is tested: \u003e\u003e\u003e loader = DataLoader(data, batch_size=4, collate_fn=lambda x: x, pin_memory=True) \u003e\u003e\u003e batch = next(iter(loader)).to(\"cuda\", non_blocking=True) Without a DataLoader, td.to(\"cuda\", non_blocking_pin=True) pins the leaves with several threads (num_threads), and copies them to the GPU (see Devices, dtypes, and memory). Share a tensordict between processes# share_memory_() moves each tensor of a tensordict to shared memory. When you then pass the tensordict to another process, as an argument or through a torch.multiprocessing queue, that process uses the same memory. Each process sees the writes of the others, without a copy. share_memory_ locks the tensordict, so write into its tensors in place, for example with td[i] = ... or td[\"x\"].add_(1) (see Locking and temporary changes). In this script, four processes each simulate one system, and write its state into one row: import torch import torch.multiprocessing as mp from tensordict import TensorDict def simulate(systems, i): systems[i] = TensorDict({\"state\": torch.full((3,), float(i))}) if __name__ == \"__main__\": systems = TensorDict({\"state\": torch.zeros(4, 3)}, batch_size=[4]).share_memory_() processes = [mp.Process(target=simulate, args=(systems, i)) for i in range(4)] for p in processes: p.start() for p in processes: p.join() print(systems[\"state\"][:, 0]) # tensor([0., 1., 2., 3.]) Call share_memory_ before you start the processes. Without it, the result depends on the start method. With fork, the child writes into a copy, and the parent does not see the writes. With spawn, PyTorch moves the tensors to shared memory when it pickles them, so the parent sees the writes. memmap_() works in the same way as share_memory_(), with the tensors in files: memory-mapped files in a directory if you give a path, and anonymous temporary files if you do not. Use files if the data is larger than RAM, or if processes that you start later must open the data. The size of /dev/shm limits shared memory. A queue works the same way. The process that gets the tensordict uses the memory of the process that sent it: import torch import torch.multiprocessing as mp from tensordict import TensorDict def consume(queue): systems = queue.get() systems[\"state\"].add_(100) if __name__ == \"__main__\": queue = mp.Queue() systems = TensorDict({\"state\": torch.zeros(4, 3)}, batch_size=[4]).share_memory_() p = mp.Process(target=consume, args=(queue,)) p.start() queue.put(systems) p.join() print(systems[\"state\"][0]) # tensor([100., 100., 100.]) Several processes on one dataset on disk# Processes can also open a memory-mapped dataset by its path, with load_memmap(). Readers that do not change the data can pass mode=\"r\" (see Save and load tensordicts). tensordict does not lock the files, so give each writer its own rows (see Share data between processes). This script preallocates a dataset on disk, fills it from two processes, and reads it back: import tempfile import torch import torch.multiprocessing as mp from tensordict import TensorDict def fill(path, start, stop): data = TensorDict.load_memmap(path) for i in range(start, stop): data[i] = TensorDict({\"image\": torch.full((3, 8, 8), i, dtype=torch.uint8)}) if __name__ == \"__main__\": with tempfile.TemporaryDirectory() as path: TensorDict.from_schema( {\"image\": ([3, 8, 8], torch.uint8)}, batch_size=[100], storage=\"memmap\", prefix=path, ) writers = [ mp.Process(target=fill, args=(path, 0, 50)), mp.Process(target=fill, args=(path, 50, 100)), ] for p in writers: p.start() for p in writers: p.join() data = TensorDict.load_memmap(path, mode=\"r\") # tensor([ 0, 49, 50, 99], dtype=torch.uint8) print(data[\"image\"][[0, 49, 50, 99], 0, 0, 0]) Process a dataset in parallel with map# map() splits a tensordict into chunks along one dimension, calls a function on each chunk in a pool of processes, and concatenates the results. If the tensordict is memory-mapped or in shared memory, the chunks go to the workers without a copy. Return a new tensordict from the function, and do not add keys to its input: the chunk of a memory-mapped tensordict is locked. If you pass a preallocated memory-mapped tensordict as out, the workers write the results into it. This script computes the kinetic energy of 8 particles in two processes: import tempfile import torch from tensordict import TensorDict def kinetic_energy(chunk): energy = 0.5 * chunk[\"mass\"] * (chunk[\"vel\"] ** 2).sum(-1) return TensorDict({\"energy\": energy}, batch_size=chunk.batch_size) if __name__ == \"__main__\": with tempfile.TemporaryDirectory() as path: particles = TensorDict( { \"mass\": torch.ones(8), \"vel\": torch.arange(8.0).unsqueeze(-1).repeat(1, 3), }, batch_size=[8], ).memmap_() out = TensorDict({\"energy\": torch.zeros(8)}, batch_size=[8]).memmap_like(path) particles.map( kinetic_energy, num_workers=2, chunksize=2, out=out, generator=torch.default_generator, ) # MemoryMappedTensor([ 0.0000, 1.5000, 6.0000, 13.5000]) print(out[\"energy\"][:4]) map also takes num_chunks, a pool that you create, and a generator that seeds each worker. Starting with TensorDict 0.17, the default will change to drawing the seed from the global RNG; generator=torch.default_generator does that now. map_iter() returns the results one chunk at a time. See also# Large datasets and storage backends: memory-mapped, HDF5, zarr, shared-memory, and Redis backends. Save and load tensordicts: memory-mapped directories and the mode of load_memmap. Distributed tensordicts: send tensordicts between nodes. The reference of share_memory_(), pin_memory(), map(), and lazy_stack(). Tutorials: Using TensorDict for datasets, Using tensorclasses for datasets, and Batched data loading with tensorclasses.",
+       "articleBody": "Load data and share it between processes# A tensordict with a batch dimension is a dataset. A DataLoader reads each batch from it with one index operation, and the batch is a tensordict. Processes on one node can also share one tensordict, in shared memory or in memory-mapped files, and see the writes of the other processes. For data from Hugging Face datasets and for training with Lightning, see Use tensordict with other libraries. Use a tensordict as a dataset# A tensordict is a map-style dataset: len(td) is the size of its first batch dimension, and td[i] is one sample (see Batch size, shapes, and indexing). It also has __getitems__, which reads a whole batch with one index operation. Pass collate_fn=lambda x: x to keep that batch as it is: \u003e\u003e\u003e import torch \u003e\u003e\u003e from torch.utils.data import DataLoader \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e _ = torch.manual_seed(0) \u003e\u003e\u003e data = TensorDict( ... {\"image\": torch.randn(10, 1, 8, 8), \"label\": torch.arange(10)}, batch_size=[10] ... ) \u003e\u003e\u003e loader = DataLoader(data, batch_size=4, shuffle=True, collate_fn=lambda x: x) \u003e\u003e\u003e batches = list(loader) \u003e\u003e\u003e [batch[\"label\"].tolist() for batch in batches] [[5, 1, 2, 7], [9, 4, 6, 3], [0, 8]] \u003e\u003e\u003e type(batches[0]).__name__, batches[0].batch_size (\u0027TensorDict\u0027, torch.Size([4])) The default collate_fn returns that batch as it is too: \u003e\u003e\u003e next(iter(DataLoader(data, batch_size=4))).batch_size torch.Size([4]) The same works for a memory-mapped tensordict (see Save and load tensordicts). Each batch then reads only its rows from disk. Without a DataLoader, index the tensordict with a permutation. With no worker processes, this gives the same batches: \u003e\u003e\u003e for idx in torch.randperm(len(data)).split(4): ... batch = data[idx] \u003e\u003e\u003e batch.batch_size torch.Size([2]) A dataset that returns tensordicts# A dataset can return one tensordict for each sample, for example a list of tensordicts, or a Dataset whose __getitem__ builds a tensordict. The DataLoader then gets a list of tensordicts for each batch. The default collate_fn stacks them into one tensordict, as collate() does (see below). A batch of tensorclasses keeps its class: \u003e\u003e\u003e samples = [TensorDict({\"features\": torch.randn(3), \"label\": i}) for i in range(10)] \u003e\u003e\u003e batch = next(iter(DataLoader(samples, batch_size=4))) \u003e\u003e\u003e batch.batch_size, batch[\"label\"] (torch.Size([4]), tensor([0, 1, 2, 3])) \u003e\u003e\u003e from tensordict import TensorClass \u003e\u003e\u003e class Sample(TensorClass): ... features: torch.Tensor \u003e\u003e\u003e batch = next(iter(DataLoader([Sample(features=torch.randn(3)) for _ in range(10)], batch_size=4))) \u003e\u003e\u003e type(batch).__name__, batch.features.shape (\u0027Sample\u0027, torch.Size([4, 3])) A batch that mixes different tensorclasses raises a TypeError, unless one class is a base of the others and has the same fields. The batch then takes the class of its first sample. collate_fn=torch.stack gives the same batches: \u003e\u003e\u003e batch = next(iter(DataLoader(samples, batch_size=4, collate_fn=torch.stack))) \u003e\u003e\u003e batch.batch_size, batch[\"label\"] (torch.Size([4]), tensor([0, 1, 2, 3])) If the samples have different shapes, torch.stack raises an error. Pass lazy_stack() instead. It returns a LazyStackedTensorDict, which keeps each sample as it is (see Stacking and variable-size data). This example loads point clouds with different numbers of points: \u003e\u003e\u003e from tensordict import lazy_stack \u003e\u003e\u003e clouds = [TensorDict({\"points\": torch.randn(n, 3)}) for n in (5, 2, 7, 3)] \u003e\u003e\u003e batch = next(iter(DataLoader(clouds, batch_size=4, collate_fn=lazy_stack))) \u003e\u003e\u003e type(batch).__name__, batch.batch_size (\u0027LazyStackedTensorDict\u0027, torch.Size([4])) \u003e\u003e\u003e [cloud[\"points\"].shape for cloud in batch.unbind(0)] [torch.Size([5, 3]), torch.Size([2, 3]), torch.Size([7, 3]), torch.Size([3, 3])] collate() does both: it stacks the samples densely if their shapes match, and lazily otherwise. It also reads samples that hold tensordicts or tensorclasses in a tuple or a dict, such as (td, label) pairs, which torch.stack cannot stack: \u003e\u003e\u003e from tensordict import collate \u003e\u003e\u003e pairs = [(TensorDict({\"features\": torch.randn(3)}), i) for i in range(10)] \u003e\u003e\u003e features, labels = next(iter(DataLoader(pairs, batch_size=4, collate_fn=collate))) \u003e\u003e\u003e type(features).__name__, features.batch_size, labels (\u0027TensorDict\u0027, torch.Size([4]), tensor([0, 1, 2, 3])) \u003e\u003e\u003e batch = next(iter(DataLoader(clouds, batch_size=4, collate_fn=collate))) \u003e\u003e\u003e type(batch).__name__ \u0027LazyStackedTensorDict\u0027 The default collate_fn gives the same batches, so you need to pass collate() only for its keyword arguments, shown below: \u003e\u003e\u003e features, labels = next(iter(DataLoader(pairs, batch_size=4))) \u003e\u003e\u003e type(features).__name__, labels (\u0027TensorDict\u0027, tensor([0, 1, 2, 3])) \u003e\u003e\u003e type(next(iter(DataLoader(clouds, batch_size=4)))).__name__ \u0027LazyStackedTensorDict\u0027 To pad some entries instead, each with its own value, or to stack them as jagged nested tensors, pass the keyword arguments of collate() with functools.partial(). The other entries are collated as above: \u003e\u003e\u003e from functools import partial \u003e\u003e\u003e tokens = [TensorDict({\"ids\": torch.ones(n, dtype=torch.long), \"points\": torch.randn(n, 3)}) for n in (2, 4, 3)] \u003e\u003e\u003e collate_fn = partial(collate, pad_keys={\"ids\": 7}, nested_keys=[\"points\"], mask_key=\"mask\") \u003e\u003e\u003e batch = next(iter(DataLoader(tokens, batch_size=3, collate_fn=collate_fn))) \u003e\u003e\u003e batch[\"ids\"].shape, batch[\"mask\", \"ids\"].sum(-1), batch[\"points\"].is_nested (torch.Size([3, 4]), tensor([2, 4, 3]), True) Batch samplers# A batch sampler gives the indices of a whole batch. Pass it as batch_sampler. The DataLoader then calls data.__getitems__ with the list of indices of each batch, and collate_fn gets the tensordict: \u003e\u003e\u003e from torch.utils.data import BatchSampler, SequentialSampler \u003e\u003e\u003e sampler = BatchSampler(SequentialSampler(data), batch_size=4, drop_last=True) \u003e\u003e\u003e loader = DataLoader(data, batch_sampler=sampler, collate_fn=lambda x: x) \u003e\u003e\u003e [batch[\"label\"].tolist() for batch in loader] [[0, 1, 2, 3], [4, 5, 6, 7]] Passing it as sampler, with batch_size=None, gives the same batches through data[indices], but the workers of the DataLoader then send an HDF5 or zarr PersistentTensorDict batch as a lazy view, which the main process reads. Worker processes and pinned memory# With num_workers greater than 0, the DataLoader reads the batches in worker processes. Each worker gets the dataset when it starts: With the fork start method (the default on Linux up to Python 3.13), the worker inherits a copy-on-write view of the memory of the main process. With spawn (the default on macOS and Windows) and forkserver (the default on Linux from Python 3.14), the DataLoader pickles the dataset to each worker. A memory-mapped tensordict pickles as its file names, so the workers open the same files and do not copy the data. Pickle cannot send a lambda, so define collate_fn as a function at the top level of a module. In a worker, __getitems__ of an HDF5 or zarr PersistentTensorDict reads the rows into a TensorDict in memory, so the batch is not a view that writes to the file, as it is without workers. With persistent_workers=True, each worker keeps its own HDF5 file handle across epochs, so it may not see writes that the main process makes to the file between epochs: HDF5 does not support writes across processes without SWMR mode. With spawn or forkserver, each worker opens the HDF5 file again. While the main process has the file open for writing (mode=\"r+\", \"a\" or \"w\"), HDF5\u2019s file lock stops the workers from opening it, so they fail with BlockingIOError, and the DataLoader raises RuntimeError saying that a worker exited unexpectedly. Give the DataLoader a tensordict opened with mode=\"r\", and don\u2019t keep the file open for writing while the workers run; or use fork. With persistent_workers=True, the workers keep the file open for reading across epochs, so the main process cannot open it for writing between epochs either. The worker examples start processes, so they are complete scripts. Save one to a file and run it with python: import tempfile import torch from torch.utils.data import DataLoader from tensordict import TensorDict def keep_batch(batch): return batch if __name__ == \"__main__\": with tempfile.TemporaryDirectory() as path: data = TensorDict( { \"image\": torch.randn(1_000, 1, 8, 8), \"label\": torch.arange(1_000), }, batch_size=[1_000], ).memmap_(path) loader = DataLoader( data, batch_size=100, shuffle=True, num_workers=2, collate_fn=keep_batch ) total = sum(batch[\"label\"].sum().item() for batch in loader) print(total) # 499500 With pin_memory=True, the DataLoader calls pin_memory() on each batch, which pins every leaf. From pinned memory, to(device, non_blocking=True) copies the batch to the GPU while the CPU goes on. These lines need a GPU, so they are not run when this page is tested: \u003e\u003e\u003e loader = DataLoader(data, batch_size=4, collate_fn=lambda x: x, pin_memory=True) \u003e\u003e\u003e batch = next(iter(loader)).to(\"cuda\", non_blocking=True) Without a DataLoader, td.to(\"cuda\", non_blocking_pin=True) pins each leaf on the calling thread and copies it to the GPU (see Devices, dtypes, and memory). For leaves of a few KiB, a plain td.to(\"cuda\") is usually faster. Share a tensordict between processes# share_memory_() moves each tensor of a tensordict to shared memory. When you then pass the tensordict to another process, as an argument or through a torch.multiprocessing queue, that process uses the same memory. Each process sees the writes of the others, without a copy. share_memory_ locks the tensordict, so write into its tensors in place, for example with td[i] = ... or td[\"x\"].add_(1) (see Locking and temporary changes). In this script, four processes each simulate one system, and write its state into one row: import torch import torch.multiprocessing as mp from tensordict import TensorDict def simulate(systems, i): systems[i] = TensorDict({\"state\": torch.full((3,), float(i))}) if __name__ == \"__main__\": systems = TensorDict({\"state\": torch.zeros(4, 3)}, batch_size=[4]).share_memory_() processes = [mp.Process(target=simulate, args=(systems, i)) for i in range(4)] for p in processes: p.start() for p in processes: p.join() print(systems[\"state\"][:, 0]) # tensor([0., 1., 2., 3.]) Call share_memory_ before you start the processes. Without it, the result depends on the start method. With fork, the child writes into a copy, and the parent does not see the writes. With spawn, PyTorch moves the tensors to shared memory when it pickles them, so the parent sees the writes. memmap_() works in the same way as share_memory_(), with the tensors in files: memory-mapped files in a directory if you give a path, and anonymous temporary files if you do not. Use files if the data is larger than RAM, or if processes that you start later must open the data. The size of /dev/shm limits shared memory. A queue works the same way. The process that gets the tensordict uses the memory of the process that sent it: import torch import torch.multiprocessing as mp from tensordict import TensorDict def consume(queue): systems = queue.get() systems[\"state\"].add_(100) if __name__ == \"__main__\": queue = mp.Queue() systems = TensorDict({\"state\": torch.zeros(4, 3)}, batch_size=[4]).share_memory_() p = mp.Process(target=consume, args=(queue,)) p.start() queue.put(systems) p.join() print(systems[\"state\"][0]) # tensor([100., 100., 100.]) Several processes on one dataset on disk# Processes can also open a memory-mapped dataset by its path, with load_memmap(). Readers that do not change the data can pass mode=\"r\" (see Save and load tensordicts). tensordict does not lock the files, so give each writer its own rows (see Share data between processes). This script preallocates a dataset on disk, fills it from two processes, and reads it back: import tempfile import torch import torch.multiprocessing as mp from tensordict import TensorDict def fill(path, start, stop): data = TensorDict.load_memmap(path) for i in range(start, stop): data[i] = TensorDict({\"image\": torch.full((3, 8, 8), i, dtype=torch.uint8)}) if __name__ == \"__main__\": with tempfile.TemporaryDirectory() as path: TensorDict.from_schema( {\"image\": ([3, 8, 8], torch.uint8)}, batch_size=[100], storage=\"memmap\", prefix=path, ) writers = [ mp.Process(target=fill, args=(path, 0, 50)), mp.Process(target=fill, args=(path, 50, 100)), ] for p in writers: p.start() for p in writers: p.join() data = TensorDict.load_memmap(path, mode=\"r\") # tensor([ 0, 49, 50, 99], dtype=torch.uint8) print(data[\"image\"][[0, 49, 50, 99], 0, 0, 0]) Process a dataset in parallel with map# map() splits a tensordict into chunks along one dimension, calls a function on each chunk in a pool of processes, and concatenates the results. If the tensordict is memory-mapped or in shared memory, the chunks go to the workers without a copy. Return a new tensordict from the function, and do not add keys to its input: the chunk of a memory-mapped tensordict is locked. If you pass a preallocated memory-mapped tensordict as out, the workers write the results into it. This script computes the kinetic energy of 8 particles in two processes: import tempfile import torch from tensordict import TensorDict def kinetic_energy(chunk): energy = 0.5 * chunk[\"mass\"] * (chunk[\"vel\"] ** 2).sum(-1) return TensorDict({\"energy\": energy}, batch_size=chunk.batch_size) if __name__ == \"__main__\": with tempfile.TemporaryDirectory() as path: particles = TensorDict( { \"mass\": torch.ones(8), \"vel\": torch.arange(8.0).unsqueeze(-1).repeat(1, 3), }, batch_size=[8], ).memmap_() out = TensorDict({\"energy\": torch.zeros(8)}, batch_size=[8]).memmap_like(path) particles.map( kinetic_energy, num_workers=2, chunksize=2, out=out, generator=torch.default_generator, ) # MemoryMappedTensor([ 0.0000, 1.5000, 6.0000, 13.5000]) print(out[\"energy\"][:4]) map also takes num_chunks, a pool that you create, and a generator that seeds each worker. Starting with TensorDict 0.17, the default will change to drawing the seed from the global RNG; generator=torch.default_generator does that now. map_iter() returns the results one chunk at a time. See also# Large datasets and storage backends: memory-mapped, HDF5, zarr, shared-memory, and Redis backends. Save and load tensordicts: memory-mapped directories and the mode of load_memmap. Distributed tensordicts: send tensordicts between nodes. Train at scale: prefetch batches to the GPU, and resume a data loader. The reference of share_memory_(), pin_memory(), map(), and lazy_stack(). Tutorials: Using TensorDict for datasets, Using tensorclasses for datasets, and Batched data loading with tensorclasses.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

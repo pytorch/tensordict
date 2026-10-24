@@ -76,25 +76,9 @@ structure of the module.
 
  .. code-block:: none
 
-    TensorDict(
-        fields={
-            0: TensorDict(
-                fields={
-                    bias: Parameter(shape=torch.Size([4]), device=cpu, dtype=torch.float32, is_shared=False),
-                    weight: Parameter(shape=torch.Size([4, 3]), device=cpu, dtype=torch.float32, is_shared=False)},
-                batch_size=torch.Size([]),
-                device=None,
-                is_shared=False),
-            2: TensorDict(
-                fields={
-                    bias: Parameter(shape=torch.Size([1]), device=cpu, dtype=torch.float32, is_shared=False),
-                    weight: Parameter(shape=torch.Size([1, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
-                batch_size=torch.Size([]),
-                device=None,
-                is_shared=False)},
-        batch_size=torch.Size([]),
-        device=None,
-        is_shared=False)
+    TensorDict(batch_size=[], fields={
+        0: {bias: f32[4], weight: f32[4,3]},
+        2: {bias: f32[1], weight: f32[1,4]}})
 
 
 
@@ -383,7 +367,7 @@ Further reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.010 seconds)
+   **Total running time of the script:** (0 minutes 0.008 seconds)
 
 
 .. _sphx_glr_download_tutorials_functional.py:

@@ -201,6 +201,9 @@ Keys, values, and entries. For the rules, see [Batch size, shapes, and indexing]
 | [`TensorDictBase.unbind`](generated/tensordict.TensorDictBase.unbind.html#tensordict.TensorDictBase.unbind)(dim) | Returns a tuple of the tensordicts along a batch dimension, as [`torch.Tensor.unbind()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.unbind.html#torch.Tensor.unbind) does. |
 | [`TensorDictBase.narrow`](generated/tensordict.TensorDictBase.narrow.html#tensordict.TensorDictBase.narrow)(dim, start, length) | Returns a tensordict narrowed along a batch dimension, as [`torch.Tensor.narrow()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.narrow.html#torch.Tensor.narrow) does. |
 
+| [`group_by`](generated/tensordict.group_by.html#tensordict.group_by)(tensordict, key) | Splits a tensordict into groups of rows that share the value of an entry. |
+| --- | --- |
+
 ### Shape, batch dimensions, and stacking
 
 Read and change the batch size and the dimension names, reshape and expand
@@ -273,7 +276,7 @@ Functions
 | [`pad`](generated/tensordict.pad.html#tensordict.pad)(tensordict, pad_size[, value, inplace, safe]) | Pads all tensors in a tensordict along the batch dimensions with a constant value. |
 | [`pad_sequence`](generated/tensordict.pad_sequence.html#tensordict.pad_sequence)(list_of_tensordicts[, pad_dim, ...]) | Pads tensordicts to a common size along one dimension and stacks them densely. |
 | [`unpad_sequence`](generated/tensordict.unpad_sequence.html#tensordict.unpad_sequence)(padded[, mask, pad_dim]) | Splits a padded batch back into its variable-length samples. |
-| [`collate`](generated/tensordict.collate.html#tensordict.collate)(batch) | Collates a list of samples into a batch, for [`DataLoader`](https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader). |
+| [`collate`](generated/tensordict.collate.html#tensordict.collate)(batch, *[, pad_keys, nested_keys, ...]) | Collates a list of samples into a batch, for [`DataLoader`](https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader). |
 
 ### Device, dtype, and memory
 
@@ -331,10 +334,6 @@ Dtype
 | [`TensorDictBase.complex32`](generated/tensordict.TensorDictBase.complex32.html#tensordict.TensorDictBase.complex32)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.complex32`. |
 | [`TensorDictBase.complex64`](generated/tensordict.TensorDictBase.complex64.html#tensordict.TensorDictBase.complex64)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.complex64`. |
 | [`TensorDictBase.complex128`](generated/tensordict.TensorDictBase.complex128.html#tensordict.TensorDictBase.complex128)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.complex128`. |
-| [`TensorDictBase.qint8`](generated/tensordict.TensorDictBase.qint8.html#tensordict.TensorDictBase.qint8)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.qint8`. |
-| [`TensorDictBase.qint32`](generated/tensordict.TensorDictBase.qint32.html#tensordict.TensorDictBase.qint32)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.qint32`. |
-| [`TensorDictBase.quint8`](generated/tensordict.TensorDictBase.quint8.html#tensordict.TensorDictBase.quint8)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.quint8`. |
-| [`TensorDictBase.quint4x2`](generated/tensordict.TensorDictBase.quint4x2.html#tensordict.TensorDictBase.quint4x2)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.quint4x2`. |
 
 `to` and the dtype shorthands take a `cast_filter` predicate
 `fn(key, value) -> bool` that selects the leaves to cast. The predicates
@@ -540,7 +539,8 @@ Functions
 
 Save a tensordict to disk and load it again, and write its entries to
 memory-mapped files. Other methods read and write key-value stores, and HDF5,
-zarr, CSV, JSON, Parquet, and MDS files.
+zarr, CSV, JSON, Parquet, and MDS files, and convert to and from Arrow
+tables.
 `memmap(return_early=True)` returns a
 [`TensorDictFuture`](generated/tensordict.utils.TensorDictFuture.html#tensordict.utils.TensorDictFuture). See [Save and load tensordicts](../saving.html#saving) and
 [Large datasets and storage backends](../storage.html#storage).
@@ -584,15 +584,20 @@ Functions
 | [`load`](generated/tensordict.load.html#tensordict.load)(prefix[, device, non_blocking, out, ...]) | Loads a tensordict that [`save()`](generated/tensordict.save.html#tensordict.save) wrote. |
 | [`memmap`](generated/tensordict.memmap.html#tensordict.memmap)(data[, prefix, copy_existing, ...]) | Writes every leaf to a memory-mapped file and returns a new tensordict of them. |
 | [`load_memmap`](generated/tensordict.load_memmap.html#tensordict.load_memmap)(prefix[, device, non_blocking, ...]) | Loads a tensordict that [`memmap()`](generated/tensordict.memmap.html#tensordict.memmap) or [`save()`](generated/tensordict.save.html#tensordict.save) wrote. |
+| [`append_memmap`](generated/tensordict.append_memmap.html#tensordict.append_memmap)(prefix, rows, *[, allow_pickle]) | Appends rows to a tensordict saved in a directory, along its first batch dimension. |
 | [`pack_memmap`](generated/tensordict.pack_memmap.html#tensordict.pack_memmap)(prefix, archive_path, *[, ...]) | Packs a memory-mapped tensordict directory into a single-file zip archive. |
 | [`unpack_memmap`](generated/tensordict.unpack_memmap.html#tensordict.unpack_memmap)(archive_path, prefix) | Extracts a memory-mapped tensordict archive into a directory. |
 | [`is_memmap_archive`](generated/tensordict.is_memmap_archive.html#tensordict.is_memmap_archive)(path) | Whether `path` is a memory-mapped tensordict archive. |
 | [`refresh_archive_checksums`](generated/tensordict.refresh_archive_checksums.html#tensordict.refresh_archive_checksums)(archive_path) | Recomputes the CRC-32 checksums of a memory-mapped archive after in-place writes. |
+| [`to_safetensors`](generated/tensordict.to_safetensors.html#tensordict.to_safetensors)(data, path) | Saves a tensordict or a tensorclass to a safetensors file. |
+| [`from_safetensors`](generated/tensordict.from_safetensors.html#tensordict.from_safetensors)(path, *[, device]) | Loads a tensordict from a safetensors file. |
 | [`from_h5`](generated/tensordict.from_h5.html#tensordict.from_h5)(h5_file, *[, mode, auto_batch_size, ...]) | Opens an HDF5 file as a [`PersistentTensorDict`](generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict). |
 | [`from_zarr`](generated/tensordict.from_zarr.html#tensordict.from_zarr)(zarr_file, *[, mode, ...]) | Opens a zarr store as a [`PersistentTensorDict`](generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict). |
 | [`from_csv`](generated/tensordict.from_csv.html#tensordict.from_csv)(path, *[, auto_batch_size, ...]) | Reads a CSV file into a tensordict, with one entry per column. |
 | [`from_json`](generated/tensordict.from_json.html#tensordict.from_json)(path, *[, auto_batch_size, ...]) | Reads a JSON file of records into a tensordict, with one entry per field. |
 | [`from_parquet`](generated/tensordict.from_parquet.html#tensordict.from_parquet)(path, *[, auto_batch_size, ...]) | Reads a Parquet file into a tensordict, with one entry per column. |
+| [`from_arrow`](generated/tensordict.from_arrow.html#tensordict.from_arrow)(table, *[, copy, nulls, ...]) | Converts an Arrow table to a tensordict, with one entry per column, viewing the data where it can. |
+| [`to_arrow`](generated/tensordict.to_arrow.html#tensordict.to_arrow)(td) | Converts a tensordict with one batch dimension to an Arrow table, with one column per entry. |
 
 ### Locking
 
@@ -617,7 +622,7 @@ them over UCXX (see [Key-value stores and UCXX](storage.html#api-storage)). See 
 | [`TensorDictBase.recv`](generated/tensordict.TensorDictBase.recv.html#tensordict.TensorDictBase.recv)([src, group, group_src, ...]) | Receives the leaves that [`send()`](generated/tensordict.TensorDictBase.send.html#tensordict.TensorDictBase.send) sends, and writes them into the tensordict in place. |
 | [`TensorDictBase.isend`](generated/tensordict.TensorDictBase.isend.html#tensordict.TensorDictBase.isend)([dst, group, ...]) | Sends the leaves of the tensordict to another rank, one asynchronous transfer per leaf. |
 | [`TensorDictBase.irecv`](generated/tensordict.TensorDictBase.irecv.html#tensordict.TensorDictBase.irecv)([src, group, ...]) | Receives the leaves that [`isend()`](generated/tensordict.TensorDictBase.isend.html#tensordict.TensorDictBase.isend) or [`send()`](generated/tensordict.TensorDictBase.send.html#tensordict.TensorDictBase.send) sends, one asynchronous transfer per leaf. |
-| [`TensorDictBase.all_reduce`](generated/tensordict.TensorDictBase.all_reduce.html#tensordict.TensorDictBase.all_reduce)([op, group, async_op]) | Reduces each leaf over all the ranks of the group, in place, so that every rank holds the result. |
+| [`TensorDictBase.all_reduce`](generated/tensordict.TensorDictBase.all_reduce.html#tensordict.TensorDictBase.all_reduce)([op, group, ...]) | Reduces each leaf over all the ranks of the group, in place, so that every rank holds the result. |
 | [`TensorDictBase.reduce`](generated/tensordict.TensorDictBase.reduce.html#tensordict.TensorDictBase.reduce)(dst[, op, async_op, ...]) | Reduces each leaf over all the ranks of the group, into the tensordict of rank `dst`. |
 | [`TensorDictBase.broadcast`](generated/tensordict.TensorDictBase.broadcast.html#tensordict.TensorDictBase.broadcast)(src, *[, group, ...]) | Sends the tensordict of rank `src` to every rank of the group, and returns it on each rank. |
 | [`TensorDictBase.scatter`](generated/tensordict.TensorDictBase.scatter.html#tensordict.TensorDictBase.scatter)(src[, tensordicts, ...]) | Scatters a list of tensordicts from `src` to all ranks. |
@@ -636,6 +641,10 @@ Their pages name the replacement and the release that removes them.
 | [`TensorDictBase.load_`](generated/tensordict.TensorDictBase.load_.html#tensordict.TensorDictBase.load_)(prefix, *args, **kwargs) | Loads a saved tensordict into the tensordict. |
 | --- | --- |
 | [`TensorDictBase.pin_memory_`](generated/tensordict.TensorDictBase.pin_memory_.html#tensordict.TensorDictBase.pin_memory_)([num_threads]) | Pins the tensor leaves of the tensordict and returns `self`. |
+| [`TensorDictBase.qint8`](generated/tensordict.TensorDictBase.qint8.html#tensordict.TensorDictBase.qint8)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.qint8`. |
+| [`TensorDictBase.qint32`](generated/tensordict.TensorDictBase.qint32.html#tensordict.TensorDictBase.qint32)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.qint32`. |
+| [`TensorDictBase.quint8`](generated/tensordict.TensorDictBase.quint8.html#tensordict.TensorDictBase.quint8)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.quint8`. |
+| [`TensorDictBase.quint4x2`](generated/tensordict.TensorDictBase.quint4x2.html#tensordict.TensorDictBase.quint4x2)(*[, cast_filter]) | Returns a tensordict whose tensor leaves are cast to `torch.quint4x2`. |
 
 ## Other functions
 

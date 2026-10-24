@@ -114,12 +114,9 @@ print(training_data_tc)
 ```
 
 ```
-FashionMNISTData(
- images=MemoryMappedTensor(shape=torch.Size([60000, 28, 28]), device=cpu, dtype=torch.float32, is_shared=False),
- targets=MemoryMappedTensor(shape=torch.Size([60000]), device=cpu, dtype=torch.int64, is_shared=False),
- batch_size=torch.Size([60000]),
- device=None,
- is_shared=False)
+FashionMNISTData(batch_size=[60000], fields={
+ images: f32[28,28],
+ targets: i64[]})
 ```
 
 ## DataLoaders
@@ -127,8 +124,8 @@ FashionMNISTData(
 A tensorclass implements `__len__`, `__getitem__`, and `__getitems__`,
 so you can use it as a map-style dataset. The `DataLoader` then reads each
 batch with one batched index, and the result is already a
-`FashionMNISTData` batch. Pass `collate_fn=lambda x: x`: the default
-collate function cannot read a tensorclass.
+`FashionMNISTData` batch. Pass `collate_fn=lambda x: x` to keep that
+batch as it is; the default collate function also returns it unchanged.
 
 ```
 batch_size = 64
@@ -148,12 +145,7 @@ print(next(iter(train_dataloader_tc)))
 ```
 
 ```
-FashionMNISTData(
- images=Tensor(shape=torch.Size([64, 28, 28]), device=cpu, dtype=torch.float32, is_shared=False),
- targets=Tensor(shape=torch.Size([64]), device=cpu, dtype=torch.int64, is_shared=False),
- batch_size=torch.Size([64]),
- device=None,
- is_shared=False)
+FashionMNISTData(batch_size=[64], fields={images: f32[28,28], targets: i64[]})
 ```
 
 ## Model
@@ -260,7 +252,7 @@ loss: 2.172683 [57600/60000]
 Test Error:
  Accuracy: 49.5%, Avg loss: 2.162513
 
-Tensorclass training done! time: 1.8356 s
+Tensorclass training done! time: 1.6107 s
 ```
 
 ## Conclusion
@@ -273,7 +265,7 @@ read its fields as attributes.
 
 ## Further reading
 
-- [TensorClass](../tensorclass.html#tensorclass-guide) explains how to define and use tensorclasses.
+- [TensorClass: a dataclass of tensors](../tensorclass.html#tensorclass-guide) explains how to define and use tensorclasses.
 - [Which container should I use?](../choosing_a_container.html#choosing-a-container) compares `TensorDict`, `TensorClass`, and
 `TypedTensorDict`.
 - [Load data and share it between processes](../data_loading.html#data-loading) explains the ways to load data with tensordict and to
@@ -281,7 +273,7 @@ share it between processes.
 - [Batched data loading with tensorclasses](tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) applies random
 transforms to whole batches, for a larger image dataset.
 
-**Total running time of the script:** (0 minutes 4.250 seconds)
+**Total running time of the script:** (0 minutes 3.977 seconds)
 
 [`Download Jupyter notebook: tensorclass_fashion.ipynb`](../_downloads/5a8f2d6b38b250cbfadc2a295255dde6/tensorclass_fashion.ipynb)
 

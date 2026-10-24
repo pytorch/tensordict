@@ -83,13 +83,7 @@ Examples
 >>> data = TensorDict(x=torch.ones(2, 3), batch_size=[2])
 >>> data = module(data)
 >>> print(data)
-TensorDict(
- fields={
- x: Tensor(shape=torch.Size([2, 3]), device=cpu, dtype=torch.float32, is_shared=False),
- y: Tensor(shape=torch.Size([2, 4]), device=cpu, dtype=torch.float32, is_shared=False)},
- batch_size=torch.Size([2]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[2], fields={x: f32[3], y: f32[4]})
 >>> module(torch.ones(2, 3)).shape
 torch.Size([2, 4])
 ```

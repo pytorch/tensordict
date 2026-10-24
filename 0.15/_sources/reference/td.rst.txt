@@ -245,6 +245,12 @@ batch dimensions. ``td["key"]`` returns an entry: see
     TensorDictBase.unbind
     TensorDictBase.narrow
 
+.. autosummary::
+    :toctree: generated/
+    :template: function.rst
+
+    group_by
+
 .. _api-methods-shape:
 
 Shape, batch dimensions, and stacking
@@ -393,10 +399,6 @@ control the memory that holds them. See :ref:`devices`.
     TensorDictBase.complex32
     TensorDictBase.complex64
     TensorDictBase.complex128
-    TensorDictBase.qint8
-    TensorDictBase.qint32
-    TensorDictBase.quint8
-    TensorDictBase.quint4x2
 
 ``to`` and the dtype shorthands take a ``cast_filter`` predicate
 ``fn(key, value) -> bool`` that selects the leaves to cast. The predicates
@@ -635,7 +637,8 @@ Saving, loading, and file formats
 
 Save a tensordict to disk and load it again, and write its entries to
 memory-mapped files. Other methods read and write key-value stores, and HDF5,
-zarr, CSV, JSON, Parquet, and MDS files.
+zarr, CSV, JSON, Parquet, and MDS files, and convert to and from Arrow
+tables.
 ``memmap(return_early=True)`` returns a
 :class:`~tensordict.utils.TensorDictFuture`. See :ref:`saving` and
 :ref:`storage`.
@@ -685,15 +688,20 @@ zarr, CSV, JSON, Parquet, and MDS files.
     load
     memmap
     load_memmap
+    append_memmap
     pack_memmap
     unpack_memmap
     is_memmap_archive
     refresh_archive_checksums
+    to_safetensors
+    from_safetensors
     from_h5
     from_zarr
     from_csv
     from_json
     from_parquet
+    from_arrow
+    to_arrow
 
 .. _api-methods-locking:
 
@@ -755,6 +763,10 @@ Their pages name the replacement and the release that removes them.
 
     TensorDictBase.load_
     TensorDictBase.pin_memory_
+    TensorDictBase.qint8
+    TensorDictBase.qint32
+    TensorDictBase.quint8
+    TensorDictBase.quint4x2
 
 Other functions
 ---------------

@@ -7,6 +7,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta content="TensorDict is a dict of tensors, and TensorClass a dataclass of tensors, that index, stack, move to a device and compile with torch.compile like one tensor in PyTorch." name="description" />
 
     <title>TensorDict &#8212; tensordict 0.15 documentation</title>
   
@@ -70,7 +71,7 @@
 <meta name="llm:site-type" content="documentation">
 <meta name="llm:framework" content="PyTorch">
 
-<meta name="llm:description" content="A dict[str, torch.Tensor] that behaves like one tensor. - TensorDict">
+<meta name="llm:description" content="TensorDict is a dict of tensors, and TensorClass a dataclass of tensors, that index, stack, move to a device and compile with torch.compile like one tensor in PyTorch.">
 
 
 
@@ -538,6 +539,18 @@ document.write(`
                 </a>
               </li>
             
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="coming_from_jax.html">
+                  Coming from JAX pytrees
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="coming_from_dataclass.html">
+                  Coming from a hand-written dataclass
+                </a>
+              </li>
+            
           </ul>
         
       </li>
@@ -555,6 +568,12 @@ document.write(`
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="overview.html">
                   What is TensorDict?
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="pitfalls.html">
+                  Common surprises
                 </a>
               </li>
             
@@ -596,7 +615,7 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="tensorclass.html">
-                  TensorClass
+                  TensorClass: a dataclass of tensors
                 </a>
               </li>
             
@@ -626,15 +645,27 @@ document.write(`
         
           
           <div class="nav-item-with-toggle">
-            <a class="nav-link nav-internal" href="saving.html">
+            <a class="nav-link nav-internal" href="cookbook.html">
               How-to guides
             </a>
           </div>
           <ul class="dropdown-menu" id="dropdown-3">
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="cookbook.html">
+                  How-to recipes
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="saving.html">
                   Save and load tensordicts
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="saving_format.html">
+                  The on-disk format
                 </a>
               </li>
             
@@ -651,8 +682,26 @@ document.write(`
               </li>
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="variable_size_batches.html">
+                  Batch samples of different sizes without padding
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="integrations.html">
+                  Use tensordict with other libraries
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="distributed.html">
                   Distributed tensordicts
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="training_at_scale.html">
+                  Train at scale
                 </a>
               </li>
             
@@ -775,6 +824,12 @@ document.write(`
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="tutorials/tensorclass_imagenet.html">
                   Batched data loading with tensorclasses
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/tensorclass_particles.html">
+                  Simulating particles with a tensorclass
                 </a>
               </li>
             
@@ -1035,6 +1090,18 @@ document.write(`
                 </a>
               </li>
             
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="coming_from_jax.html">
+                  Coming from JAX pytrees
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="coming_from_dataclass.html">
+                  Coming from a hand-written dataclass
+                </a>
+              </li>
+            
           </ul>
         
       </li>
@@ -1052,6 +1119,12 @@ document.write(`
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="overview.html">
                   What is TensorDict?
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="pitfalls.html">
+                  Common surprises
                 </a>
               </li>
             
@@ -1093,7 +1166,7 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="tensorclass.html">
-                  TensorClass
+                  TensorClass: a dataclass of tensors
                 </a>
               </li>
             
@@ -1123,15 +1196,27 @@ document.write(`
         
           
           <div class="nav-item-with-toggle">
-            <a class="nav-link nav-internal" href="saving.html">
+            <a class="nav-link nav-internal" href="cookbook.html">
               How-to guides
             </a>
           </div>
           <ul class="dropdown-menu" id="dropdown-3">
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="cookbook.html">
+                  How-to recipes
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="saving.html">
                   Save and load tensordicts
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="saving_format.html">
+                  The on-disk format
                 </a>
               </li>
             
@@ -1148,8 +1233,26 @@ document.write(`
               </li>
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="variable_size_batches.html">
+                  Batch samples of different sizes without padding
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="integrations.html">
+                  Use tensordict with other libraries
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="distributed.html">
                   Distributed tensordicts
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="training_at_scale.html">
+                  Train at scale
                 </a>
               </li>
             
@@ -1272,6 +1375,12 @@ document.write(`
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="tutorials/tensorclass_imagenet.html">
                   Batched data loading with tensorclasses
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/tensorclass_particles.html">
+                  Simulating particles with a tensorclass
                 </a>
               </li>
             
@@ -1437,27 +1546,35 @@ document.write(`
 <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="coming_from_jax.html">Coming from JAX pytrees</a></li>
+<li class="toctree-l1"><a class="reference internal" href="coming_from_dataclass.html">Coming from a hand-written dataclass</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">User guide</span></p>
 <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="overview.html">What is TensorDict?</a></li>
+<li class="toctree-l1"><a class="reference internal" href="pitfalls.html">Common surprises</a></li>
 <li class="toctree-l1"><a class="reference internal" href="concepts/batch_size.html">Batch size, shapes, and indexing</a></li>
 <li class="toctree-l1"><a class="reference internal" href="concepts/keys.html">Keys, nested keys, and locking</a></li>
 <li class="toctree-l1"><a class="reference internal" href="concepts/stacking.html">Stacking and variable-size data</a></li>
 <li class="toctree-l1"><a class="reference internal" href="concepts/operations.html">Arithmetic, apply, reductions, and gradients</a></li>
 <li class="toctree-l1"><a class="reference internal" href="concepts/devices.html">Devices, dtypes, and memory</a></li>
 <li class="toctree-l1"><a class="reference internal" href="concepts/non_tensor.html">Non-tensor data and unbatched entries</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tensorclass.html">TensorClass</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tensorclass.html">TensorClass: a dataclass of tensors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="typed_tensordict.html">TypedTensorDict</a></li>
 <li class="toctree-l1"><a class="reference internal" href="choosing_a_container.html">Which container should I use?</a></li>
 <li class="toctree-l1"><a class="reference internal" href="modules.html">Modules: TensorDictModule and tensordict.nn</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">How-to guides</span></p>
 <ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="cookbook.html">How-to recipes</a></li>
 <li class="toctree-l1"><a class="reference internal" href="saving.html">Save and load tensordicts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="saving_format.html">The on-disk format</a></li>
 <li class="toctree-l1"><a class="reference internal" href="storage.html">Large datasets and storage backends</a></li>
 <li class="toctree-l1"><a class="reference internal" href="data_loading.html">Load data and share it between processes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="variable_size_batches.html">Batch samples of different sizes without padding</a></li>
+<li class="toctree-l1"><a class="reference internal" href="integrations.html">Use tensordict with other libraries</a></li>
 <li class="toctree-l1"><a class="reference internal" href="distributed.html">Distributed tensordicts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="training_at_scale.html">Train at scale</a></li>
 <li class="toctree-l1"><a class="reference internal" href="compile.html">torch.compile, torch.func, torch.export, and CUDA graphs</a></li>
 <li class="toctree-l1"><a class="reference internal" href="printing.html">Printing and display</a></li>
 <li class="toctree-l1"><a class="reference internal" href="compatibility.html">Containers on storage backends</a></li>
@@ -1488,6 +1605,10 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="tutorials/data_fashion.html">Using TensorDict for datasets</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorials/tensorclass_fashion.html">Using tensorclasses for datasets</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorials/tensorclass_imagenet.html">Batched data loading with tensorclasses</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Tutorials: scientific computing</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensorclass_particles.html">Simulating particles with a tensorclass</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">API reference</span></p>
 <ul class="nav bd-sidenav">
@@ -1601,32 +1722,6 @@ function body is two lines:</p>
 </pre></div>
 </div>
 <p>The new function names no tensor, so it does not change when you add one.</p>
-<section id="tensordict-keys-at-run-time-like-a-dict">
-<h2>TensorDict: keys at run time, like a dict<a class="headerlink" href="#tensordict-keys-at-run-time-like-a-dict" title="Link to this heading">#</a></h2>
-<p>You add and read keys at run time, as in a <code class="docutils literal notranslate"><span class="pre">dict</span></code>. A <code class="docutils literal notranslate"><span class="pre">dict</span></code> value becomes
-a nested TensorDict, and a tuple of keys reads its entries. The tensors share
-the batch size, so indexing, reshaping, stacking, and <code class="docutils literal notranslate"><span class="pre">.to(device)</span></code> apply to
-every tensor at once, nested ones too:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span><span class="p">[</span><span class="s2">"meta"</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"id"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">32</span><span class="p">)}</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span><span class="p">[:</span><span class="mi">8</span><span class="p">][</span><span class="s2">"meta"</span><span class="p">,</span> <span class="s2">"id"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
-<span class="go">torch.Size([8])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">8</span><span class="p">)[</span><span class="s2">"images"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
-<span class="go">torch.Size([4, 8, 3, 64, 64])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">batch</span><span class="p">,</span> <span class="n">batch</span><span class="p">])</span><span class="o">.</span><span class="n">batch_size</span>
-<span class="go">torch.Size([2, 32])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">"cuda"</span> <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="k">else</span> <span class="s2">"cpu"</span><span class="p">)</span>
-</pre></div>
-</div>
-<p>Every tensor that you add must have the batch dimensions, so the tensors of
-a group stay aligned:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span><span class="p">[</span><span class="s2">"scores"</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">31</span><span class="p">)</span>
-<span class="gt">Traceback (most recent call last):</span>
-<span class="c">...</span>
-<span class="gr">RuntimeError</span>: <span class="n">batch dimension mismatch, got self.batch_size=torch.Size([32]) and value.shape=torch.Size([31]) for key 'scores'. The leading dimensions of a value must match the batch size.</span>
-</pre></div>
-</div>
-<p>You can also <a class="reference internal" href="saving.html#saving"><span class="std std-ref">save it to disk</span></a>, <a class="reference internal" href="modules.html#modules-guide"><span class="std std-ref">pass it to modules</span></a>, and <a class="reference internal" href="compile.html#compile"><span class="std std-ref">compile functions that take it</span></a>.</p>
-</section>
 <section id="tensorclass-fields-and-methods-like-a-dataclass">
 <h2>TensorClass: fields and methods, like a dataclass<a class="headerlink" href="#tensorclass-fields-and-methods-like-a-dataclass" title="Link to this heading">#</a></h2>
 <p><a class="reference internal" href="reference/generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorClass</span></code></a> is the class form of the same idea. You
@@ -1653,15 +1748,44 @@ write once runs on one item or on a batch of any shape, and it compiles with
 <span class="gp">&gt;&gt;&gt; </span><span class="n">one</span> <span class="o">=</span> <span class="n">systems</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">1000</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">dt</span><span class="o">=</span><span class="mf">0.01</span><span class="p">)</span>  <span class="c1"># one system</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">type</span><span class="p">(</span><span class="n">one</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">one</span><span class="o">.</span><span class="n">batch_size</span>
 <span class="go">('Particles', torch.Size([1000]))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">systems</span><span class="p">,</span> <span class="n">systems</span><span class="p">])</span><span class="o">.</span><span class="n">batch_size</span>
+<span class="go">torch.Size([2, 64, 1000])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">step</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">Particles</span><span class="o">.</span><span class="n">step</span><span class="p">,</span> <span class="n">fullgraph</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">step</span><span class="p">(</span><span class="n">systems</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">64</span><span class="p">,</span> <span class="mi">1000</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="mf">0.01</span><span class="p">)</span><span class="o">.</span><span class="n">batch_size</span>
 <span class="go">torch.Size([64, 1000])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">systems</span> <span class="o">=</span> <span class="n">systems</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">"cuda"</span> <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="k">else</span> <span class="s2">"cpu"</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>The fields are class attributes, so your editor completes <code class="docutils literal notranslate"><span class="pre">systems.pos</span></code>.
-Indexing, stacking, <code class="docutils literal notranslate"><span class="pre">.to(device)</span></code>, and saving work as for a TensorDict.
-<a class="reference internal" href="tensorclass.html#tensorclass-guide"><span class="std std-ref">TensorClass</span></a> explains TensorClass, and
+Saving works as for a TensorDict.
+<a class="reference internal" href="tensorclass.html#tensorclass-guide"><span class="std std-ref">TensorClass: a dataclass of tensors</span></a> explains TensorClass, and
 <a class="reference internal" href="choosing_a_container.html#choosing-a-container"><span class="std std-ref">Which container should I use?</span></a> helps you choose between the two forms.</p>
+</section>
+<section id="tensordict-keys-at-run-time-like-a-dict">
+<h2>TensorDict: keys at run time, like a dict<a class="headerlink" href="#tensordict-keys-at-run-time-like-a-dict" title="Link to this heading">#</a></h2>
+<p>You add and read keys at run time, as in a <code class="docutils literal notranslate"><span class="pre">dict</span></code>. A <code class="docutils literal notranslate"><span class="pre">dict</span></code> value becomes
+a nested TensorDict, and a tuple of keys reads its entries. The tensors share
+the batch size, so indexing, reshaping, stacking, and <code class="docutils literal notranslate"><span class="pre">.to(device)</span></code> apply to
+every tensor at once, nested ones too:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span><span class="p">[</span><span class="s2">"meta"</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"id"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">32</span><span class="p">)}</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span><span class="p">[:</span><span class="mi">8</span><span class="p">][</span><span class="s2">"meta"</span><span class="p">,</span> <span class="s2">"id"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
+<span class="go">torch.Size([8])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">8</span><span class="p">)[</span><span class="s2">"images"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
+<span class="go">torch.Size([4, 8, 3, 64, 64])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">batch</span><span class="p">,</span> <span class="n">batch</span><span class="p">])</span><span class="o">.</span><span class="n">batch_size</span>
+<span class="go">torch.Size([2, 32])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">"cuda"</span> <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="k">else</span> <span class="s2">"cpu"</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Every tensor that you add must have the batch dimensions, so the tensors of
+a group stay aligned:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span><span class="p">[</span><span class="s2">"scores"</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">31</span><span class="p">)</span>
+<span class="gt">Traceback (most recent call last):</span>
+<span class="c">...</span>
+<span class="gr">RuntimeError</span>: <span class="n">batch dimension mismatch, got self.batch_size=torch.Size([32]) and value.shape=torch.Size([31]) for key 'scores'. The leading dimensions of a value must match the batch size.</span>
+</pre></div>
+</div>
+<p>You can also <a class="reference internal" href="saving.html#saving"><span class="std std-ref">save it to disk</span></a>, <a class="reference internal" href="modules.html#modules-guide"><span class="std std-ref">pass it to modules</span></a>, and <a class="reference internal" href="compile.html#compile"><span class="std std-ref">compile functions that take it</span></a>.</p>
 </section>
 <section id="install">
 <h2>Install<a class="headerlink" href="#install" title="Link to this heading">#</a></h2>
@@ -1676,6 +1800,10 @@ nightly builds, the optional dependencies, conda-forge, and source installs.</p>
 <ul class="simple">
 <li><p><a class="reference internal" href="getting_started.html#getting-started"><span class="std std-ref">Getting started</span></a>: a one-hour tour, with examples
 that you can run. Start here.</p></li>
+<li><p><a class="reference internal" href="coming_from_jax.html#coming-from-jax"><span class="std std-ref">Coming from JAX</span></a>: JAX pytree idioms in tensordict.</p></li>
+<li><p><a class="reference internal" href="coming_from_dataclass.html#coming-from-dataclass"><span class="std std-ref">Coming from a hand-written dataclass</span></a>: what
+replaces a hand-written <code class="docutils literal notranslate"><span class="pre">to</span></code>, <code class="docutils literal notranslate"><span class="pre">pin_memory</span></code>, <code class="docutils literal notranslate"><span class="pre">__getitem__</span></code> and
+<code class="docutils literal notranslate"><span class="pre">collate_fn</span></code>.</p></li>
 <li><p><a class="reference internal" href="overview.html#overview"><span class="std std-ref">User guide</span></a>: one page for each concept, from the batch
 size to TensorClass and <code class="docutils literal notranslate"><span class="pre">tensordict.nn</span></code>.</p></li>
 <li><p><a class="reference internal" href="saving.html#saving"><span class="std std-ref">How-to guides</span></a>: one page for each task, such as saving,
@@ -1686,6 +1814,8 @@ download as notebooks.</p></li>
 <li><p><a class="reference internal" href="reference/index.html#api-reference"><span class="std std-ref">API reference</span></a>: every public class, function, and
 method. The <a class="reference internal" href="genindex.html"><span class="std std-ref">Index</span></a> lists them from A to Z.</p></li>
 </ul>
+<div class="toctree-wrapper compound">
+</div>
 <div class="toctree-wrapper compound">
 </div>
 <div class="toctree-wrapper compound">
@@ -1744,8 +1874,8 @@ method. The <a class="reference internal" href="genindex.html"><span class="std 
   </div>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tensordict-keys-at-run-time-like-a-dict">TensorDict: keys at run time, like a dict</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tensorclass-fields-and-methods-like-a-dataclass">TensorClass: fields and methods, like a dataclass</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#tensordict-keys-at-run-time-like-a-dict">TensorDict: keys at run time, like a dict</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#install">Install</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#where-to-go">Where to go</a><ul class="visible nav section-nav flex-column">
 </ul>
@@ -2003,9 +2133,9 @@ method. The <a class="reference internal" href="genindex.html"><span class="std 
        "@type": "Article",
        "name": "TensorDict",
        "headline": "TensorDict",
-       "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDict",
+       "description": "TensorDict is a dict of tensors, and TensorClass a dataclass of tensors, that index, stack, move to a device and compile with torch.compile like one tensor in PyTorch.",
        "url": "/index.html",
-       "articleBody": "TensorDict# A dict[str, torch.Tensor] that behaves like one tensor. PyTorch code that handles groups of tensors, such as a training batch, a particle system, or a batch of graphs, repeats every operation for every tensor: def shuffle_and_split(images, labels, masks, weights): perm = torch.randperm(len(images)) images, labels, masks, weights = images[perm], labels[perm], masks[perm], weights[perm] half = len(images) // 2 first = images[:half], labels[:half], masks[:half], weights[:half] second = images[half:], labels[half:], masks[half:], weights[half:] return first, second With a TensorDict, the group is one object, and the function body is two lines: \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e def shuffle_and_split(batch): ... batch = batch[torch.randperm(len(batch))] ... return batch.split(len(batch) // 2) Build a TensorDict from the four tensors, then call the function: \u003e\u003e\u003e batch = TensorDict( ... { ... \"images\": torch.randn(32, 3, 64, 64), ... \"labels\": torch.randint(10, (32,)), ... \"masks\": torch.ones(32, 64, 64, dtype=torch.bool), ... \"weights\": torch.rand(32), ... }, ... batch_size=[32], # the leading dimension that all tensors share ... ) \u003e\u003e\u003e first, second = shuffle_and_split(batch) \u003e\u003e\u003e first[\"images\"].shape torch.Size([16, 3, 64, 64]) The new function names no tensor, so it does not change when you add one. TensorDict: keys at run time, like a dict# You add and read keys at run time, as in a dict. A dict value becomes a nested TensorDict, and a tuple of keys reads its entries. The tensors share the batch size, so indexing, reshaping, stacking, and .to(device) apply to every tensor at once, nested ones too: \u003e\u003e\u003e batch[\"meta\"] = {\"id\": torch.arange(32)} \u003e\u003e\u003e batch[:8][\"meta\", \"id\"].shape torch.Size([8]) \u003e\u003e\u003e batch.reshape(4, 8)[\"images\"].shape torch.Size([4, 8, 3, 64, 64]) \u003e\u003e\u003e torch.stack([batch, batch]).batch_size torch.Size([2, 32]) \u003e\u003e\u003e batch = batch.to(\"cuda\" if torch.cuda.is_available() else \"cpu\") Every tensor that you add must have the batch dimensions, so the tensors of a group stay aligned: \u003e\u003e\u003e batch[\"scores\"] = torch.ones(31) Traceback (most recent call last): ... RuntimeError: batch dimension mismatch, got self.batch_size=torch.Size([32]) and value.shape=torch.Size([31]) for key \u0027scores\u0027. The leading dimensions of a value must match the batch size. You can also save it to disk, pass it to modules, and compile functions that take it. TensorClass: fields and methods, like a dataclass# TensorClass is the class form of the same idea. You declare typed fields and write methods, as for a dataclass. A method that you write once runs on one item or on a batch of any shape, and it compiles with fullgraph=True: \u003e\u003e\u003e from tensordict import TensorClass \u003e\u003e\u003e class Particles(TensorClass): ... pos: torch.Tensor # [*batch, 3] ... vel: torch.Tensor # [*batch, 3] ... mass: torch.Tensor # [*batch] ... ... def step(self, force: torch.Tensor, dt: float) -\u003e \"Particles\": ... vel = self.vel + dt * force / self.mass.unsqueeze(-1) ... pos = self.pos + dt * vel ... return Particles(pos=pos, vel=vel, mass=self.mass, batch_size=self.batch_size) \u003e\u003e\u003e systems = Particles( # 64 systems of 1,000 particles each ... pos=torch.randn(64, 1000, 3), ... vel=torch.zeros(64, 1000, 3), ... mass=torch.ones(64, 1000), ... batch_size=[64, 1000], ... ) \u003e\u003e\u003e systems = systems.step(torch.randn(64, 1000, 3), dt=0.01) # all 64 systems \u003e\u003e\u003e one = systems[0].step(torch.randn(1000, 3), dt=0.01) # one system \u003e\u003e\u003e type(one).__name__, one.batch_size (\u0027Particles\u0027, torch.Size([1000])) \u003e\u003e\u003e step = torch.compile(Particles.step, fullgraph=True) \u003e\u003e\u003e step(systems, torch.randn(64, 1000, 3), 0.01).batch_size torch.Size([64, 1000]) The fields are class attributes, so your editor completes systems.pos. Indexing, stacking, .to(device), and saving work as for a TensorDict. TensorClass explains TensorClass, and Which container should I use? helps you choose between the two forms. Install# pip install tensordict tensordict needs Python 3.10+ and PyTorch 2.11+. Installation covers nightly builds, the optional dependencies, conda-forge, and source installs. Where to go# Getting started: a one-hour tour, with examples that you can run. Start here. User guide: one page for each concept, from the batch size to TensorClass and tensordict.nn. How-to guides: one page for each task, such as saving, large datasets, data loading, distributed training, and torch.compile(). Tutorials: scripts that you can run or download as notebooks. API reference: every public class, function, and method. The Index lists them from A to Z.",
+       "articleBody": "TensorDict# A dict[str, torch.Tensor] that behaves like one tensor. PyTorch code that handles groups of tensors, such as a training batch, a particle system, or a batch of graphs, repeats every operation for every tensor: def shuffle_and_split(images, labels, masks, weights): perm = torch.randperm(len(images)) images, labels, masks, weights = images[perm], labels[perm], masks[perm], weights[perm] half = len(images) // 2 first = images[:half], labels[:half], masks[:half], weights[:half] second = images[half:], labels[half:], masks[half:], weights[half:] return first, second With a TensorDict, the group is one object, and the function body is two lines: \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e def shuffle_and_split(batch): ... batch = batch[torch.randperm(len(batch))] ... return batch.split(len(batch) // 2) Build a TensorDict from the four tensors, then call the function: \u003e\u003e\u003e batch = TensorDict( ... { ... \"images\": torch.randn(32, 3, 64, 64), ... \"labels\": torch.randint(10, (32,)), ... \"masks\": torch.ones(32, 64, 64, dtype=torch.bool), ... \"weights\": torch.rand(32), ... }, ... batch_size=[32], # the leading dimension that all tensors share ... ) \u003e\u003e\u003e first, second = shuffle_and_split(batch) \u003e\u003e\u003e first[\"images\"].shape torch.Size([16, 3, 64, 64]) The new function names no tensor, so it does not change when you add one. TensorClass: fields and methods, like a dataclass# TensorClass is the class form of the same idea. You declare typed fields and write methods, as for a dataclass. A method that you write once runs on one item or on a batch of any shape, and it compiles with fullgraph=True: \u003e\u003e\u003e from tensordict import TensorClass \u003e\u003e\u003e class Particles(TensorClass): ... pos: torch.Tensor # [*batch, 3] ... vel: torch.Tensor # [*batch, 3] ... mass: torch.Tensor # [*batch] ... ... def step(self, force: torch.Tensor, dt: float) -\u003e \"Particles\": ... vel = self.vel + dt * force / self.mass.unsqueeze(-1) ... pos = self.pos + dt * vel ... return Particles(pos=pos, vel=vel, mass=self.mass, batch_size=self.batch_size) \u003e\u003e\u003e systems = Particles( # 64 systems of 1,000 particles each ... pos=torch.randn(64, 1000, 3), ... vel=torch.zeros(64, 1000, 3), ... mass=torch.ones(64, 1000), ... batch_size=[64, 1000], ... ) \u003e\u003e\u003e systems = systems.step(torch.randn(64, 1000, 3), dt=0.01) # all 64 systems \u003e\u003e\u003e one = systems[0].step(torch.randn(1000, 3), dt=0.01) # one system \u003e\u003e\u003e type(one).__name__, one.batch_size (\u0027Particles\u0027, torch.Size([1000])) \u003e\u003e\u003e torch.stack([systems, systems]).batch_size torch.Size([2, 64, 1000]) \u003e\u003e\u003e step = torch.compile(Particles.step, fullgraph=True) \u003e\u003e\u003e step(systems, torch.randn(64, 1000, 3), 0.01).batch_size torch.Size([64, 1000]) \u003e\u003e\u003e systems = systems.to(\"cuda\" if torch.cuda.is_available() else \"cpu\") The fields are class attributes, so your editor completes systems.pos. Saving works as for a TensorDict. TensorClass: a dataclass of tensors explains TensorClass, and Which container should I use? helps you choose between the two forms. TensorDict: keys at run time, like a dict# You add and read keys at run time, as in a dict. A dict value becomes a nested TensorDict, and a tuple of keys reads its entries. The tensors share the batch size, so indexing, reshaping, stacking, and .to(device) apply to every tensor at once, nested ones too: \u003e\u003e\u003e batch[\"meta\"] = {\"id\": torch.arange(32)} \u003e\u003e\u003e batch[:8][\"meta\", \"id\"].shape torch.Size([8]) \u003e\u003e\u003e batch.reshape(4, 8)[\"images\"].shape torch.Size([4, 8, 3, 64, 64]) \u003e\u003e\u003e torch.stack([batch, batch]).batch_size torch.Size([2, 32]) \u003e\u003e\u003e batch = batch.to(\"cuda\" if torch.cuda.is_available() else \"cpu\") Every tensor that you add must have the batch dimensions, so the tensors of a group stay aligned: \u003e\u003e\u003e batch[\"scores\"] = torch.ones(31) Traceback (most recent call last): ... RuntimeError: batch dimension mismatch, got self.batch_size=torch.Size([32]) and value.shape=torch.Size([31]) for key \u0027scores\u0027. The leading dimensions of a value must match the batch size. You can also save it to disk, pass it to modules, and compile functions that take it. Install# pip install tensordict tensordict needs Python 3.10+ and PyTorch 2.11+. Installation covers nightly builds, the optional dependencies, conda-forge, and source installs. Where to go# Getting started: a one-hour tour, with examples that you can run. Start here. Coming from JAX: JAX pytree idioms in tensordict. Coming from a hand-written dataclass: what replaces a hand-written to, pin_memory, __getitem__ and collate_fn. User guide: one page for each concept, from the batch size to TensorClass and tensordict.nn. How-to guides: one page for each task, such as saving, large datasets, data loading, distributed training, and torch.compile(). Tutorials: scripts that you can run or download as notebooks. API reference: every public class, function, and method. The Index lists them from A to Z.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

@@ -60,8 +60,8 @@
     <link rel="canonical" href="https://docs.pytorch.org/tensordict/stable/overview.html" />
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Batch size, shapes, and indexing" href="concepts/batch_size.html" />
-    <link rel="prev" title="Getting started" href="getting_started.html" />
+    <link rel="next" title="Common surprises" href="pitfalls.html" />
+    <link rel="prev" title="Coming from a hand-written dataclass" href="coming_from_dataclass.html" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -539,6 +539,18 @@ document.write(`
                 </a>
               </li>
             
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="coming_from_jax.html">
+                  Coming from JAX pytrees
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="coming_from_dataclass.html">
+                  Coming from a hand-written dataclass
+                </a>
+              </li>
+            
           </ul>
         
       </li>
@@ -556,6 +568,12 @@ document.write(`
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="#">
                   What is TensorDict?
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="pitfalls.html">
+                  Common surprises
                 </a>
               </li>
             
@@ -597,7 +615,7 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="tensorclass.html">
-                  TensorClass
+                  TensorClass: a dataclass of tensors
                 </a>
               </li>
             
@@ -627,15 +645,27 @@ document.write(`
         
           
           <div class="nav-item-with-toggle">
-            <a class="nav-link nav-internal" href="saving.html">
+            <a class="nav-link nav-internal" href="cookbook.html">
               How-to guides
             </a>
           </div>
           <ul class="dropdown-menu" id="dropdown-3">
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="cookbook.html">
+                  How-to recipes
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="saving.html">
                   Save and load tensordicts
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="saving_format.html">
+                  The on-disk format
                 </a>
               </li>
             
@@ -652,8 +682,26 @@ document.write(`
               </li>
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="variable_size_batches.html">
+                  Batch samples of different sizes without padding
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="integrations.html">
+                  Use tensordict with other libraries
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="distributed.html">
                   Distributed tensordicts
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="training_at_scale.html">
+                  Train at scale
                 </a>
               </li>
             
@@ -776,6 +824,12 @@ document.write(`
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="tutorials/tensorclass_imagenet.html">
                   Batched data loading with tensorclasses
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/tensorclass_particles.html">
+                  Simulating particles with a tensorclass
                 </a>
               </li>
             
@@ -1036,6 +1090,18 @@ document.write(`
                 </a>
               </li>
             
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="coming_from_jax.html">
+                  Coming from JAX pytrees
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="coming_from_dataclass.html">
+                  Coming from a hand-written dataclass
+                </a>
+              </li>
+            
           </ul>
         
       </li>
@@ -1053,6 +1119,12 @@ document.write(`
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="#">
                   What is TensorDict?
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="pitfalls.html">
+                  Common surprises
                 </a>
               </li>
             
@@ -1094,7 +1166,7 @@ document.write(`
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="tensorclass.html">
-                  TensorClass
+                  TensorClass: a dataclass of tensors
                 </a>
               </li>
             
@@ -1124,15 +1196,27 @@ document.write(`
         
           
           <div class="nav-item-with-toggle">
-            <a class="nav-link nav-internal" href="saving.html">
+            <a class="nav-link nav-internal" href="cookbook.html">
               How-to guides
             </a>
           </div>
           <ul class="dropdown-menu" id="dropdown-3">
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="cookbook.html">
+                  How-to recipes
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="saving.html">
                   Save and load tensordicts
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="saving_format.html">
+                  The on-disk format
                 </a>
               </li>
             
@@ -1149,8 +1233,26 @@ document.write(`
               </li>
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="variable_size_batches.html">
+                  Batch samples of different sizes without padding
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="integrations.html">
+                  Use tensordict with other libraries
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="distributed.html">
                   Distributed tensordicts
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="training_at_scale.html">
+                  Train at scale
                 </a>
               </li>
             
@@ -1273,6 +1375,12 @@ document.write(`
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="tutorials/tensorclass_imagenet.html">
                   Batched data loading with tensorclasses
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="tutorials/tensorclass_particles.html">
+                  Simulating particles with a tensorclass
                 </a>
               </li>
             
@@ -1438,27 +1546,35 @@ document.write(`
 <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="coming_from_jax.html">Coming from JAX pytrees</a></li>
+<li class="toctree-l1"><a class="reference internal" href="coming_from_dataclass.html">Coming from a hand-written dataclass</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">User guide</span></p>
 <ul class="current nav bd-sidenav">
 <li class="toctree-l1 current active"><a class="current reference internal" href="#">What is TensorDict?</a></li>
+<li class="toctree-l1"><a class="reference internal" href="pitfalls.html">Common surprises</a></li>
 <li class="toctree-l1"><a class="reference internal" href="concepts/batch_size.html">Batch size, shapes, and indexing</a></li>
 <li class="toctree-l1"><a class="reference internal" href="concepts/keys.html">Keys, nested keys, and locking</a></li>
 <li class="toctree-l1"><a class="reference internal" href="concepts/stacking.html">Stacking and variable-size data</a></li>
 <li class="toctree-l1"><a class="reference internal" href="concepts/operations.html">Arithmetic, apply, reductions, and gradients</a></li>
 <li class="toctree-l1"><a class="reference internal" href="concepts/devices.html">Devices, dtypes, and memory</a></li>
 <li class="toctree-l1"><a class="reference internal" href="concepts/non_tensor.html">Non-tensor data and unbatched entries</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tensorclass.html">TensorClass</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tensorclass.html">TensorClass: a dataclass of tensors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="typed_tensordict.html">TypedTensorDict</a></li>
 <li class="toctree-l1"><a class="reference internal" href="choosing_a_container.html">Which container should I use?</a></li>
 <li class="toctree-l1"><a class="reference internal" href="modules.html">Modules: TensorDictModule and tensordict.nn</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">How-to guides</span></p>
 <ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="cookbook.html">How-to recipes</a></li>
 <li class="toctree-l1"><a class="reference internal" href="saving.html">Save and load tensordicts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="saving_format.html">The on-disk format</a></li>
 <li class="toctree-l1"><a class="reference internal" href="storage.html">Large datasets and storage backends</a></li>
 <li class="toctree-l1"><a class="reference internal" href="data_loading.html">Load data and share it between processes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="variable_size_batches.html">Batch samples of different sizes without padding</a></li>
+<li class="toctree-l1"><a class="reference internal" href="integrations.html">Use tensordict with other libraries</a></li>
 <li class="toctree-l1"><a class="reference internal" href="distributed.html">Distributed tensordicts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="training_at_scale.html">Train at scale</a></li>
 <li class="toctree-l1"><a class="reference internal" href="compile.html">torch.compile, torch.func, torch.export, and CUDA graphs</a></li>
 <li class="toctree-l1"><a class="reference internal" href="printing.html">Printing and display</a></li>
 <li class="toctree-l1"><a class="reference internal" href="compatibility.html">Containers on storage backends</a></li>
@@ -1489,6 +1605,10 @@ document.write(`
 <li class="toctree-l1"><a class="reference internal" href="tutorials/data_fashion.html">Using TensorDict for datasets</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorials/tensorclass_fashion.html">Using tensorclasses for datasets</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorials/tensorclass_imagenet.html">Batched data loading with tensorclasses</a></li>
+</ul>
+<p aria-level="2" class="caption" role="heading"><span class="caption-text">Tutorials: scientific computing</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="tutorials/tensorclass_particles.html">Simulating particles with a tensorclass</a></li>
 </ul>
 <p aria-level="2" class="caption" role="heading"><span class="caption-text">API reference</span></p>
 <ul class="nav bd-sidenav">
@@ -1793,10 +1913,11 @@ reductions, gradients, and the in-place conventions.</p></li>
 <li><p><a class="reference internal" href="concepts/devices.html#devices"><span class="std std-ref">Devices, dtypes, and memory</span></a>: devices, dtypes, and memory.</p></li>
 <li><p><a class="reference internal" href="concepts/non_tensor.html#non-tensor-data"><span class="std std-ref">Non-tensor data and unbatched entries</span></a>: strings and other Python objects, and entries outside
 the batch size.</p></li>
-<li><p><a class="reference internal" href="tensorclass.html#tensorclass-guide"><span class="std std-ref">TensorClass</span></a> and <a class="reference internal" href="typed_tensordict.html#typed-tensordict-guide"><span class="std std-ref">TypedTensorDict</span></a>: containers with
+<li><p><a class="reference internal" href="tensorclass.html#tensorclass-guide"><span class="std std-ref">TensorClass: a dataclass of tensors</span></a> and <a class="reference internal" href="typed_tensordict.html#typed-tensordict-guide"><span class="std std-ref">TypedTensorDict</span></a>: containers with
 typed fields. <a class="reference internal" href="choosing_a_container.html#choosing-a-container"><span class="std std-ref">Which container should I use?</span></a> compares them.</p></li>
 <li><p><a class="reference internal" href="modules.html#modules-guide"><span class="std std-ref">Modules: TensorDictModule and tensordict.nn</span></a>: <a class="reference internal" href="reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a> and the other
 modules that read and write tensordicts.</p></li>
+<li><p><a class="reference internal" href="pitfalls.html#pitfalls"><span class="std std-ref">Common surprises</span></a>: the behaviors that surprise new users most often.</p></li>
 </ul>
 <p>For saving, storage, data loading, distributed training, and
 <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a>, see <a class="reference internal" href="saving.html#saving"><span class="std std-ref">Save and load tensordicts</span></a>, <a class="reference internal" href="storage.html#storage"><span class="std std-ref">Large datasets and storage backends</span></a>, <a class="reference internal" href="data_loading.html#data-loading"><span class="std std-ref">Load data and share it between processes</span></a>,
@@ -1856,20 +1977,20 @@ modules that read and write tensordicts.</p></li>
 
 <div class="prev-next-area">
     <a class="left-prev"
-       href="getting_started.html"
+       href="coming_from_dataclass.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Getting started</p>
+        <p class="prev-next-title">Coming from a hand-written dataclass</p>
       </div>
     </a>
     <a class="right-next"
-       href="concepts/batch_size.html"
+       href="pitfalls.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Batch size, shapes, and indexing</p>
+        <p class="prev-next-title">Common surprises</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -1895,20 +2016,20 @@ modules that read and write tensordicts.</p></li>
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="getting_started.html"
+       href="coming_from_dataclass.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Getting started</p>
+        <p class="prev-next-title">Coming from a hand-written dataclass</p>
       </div>
     </a>
     <a class="right-next"
-       href="concepts/batch_size.html"
+       href="pitfalls.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Batch size, shapes, and indexing</p>
+        <p class="prev-next-title">Common surprises</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -2191,7 +2312,7 @@ modules that read and write tensordicts.</p></li>
        "headline": "What is TensorDict?",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - What is TensorDict?",
        "url": "/overview.html",
-       "articleBody": "What is TensorDict?# A TensorDict is a dictionary of tensors that behaves like one tensor. You index, reshape, move, and save the whole group with one call. TensorDict also makes sure that every tensor keeps the dimensions that the group shares. A TensorClass gives the same behavior to a class with typed fields and methods. TensorDict: the dict form# All the entries of a TensorDict share their first dimensions, called the batch size. This TensorDict holds the state of 4 robots: 7 joint angles for each robot, and the camera images in a nested TensorDict: \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e robots = TensorDict( ... { ... \"joints\": torch.zeros(4, 7), ... \"camera\": { ... \"rgb\": torch.zeros(4, 3, 32, 32, dtype=torch.uint8), ... \"depth\": torch.zeros(4, 32, 32), ... }, ... }, ... batch_size=[4], ... ) A string, or a tuple of strings for a nested entry, reads one entry. Any other index applies to the batch dimensions of every entry, nested entries too. Device moves and dtype casts also apply to every entry: \u003e\u003e\u003e robots[\"camera\", \"depth\"].shape torch.Size([4, 32, 32]) \u003e\u003e\u003e robots[:2][\"camera\", \"rgb\"].shape torch.Size([2, 3, 32, 32]) \u003e\u003e\u003e robots.to(torch.float64)[\"camera\", \"rgb\"].dtype torch.float64 You can also save a TensorDict to disk, send it to other processes or nodes, and pass it to torch.nn.Module objects through tensordict.nn. With torch.func, a TensorDict of parameters makes model ensembles and parameter edits shorter to write (see torch.compile, torch.func, torch.export, and CUDA graphs). TensorDict started as part of TorchRL and is now a separate library. TensorClass: the class form# A TensorClass declares its fields as class annotations, like a dataclass, and it has the tensor behavior of a TensorDict. A method that you write once runs on one item or on a batch of any shape. This class holds bounding boxes for object detection, with a batch of 8 images and 5 boxes for each image: \u003e\u003e\u003e from tensordict import TensorClass \u003e\u003e\u003e class Box(TensorClass): ... low: torch.Tensor # [*batch, 2], the lower corner ... high: torch.Tensor # [*batch, 2], the upper corner ... ... def area(self) -\u003e torch.Tensor: ... return (self.high - self.low).prod(-1) \u003e\u003e\u003e boxes = Box( ... low=torch.zeros(8, 5, 2), high=torch.full((8, 5, 2), 2.0), batch_size=[8, 5] ... ) \u003e\u003e\u003e boxes.area().shape torch.Size([8, 5]) \u003e\u003e\u003e boxes[0, 1].area() tensor(4.) \u003e\u003e\u003e type(boxes.reshape(40)).__name__ \u0027Box\u0027 Use a TensorDict when your code chooses the keys at run time. Use a TensorClass when the fields are fixed and you want methods on them. Which container should I use? covers the other containers. What it replaces: a dictionary and tree_map# torch.utils._pytree.tree_map() applies a function to each tensor of a nested dictionary. It does some of the work of a TensorDict, but it does not know about a batch dimension. The examples below use a batch of 3 graphs, each with 5 nodes and 10 edges: \u003e\u003e\u003e from torch.utils._pytree import tree_map \u003e\u003e\u003e graphs = { ... \"nodes\": torch.randn(3, 5, 16), ... \"edges\": {\"index\": torch.randint(5, (3, 2, 10)), \"weight\": torch.rand(3, 10)}, ... } \u003e\u003e\u003e td = TensorDict(graphs, batch_size=[3]) To split the graphs with tree_map, you get one dictionary of tuples. You must then build the three dictionaries by hand, and that code grows with each level of nesting: \u003e\u003e\u003e unbound = tree_map(lambda x: x.unbind(0), graphs) \u003e\u003e\u003e type(unbound[\"edges\"][\"weight\"]) \u003cclass \u0027tuple\u0027\u003e \u003e\u003e\u003e samples = [ ... { ... \"nodes\": unbound[\"nodes\"][i], ... \"edges\": { ... \"index\": unbound[\"edges\"][\"index\"][i], ... \"weight\": unbound[\"edges\"][\"weight\"][i], ... }, ... } ... for i in range(3) ... ] unbind() returns the three tensordicts directly, at any nesting depth. split() and chunk() work the same way: \u003e\u003e\u003e g0, g1, g2 = td.unbind(0) \u003e\u003e\u003e g0[\"edges\", \"weight\"].shape torch.Size([10]) tree_map applies an index to each tensor as it is, so the result depends on the shape of each tensor. A TensorDict applies the index to the batch dimensions only: \u003e\u003e\u003e mapped = tree_map(lambda x: x[..., :2], graphs) \u003e\u003e\u003e mapped[\"nodes\"].shape, mapped[\"edges\"][\"weight\"].shape (torch.Size([3, 5, 2]), torch.Size([3, 2])) \u003e\u003e\u003e sliced = td[..., :2] \u003e\u003e\u003e sliced[\"nodes\"].shape, sliced[\"edges\", \"weight\"].shape (torch.Size([2, 5, 16]), torch.Size([2, 10])) A dictionary accepts a tensor of any shape. A TensorDict raises an error when an entry does not match the batch size: \u003e\u003e\u003e graphs[\"edges\"][\"type\"] = torch.zeros(5) # no error \u003e\u003e\u003e td[\"edges\", \"type\"] = torch.zeros(5) Traceback (most recent call last): ... RuntimeError: batch dimension mismatch, got self.batch_size=torch.Size([3]) and value.shape=torch.Size([5]) for key \u0027type\u0027. The leading dimensions of a value must match the batch size. TensorDict is registered as a pytree node, so tree_map and torch.func also work on a TensorDict. The result is a TensorDict: \u003e\u003e\u003e type(tree_map(lambda x: x + 1, td)).__name__ \u0027TensorDict\u0027 What it is not# A TensorDict is not exactly a dict. A dict is a good model: a TensorDict has the methods of a mapping, keys, values, items, get, pop, update, in, and **data. But for x in data, len(data), bool(data), and data == other follow the rules of a tensor: \u003e\u003e\u003e isinstance(robots, dict) False \u003e\u003e\u003e len(robots) # the size of the first batch dimension, not the number of keys 4 \u003e\u003e\u003e sorted(robots.keys()) [\u0027camera\u0027, \u0027joints\u0027] A TensorDict is not exactly a dict lists these differences. A TensorDict is not a torch.Tensor either. Each entry keeps its own dtype, device, and the dimensions after the batch dimensions. robots.shape is the batch size, not the shape of an entry: \u003e\u003e\u003e isinstance(robots, torch.Tensor) False \u003e\u003e\u003e robots.shape torch.Size([4]) A TensorDict is not a data frame. For tables that you filter, group, and join, use pandas or Polars. to_pandas() and from_pandas() convert between the two. Where to go next# The user guide explains one concept on each page: Batch size, shapes, and indexing: the batch size, indexing, shape operations, and dimension names. Keys, nested keys, and locking: string and nested keys, reading and writing entries, nested tensordicts, and locking. Stacking and variable-size data: dense and lazy stacks, and data with different shapes. Arithmetic, apply, reductions, and gradients: arithmetic, apply(), reductions, gradients, and the in-place conventions. Devices, dtypes, and memory: devices, dtypes, and memory. Non-tensor data and unbatched entries: strings and other Python objects, and entries outside the batch size. TensorClass and TypedTensorDict: containers with typed fields. Which container should I use? compares them. Modules: TensorDictModule and tensordict.nn: TensorDictModule and the other modules that read and write tensordicts. For saving, storage, data loading, distributed training, and torch.compile(), see Save and load tensordicts, Large datasets and storage backends, Load data and share it between processes, Distributed tensordicts, and torch.compile, torch.func, torch.export, and CUDA graphs. See also# TensorDict and TensorClass in the API reference. The tutorials Getting, setting, and nesting keys, Slicing, indexing, and masking, and Changing the shape of a TensorDict.",
+       "articleBody": "What is TensorDict?# A TensorDict is a dictionary of tensors that behaves like one tensor. You index, reshape, move, and save the whole group with one call. TensorDict also makes sure that every tensor keeps the dimensions that the group shares. A TensorClass gives the same behavior to a class with typed fields and methods. TensorDict: the dict form# All the entries of a TensorDict share their first dimensions, called the batch size. This TensorDict holds the state of 4 robots: 7 joint angles for each robot, and the camera images in a nested TensorDict: \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e robots = TensorDict( ... { ... \"joints\": torch.zeros(4, 7), ... \"camera\": { ... \"rgb\": torch.zeros(4, 3, 32, 32, dtype=torch.uint8), ... \"depth\": torch.zeros(4, 32, 32), ... }, ... }, ... batch_size=[4], ... ) A string, or a tuple of strings for a nested entry, reads one entry. Any other index applies to the batch dimensions of every entry, nested entries too. Device moves and dtype casts also apply to every entry: \u003e\u003e\u003e robots[\"camera\", \"depth\"].shape torch.Size([4, 32, 32]) \u003e\u003e\u003e robots[:2][\"camera\", \"rgb\"].shape torch.Size([2, 3, 32, 32]) \u003e\u003e\u003e robots.to(torch.float64)[\"camera\", \"rgb\"].dtype torch.float64 You can also save a TensorDict to disk, send it to other processes or nodes, and pass it to torch.nn.Module objects through tensordict.nn. With torch.func, a TensorDict of parameters makes model ensembles and parameter edits shorter to write (see torch.compile, torch.func, torch.export, and CUDA graphs). TensorDict started as part of TorchRL and is now a separate library. TensorClass: the class form# A TensorClass declares its fields as class annotations, like a dataclass, and it has the tensor behavior of a TensorDict. A method that you write once runs on one item or on a batch of any shape. This class holds bounding boxes for object detection, with a batch of 8 images and 5 boxes for each image: \u003e\u003e\u003e from tensordict import TensorClass \u003e\u003e\u003e class Box(TensorClass): ... low: torch.Tensor # [*batch, 2], the lower corner ... high: torch.Tensor # [*batch, 2], the upper corner ... ... def area(self) -\u003e torch.Tensor: ... return (self.high - self.low).prod(-1) \u003e\u003e\u003e boxes = Box( ... low=torch.zeros(8, 5, 2), high=torch.full((8, 5, 2), 2.0), batch_size=[8, 5] ... ) \u003e\u003e\u003e boxes.area().shape torch.Size([8, 5]) \u003e\u003e\u003e boxes[0, 1].area() tensor(4.) \u003e\u003e\u003e type(boxes.reshape(40)).__name__ \u0027Box\u0027 Use a TensorDict when your code chooses the keys at run time. Use a TensorClass when the fields are fixed and you want methods on them. Which container should I use? covers the other containers. What it replaces: a dictionary and tree_map# torch.utils._pytree.tree_map() applies a function to each tensor of a nested dictionary. It does some of the work of a TensorDict, but it does not know about a batch dimension. The examples below use a batch of 3 graphs, each with 5 nodes and 10 edges: \u003e\u003e\u003e from torch.utils._pytree import tree_map \u003e\u003e\u003e graphs = { ... \"nodes\": torch.randn(3, 5, 16), ... \"edges\": {\"index\": torch.randint(5, (3, 2, 10)), \"weight\": torch.rand(3, 10)}, ... } \u003e\u003e\u003e td = TensorDict(graphs, batch_size=[3]) To split the graphs with tree_map, you get one dictionary of tuples. You must then build the three dictionaries by hand, and that code grows with each level of nesting: \u003e\u003e\u003e unbound = tree_map(lambda x: x.unbind(0), graphs) \u003e\u003e\u003e type(unbound[\"edges\"][\"weight\"]) \u003cclass \u0027tuple\u0027\u003e \u003e\u003e\u003e samples = [ ... { ... \"nodes\": unbound[\"nodes\"][i], ... \"edges\": { ... \"index\": unbound[\"edges\"][\"index\"][i], ... \"weight\": unbound[\"edges\"][\"weight\"][i], ... }, ... } ... for i in range(3) ... ] unbind() returns the three tensordicts directly, at any nesting depth. split() and chunk() work the same way: \u003e\u003e\u003e g0, g1, g2 = td.unbind(0) \u003e\u003e\u003e g0[\"edges\", \"weight\"].shape torch.Size([10]) tree_map applies an index to each tensor as it is, so the result depends on the shape of each tensor. A TensorDict applies the index to the batch dimensions only: \u003e\u003e\u003e mapped = tree_map(lambda x: x[..., :2], graphs) \u003e\u003e\u003e mapped[\"nodes\"].shape, mapped[\"edges\"][\"weight\"].shape (torch.Size([3, 5, 2]), torch.Size([3, 2])) \u003e\u003e\u003e sliced = td[..., :2] \u003e\u003e\u003e sliced[\"nodes\"].shape, sliced[\"edges\", \"weight\"].shape (torch.Size([2, 5, 16]), torch.Size([2, 10])) A dictionary accepts a tensor of any shape. A TensorDict raises an error when an entry does not match the batch size: \u003e\u003e\u003e graphs[\"edges\"][\"type\"] = torch.zeros(5) # no error \u003e\u003e\u003e td[\"edges\", \"type\"] = torch.zeros(5) Traceback (most recent call last): ... RuntimeError: batch dimension mismatch, got self.batch_size=torch.Size([3]) and value.shape=torch.Size([5]) for key \u0027type\u0027. The leading dimensions of a value must match the batch size. TensorDict is registered as a pytree node, so tree_map and torch.func also work on a TensorDict. The result is a TensorDict: \u003e\u003e\u003e type(tree_map(lambda x: x + 1, td)).__name__ \u0027TensorDict\u0027 What it is not# A TensorDict is not exactly a dict. A dict is a good model: a TensorDict has the methods of a mapping, keys, values, items, get, pop, update, in, and **data. But for x in data, len(data), bool(data), and data == other follow the rules of a tensor: \u003e\u003e\u003e isinstance(robots, dict) False \u003e\u003e\u003e len(robots) # the size of the first batch dimension, not the number of keys 4 \u003e\u003e\u003e sorted(robots.keys()) [\u0027camera\u0027, \u0027joints\u0027] A TensorDict is not exactly a dict lists these differences. A TensorDict is not a torch.Tensor either. Each entry keeps its own dtype, device, and the dimensions after the batch dimensions. robots.shape is the batch size, not the shape of an entry: \u003e\u003e\u003e isinstance(robots, torch.Tensor) False \u003e\u003e\u003e robots.shape torch.Size([4]) A TensorDict is not a data frame. For tables that you filter, group, and join, use pandas or Polars. to_pandas() and from_pandas() convert between the two. Where to go next# The user guide explains one concept on each page: Batch size, shapes, and indexing: the batch size, indexing, shape operations, and dimension names. Keys, nested keys, and locking: string and nested keys, reading and writing entries, nested tensordicts, and locking. Stacking and variable-size data: dense and lazy stacks, and data with different shapes. Arithmetic, apply, reductions, and gradients: arithmetic, apply(), reductions, gradients, and the in-place conventions. Devices, dtypes, and memory: devices, dtypes, and memory. Non-tensor data and unbatched entries: strings and other Python objects, and entries outside the batch size. TensorClass: a dataclass of tensors and TypedTensorDict: containers with typed fields. Which container should I use? compares them. Modules: TensorDictModule and tensordict.nn: TensorDictModule and the other modules that read and write tensordicts. Common surprises: the behaviors that surprise new users most often. For saving, storage, data loading, distributed training, and torch.compile(), see Save and load tensordicts, Large datasets and storage backends, Load data and share it between processes, Distributed tensordicts, and torch.compile, torch.func, torch.export, and CUDA graphs. See also# TensorDict and TensorClass in the API reference. The tutorials Getting, setting, and nesting keys, Slicing, indexing, and masking, and Changing the shape of a TensorDict.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

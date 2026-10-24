@@ -1,6 +1,6 @@
 # pad_sequence
 
-tensordict.pad_sequence(*list_of_tensordicts: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[T]*, *pad_dim: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *padding_value: [float](https://docs.python.org/3/builtins/functions.html#float) = 0.0*, *out: T | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *return_mask: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey) = False*, *padding_side: [str](https://docs.python.org/3/builtins/stdtypes.html#str) = 'right'*) → T
+tensordict.pad_sequence(*list_of_tensordicts: [Sequence](https://docs.python.org/3/library/typing.html#typing.Sequence)[T]*, *pad_dim: [int](https://docs.python.org/3/builtins/functions.html#int) = 0*, *padding_value: [float](https://docs.python.org/3/builtins/functions.html#float) | [Mapping](https://docs.python.org/3/library/typing.html#typing.Mapping)[[NestedKey](tensordict.NestedKey.html#tensordict.NestedKey), [float](https://docs.python.org/3/builtins/functions.html#float)] = 0.0*, *out: T | [None](https://docs.python.org/3/builtins/constants.html#None) = None*, *return_mask: [bool](https://docs.python.org/3/builtins/functions.html#bool) | [NestedKey](tensordict.NestedKey.html#tensordict.NestedKey) = False*, *padding_side: [str](https://docs.python.org/3/builtins/stdtypes.html#str) = 'right'*) → T
 
 Pads tensordicts to a common size along one dimension and stacks them densely.
 
@@ -23,10 +23,14 @@ dimension of each entry. If it lands on a batch dimension of some
 entries and on another dimension of others, the batch size is not
 padded, and, unless `out` is given, no entry may be longer along
 it than the batch of the first sample. Defaults to `0`.
-- **padding_value** ([*float*](https://docs.python.org/3/builtins/functions.html#float)*,**optional*) - the value of the padded elements.
-When `pad_dim` is a batch dimension, non-tensor entries hold
-`None` there instead, as with [`pad()`](tensordict.pad.html#tensordict.pad). Defaults
-to `0.0`.
+- **padding_value** ([*float*](https://docs.python.org/3/builtins/functions.html#float)*or**Mapping**[*[*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*,*[*float*](https://docs.python.org/3/builtins/functions.html#float)*]**,**optional*) - the
+value of the padded elements. A mapping gives the value of each
+entry by its key (`"a"` or `("a", "b")`), and the entries it
+does not name are padded with `0`. A key of the mapping that
+names no entry of the inputs raises a `KeyError`. The masks are
+always padded with `False`. When `pad_dim` is a batch
+dimension, non-tensor entries hold `None` there instead, as with
+[`pad()`](tensordict.pad.html#tensordict.pad). Defaults to `0.0`.
 - **out** ([*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,**optional*) - a tensordict to write the result
 into. Defaults to `None`.
 - **return_mask** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*or*[*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*,**optional*) - if `True`, the result has
@@ -57,6 +61,8 @@ Raises:
 - [**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if `list_of_tensordicts` is empty, if the entry
  shapes differ in a dimension other than `pad_dim`, or if
  `return_mask` is set for tensorclass inputs.
+- [**KeyError**](https://docs.python.org/3/builtins/exceptions.html#KeyError) - if `padding_value` is a mapping with a key that names no
+ entry of the inputs.
 - [**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if `padding_side` is neither `"left"` nor `"right"`,
  or if a negative `pad_dim` lands on a batch dimension of some
  entries and on another dimension of others, and, with no `out`,
@@ -77,4 +83,21 @@ Examples
 (torch.Size([2, 5, 8]), torch.Size([2, 6, 8]))
 >>> padded_td["masks", "a"].sum(-1)
 tensor([3, 5])
+```
+
+A mapping pads each entry with its own value, for example the token ids
+with the pad id of a tokenizer and the labels with `-100`:
+
+```
+>>> samples = [
+... TensorDict(ids=torch.ones(n, dtype=torch.long), labels=torch.ones(n, dtype=torch.long))
+... for n in (2, 3)
+... ]
+>>> padded = pad_sequence(samples, padding_value={"ids": 7, "labels": -100})
+>>> padded["ids"]
+tensor([[1, 1, 7],
+ [1, 1, 1]])
+>>> padded["labels"]
+tensor([[ 1, 1, -100],
+ [ 1, 1, 1]])
 ```

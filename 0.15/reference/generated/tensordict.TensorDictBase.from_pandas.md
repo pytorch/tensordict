@@ -5,10 +5,22 @@
 Converts a pandas DataFrame to a tensordict, with one entry per column.
 
 The batch size is `[num_rows]`. Numeric and boolean columns become
-tensors, string and object columns become non-tensor data, a
+tensors, a string or object column becomes one
+[`NonTensorData`](tensordict.NonTensorData.html#tensordict.NonTensorData) that holds the whole column, a
 categorical column becomes the tensor of its codes, and a datetime
 column becomes an `int64` tensor of nanoseconds.
 [`to_pandas()`](tensordict.TensorDictBase.to_pandas.html#tensordict.TensorDictBase.to_pandas) converts back.
+
+Note
+
+A string or object column is one value for the whole batch, so
+`td[i]["name"]` gives the values of every row, not the value of
+row `i`. To get one value per row, set the column again as a
+list: `td["name"] = df["name"].tolist()` stores a
+[`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack), whose `td[i]["name"]` is
+the value of row `i`. It builds one object per row, about 20
+microseconds each, so it is much slower than reading the column
+for large frames.
 
 Parameters:
 
@@ -55,13 +67,7 @@ Examples
 >>> df = pd.DataFrame({"a": [1, 2, 3], "b": [4.0, 5.0, 6.0]})
 >>> td = TensorDict.from_pandas(df)
 >>> print(td)
-TensorDict(
- fields={
- a: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.int64, is_shared=False),
- b: Tensor(shape=torch.Size([3]), device=cpu, dtype=torch.float64, is_shared=False)},
- batch_size=torch.Size([3]),
- device=None,
- is_shared=False)
+TensorDict(batch_size=[3], fields={a: i64[], b: f64[]})
 ```
 
 Every tensordict class and every tensorclass has this method. For the
