@@ -5576,6 +5576,62 @@ class TestTensorDicts(TestTensorDictsBase):
         assert not call([("n", "x"), ("n", "y")])
         assert not call(["n", ("n", "x"), ("n", "y")])
 
+    def test_update__keys_to_update_invalid_key_warns(self, td_name, device):
+        # #3354: an entry of keys_to_update that is not a key unravels to (),
+        # which selects every entry, so update_ writes all of the input, while
+        # update raises. It warns until TensorDict 0.18, which raises.
+        td = getattr(self, td_name)(device)
+        td.unlock_()
+        zeros = torch.zeros(td.shape, device=device)
+        ones = torch.ones(td.shape, device=device)
+        td.set("z", zeros.clone())
+        td.set("w", zeros.clone())
+        td.set(("n", "x"), zeros.clone())
+
+        def call(keys):
+            for key in ("z", "w", ("n", "x")):
+                td.set_(key, zeros)
+            source = {"z": ones, "w": ones, "n": {"x": ones}}
+            error = None
+            with torch.no_grad(), warnings.catch_warnings(record=True) as record:
+                warnings.simplefilter("always")
+                try:
+                    td.update_(source, keys_to_update=keys)
+                except RuntimeError as err:
+                    error = err
+            warned = [
+                w
+                for w in record
+                if "keys_to_update that is not a key" in str(w.message)
+                and issubclass(w.category, FutureWarning)
+            ]
+            return warned, error
+
+        for bad in (None, 1, b"z", ("n", None)):
+            warned, error = call([bad, "z"])
+            if error is not None:
+                # a nested lazy stack or a file selects the keys as update
+                # does, and raises already: it stays silent
+                assert "key should be a Sequence<NestedKey>" in str(error)
+                assert td_name in (
+                    "stacked_td",
+                    "nested_stacked_td",
+                    "sub_td",
+                    "sub_td2",
+                    "td_h5",
+                )
+                assert not warned
+                continue
+            assert len(warned) == 1, (bad, warned)
+            assert warned[0].filename == __file__
+            # main's result: every entry of the source is written
+            for key in ("z", "w", ("n", "x")):
+                assert (td[key] == 1).all(), (bad, key)
+        # valid keys select their entries, silently
+        for keys in (["z"], [("z",)], ["z", ("n", "x")], [("n", ("x",))]):
+            assert call(keys) == ([], None), keys
+            assert (td["w"] == 0).all(), keys
+
     @pytest.mark.parametrize("method", ["update_", "update_at_"])
     def test_update__keys_to_update_narrowed_warns_repeated(
         self, td_name, device, method
@@ -6035,6 +6091,86 @@ def test_update_select_flat_dict_source():
             )
             for key in expected.keys(True, True):
                 assert (dest[key] == expected[key]).all(), (keys_to_update, key)
+
+
+def test_update__keys_to_update_invalid_key_lazy_stack_warns():
+    # #3354: a lazy stack writes its members with the same keys, and warns
+    # once, with a dict or a tensordict source, keeping main's result.
+    def make(value):
+        members = [
+            TensorDict(
+                a=torch.full((2,), value), b=torch.full((2,), value), batch_size=[2]
+            )
+            for _ in range(3)
+        ]
+        return LazyStackedTensorDict(*members, stack_dim=0)
+
+    for as_source in (lambda td: td, lambda td: td.to_dict()):
+        for bad in (None, 1, b"a"):
+            dest = make(0.0)
+            with warnings.catch_warnings(record=True) as record:
+                warnings.simplefilter("always")
+                dest.update_(as_source(make(1.0)), keys_to_update=[bad, "a"])
+            warned = [
+                w
+                for w in record
+                if "keys_to_update that is not a key" in str(w.message)
+            ]
+            assert len(warned) == 1, (bad, warned)
+            assert warned[0].filename == __file__
+            assert (dest["b"] == 1).all()
+        dest = make(0.0)
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            dest.update_(as_source(make(1.0)), keys_to_update=["a"])
+        assert not [
+            w for w in record if "keys_to_update that is not a key" in str(w.message)
+        ]
+        assert (dest["b"] == 0).all()
+
+
+def test_update__keys_to_update_invalid_key_tensorclass_warns():
+    # #3354: a tensorclass warns once for an entry of keys_to_update that is
+    # not a key, with each kind of source, and keeps main's result.
+    class Foo(TensorClass):
+        x: torch.Tensor
+        y: torch.Tensor
+
+    def call(source, keys):
+        foo = Foo(x=torch.zeros(3), y=torch.zeros(3), batch_size=[3])
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            foo.update_(source, keys_to_update=keys)
+        warned = [
+            w for w in record if "keys_to_update that is not a key" in str(w.message)
+        ]
+        return foo, warned
+
+    sources = (
+        TensorDict(x=torch.ones(3), y=torch.ones(3), batch_size=[3]),
+        {"x": torch.ones(3), "y": torch.ones(3)},
+        Foo(x=torch.ones(3), y=torch.ones(3), batch_size=[3]),
+    )
+    for source in sources:
+        foo, warned = call(source, [None, "x"])
+        assert len(warned) == 1, (type(source), warned)
+        assert warned[0].filename == __file__
+        assert (foo.y == 1).all()
+        assert not call(source, ["x"])[1]
+
+
+def test_update__keys_to_update_invalid_key_compile():
+    # #3354: the check adds no graph break to update_ with valid keys.
+    td = TensorDict(a=torch.zeros(3), b=torch.zeros(3), n={"x": torch.zeros(3)})
+
+    @torch.compile(fullgraph=True, backend="eager")
+    def update(td, a, x):
+        return td.update_({"a": a, "n": {"x": x}}, keys_to_update=["a", ("n", "x")])
+
+    update(td, torch.ones(3), torch.ones(3))
+    assert (td["a"] == 1).all()
+    assert (td["n", "x"] == 1).all()
+    assert (td["b"] == 0).all()
 
 
 # The unary pointwise methods of tensordict/_base/pointwise.py, each with an

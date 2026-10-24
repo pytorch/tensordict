@@ -2564,6 +2564,29 @@ def _warn_update_keys_narrowed(
     )
 
 
+def _warn_update_invalid_key() -> None:
+    """Warns that ``update_`` writes every entry for an entry of ``keys_to_update`` that is not a key, until 0.18 (#3354)."""
+    if is_dynamo_compiling():
+        return
+    # the members of a lazy stack, which its update_ writes with the same keys,
+    # and the nested update_ of a call with keyword entries don't warn again
+    frame = sys._getframe(2)
+    while frame is not None and frame.f_code.co_filename.startswith(_LIBRARY_DIRS):
+        if frame.f_code is TensorDictBase.update_.__code__:
+            return
+        frame = frame.f_back
+    # Fixed text: the key would make Python warn again for each new value (#3232).
+    warnings.warn(
+        "update_() got an entry in keys_to_update that is not a key, such as "
+        "None, an int or bytes, and writes every entry of the input, while "
+        "update() raises a RuntimeError. Starting with TensorDict 0.18, the "
+        "default will change to raising a RuntimeError, as update() does. "
+        "Pass only str or tuple-of-str keys in keys_to_update.",
+        FutureWarning,
+        stacklevel=_user_stacklevel(),
+    )
+
+
 def _warn_unsupported_operand(op: str, other: Any, result: bool) -> None:
     """Warns that ``op`` (``"__xor__"``, ``"__lt__"``, ...) returns ``result`` for ``other``, which is not a tensor collection, a tensor or a number, until 0.17 (#2979)."""
     if is_compiling():
@@ -6978,6 +7001,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 is copied and the call warns, while ``select`` keeps only the
                 deeper keys; starting with TensorDict 0.17, the default will
                 change to copying only the deeper keys, as ``select`` does.
+                An entry that is not a key, such as ``None``, an int or bytes,
+                selects every entry, and the call warns; starting with
+                TensorDict 0.18, the default will change to raising a
+                ``RuntimeError``, as :meth:`update` does.
             **kwargs: entries to copy at the top level, by key.
 
         Returns:
@@ -7035,7 +7062,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 return self
             keys_to_update = [_unravel_key_to_tuple(key) for key in keys_to_update]
         try:
-            return self._update_(
+            result = self._update_(
                 input_dict_or_td,
                 clone=clone,
                 non_blocking=non_blocking,
@@ -7044,6 +7071,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         except RuntimeError as err:
             # name the key and the shapes that torch's error leaves out
             _update_shape_error(self, input_dict_or_td, err, keys_to_update)
+        if keys_to_update is not None and () in keys_to_update:
+            # an entry that is not a key unravels to (), which selects every
+            # entry; a call that raises for it already is silent
+            _warn_update_invalid_key()
+        return result
 
     def _update_(
         self,
