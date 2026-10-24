@@ -9429,6 +9429,31 @@ class TestGeneric:
         else:
             assert "masks" not in padded_td.keys()
 
+    # #3313
+    @pytest.mark.parametrize(
+        "return_mask, entry",
+        [
+            (True, "masks"),
+            (True, ("masks", "a")),
+            ("valid", "valid"),
+            (("meta", "m"), ("meta", "m")),
+            (("meta", "m"), ("meta", "m", "a")),
+        ],
+    )
+    def test_pad_sequence_masks_key_clash(self, return_mask, entry):
+        # The masks of return_mask would overwrite or mix with an entry of the
+        # inputs at their key: pad_sequence raises, as collate does.
+        samples = [
+            TensorDict(x=torch.ones(n)).set(entry, torch.ones(n, dtype=torch.bool))
+            for n in (2, 3)
+        ]
+        with pytest.raises(ValueError, match="would write its masks under"):
+            pad_sequence(samples, return_mask=return_mask)
+        # another masks key works, and keeps the entry
+        padded = pad_sequence(samples, return_mask="other_masks")
+        assert padded[entry].shape == (2, 3)
+        assert padded["other_masks", "x"].tolist() == [[True, True, False], [True] * 3]
+
     @pytest.mark.parametrize("return_mask", [True, False])
     def test_pad_sequence_padding_value_mapping(self, return_mask):
         list_td = [
