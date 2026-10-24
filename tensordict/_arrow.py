@@ -368,10 +368,7 @@ def from_arrow(
         raise ValueError(f"from_arrow got a mask_key but nulls={nulls!r}, not 'mask'.")
     if mask_key is None:
         mask_key = "_mask"
-    elif not isinstance(mask_key, str) and not (
-        isinstance(mask_key, tuple)
-        and all(isinstance(k, (str, tuple)) for k in mask_key)
-    ):
+    elif not _is_str_key(mask_key):
         raise TypeError(
             f"mask_key must be a string or a tuple of strings, got {mask_key!r}."
         )
@@ -428,6 +425,13 @@ def from_arrow(
     if device is not None:
         result = result.to(device)
     return result
+
+
+def _is_str_key(key) -> bool:
+    """Whether ``key`` is a string, or a tuple of such keys at any depth."""
+    if isinstance(key, str):
+        return True
+    return isinstance(key, tuple) and all(_is_str_key(k) for k in key)
 
 
 def _to_array(pa, value, key):
