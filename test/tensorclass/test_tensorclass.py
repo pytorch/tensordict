@@ -1120,6 +1120,171 @@ params.memmap_like("p", archive=1.5)
     assert "invalid.py:7:" in errors[1]
 
 
+# #3353: TensorDictSequential and ProbabilisticTensorDictSequential take their
+# modules positionally (a dict, a list, or one argument per module) and their
+# options by keyword.
+_ISSUE_3353_HEADER = """from collections import OrderedDict
+
+import torch
+from tensordict import TensorDict
+from tensordict.nn import (
+    ProbabilisticTensorDictModule,
+    ProbabilisticTensorDictSequential,
+    TensorDictModule,
+    TensorDictSequential,
+)
+
+net = TensorDictModule(
+    lambda x: (x, x.abs() + 1), in_keys=["x"], out_keys=["loc", "scale"]
+)
+prob = ProbabilisticTensorDictModule(
+    in_keys=["loc", "scale"],
+    out_keys=["y"],
+    distribution_class=torch.distributions.Normal,
+)
+mods = [net, prob]
+"""
+_ISSUE_3353_SOURCE = (
+    _ISSUE_3353_HEADER
+    + """ProbabilisticTensorDictSequential(net, prob)
+ProbabilisticTensorDictSequential(
+    net,
+    prob,
+    partial_tolerant=True,
+    return_composite=True,
+    selected_out_keys=["y"],
+    inplace=False,
+)
+ProbabilisticTensorDictSequential(*mods)
+ProbabilisticTensorDictSequential([net, prob])
+ProbabilisticTensorDictSequential(
+    [net, prob],
+    partial_tolerant=True,
+    return_composite=False,
+    selected_out_keys=["y"],
+    inplace=True,
+)
+ProbabilisticTensorDictSequential({"net": net, "prob": prob})
+ProbabilisticTensorDictSequential(
+    OrderedDict(net=net, prob=prob), partial_tolerant=True, inplace=None
+)
+seq = TensorDictSequential(net, prob)
+TensorDictSequential(net, prob, partial_tolerant=True, selected_out_keys=["y"])
+TensorDictSequential(*mods, inplace=True)
+TensorDictSequential([net, prob], inplace="empty")
+TensorDictSequential({"net": net, "prob": prob}, partial_tolerant=True)
+TensorDictSequential(OrderedDict(net=net, prob=prob), inplace=False)
+seq(TensorDict(x=torch.zeros(3)))
+"""
+)
+# Each call raises a TypeError at run time, so type checkers must reject it.
+_ISSUE_3353_INVALID = [
+    "ProbabilisticTensorDictSequential(modules=[net, prob])",
+    'ProbabilisticTensorDictSequential(modules={"net": net, "prob": prob})',
+    "TensorDictSequential(modules=[net, prob])",
+    'TensorDictSequential(modules={"net": net, "prob": prob})',
+]
+
+
+def _issue_3353_write_sources(tmp_path):
+    tmp_path.joinpath("user.py").write_text(_ISSUE_3353_SOURCE)
+    tmp_path.joinpath("invalid.py").write_text(
+        _ISSUE_3353_HEADER + "\n".join(_ISSUE_3353_INVALID) + "\n"
+    )
+    first = _ISSUE_3353_HEADER.count("\n") + 1
+    return list(range(first, first + len(_ISSUE_3353_INVALID)))
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+def test_issue_3353_source_runs(tmp_path):
+    # The accepted calls must run, and each rejected call must raise a
+    # TypeError at run time.
+    _issue_3353_write_sources(tmp_path)
+    runpy.run_path(str(tmp_path / "user.py"), run_name="__main__")
+    for call in _ISSUE_3353_INVALID:
+        path = tmp_path / "call.py"
+        path.write_text(_ISSUE_3353_HEADER + call + "\n")
+        with pytest.raises(TypeError, match="unexpected keyword argument 'modules'"):
+            runpy.run_path(str(path), run_name="__main__")
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+@pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
+@pytest.mark.parametrize("python_version", ["3.10", "3.12"])
+def test_issue_3353_installed_wheel_mypy(installed_wheel, tmp_path, python_version):
+    # #3353: mypy accepted the modules of both sequences by keyword, which
+    # raises a TypeError at run time.
+    expected = _issue_3353_write_sources(tmp_path)
+
+    def mypy(path):
+        return subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "mypy",
+                "--config-file=",
+                f"--cache-dir={os.devnull}",
+                f"--python-version={python_version}",
+                path,
+            ],
+            cwd=tmp_path,
+            env=_checker_env(installed_wheel),
+            capture_output=True,
+            text=True,
+            timeout=1200,
+        )
+
+    result = mypy("user.py")
+    assert result.returncode == 0, result.stdout + result.stderr
+    result = mypy("invalid.py")
+    lines = {
+        int(line.split(":")[1])
+        for line in result.stdout.splitlines()
+        if ": error: " in line
+    }
+    assert sorted(lines) == expected, result.stdout + result.stderr
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+@pytest.mark.skipif(not _has_pyright, reason="pyright is not installed")
+@pytest.mark.parametrize("python_version", ["3.10", "3.12"])
+def test_issue_3353_installed_wheel_pyright(installed_wheel, tmp_path, python_version):
+    # #3353: pyright accepted the modules of both sequences by keyword, which
+    # raises a TypeError at run time.
+    expected = _issue_3353_write_sources(tmp_path)
+    # Keeps pyright from reading a configuration file above tmp_path.
+    tmp_path.joinpath("pyrightconfig.json").write_text("{}")
+
+    def pyright(path):
+        return subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pyright",
+                "--pythonpath",
+                sys.executable,
+                "--pythonversion",
+                python_version,
+                path,
+            ],
+            cwd=tmp_path,
+            env=_checker_env(installed_wheel),
+            capture_output=True,
+            text=True,
+            timeout=1200,
+        )
+
+    result = pyright("user.py")
+    assert result.returncode == 0, result.stdout + result.stderr
+    result = pyright("invalid.py")
+    lines = {
+        int(line.split("invalid.py:")[1].split(":")[0])
+        for line in result.stdout.splitlines()
+        if " - error: " in line
+    }
+    assert sorted(lines) == expected, result.stdout + result.stderr
+
+
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")
 @pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
 def test_tensorclass_stub_static_types(tmp_path, monkeypatch):
