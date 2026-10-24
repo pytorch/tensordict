@@ -414,3 +414,66 @@ jobs:
           name: test-results-min-deps-cpu-${{ matrix.python_version }}
           path: ${{ github.workspace }}/artifacts
           if-no-files-found: ignore
+
+  # pyarrow 15, the oldest release that from_arrow and to_arrow support, which
+  # run_test_pyarrow15.sh pins, with the oldest torch. It runs the tabular tests,
+  # which test-min-deps-cpu runs with pyarrow 10 and without the Arrow tests.
+  test-pyarrow15-cpu:
+    strategy:
+      matrix:
+        python_version: ["3.11"]
+      fail-fast: false
+    # One test file: the 8-core runner that the docs build uses is enough.
+    runs-on: mt-l-x86iavx512-8-64
+    container:
+      image: "nvidia/cuda:12.8.0-devel-ubuntu22.04"
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    # The scripts below source conda, so a login shell.
+    defaults:
+      run:
+        shell: bash -l {0}
+    steps:
+      # Before checkout on purpose: actions/checkout needs git in the
+      # container, and this image has none -- without it the checkout
+      # degrades to a REST API tarball with no .git, which the scripts need.
+      - name: Install git
+        run: |
+          set -eux
+          apt-get update
+          apt-get install -y git
+
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Run tests
+        env:
+          PYTHON_VERSION: ${{ matrix.python_version }}
+          CU_VERSION: cpu
+          TORCH_VERSION: "2.11"
+          # pytest-xdist workers for run_test_pyarrow15.sh; the runner has 8 CPUs.
+          TD_TEST_WORKERS: 4
+          ARCH: x86_64
+          RUNNER_ARTIFACT_DIR: ${{ github.workspace }}/artifacts
+        run: |
+          set -eux
+          mkdir -p "${RUNNER_ARTIFACT_DIR}"
+          echo "PYTHON_VERSION: $PYTHON_VERSION"
+          echo "CU_VERSION: $CU_VERSION"
+
+          bash .github/unittest/linux/scripts/setup_env.sh
+          bash .github/unittest/linux/scripts/install.sh
+          bash .github/unittest/linux/scripts/run_test_pyarrow15.sh
+
+      - name: Collect junit results
+        if: always()
+        run: ls -la "${{ github.workspace }}/artifacts" || true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-pyarrow15-cpu-${{ matrix.python_version }}
+          path: ${{ github.workspace }}/artifacts
+          if-no-files-found: ignore
