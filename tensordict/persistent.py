@@ -587,14 +587,14 @@ class _ZarrBackend(_PersistentBackend):
     def check_available(self) -> None:
         if not _has_zarr:
             raise ModuleNotFoundError(
-                "Could not load zarr. Install it with `pip install 'zarr>=3.0'`."
+                "Could not load zarr. Install it with `pip install 'zarr>=3.1.1'`."
             )
         import zarr
 
         if int(zarr.__version__.split(".")[0]) < 3:
             raise ImportError(
                 f"tensordict's zarr backend requires zarr>=3.0, got zarr=={zarr.__version__}. "
-                "Upgrade with `pip install 'zarr>=3.0'`."
+                "Upgrade with `pip install 'zarr>=3.1.1'`."
             )
 
     @staticmethod
@@ -1014,7 +1014,7 @@ class PersistentTensorDict(
     """A tensordict whose entries live in an HDF5 file or a Zarr store.
 
     The HDF5 backend (``backend="h5"``) needs ``h5py``. The Zarr backend
-    (``backend="zarr"``) needs ``zarr>=3.0``. Each read of an entry loads it
+    (``backend="zarr"``) needs ``zarr>=3.1.1``. Each read of an entry loads it
     from the file into a new tensor, so ``ptd["a"] is ptd["a"]`` is
     ``False``, and in-place changes to the tensor that you read do not reach
     the file. Writes (``ptd["a"] = value``) go to the file, and so do the
@@ -1057,7 +1057,7 @@ class PersistentTensorDict(
             or ``"x"`` (create, fail if the file exists), ``"a"`` (read and
             write, create the file if needed). Defaults to ``"r"``.
         backend (str, optional): the storage backend, ``"h5"`` (requires
-            ``h5py``) or ``"zarr"`` (requires ``zarr>=3.0``). Defaults to
+            ``h5py``) or ``"zarr"`` (requires ``zarr>=3.1.1``). Defaults to
             ``"h5"``.
         device (torch.device, str or int, optional): the device that the
             entries are cast to when they are read. Defaults to ``None``: the

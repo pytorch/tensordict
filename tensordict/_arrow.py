@@ -430,16 +430,17 @@ def from_arrow(
     return result
 
 
-def _to_array(pa, value):
-    """Converts one entry of a tensordict to an Arrow array."""
+def _to_array(pa, value, key):
+    """Converts the entry ``key`` of a tensordict to an Arrow array."""
     if is_non_tensor(value):
         return pa.array(value.tolist())
     if is_tensor_collection(value):
-        keys = list(value.keys())
-        if not keys:
+        items = list(value.items())
+        if not items:
             return pa.array([{}] * value.shape[0], type=pa.struct([]))
         return pa.StructArray.from_arrays(
-            [_to_array(pa, value.get(key)) for key in keys], names=keys
+            [_to_array(pa, item, unravel_key((key, k))) for k, item in items],
+            names=[k for k, _ in items],
         )
     tensor = value.detach().cpu().contiguous()
     if tensor.is_nested:
@@ -448,8 +449,14 @@ def _to_array(pa, value):
                 "to_arrow converts the nested tensors of layout torch.jagged only, "
                 f"got {tensor.layout}."
             )
+        if tensor._ragged_idx != 1:
+            raise ValueError(
+                f"to_arrow needs the ragged dim of the jagged tensor {key!r} at "
+                f"position 1, got {tensor._ragged_idx}. Move it there first, for "
+                f"example with .transpose(1, {tensor._ragged_idx})."
+            )
         return pa.LargeListArray.from_arrays(
-            pa.array(tensor.offsets().numpy()), _to_array(pa, tensor.values())
+            pa.array(tensor.offsets().numpy()), _to_array(pa, tensor.values(), key)
         )
     if tensor.ndim == 1:
         return pa.array(tensor.numpy())
@@ -471,8 +478,9 @@ def to_arrow(td: TensorDictBase) -> pyarrow.Table:
     - 1-D tensors become primitive columns. The columns of contiguous numeric
       tensors on the CPU view their data. Boolean tensors are copied.
     - tensors with more dimensions become ``arrow.fixed_shape_tensor`` columns.
-    - jagged nested tensors (``layout=torch.jagged``) become ``large_list``
-      columns.
+    - jagged nested tensors (``layout=torch.jagged``) with their ragged dim
+      at position 1 become ``large_list`` columns; another ragged dim raises a
+      ``ValueError``.
     - nested tensordicts become ``struct`` columns.
     - non-tensor entries, such as a :class:`~tensordict.NonTensorStack` of
       strings, become columns of the type that :func:`pyarrow.array` infers
@@ -513,4 +521,4 @@ def to_arrow(td: TensorDictBase) -> pyarrow.Table:
             "to_arrow needs a tensordict with one batch dimension, got the batch "
             f"size {td.batch_size}. Call td.reshape(-1) first to flatten it."
         )
-    return pa.table({key: _to_array(pa, value) for key, value in td.items()})
+    return pa.table({key: _to_array(pa, value, key) for key, value in td.items()})
