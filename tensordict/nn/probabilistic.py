@@ -1526,6 +1526,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
     def __init__(
         self,
         modules: dict[str, TensorDictModuleBase | ProbabilisticTensorDictModule],
+        /,
         *,
         partial_tolerant: bool = False,
         return_composite: bool | None = None,
@@ -1537,6 +1538,7 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
     def __init__(
         self,
         modules: List[TensorDictModuleBase | ProbabilisticTensorDictModule],
+        /,
         *,
         partial_tolerant: bool = False,
         return_composite: bool | None = None,
