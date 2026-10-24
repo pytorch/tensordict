@@ -667,7 +667,25 @@ class TestArrow:
         array = np.arange(24).reshape(2, 3, 4).transpose(0, 2, 1)
         import pyarrow as pa
 
+        if int(pa.__version__.split(".")[0]) < 16:
+            pytest.skip(
+                "pyarrow 15's from_numpy_ndarray rejects a non-contiguous array"
+            )
         column = pa.FixedShapeTensorArray.from_numpy_ndarray(array)
+        assert column.type.permutation == [1, 0]
+        td = from_arrow(pa.table({"t": column}))
+        assert torch.equal(td["t"], torch.from_numpy(np.ascontiguousarray(array)))
+
+    def test_from_arrow_permuted_tensor_from_storage(self):
+        # #3355: the column of test_from_arrow_permuted_tensor, built in a way
+        # that pyarrow 15, the oldest release from_arrow supports, accepts: rows
+        # of physical shape (3, 4) stored in order, with permutation [1, 0].
+        import pyarrow as pa
+
+        array = np.arange(24).reshape(2, 3, 4).transpose(0, 2, 1)
+        tensor_type = pa.fixed_shape_tensor(pa.int64(), [3, 4], permutation=[1, 0])
+        storage = pa.FixedSizeListArray.from_arrays(pa.array(np.arange(24)), 12)
+        column = pa.ExtensionArray.from_storage(tensor_type, storage)
         assert column.type.permutation == [1, 0]
         td = from_arrow(pa.table({"t": column}))
         assert torch.equal(td["t"], torch.from_numpy(np.ascontiguousarray(array)))
