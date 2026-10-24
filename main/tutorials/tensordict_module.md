@@ -244,12 +244,12 @@ for name, module in [
 
 ```
 Eager
- Regular: 134.7 us
- TDM: 147.1 us
- Sequential: 193.9 us
+ Regular: 139.5 us
+ TDM: 152.4 us
+ Sequential: 197.9 us
 Compiled
- Regular: 141.4 us
- TDM: 153.0 us
+ Regular: 142.3 us
+ TDM: 154.3 us
  Sequential: 160.2 us
 ```
 
@@ -393,7 +393,7 @@ graph that takes and returns plain tensors.
 and runs ensembles with [`torch.vmap()`](https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap).
 - [tensordict.nn](../reference/nn.html#api-nn) lists all the classes of `tensordict.nn`.
 
-**Total running time of the script:** (0 minutes 16.474 seconds)
+**Total running time of the script:** (0 minutes 16.877 seconds)
 
 [`Download Jupyter notebook: tensordict_module.ipynb`](../_downloads/ba42555713e16dc342a5f3e550dec192/tensordict_module.ipynb)
 
