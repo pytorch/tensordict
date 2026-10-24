@@ -61,6 +61,10 @@ jobs:
           PYTHON_VERSION: ${{ matrix.python_version }}
           CUDA_ARCH_VERSION: ${{ matrix.cuda_arch_version }}
           TORCH_VERSION: nightly
+          # Triton 3.9 warns at its first kernel launch when this is unset,
+          # and test_generic.py turns warnings into errors. "1" keeps its
+          # current default, fusion on.
+          TRITON_DEFAULT_FP_FUSION: "1"
           # run_test.sh skips test_distributed.py: its CUDA tests need 2 GPUs,
           # and test-cpu (3.12) runs the rest on the same Python and torch.
           TD_SKIP_DISTRIBUTED_TESTS: "1"
