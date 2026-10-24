@@ -791,7 +791,9 @@ def pad_sequence(
             batch size. Otherwise, its shape is the output's batch size
             followed by the padded length, regardless of the feature
             dimension's position. Tensorclass inputs raise a
-            ``RuntimeError``. Use :func:`~tensordict.unpad_sequence` to turn
+            ``RuntimeError``, and inputs that already hold an entry at the
+            masks key raise a ``ValueError``. Use
+            :func:`~tensordict.unpad_sequence` to turn
             the result back into the variable-length samples. Defaults to
             ``False``.
         padding_side (str, optional): ``"right"`` puts the padding after the
@@ -863,6 +865,15 @@ def pad_sequence(
         return_mask = True
     else:
         masks_key = "masks"
+    if return_mask:
+        # the masks would overwrite or mix with that entry (#3313)
+        for td in list_of_tensordicts:
+            if masks_key in td.keys(include_nested=True):
+                raise ValueError(
+                    f"pad_sequence would write its masks under {masks_key!r}, "
+                    "which is an entry of the input tensordicts. Pass another "
+                    "key as return_mask."
+                )
 
     # check that all tensordict match
     update_batch_size = True
