@@ -65,7 +65,7 @@ from tensordict.nn.distributions import (
 )
 from tensordict.nn.distributions.composite import CompositeDistribution
 from tensordict.nn.distributions.truncated_normal import TruncatedStandardNormal
-from tensordict.nn.ensemble import EnsembleModule
+from tensordict.nn.ensemble import EnsembleModule, functional_vmap
 from tensordict.nn.probabilistic import (
     interaction_type,
     InteractionType,
@@ -5077,6 +5077,210 @@ class TestEnsembleModule:
         weight = params["module", "weight"].reshape(-1, 3, 2)
         assert (weight != before["module", "weight"].reshape(-1, 3, 2)).any()
         assert (weight[0] != weight[1:]).any(dim=(-2, -1)).all()
+
+
+class _Critic(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.lin = nn.Linear(5, 1)
+
+    def forward(self, obs, action):
+        return self.lin(torch.cat([obs, action], -1))
+
+    def twice(self, obs, action):
+        return 2 * self(obs, action)
+
+
+@pytest.mark.skipif(PYTORCH_TEST_FBCODE, reason="vmap now working in fbcode")
+class TestFunctionalVmap:
+    @staticmethod
+    def _critics(n=6):
+        torch.manual_seed(0)
+        critics = [_Critic() for _ in range(n)]
+        return critics, TensorDict.from_modules(*critics, as_module=True)
+
+    @pytest.mark.parametrize("loop", [False, True])
+    @pytest.mark.parametrize("by_keyword", [False, True])
+    @pytest.mark.parametrize("batch_size", [[], [6], [2, 3]])
+    def test_matches_each_module(self, batch_size, by_keyword, loop):
+        critics, params = self._critics()
+        obs, action = torch.randn(8, 3), torch.randn(8, 2)
+        expected = torch.stack([c(obs, action) for c in critics])
+        if batch_size:
+            params = params.reshape(batch_size)
+            expected = expected.reshape(*batch_size, 8, 1)
+        else:
+            params, expected = params[0], expected[0]
+        inputs = (
+            {"kwargs": {"obs": obs, "action": action}}
+            if by_keyword
+            else {"args": (obs, action)}
+        )
+        out = functional_vmap(critics[0], params=params, loop=loop, **inputs)
+        torch.testing.assert_close(out, expected)
+
+    @pytest.mark.parametrize("loop", [False, True])
+    @pytest.mark.parametrize(
+        "batch_size,in_dim",
+        [([6], 0), ([6], 1), ([2, 3], 0), ([2, 3], 1), ([2, 3], -3)],
+    )
+    def test_mapped_input(self, batch_size, in_dim, loop):
+        """Set i reads slice i of a mapped input, at any dim, and shares the others."""
+        critics, params = self._critics()
+        obs, action = torch.randn(6, 8, 3), torch.randn(8, 2)
+        expected = torch.stack([c(o, action) for c, o in zip(critics, obs)])
+        obs = obs.reshape(*batch_size, 8, 3)
+        if in_dim:
+            obs = obs.movedim(tuple(range(len(batch_size))), (1, 2)[: len(batch_size)])
+        out = functional_vmap(
+            critics[0],
+            params=params.reshape(batch_size),
+            kwargs={"obs": obs, "action": action},
+            in_dims={"obs": in_dim},
+            loop=loop,
+        )
+        torch.testing.assert_close(out, expected.reshape(*batch_size, 8, 1))
+
+    def test_module_with_params_argument(self):
+        """A params argument of the module goes through kwargs without clashing."""
+
+        class Scaled(nn.Linear):
+            def forward(self, x, params):
+                return super().forward(x) * params
+
+        torch.manual_seed(0)
+        mods = [Scaled(3, 1) for _ in range(3)]
+        x, scale = torch.randn(4, 3), torch.tensor(2.0)
+        out = functional_vmap(
+            mods[0],
+            params=TensorDict.from_modules(*mods),
+            kwargs={"x": x, "params": scale},
+        )
+        torch.testing.assert_close(out, torch.stack([m(x, scale) for m in mods]))
+
+    @pytest.mark.parametrize("loop", [False, True])
+    @pytest.mark.parametrize("mapped", [False, True])
+    def test_tensordict_module(self, mapped, loop):
+        """Each set writes into its own copy of the input td, never the caller's."""
+        torch.manual_seed(0)
+        mods = [TensorDictModule(nn.Linear(3, 2), ["x"], ["y"]) for _ in range(3)]
+        if mapped:
+            td = TensorDict(x=torch.randn(3, 4, 3), batch_size=[3, 4])
+            inputs = {"kwargs": {"tensordict": td}, "in_dims": {"tensordict": 0}}
+            expected = [m(t)["y"] for m, t in zip(mods, td.clone().unbind(0))]
+        else:
+            td = TensorDict(x=torch.randn(4, 3), batch_size=[4])
+            inputs = {"args": (td,)}
+            expected = [m(td.clone())["y"] for m in mods]
+        out = functional_vmap(
+            mods[0], params=TensorDict.from_modules(*mods), loop=loop, **inputs
+        )
+        assert out.batch_size == (3, 4)
+        torch.testing.assert_close(out["y"], torch.stack(expected))
+        # A batched "y" left in td by vmap would make clone() raise.
+        assert "y" not in td.clone().keys()
+
+    def test_loop_tuple_output(self):
+        torch.manual_seed(0)
+        grus = [nn.GRU(3, 4, batch_first=True) for _ in range(6)]
+        params = TensorDict.from_modules(*grus).reshape(2, 3)
+        seq = torch.randn(2, 5, 3)
+        out, hidden = functional_vmap(grus[0], params=params, args=(seq,), loop=True)
+        expected_out, expected_hidden = grus[4](seq)
+        torch.testing.assert_close(out[1, 1], expected_out)
+        torch.testing.assert_close(hidden[1, 1], expected_hidden)
+        with pytest.raises(RuntimeError, match="loop=True"):
+            functional_vmap(grus[0], params=params, args=(seq,))
+
+    def test_method(self):
+        critics, params = self._critics()
+        obs, action = torch.randn(8, 3), torch.randn(8, 2)
+        out = functional_vmap(
+            critics[0], params=params, args=(obs, action), method="twice"
+        )
+        torch.testing.assert_close(
+            out, torch.stack([2 * c(obs, action) for c in critics])
+        )
+
+    def test_chunk_size_spans_batch_dims(self):
+        calls = []
+
+        class Counted(nn.Linear):
+            def forward(self, x):
+                calls.append(None)
+                return super().forward(x)
+
+        mods = [Counted(3, 1) for _ in range(6)]
+        x = torch.randn(4, 3)
+        out = functional_vmap(
+            mods[0],
+            params=TensorDict.from_modules(*mods).reshape(2, 3),
+            args=(x,),
+            chunk_size=2,
+        )
+        assert len(calls) == 3
+        torch.testing.assert_close(
+            out, torch.stack([m(x) for m in mods]).reshape(2, 3, 4, 1)
+        )
+
+    @pytest.mark.parametrize(
+        "randomness,loop,same",
+        [
+            ("different", False, False),
+            ("same", False, True),
+            ("different", True, False),
+        ],
+    )
+    def test_randomness(self, randomness, loop, same):
+        net = nn.Sequential(nn.Linear(3, 3), nn.Dropout(0.5))
+        out = functional_vmap(
+            net,
+            params=TensorDict.from_modules(net, net),
+            args=(torch.ones(100, 3),),
+            randomness=randomness,
+            loop=loop,
+        )
+        assert torch.equal(out[0] == 0, out[1] == 0) is same
+
+    def test_loop_gradients_match_vmap(self):
+        critics, params = self._critics()
+        obs, action = torch.randn(8, 3), torch.randn(8, 2)
+        grads = []
+        for loop in (False, True):
+            p = params.detach().clone().requires_grad_()
+            functional_vmap(
+                critics[0], params=p.reshape(2, 3), args=(obs, action), loop=loop
+            ).pow(2).sum().backward()
+            grads.append(p.grad)
+        torch.testing.assert_close(grads[0], grads[1])
+        assert (grads[0] != 0).all()
+
+    @pytest.mark.parametrize(
+        "kwargs,error,match",
+        [
+            ({"in_dims": {"act": 0}}, KeyError, "not in kwargs"),
+            ({"in_dims": {"obs": 0}, "batch_size": []}, ValueError, "batch dimension"),
+            ({"in_dims": {"obs": 0}, "obs": (8, 3)}, ValueError, r"\(6,\) at that"),
+            ({"in_dims": {"obs": 3}}, ValueError, r"in_dims\['obs'\]=3"),
+            ({"in_dims": {"obs": -4}}, ValueError, r"in_dims\['obs'\]=-4"),
+            (
+                {"in_dims": {"obs": 0}, "obs": (6, 8, 3), "batch_size": [2, 3]},
+                ValueError,
+                r"\(2, 3\)",
+            ),
+            ({"loop": True, "randomness": "same"}, ValueError, "loop=True"),
+        ],
+    )
+    def test_errors(self, kwargs, error, match):
+        critics, params = self._critics()
+        batch_size = kwargs.pop("batch_size", [6])
+        params = params.reshape(batch_size) if batch_size else params[0]
+        inputs = {
+            "obs": torch.randn(kwargs.pop("obs", (6, 8, 3))),
+            "action": torch.randn(8, 2),
+        }
+        with pytest.raises(error, match=match):
+            functional_vmap(critics[0], params=params, kwargs=inputs, **kwargs)
 
 
 class TestTensorDictParams:

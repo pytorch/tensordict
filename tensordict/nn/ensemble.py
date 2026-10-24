@@ -4,15 +4,18 @@
 # LICENSE file in the root directory of this source tree.
 
 import warnings
+from typing import Any, Literal
 
 import torch
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import TensorDict
-from tensordict.base import TensorDictBase
+from tensordict.base import is_tensor_collection, TensorDictBase
 from tensordict.nn.common import TensorDictModuleBase
 from tensordict.nn.params import TensorDictParams
+from torch import nn
+from torch.utils._pytree import tree_map
 
-__all__ = ["EnsembleModule"]
+__all__ = ["EnsembleModule", "functional_vmap"]
 
 
 class EnsembleModule(TensorDictModuleBase):
@@ -148,3 +151,155 @@ class EnsembleModule(TensorDictModuleBase):
                 )
             # Reset all self.module descendant parameters
             return self.module.reset_parameters_recursive(parameters)
+
+
+def functional_vmap(
+    module: nn.Module,
+    *,
+    params: TensorDictBase,
+    args: tuple = (),
+    kwargs: dict[str, Any] | None = None,
+    in_dims: dict[str, int] | None = None,
+    randomness: Literal["error", "different", "same"] = "error",
+    chunk_size: int | None = None,
+    method: str | None = None,
+    loop: bool = False,
+) -> Any:
+    """Calls ``module`` once per set of parameters in ``params`` and stacks the outputs.
+
+    The batch dimensions of ``params`` index the sets, for example the
+    parameters of several modules stacked with
+    :meth:`~tensordict.TensorDict.from_modules`. They are flattened into one
+    dimension and :func:`torch.vmap` runs over it once, so every output gets
+    ``params.batch_size`` as its leading dimensions. With an empty batch
+    size, ``module`` is called once with ``params``.
+
+    Args:
+        module (nn.Module): the module to call. ``params`` must have the
+            structure of :meth:`~tensordict.TensorDict.from_module` of it.
+
+    Keyword Args:
+        params (TensorDictBase): the stacked parameters and buffers.
+        args (tuple, optional): the positional inputs of ``module``. Every set
+            receives the same ones. Defaults to ``()``.
+        kwargs (dict, optional): the keyword inputs of ``module``.
+        in_dims (dict, optional): maps keys of ``kwargs`` to the dimension that
+            indexes the sets. That input needs ``params.batch_size`` at this
+            dimension, and set ``i`` receives its slice ``i``. With several
+            batch dimensions, the value names the first of them. The other
+            inputs are shared.
+        randomness (str, optional): what a random op, such as dropout, does.
+            ``"error"`` will raise, ``"different"`` means the randomness for each batch
+            will be different, and ``"same"`` gives every set the same ones. Defaults to
+            ``"error"``.
+        chunk_size (int, optional): the number of sets computed at once.
+        method (str, optional): the name of the method of ``module`` to call
+            instead of ``forward``.
+        loop (bool, optional): if ``True``, calls the sets one at a time and
+            stacks the results, for modules that :func:`torch.vmap` cannot
+            handle. A loop cannot detect random ops, so it does not raise under
+            ``randomness="error"``: each set gets its own random values, as
+            with ``"different"``. Defaults to ``False``.
+
+    Returns:
+        The outputs of ``module``, with ``params.batch_size`` as leading
+        dimensions.
+
+    Raises:
+        KeyError: if a key of ``in_dims`` is not in ``kwargs``.
+        ValueError: if ``in_dims`` is not empty and ``params`` has no batch
+            dimension, if an input named in ``in_dims`` does not have
+            ``params.batch_size`` at its dimension, or if ``loop=True`` with
+            ``randomness="same"``.
+
+    Examples:
+        >>> import torch
+        >>> from torch import nn
+        >>> from tensordict import TensorDict
+        >>> from tensordict.nn import functional_vmap
+        >>> nets = [nn.Linear(3, 1) for _ in range(4)]
+        >>> params = TensorDict.from_modules(*nets)
+        >>> x = torch.randn(10, 3)
+        >>> functional_vmap(nets[0], params=params, args=(x,)).shape
+        torch.Size([4, 10, 1])
+        >>> x_per_set = torch.randn(4, 10, 3)
+        >>> functional_vmap(
+        ...     nets[0],
+        ...     params=params,
+        ...     kwargs={"input": x_per_set},
+        ...     in_dims={"input": 0},
+        ... ).shape
+        torch.Size([4, 10, 1])
+    """
+    kwargs = {} if kwargs is None else kwargs
+    in_dims = {} if in_dims is None else in_dims
+    if loop and randomness == "same":
+        raise ValueError("loop=True cannot share random values across sets.")
+    missing = in_dims.keys() - kwargs.keys()
+    if missing:
+        raise KeyError(
+            f"in_dims names inputs that are not in kwargs: {sorted(missing)}."
+        )
+    batch_size = params.batch_size
+    if in_dims and not batch_size:
+        raise ValueError("in_dims needs params with at least one batch dimension.")
+    ndim = len(batch_size)
+    dims = {}
+    for key, dim in in_dims.items():
+        shape = kwargs[key].shape
+        if dim < 0:
+            dim += len(shape)
+        if dim < 0 or shape[dim : dim + ndim] != batch_size:
+            raise ValueError(
+                f"kwargs[{key!r}] has shape {tuple(shape)}, but "
+                f"in_dims[{key!r}]={in_dims[key]} needs "
+                f"params.batch_size={tuple(batch_size)} at that dimension."
+            )
+        dims[key] = dim
+    func = module if method is None else getattr(module, method)
+
+    def call(params, args, kwargs):
+        with params.to_module(module, preserve_module_state=False):
+            return func(*args, **kwargs)
+
+    if not batch_size:
+        return call(params, args, kwargs)
+
+    params = params.reshape(-1)
+    kwargs = {
+        key: value.flatten(dims[key], dims[key] + ndim - 1) if key in dims else value
+        for key, value in kwargs.items()
+    }
+    if loop:
+        outs = []
+        for i in range(params.shape[0]):
+            kwargs_i = {
+                key: value[(slice(None),) * dims[key] + (i,)] if key in dims else value
+                for key, value in kwargs.items()
+            }
+            args_i, kwargs_i = tree_map(
+                lambda x: x.clone(False) if is_tensor_collection(x) else x,
+                (args, kwargs_i),
+                is_leaf=is_tensor_collection,
+            )
+            outs.append(call(params[i], args_i, kwargs_i))
+        out = tree_map(lambda *xs: torch.stack(xs), *outs, is_leaf=is_tensor_collection)
+    else:
+        vmapped = torch.vmap(
+            call,
+            (0, None, {key: dims.get(key) for key in kwargs}),
+            randomness=randomness,
+            chunk_size=chunk_size,
+        )
+        try:
+            out = vmapped(params, args, kwargs)
+        except RuntimeError as err:
+            if "Batching rule not implemented" in str(err):
+                raise RuntimeError(
+                    f"{err}\nfunctional_vmap(..., loop=True) calls the sets one "
+                    "at a time instead."
+                ) from err
+            raise
+    return tree_map(
+        lambda x: x.unflatten(0, batch_size), out, is_leaf=is_tensor_collection
+    )

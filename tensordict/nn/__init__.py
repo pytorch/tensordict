@@ -19,7 +19,7 @@ from tensordict.nn.distributions import (
     rand_one_hot,
     TruncatedNormal,
 )
-from tensordict.nn.ensemble import EnsembleModule
+from tensordict.nn.ensemble import EnsembleModule, functional_vmap
 from tensordict.nn.params import TensorDictParams
 from tensordict.nn.probabilistic import (
     interaction_type,
@@ -54,6 +54,7 @@ __all__ = [
     "WrapModule",
     "TensorDictSequential",
     "EnsembleModule",
+    "functional_vmap",
     "CudaGraphModule",
     "TensorClassModuleBase",
     "TensorClassModuleWrapper",
