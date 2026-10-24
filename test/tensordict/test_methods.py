@@ -4585,6 +4585,27 @@ class TestTensorDicts(TestTensorDictsBase):
         td.update(other_td, keys_to_update=(("My", ("father",), "was"),))
         assert (td["My", "father", "was"] == 1).all()
 
+    @set_lazy_legacy(True)
+    def test_update_select_flat_dict_tuple_keys(self, td_name, device):
+        if td_name in ("memmap_td",):
+            pytest.skip(reason="update not possible with memory-mapped td")
+        # Regression test for #3216: a flat dict whose keys are tuples must only
+        # write the entries named in keys_to_update, not every entry sharing the
+        # same first key.
+        td = TensorDict(
+            a=torch.zeros(2),
+            nested=TensorDict(
+                b=torch.zeros(2),
+                c=torch.zeros(2),
+                batch_size=[2],
+            ),
+            batch_size=[2],
+        )
+        flat = {("nested", "b"): torch.ones(2), ("nested", "c"): torch.ones(2)}
+        td.update(flat, keys_to_update=[("nested", "b")])
+        assert (td["nested", "b"] == 1).all()
+        assert (td["nested", "c"] == 0).all()
+
     @pytest.mark.parametrize(
         "index", ["tensor1", "mask", "int", "range", "tensor2", "slice_tensor"]
     )

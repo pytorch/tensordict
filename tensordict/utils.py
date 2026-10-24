@@ -2378,6 +2378,26 @@ def _prune_selected_keys(keys_to_update, prefix):
     )
 
 
+def _is_key_selected(key, keys_to_update):
+    """Return True if the nested ``key`` (a tuple of keys) is selected by any
+    entry in ``keys_to_update`` (a list of :class:`NestedKey`, i.e. str or tuple).
+
+    A string entry is a top-level wildcard: it matches any key whose first
+    element equals it. A tuple entry matches when one of the two is a prefix of
+    the other, so that ``("nested", "b")`` selects both the ``("nested",)``
+    prefix (to recurse into a nested collection) and the exact ``("nested", "b")``
+    leaf, but not the sibling ``("nested", "c")``.
+    """
+    for ktu in keys_to_update:
+        if isinstance(ktu, str):
+            if key[0] == ktu:
+                return True
+        n = min(len(key), len(ktu))
+        if key[:n] == ktu[:n]:
+            return True
+    return False
+
+
 class TensorDictFuture:
     """A custom future class for TensorDict multithreaded operations.
 

@@ -81,6 +81,7 @@ from tensordict.utils import (
     _DTYPE_TO_STR_DTYPE,
     _GENERIC_NESTED_ERR,
     _get_shared_executor,
+    _is_key_selected,
     _is_dataclass as is_dataclass,
     _is_list_tensor_compatible,
     _is_non_tensor,
@@ -8761,10 +8762,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
         for key, value in input_dict_or_td.items():
             key = _unravel_key_to_tuple(key)
             firstkey, subkey = key[0], key[1:]
-            if keys_to_update and not any(
-                firstkey == ktu if isinstance(ktu, str) else firstkey == ktu[0]
-                for ktu in keys_to_update
-            ):
+            if keys_to_update and not _is_key_selected(key, keys_to_update):
                 continue
             target = self._get_str(firstkey, None)
             if clone and hasattr(value, "clone"):
@@ -9074,10 +9072,7 @@ class TensorDictBase(MutableMapping, TensorCollection):
             keys_to_update = unravel_key_list(keys_to_update)
         for key, value in input_dict_or_td.items():
             firstkey, *nextkeys = _unravel_key_to_tuple(key)
-            if keys_to_update and not any(
-                firstkey == ktu if isinstance(ktu, str) else firstkey == ktu[0]
-                for ktu in keys_to_update
-            ):
+            if keys_to_update and not _is_key_selected(key, keys_to_update):
                 continue
             if not isinstance(value, _ACCEPTED_CLASSES):
                 raise TypeError(
