@@ -7002,7 +7002,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 deeper keys; starting with TensorDict 0.17, the default will
                 change to copying only the deeper keys, as ``select`` does.
                 An entry that is not a key, such as ``None``, an int or bytes,
-                selects every entry, and the call warns; starting with
+                selects every entry, and the call warns (a tensordict that
+                holds a lazy stack, a sub-tensordict view or a file raises a
+                ``RuntimeError`` instead, as before); starting with
                 TensorDict 0.18, the default will change to raising a
                 ``RuntimeError``, as :meth:`update` does.
             **kwargs: entries to copy at the top level, by key.
