@@ -23,7 +23,7 @@ import warnings
 import weakref
 from collections.abc import Iterable, Mapping, MutableMapping
 from concurrent.futures import Future, ThreadPoolExecutor, wait
-from functools import wraps
+from functools import lru_cache, wraps
 from pathlib import Path
 from textwrap import indent
 from threading import local
@@ -2480,6 +2480,25 @@ def _warn_update_batch_size_prefix() -> None:
     )
 
 
+@lru_cache(maxsize=128)
+def _update_keys_nest(keys_to_update: Sequence[tuple[str, ...]]) -> bool:
+    """Whether a key of ``keys_to_update`` is strictly under another one."""
+    lengths = sorted(set(map(len, keys_to_update)))
+    if len(lengths) < 2:
+        # keys of one length: none is under another
+        return False
+    # Compare the keys of each length with the first dims of the longer keys,
+    # with set operations.
+    by_length = sorted(keys_to_update, key=len)
+    sizes = list(map(len, by_length))
+    for length in lengths[:-1]:
+        start, stop = sizes.index(length), bisect.bisect_right(sizes, length)
+        heads = set(map(operator.itemgetter(slice(length)), by_length[stop:]))
+        if not heads.isdisjoint(by_length[start:stop]):
+            return True
+    return False
+
+
 def _warn_update_keys_narrowed(
     method: str,
     source: Any,
@@ -2494,23 +2513,9 @@ def _warn_update_keys_narrowed(
     if is_dynamo_compiling():
         # Dynamo can't trace bisect; the warning is for eager code
         return
-    lengths = sorted(set(map(len, keys_to_update)))
-    if len(lengths) < 2:
-        # keys of one length: none is under another
-        return
-    # Is a key strictly under another one? Compare the keys of each length
-    # with the first dims of the longer keys, with set operations: this runs
-    # for every update_ with keys of several lengths.
-    by_length = sorted(keys_to_update, key=len)
-    sizes = list(map(len, by_length))
-    for length in lengths[:-1]:
-        start, stop = sizes.index(length), bisect.bisect_right(sizes, length)
-        heads = set(map(operator.itemgetter(slice(length)), by_length[stop:]))
-        if not heads.isdisjoint(by_length[start:stop]):
-            break
-    else:
-        return
-    if is_compiling():
+    # callers such as batched environments pass the same keys at every step:
+    # scan each list once (#3333)
+    if not _update_keys_nest(tuple(keys_to_update)) or is_compiling():
         return
     # the keys that another key of keys_to_update is strictly under
     prefixes = {key[:i] for key in keys_to_update for i in range(1, len(key))}
@@ -2960,6 +2965,7 @@ def _keys_update_pairs(
     dests: list[Tensor],
     sources: list[Tensor],
     entries: list[tuple],
+    nodes: list[tuple],
 ) -> int:
     """Pairs the tensors that ``update_(keys_to_update=...)`` copies from the exact ``TensorDict`` ``source`` into ``dest``.
 
@@ -2974,7 +2980,9 @@ def _keys_update_pairs(
     and each nested tensordict that is not an exact ``TensorDict`` on both
     sides, goes in ``entries`` as ``(len(dests), key, source, dest, nested)``,
     for the ``_apply_nest`` route to write with the same call, at its place
-    in the order. Writes nothing. Returns the number of keys of ``wanted``
+    in the order. Appends the key of each exact ``TensorDict`` node of
+    ``source`` that is in ``wanted`` to ``nodes``. Writes nothing. Returns the
+    number of keys of ``wanted``
     that name an entry of ``dest`` that is not a tensordict, read through
     exact ``TensorDict`` nodes, or ``-1`` where a selected leaf, or a nested
     tensordict that is not an exact ``TensorDict``, has no destination: the
@@ -3008,8 +3016,19 @@ def _keys_update_pairs(
             continue
         other = None if dest_entries is None else dest_entries.get(key)
         if cls is tensordict_type and (other is None or type(other) is cls):
+            if is_named:
+                nodes.append(name)
             nested = _keys_update_pairs(
-                value, other, name, is_selected, wanted, grad, dests, sources, entries
+                value,
+                other,
+                name,
+                is_selected,
+                wanted,
+                grad,
+                dests,
+                sources,
+                entries,
+                nodes,
             )
             if nested < 0:
                 return -1
@@ -7037,10 +7056,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             input_dict_or_td = TensorDict.from_dict(
                 input_dict_or_td, batch_dims=self.batch_dims
             )
-        if keys_to_update is not None and len(keys_to_update) > 1:
-            _warn_update_keys_narrowed(
-                "update_", input_dict_or_td, keys_to_update, dest=self
-            )
+        check_narrowed = keys_to_update is not None and len(keys_to_update) > 1
         entries = None
         if (
             keys_to_update is not None
@@ -7058,7 +7074,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             # entry that is not a tensordict, the walk has read the path of
             # each key through exact TensorDicts: _reads_copies_under is False.
             wanted = set(keys_to_update)
-            dests, sources, entries = [], [], []
+            dests, sources, entries, nodes = [], [], [], []
             named = _keys_update_pairs(
                 input_dict_or_td,
                 self,
@@ -7069,7 +7085,27 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 dests,
                 sources,
                 entries,
+                nodes,
             )
+            if (
+                check_narrowed
+                and named != len(wanted)
+                and not (
+                    named + len(nodes) == len(wanted)
+                    and len(dests) + len(entries) == named
+                    and not any(entry[4] for entry in entries)
+                )
+            ):
+                # The check costs about 0.5 us per call, or more when it reads
+                # the leaves of the source (#3333), and it can only warn about
+                # a selected leaf that no listed key names. It is skipped
+                # where every listed key names a leaf, or a node walked here,
+                # and every selected leaf is listed: then no leaf is written
+                # that the deeper keys leave out. Nothing is written yet.
+                _warn_update_keys_narrowed(
+                    "update_", input_dict_or_td, keys_to_update, dest=self
+                )
+            check_narrowed = False
             if named < 0 or (
                 named != len(wanted) and _reads_copies_under(self, keys_to_update)
             ):
@@ -7078,6 +7114,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 if dests:
                     _copy_leaves(dests, sources, non_blocking, exact=True)
                 return self
+        if check_narrowed:
+            _warn_update_keys_narrowed(
+                "update_", input_dict_or_td, keys_to_update, dest=self
+            )
         if (
             keys_to_update is not None
             and entries is None
