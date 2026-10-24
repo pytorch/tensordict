@@ -423,8 +423,8 @@ jobs:
       matrix:
         python_version: ["3.11"]
       fail-fast: false
-    # One test file: the 8-core runner that the docs build uses is enough.
-    runs-on: mt-l-x86iavx512-8-64
+    # The runner and container of test-min-deps-cpu, a pairing CI already runs.
+    runs-on: mt-l-x86iavx512-48-384
     container:
       image: "nvidia/cuda:12.8.0-devel-ubuntu22.04"
     timeout-minutes: 60
