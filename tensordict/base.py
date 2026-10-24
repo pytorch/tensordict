@@ -6727,7 +6727,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     # a tensorclass holding self, as tensorclass.update passes;
                     # if locked, it raises its lock error below, as before
                     or (
+                        # a Tensor or a TensorDict is not a tensorclass: skip
+                        # the lookup, which costs about 10% of an update of
+                        # nested tensordicts
                         type(value) is not Tensor
+                        and type(value) is not _TENSORDICT_TYPE
                         and _is_tensorclass(type(value))
                         and value._tensordict is self
                         and not self.is_locked

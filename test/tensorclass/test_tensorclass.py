@@ -46,6 +46,7 @@ from typing import (
 
 import numpy as np
 import pytest
+import tensordict.base as tensordict_base
 import tensordict.utils
 import torch
 from _utils_internal import is_npu_available
@@ -6618,6 +6619,35 @@ class TestTensorClass:
         tc = SelfNesting(a=torch.zeros(3), batch_size=[3]).lock_()
         with pytest.raises(RuntimeError, match="locked"):
             tc.update({"x": tc}, inplace=True)
+
+    def test_update_self_nesting_check_skips_tensordicts(self, monkeypatch):
+        # update() checks whether a value is a tensorclass holding self (#2741).
+        # A Tensor or a TensorDict is not a tensorclass: it skips the lookup,
+        # which made an update of nested tensordicts about 10% slower than in
+        # 0.15.2 (#3346)
+        looked_up = []
+        is_tensorclass = tensordict_base._is_tensorclass
+
+        def recording(cls):
+            looked_up.append(cls)
+            return is_tensorclass(cls)
+
+        monkeypatch.setattr(tensordict_base, "_is_tensorclass", recording)
+        source = {"a": TensorDict(x=torch.zeros(3), batch_size=[3]), "b": torch.ones(3)}
+        td = TensorDict(batch_size=[3])
+        td.update(source)
+        td.update(source, inplace=True)
+        assert TensorDict not in looked_up
+        assert torch.Tensor not in looked_up
+        assert (td["a", "x"] == 0).all() and (td["b"] == 1).all()
+
+        class SelfNesting(TensorClass):
+            a: torch.Tensor
+            x: SelfNesting = None
+
+        tc = SelfNesting(a=torch.zeros(3), batch_size=[3])
+        with pytest.raises(ValueError, match="inside itself"):
+            tc.update({"x": tc})
 
     def test_set_non_tensor_data_to_itself(self):
         # a NonTensorData set to itself keeps its data, as before #2741's check
