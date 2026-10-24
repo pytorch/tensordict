@@ -2995,26 +2995,38 @@ def _prune_selected_keys(keys_to_update, prefix):
     return sub_keys
 
 
-def _is_key_selected(key, keys_to_update):
-    """Whether ``update`` writes the entry at ``key`` (a tuple), given the unravelled ``keys_to_update``.
+def _selection_trie(keys_to_update):
+    """The unravelled ``keys_to_update`` as a trie, for :func:`_is_key_selected` (#3216).
 
-    Follows the rule of :func:`_prune_selected_keys`, so a flat dict source
-    with tuple keys gets the entries that a tensordict source gets (#3216).
+    Each node maps a key part to its child node; the ``None`` entry marks a
+    listed key. ``update`` builds it once per call.
     """
-    if key in keys_to_update:
-        # an exact match is always selected; skip the walk
-        return True
+    trie = {}
+    for key in keys_to_update:
+        node = trie
+        for part in (key,) if isinstance(key, str) else key:
+            node = node.setdefault(part, {})
+        node[None] = True
+    return trie
+
+
+def _is_key_selected(key, trie):
+    """Whether ``update`` writes the entry at ``key`` (a tuple), given ``_selection_trie(keys_to_update)``.
+
+    Follows the rule of :func:`_prune_selected_keys`: a listed key selects every
+    entry under it, unless deeper keys are listed under it, which narrow it. So
+    a flat dict source with tuple keys gets the entries that a tensordict
+    source gets (#3216).
+    """
+    node = trie
     for part in key[:-1]:
-        keys_to_update = _prune_selected_keys(keys_to_update, part)
-        if keys_to_update is None:
+        node = node.get(part)
+        if node is None:
+            return False
+        if len(node) == 1 and None in node:
+            # a listed key with nothing listed under it: all its entries
             return True
-        # the pruned keys are flat tuples: unravel them as update does
-        keys_to_update = [k[0] if len(k) == 1 else k for k in keys_to_update]
-    last = key[-1]
-    return any(
-        last == ktu if isinstance(ktu, str) else last == ktu[0]
-        for ktu in keys_to_update
-    )
+    return key[-1] in node
 
 
 class TensorDictFuture:
