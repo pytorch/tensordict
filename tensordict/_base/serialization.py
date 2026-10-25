@@ -665,7 +665,6 @@ class _Serialization:
                 leaf_metadata = [
                     _DTYPE_TO_STR_DTYPE[dtype],
                     list(shape),
-                    # _DEVICE2STRDEVICE[device],
                     start,
                     stop,
                     pad,

@@ -234,11 +234,9 @@ _TORCH_DTYPES = (
     torch.uint64,
 )
 _STR_DTYPE_TO_DTYPE = {str(dtype): dtype for dtype in _TORCH_DTYPES}
-_STRDTYPE2DTYPE = _STR_DTYPE_TO_DTYPE
 _DTYPE_TO_STR_DTYPE = {
     dtype: str_dtype for str_dtype, dtype in _STR_DTYPE_TO_DTYPE.items()
 }
-_DTYPE2STRDTYPE = _STR_DTYPE_TO_DTYPE
 
 #: The type of the indices that a tensordict accepts in ``td[index]``.
 #:
@@ -1526,34 +1524,6 @@ class _ErrorInteceptor:
             self.exc_msg is None or self.exc_msg in str(exc_value)
         ):
             exc_value.args = (self._add_key_to_error_msg(str(exc_value)),)
-
-
-def _dict_to_nested_keys(
-    nested_keys: dict[NestedKey, NestedKey], prefix: tuple[str, ...] = ()
-) -> tuple[str, ...]:
-    for key, subkeys in nested_keys.items():
-        if subkeys:
-            yield from _dict_to_nested_keys(subkeys, prefix=(*prefix, key))
-        elif prefix:
-            yield (*prefix, key)
-        else:
-            yield key
-
-
-def _get_leaf_tensordict(
-    tensordict: T, key: tuple[str, ...], hook: Callable = None
-) -> tuple[TensorDictBase, str]:
-    # utility function for traversing nested tensordicts
-    # hook should return the default value for tensordict.get(key)
-    while len(key) > 1:
-        if hook is not None:
-            tensordict = hook(tensordict, key)
-        else:
-            tensordict = tensordict.get(key[0])
-            if tensordict is None:
-                raise KeyError(f"No sub-tensordict with key {key[0]}.")
-        key = key[1:]
-    return tensordict, key[0]
 
 
 class _TensorDictPropertyError(RuntimeError):
@@ -3043,7 +3013,6 @@ class _BufferLegacy(torch.nn.Buffer):
 
 
 from tensordict._utils_options import (  # noqa: F401
-    _legacy_lazy,
     _REPR_OPTIONS,
     _strtobool,
     capture_non_tensor_stack,
@@ -4179,7 +4148,6 @@ def unravel_key_list(keys):
 from tensordict._utils_key_json import (  # noqa: F401
     _decode_key_from_filesystem,
     _encode_key_for_filesystem,
-    _get_robust_key_setting,
     _get_robust_key_setting_with_warning,
     _is_safe_legacy_key,
 )
@@ -4200,8 +4168,6 @@ _NESTED_TENSOR_ERR = (
     "nested tensors. Please upgrade to a more recent "
     "version."
 )
-
-_DEVICE2STRDEVICE = _KeyDependentDefaultDict(str)
 
 
 def _lock_warn():

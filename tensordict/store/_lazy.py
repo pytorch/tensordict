@@ -219,7 +219,6 @@ class _StoreStackElementView(_StoreUnsupported, TensorDictBase):
         self._parent = parent
         self._element_idx = _normalize_index(element_idx, parent._count)
 
-        self._locked_tensordicts = []
         self._lock_id = set()
         self._is_shared = False
         self._is_memmap = False

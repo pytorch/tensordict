@@ -210,7 +210,6 @@ class _StoreConnection:
         The constructor and ``__setstate__`` call it once ``_cache_metadata`` is
         set. A store with more per-process state extends it.
         """
-        self._locked_tensordicts = []
         self._lock_id = set()
         self._is_shared = False
         self._is_memmap = False

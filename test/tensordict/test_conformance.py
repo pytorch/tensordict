@@ -859,7 +859,6 @@ _UNDOCUMENTED_HOOKS = {
             "_change_batch_size",
             "_check_batch_size",
             "_check_device",
-            "_check_is_shared",
             "_check_new_batch_size",
             "_convert_inplace",
             "_convert_to_tensordict",

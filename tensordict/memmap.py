@@ -271,7 +271,6 @@ class MemoryMappedTensor(torch.Tensor):
     _filename: str | Path = None
     _handler: _FileHandler = None
     _mode: str | None = None
-    _clear: bool
     _index: Any
     # the indices that made this tensor from the one that its file or handler
     # holds, as nested pairs: (the chain of the parent, the last index)

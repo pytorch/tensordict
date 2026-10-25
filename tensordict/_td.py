@@ -547,7 +547,6 @@ class TensorDict(TensorDictBase):
         if device is not None:
             if non_blocking is None:
                 sub_non_blocking = True
-                non_blocking = False
             else:
                 sub_non_blocking = non_blocking
             if type(device) is not torch.device:
@@ -3328,8 +3327,6 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
     """A TensorDict that only sees an index of the stored tensors."""
 
     _lazy = True
-    _inplace_set = True
-    _safe = False
     _masking_on_dense_copy = True
     _memmap_inplace_unsupported = True
     _pin_memory_unsupported = True
@@ -3423,9 +3420,6 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
         for key in self.keys():
             if _is_tensor_collection(self.entry_class(key)):
                 raise RuntimeError("Cannot rename nested sub-tensordict dimensions.")
-
-    def _preallocate(self, key: NestedKey, value: CompatibleType) -> Self:
-        return self._source.set(key, value)
 
     def _convert_inplace(self, inplace, key):
         has_key = key in self.keys()
@@ -4053,11 +4047,6 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
     def _propagate_unlock(self):
         return []
 
-    def _remove_lock(self, lock_id):
-        raise RuntimeError(
-            "Cannot unlock a _SubTensorDict. Unlock the parent tensordict instead."
-        )
-
     # Override: only the parent tensordict can be locked.
     def _propagate_lock(self, lock_ids=None, *, is_compiling):
         raise RuntimeError(
@@ -4303,7 +4292,7 @@ class _TensorDictKeysView:
         )
 
         if isinstance(tensordict, LazyStackedTensorDict):
-            return _iter_items_lazystack(tensordict, return_none_for_het_values=True)
+            return _iter_items_lazystack(tensordict)
         if isinstance(tensordict, _CustomOpTensorDict):
             # it's possible that a TensorDict contains a nested LazyStackedTensorDict,
             # or _CustomOpTensorDict, so as we iterate through the contents we need to

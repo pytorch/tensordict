@@ -22,7 +22,7 @@ import sys
 import warnings
 import weakref
 from collections.abc import Iterable, Mapping, MutableMapping
-from concurrent.futures import Future, ThreadPoolExecutor, wait
+from concurrent.futures import Future, ThreadPoolExecutor
 from functools import lru_cache, wraps
 from pathlib import Path
 from textwrap import indent
@@ -206,14 +206,10 @@ BEST_ATTEMPT_INPLACE = _BEST_ATTEMPT_INPLACE()
 
 CompatibleType: TypeAlias = Tensor | TensorCollection
 
-_STR_MIXED_INDEX_ERROR = "Received a mixed string-non string index. Only string-only or string-free indices are supported."
-
 _SELF_NESTING_ERROR = (
     "Cannot set a tensordict inside itself (key {!r}): tensordicts that "
     "contain themselves are not supported."
 )
-
-_HEURISTIC_EXCLUDED = (Tensor, tuple, list, set, dict, np.ndarray)
 
 # Context-manager ops whose inverse __exit__ runs also when the body raises
 _UNDO_ON_ERROR_OPS = frozenset({"to_module", "lock_", "unlock_"})
@@ -330,8 +326,8 @@ class _RecordDeviceTransfer:
         self._state.marked = False
         self._state.has_transfer = False
 
-    def record_transfer(self, device):
-        # Adds a device to all markers
+    def record_transfer(self):
+        # Records that a value was moved to another device
         self._state.has_transfer = True
 
     def has_transfer(self):
@@ -3501,9 +3497,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         (True, True)
     """
 
-    _safe: bool = False
     _lazy: bool = False
-    _inplace_set: bool = False
     _is_locked: bool = False
     _is_shared: bool = False
     _is_memmap: bool = False
@@ -4380,10 +4374,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             None
         """
         if set_to_none:
-            for val in self._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
+            for val in self._values_list(True, True):
                 val.grad = None
             return self
-        for val in self._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
+        for val in self._values_list(True, True):
             grad = val.grad
             if grad is not None:
                 grad.zero_()
@@ -8314,8 +8308,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         include_nested: bool = False,
         leaves_only: bool = False,
         *,
-        collapse: bool = False,
-        is_leaf: Callable[[Type], bool] | None = None,
         sorting_keys: List[NestedKey] | None = None,
     ) -> List:
         if sorting_keys is None:
@@ -8323,15 +8315,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 self.values(
                     include_nested=include_nested,
                     leaves_only=leaves_only,
-                    is_leaf=_NESTED_TENSORS_AS_LISTS if not collapse else is_leaf,
+                    is_leaf=_NESTED_TENSORS_AS_LISTS,
                 )
             )
         else:
             keys, vals = self._items_list(
                 include_nested=include_nested,
                 leaves_only=leaves_only,
-                is_leaf=is_leaf,
-                collapse=collapse,
             )
             try:
                 if is_compiling():
@@ -8352,7 +8342,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         leaves_only: bool = False,
         *,
         collapse: bool = False,
-        is_leaf: Callable[[Type], bool] | None = None,
         sorting_keys: List[NestedKey] | None = None,
         default: str | CompatibleType | None = None,
     ) -> Tuple[List, List]:
@@ -8397,7 +8386,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     def _grad(self):
         # We can't cache this because zero_grad can be called outside (eg from optimizer) and we want the tensors
         # to clear out when that is done.
-        keys, vals = self._items_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
+        keys, vals = self._items_list(True, True)
         grads = [val.grad for val in vals]
         items = dict(zip(keys, grads))
 
@@ -8439,12 +8428,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             # a TypedTensorDict over a lazy stack lists the leaves of each
             # member (#2772): read them stacked, as self lists them
             value = value.to_tensordict()
-        nodes_self = dict(
-            zip(*self._items_list(True, False, is_leaf=_NESTED_TENSORS_AS_LISTS))
-        )
-        for key, node in zip(
-            *value._items_list(True, False, is_leaf=_NESTED_TENSORS_AS_LISTS)
-        ):
+        nodes_self = dict(zip(*self._items_list(True, False)))
+        for key, node in zip(*value._items_list(True, False)):
             node_self = nodes_self.get(key)
             if (
                 _is_tensor_collection(type(node))
@@ -8455,10 +8440,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     f"Cannot assign .data from a source with batch size {node.batch_size} "
                     f"to a destination with batch size {node_self.batch_size} at key {key!r}."
                 )
-        keys, vals = value._items_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
-        keys_self, vals_self = self._items_list(
-            True, True, is_leaf=_NESTED_TENSORS_AS_LISTS
-        )
+        keys, vals = value._items_list(True, True)
+        keys_self, vals_self = self._items_list(True, True)
         self_dict = dict(zip(keys_self, vals_self))
         missing = [key for key in keys if key not in self_dict]
         if missing:
@@ -9322,8 +9305,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         executor: ThreadPoolExecutor,
         futures: List[Future],
         local_futures: List,
-        subs_results: Dict[Future, Any] | None = None,
-        multithread_set: bool = False,  # Experimental
         **constructor_kwargs,
     ) -> None:
         from tensordict._td import _SubTensorDict, TensorDict
@@ -9414,9 +9395,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     non_blocking=False,
                 )
 
-        for i, (key, local_future) in enumerate(
-            _zip_strict(self.keys(), local_futures)
-        ):
+        for key, local_future in _zip_strict(self.keys(), local_futures):
             if isinstance(local_future, list):
                 # We can't make this a future as it could cause deadlocks:
                 #  If we put a future over the root and this triggers another
@@ -9435,36 +9414,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     executor=executor,
                     futures=futures,
                     local_futures=local_future,
-                    subs_results=subs_results,
-                    multithread_set=multithread_set,
                     **constructor_kwargs,
                 )
-                if multithread_set:
-                    local_future = executor.submit(setter, item_trsf=item_trsf, key=key)
-                    local_futures[i] = local_future
-                    futures.append(local_future)
-                else:
-                    setter(item_trsf=item_trsf, key=key)
+                setter(item_trsf=item_trsf, key=key)
             else:
-                if multithread_set:
-                    if subs_results is not None:
-                        local_result = subs_results[local_future]
-                    else:
-                        # TODO: check if add_done_callback can safely be used here
-                        #  The issue is that it does not raises an exception encountered during the
-                        #  execution, resulting in UBs.
-                        local_result = local_future.result()
-                    local_future = executor.submit(
-                        setter, item_trsf=local_result, key=key
-                    )
-                    futures.append(local_future)
-                    local_futures[i] = local_future
-                else:
-                    local_result = local_future.result()
-                    setter(item_trsf=local_result, key=key)
+                local_result = local_future.result()
+                setter(item_trsf=local_result, key=key)
 
-        if multithread_set:
-            wait(local_futures)
         any_set = True in any_set or is_non_tensor(self)
 
         if filter_empty and not any_set:
@@ -9491,16 +9447,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         is_leaf: Callable[[Type], bool] | None = None,
         out: TensorDictBase | None = None,
         num_threads: int,
-        call_when_done: Callable | None = None,
         **constructor_kwargs,
     ) -> Self | None:
         """A deadlock-safe multithread wrapper around TD.apply.
 
         First launches fn for all the leaves, then rebuilds the tensordicts out of them.
-
-        An optional ``call_when_done`` function can be passed to execute a method on the main thread
-        after a future is completed.
-
         """
         if call_on_nested:
             warnings.warn(
@@ -9528,23 +9479,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             futures=futures,
             local_futures=local_futures,
         )
-        if call_when_done is not None:
-            subs_results = {}
-
-            def cb(fut):
-                fut._result = call_when_done(fut.result())
-                return fut
-
-            for fut in futures:
-                fut.add_done_callback(cb)
-            # wait(futures)
-            # for fut in as_completed(futures):
-            #     subs_results[fut] = call_when_done(fut.result())
-            #     fut._result = None
-            #     # futures.remove(fut)
-            #     # del fut
-        else:
-            subs_results = None
         return self._multithread_rebuild(
             batch_size=batch_size,
             device=device,
@@ -9556,7 +9490,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             executor=executor,
             futures=futures,
             local_futures=local_futures,
-            subs_results=subs_results,
             **constructor_kwargs,
         )
 
@@ -10684,7 +10617,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             device = self.device
             if device is not None and value.device != device:
                 if _device_recorder.marked and device.type != "cuda":
-                    _device_recorder.record_transfer(device)
+                    _device_recorder.record_transfer()
                 value = value.to(device, non_blocking=non_blocking)
             if value.batch_size != self.batch_size:
                 value = _unbatched_with_batch_size(value, self.batch_size)
@@ -10706,7 +10639,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         device = self.device
         if device is not None and value.device != device:
             if _device_recorder.marked and device.type != "cuda":
-                _device_recorder.record_transfer(device)
+                _device_recorder.record_transfer()
             value = value.to(device, non_blocking=non_blocking)
         if check_shape:
             if not is_tc:
@@ -10756,7 +10689,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         device = self.device
         if device is not None and value.device != device:
             if _device_recorder.marked and device.type != "cuda":
-                _device_recorder.record_transfer(device)
+                _device_recorder.record_transfer()
             value = value.to(device, non_blocking=non_blocking)
         if _is_unbatched(value):
             if value.batch_size != self.batch_size:
@@ -12526,7 +12459,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             >>> td.requires_grad
             True
         """
-        for val in self._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
+        for val in self._values_list(True, True):
             val.requires_grad_(requires_grad)
         return self
 

@@ -4338,9 +4338,6 @@ def _wrap_method(self, attr, func, nowarn=False):
             return type(self)._from_tensordict(res, dict(self._non_tensordict))
         return res
 
-    if not is_compiling():
-        wrapped_func = functools.wraps(func)(wrapped_func)
-
     return wrapped_func
 
 
@@ -7997,7 +7994,6 @@ class _MetaDataMeta(_TensorClassMeta):
         class_name = f"MetaData[{type_name}]"
 
         class TypedMetaData(cls):
-            _expected_type = item
             # Define all the classes defined by MetaData
             _load_memmap = classmethod(_load_memmap)
             _from_dict = classmethod(_from_dict)

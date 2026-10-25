@@ -1038,9 +1038,7 @@ class LazyStackedTensorDict(TensorDictBase):
         if func in LAZY_TD_HANDLED_FUNCTIONS:
             if kwargs is None:
                 kwargs = {}
-            if func not in LAZY_TD_HANDLED_FUNCTIONS or not all(
-                issubclass(t, (Tensor, TensorDictBase)) for t in types
-            ):
+            if not all(issubclass(t, (Tensor, TensorDictBase)) for t in types):
                 return NotImplemented
             return LAZY_TD_HANDLED_FUNCTIONS[func](*args, **kwargs)
         else:
@@ -1050,7 +1048,6 @@ class LazyStackedTensorDict(TensorDictBase):
     # The names of the batch dims of a stack without members, without the
     # stack dim. None if these dims have no names.
     _empty_stack_names = None
-    _safe = False
     _lazy = True
     _set_at_warns_cast = True
     _leaves_built_on_read = True
@@ -1172,9 +1169,7 @@ class LazyStackedTensorDict(TensorDictBase):
         ndim = self.ndim
         if device is not NO_DEFAULT:
             kwargs["device"] = device
-        if (
-            empty_lazy and len(size) > self.stack_dim
-        ):  # eg, stack_dim is 1 and size is (3, 4)
+        if len(size) > self.stack_dim:  # eg, stack_dim is 1 and size is (3, 4)
             sub_size = list(size)
             # TODO: consider starting from the end?
             stack_dim = self.stack_dim  # - self.ndim
@@ -1204,7 +1199,7 @@ class LazyStackedTensorDict(TensorDictBase):
             feature_shape = tensor.shape[ndim:]
             size = torch.Size((*size, *feature_shape))
             kwargs_copy = kwargs
-            if empty_lazy and is_tensor_collection(tensor):
+            if is_tensor_collection(tensor):
                 kwargs_copy = dict(kwargs)
                 kwargs_copy["empty_lazy"] = empty_lazy
             return getattr(tensor, funcname)(
@@ -1235,7 +1230,6 @@ class LazyStackedTensorDict(TensorDictBase):
         device: torch.device | None = None,
         names: Sequence[str] | None = None,
         stack_dim_name: str | None = None,
-        strict_shape: bool = False,
     ) -> None:
         self = cls.__new__(cls)
         self._is_locked = None
@@ -3720,8 +3714,6 @@ class LazyStackedTensorDict(TensorDictBase):
         executor: ThreadPoolExecutor,
         futures: List[Future],
         local_futures: List,
-        subs_results: Dict[Future, Any] | None = None,
-        multithread_set: bool = False,  # Experimental
         **constructor_kwargs,
     ) -> None:
         if inplace and any(
@@ -3743,8 +3735,6 @@ class LazyStackedTensorDict(TensorDictBase):
                     executor=executor,
                     futures=futures,
                     local_futures=local_futures,
-                    subs_results=subs_results,
-                    multithread_set=multithread_set,
                     **constructor_kwargs,
                 )
                 if result is not None:
@@ -3770,8 +3760,6 @@ class LazyStackedTensorDict(TensorDictBase):
                 executor=executor,
                 futures=futures,
                 local_futures=local_future,
-                subs_results=subs_results,
-                multithread_set=multithread_set,
             )
             results.append(local_out)
         if filter_empty and all(r is None for r in results):
@@ -4226,10 +4214,7 @@ class LazyStackedTensorDict(TensorDictBase):
             if dim is NO_DEFAULT:
                 # It is not very memory-efficient to do this, but it's the easiest to cover all use cases
                 agglomerate = [
-                    val.contiguous().flatten()
-                    for val in self._values_list(
-                        True, True, is_leaf=_NESTED_TENSORS_AS_LISTS
-                    )
+                    val.contiguous().flatten() for val in self._values_list(True, True)
                 ]
                 agglomerate = torch.cat(agglomerate, dim=-1)
                 return getattr(torch, reduction_name)(agglomerate, **kwargs)
@@ -4392,7 +4377,6 @@ class LazyStackedTensorDict(TensorDictBase):
         _tag: int = -1,
         pseudo_rand: bool = False,
         group: "torch.distributed.ProcessGroup" | None = None,
-        non_blocking: bool = False,
         group_src: int | None = None,
     ) -> int:
         for td in self.tensordicts:
@@ -4401,7 +4385,6 @@ class LazyStackedTensorDict(TensorDictBase):
                 _tag=_tag,
                 pseudo_rand=pseudo_rand,
                 group=group,
-                non_blocking=non_blocking,
                 group_src=group_src,
             )
         return _tag
@@ -5854,7 +5837,6 @@ class LazyStackedTensorDict(TensorDictBase):
 class _CustomOpTensorDict(TensorDictBase):
     """Encodes lazy operations on tensors contained in a TensorDict."""
 
-    _safe = False
     _lazy = True
     _masking_on_dense_copy = True
 
@@ -6462,9 +6444,6 @@ class _CustomOpTensorDict(TensorDictBase):
         self._source.unlock_()
         return self
 
-    def _remove_lock(self, lock_id):
-        return self._source._remove_lock(lock_id)
-
     @_erase_cache_first
     def _propagate_lock(self, lock_ids, *, is_compiling):
         return self._source._propagate_lock(lock_ids, is_compiling=is_compiling)
@@ -6820,7 +6799,7 @@ class _PermutedTensorDict(_CustomOpTensorDict):
 
 
 def _iter_items_lazystack(
-    tensordict: LazyStackedTensorDict, return_none_for_het_values: bool = False
+    tensordict: LazyStackedTensorDict,
 ) -> Iterator[tuple[str, CompatibleType]]:
     # The keys of every member, as keys() lists them: a sub-tensordict that
     # only some members have cannot be stacked.

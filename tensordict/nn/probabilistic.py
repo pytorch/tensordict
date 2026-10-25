@@ -679,7 +679,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         if log_prob_keys is None:
             if len(out_keys) == 1 and log_prob_key is not None:
                 log_prob_keys = [log_prob_key]
-            elif composite_lp_aggregate(nowarn=True):
+            elif composite_lp_aggregate():
                 if len(out_keys) == 1:
                     log_prob_keys = ["sample_log_prob"]
                 else:
@@ -688,19 +688,17 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 log_prob_keys = [
                     _add_suffix(key, "_log_prob") for key in self._out_keys
                 ]
-        elif composite_lp_aggregate(nowarn=True):
+        elif composite_lp_aggregate():
             raise RuntimeError(
                 "composite_lp_aggregate is set to True but log_prob_keys were passed. "
                 "When composite_lp_aggregate() returns ``True``, log_prob_key must be used instead."
             )
-        self._trigger_warning_lpk = len(self._out_keys) > 1
         if log_prob_key is None:
-            if composite_lp_aggregate(nowarn=True):
+            if composite_lp_aggregate():
                 log_prob_key = "sample_log_prob"
-                self._trigger_warning_lpk = True
             elif len(out_keys) == 1:
                 log_prob_key = _add_suffix(out_keys[0], "_log_prob")
-        elif len(out_keys) > 1 and not composite_lp_aggregate(nowarn=True):
+        elif len(out_keys) > 1 and not composite_lp_aggregate():
             raise RuntimeError(
                 "composite_lp_aggregate is set to `False` but a `log_prob_key` was passed. "
                 "When composite_lp_aggregate() returns ``False``, log_prob_keys must be used instead."
@@ -727,7 +725,6 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         if return_log_prob:
             self._check_log_prob_keys(log_prob_keys, log_prob_key)
         self.n_empirical_estimate = n_empirical_estimate
-        self._dist = None
         if cache_dist:
             warn_deprecated(
                 "ProbabilisticTensorDictModule(cache_dist=True)", removal="0.17"
@@ -847,7 +844,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 changed since the module was built, or if it is ``False`` and
                 the module has several sampled keys (use :attr:`log_prob_keys`).
         """
-        clpa = composite_lp_aggregate(nowarn=True)
+        clpa = composite_lp_aggregate()
         if clpa != self._composite_lp_aggreate_at_init:
             raise RuntimeError(
                 f"composite_lp_aggregate is set to `{clpa}`, but the class was instantiated with `{self._composite_lp_aggreate_at_init}` "
@@ -875,7 +872,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             RuntimeError: if :func:`~tensordict.nn.composite_lp_aggregate`
                 changed since the module was built.
         """
-        clpa = composite_lp_aggregate(nowarn=True)
+        clpa = composite_lp_aggregate()
         if clpa != self._composite_lp_aggreate_at_init:
             raise RuntimeError(
                 f"composite_lp_aggregate is set to `{clpa}`, but the class was instantiated with `{self._composite_lp_aggreate_at_init}` "
