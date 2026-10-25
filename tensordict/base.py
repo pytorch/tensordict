@@ -2651,6 +2651,32 @@ def _warn_update_inserts_whole_entry(
     )
 
 
+def _keys_to_update_as_main(
+    dest: TensorCollection, keys: Sequence[NestedKey]
+) -> list[NestedKey]:
+    """``keys`` with each key that runs under an entry that ``dest`` lacks cut to the key of that entry.
+
+    ``dest.update(source, keys_to_update=...)`` then writes what it writes on
+    main, whole entries included, now and after 0.17, and does not warn
+    (#3360). The ``tensordict.nn`` modules use it to keep their outputs;
+    whether these should narrow is #3367.
+    """
+    result = {}
+    for key in keys:
+        key = _unravel_key_to_tuple(key)
+        node = dest
+        for i, part in enumerate(key[:-1]):
+            node = node.get(part, None)
+            if node is None:
+                key = key[: i + 1]
+                break
+            if _is_leaf_nontensor(type(node)):
+                # update writes the entry whole, without a warning
+                break
+        result[key[0] if len(key) == 1 else key] = None
+    return list(result)
+
+
 def _warn_unsupported_operand(op: str, other: Any, result: bool) -> None:
     """Warns that ``op`` (``"__xor__"``, ``"__lt__"``, ...) returns ``result`` for ``other``, which is not a tensor collection, a tensor or a number, until 0.17 (#2979)."""
     if is_compiling():

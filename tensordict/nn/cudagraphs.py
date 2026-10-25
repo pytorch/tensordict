@@ -14,7 +14,11 @@ from typing import Any, Callable, List
 
 import torch
 from tensordict._nestedkey import NestedKey
-from tensordict.base import is_tensor_collection, TensorDictBase
+from tensordict.base import (
+    _keys_to_update_as_main,
+    is_tensor_collection,
+    TensorDictBase,
+)
 from tensordict.nn.common import dispatch
 from tensordict.nn.functional_modules import (
     PYTREE_REGISTERED_LAZY_TDS,
@@ -390,7 +394,11 @@ class CudaGraphModule:
                     if self._out_matches_in:
                         # Clone: the graph overwrites ``self._out`` on the next replay.
                         result = tensordict.update(  # type-ignore[unreachable]
-                            self._out, keys_to_update=self._selected_keys, clone=True
+                            self._out,
+                            keys_to_update=_keys_to_update_as_main(
+                                tensordict, self._selected_keys
+                            ),
+                            clone=True,
                         )
                     elif tensordict_out is not None:
                         result = tensordict_out.update(self._out, clone=True)
