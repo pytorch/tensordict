@@ -55,6 +55,7 @@ from tensordict.utils import (
     _is_unbatched,
     _LOCK_ERROR,
     _NUMPY_TO_TORCH_DTYPE_DICT,
+    _TORCH_TO_NUMPY_DTYPE_DICT,
     _UNBATCHED_SAVE,
     _warn_unbatched_saved_as_plain,
     expand_right,
@@ -2408,21 +2409,23 @@ class PersistentTensorDict(
                 full_key = tuple(
                     p for p in self.file.name.split("/") if p
                 ) + _unravel_key_to_tuple(key)
+                text = str(err)
                 if value.is_nested:
-                    limit = (
-                        "h5 and zarr files can't store nested tensors: pad the "
-                        "entry first, for example with "
+                    text = (
+                        f"{text.rstrip('.')}. h5 and zarr can't store nested "
+                        "tensors: pad the entry first, for example with "
                         "torch.nested.to_padded_tensor, or save with torch.save."
                     )
-                else:
-                    limit = (
-                        "h5 and zarr files hold numpy dtypes only: convert the "
-                        "entry first, for example with .float(), or save with "
+                elif value.dtype not in _TORCH_TO_NUMPY_DTYPE_DICT:
+                    text = (
+                        f"{text.rstrip('.')}. h5 and zarr hold numpy dtypes "
+                        "only: convert the entry first to a dtype numpy has "
+                        "(for example float32 or complex64), or save with "
                         "memmap or torch.save."
                     )
+                where = "h5 file" if self._backend.name == "h5" else "zarr store"
                 raise type(err)(
-                    f"Cannot write the entry {full_key} to the "
-                    f"{self._backend.name} file: {str(err).rstrip('.')}. {limit}"
+                    f"Cannot write the entry {full_key} to the {where}: {text}"
                 ) from err
         elif isinstance(value, dict):
             out = TensorDict(value, [])

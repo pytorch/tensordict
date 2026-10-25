@@ -130,6 +130,28 @@ class TestZarrRoundTrip:
         with pytest.raises(RuntimeError, match=r"\('obs', 'j'\).*zarr.*nested"):
             td.to_zarr(tmp_path / "d.zarr")
 
+    @pytest.mark.parametrize(
+        "make, err, hint",
+        [
+            (
+                lambda: torch.zeros(2, dtype=torch.complex64).conj(),
+                RuntimeError,
+                "resolve_conj",
+            ),
+            (lambda: torch.zeros(2).to_sparse(), TypeError, "to_dense"),
+        ],
+        ids=["conj", "sparse"],
+    )
+    def test_other_numpy_error_names_entry(self, tmp_path, make, err, hint):
+        # #3265: a numpy dtype that fails for another reason keeps torch's advice only
+        ztd = PersistentTensorDict(
+            filename=tmp_path / "s.zarr", backend="zarr", mode="w"
+        )
+        with pytest.raises(err, match=rf"\('x', 'y'\).*zarr.*{hint}") as info:
+            ztd["x", "y"] = make()
+        assert "numpy dtypes only" not in str(info.value)
+        ztd.close()
+
     def test_names_roundtrip(self, tmp_path):
         td = TensorDict({"a": torch.randn(3, 4)}, batch_size=[3, 4], names=["x", "y"])
         td.to_zarr(tmp_path / "s.zarr")

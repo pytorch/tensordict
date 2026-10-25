@@ -976,6 +976,26 @@ class TestH5Serialization:
         with pytest.raises(RuntimeError, match=r"\('obs', 'j'\).*h5.*nested"):
             td.to_h5(tmp_path / "d.h5")
 
+    @pytest.mark.parametrize(
+        "make, err, hint",
+        [
+            (
+                lambda: torch.zeros(2, dtype=torch.complex64).conj(),
+                RuntimeError,
+                "resolve_conj",
+            ),
+            (lambda: torch.zeros(2).to_sparse(), TypeError, "to_dense"),
+        ],
+        ids=["conj", "sparse"],
+    )
+    def test_other_numpy_error_names_entry(self, tmp_path, make, err, hint):
+        # #3265: a numpy dtype that fails for another reason keeps torch's advice only
+        h5td = PersistentTensorDict(filename=tmp_path / "s.h5", mode="w")
+        with pytest.raises(err, match=rf"\('x', 'y'\).*h5.*{hint}") as info:
+            h5td["x", "y"] = make()
+        assert "numpy dtypes only" not in str(info.value)
+        h5td.close()
+
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 def test_auto_batch_size(tmpdir):
