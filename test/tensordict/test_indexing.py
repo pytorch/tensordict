@@ -141,7 +141,8 @@ def _torch_index(index):
 
 
 def _check_known_failures(key, failures):
-    check_known_failures(key, failures, _KNOWN_FAILURES_FILE, _KNOWN_FAILURES)
+    message = check_known_failures(key, failures, _KNOWN_FAILURES_FILE, _KNOWN_FAILURES)
+    assert not message, "\n".join(message)
 
 
 def _expected_names(batch_size, index, names):

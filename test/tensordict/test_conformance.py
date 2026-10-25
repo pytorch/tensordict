@@ -499,7 +499,8 @@ def _compare(make, op):
 
 
 def _check_known_failures(key, failures, path=_KNOWN_FAILURES_FILE, hint=None):
-    check_known_failures(key, failures, path, _KNOWN_FAILURES[path], hint)
+    message = check_known_failures(key, failures, path, _KNOWN_FAILURES[path], hint)
+    assert not message, "\n".join(message)
 
 
 class TestContainersMatchDense:

@@ -127,12 +127,16 @@ def check_known_failures(key, failures, path, known_failures, hint=None):
     ``known_failures`` is the content of ``path`` when the tests started. With
     ``TENSORDICT_UPDATE_KNOWN_FAILURES`` set, the list of ``key`` in ``path`` is
     rewritten instead. ``hint`` ends the message of a failure.
+
+    Returns the lines of the failure message, empty when everything matches.
+    The caller asserts that it is empty, in the test module, where pytest
+    rewrites the assert.
     """
     if _UPDATE_KNOWN_FAILURES:
         known = json.loads(path.read_text())
         known[key] = sorted(failures)
         path.write_text(json.dumps(dict(sorted(known.items())), indent=1) + "\n")
-        return
+        return []
     known = set(known_failures.get(key, ()))
     new = {case: reason for case, reason in failures.items() if case not in known}
     fixed = sorted(known.difference(failures))
@@ -149,7 +153,7 @@ def check_known_failures(key, failures, path, known_failures, hint=None):
         )
     if message and hint:
         message.append(hint)
-    assert not message, "\n".join(message)
+    return message
 
 
 @tensorclass
