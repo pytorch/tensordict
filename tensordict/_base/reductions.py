@@ -34,6 +34,20 @@ from tensordict.utils import _maybe_correct_neg_dim, _user_stacklevel
 _NO_EMPTY_DIM_REDUCTIONS = frozenset({"max", "min", "cummax", "cummin", "quantile"})
 
 
+def _split_values_indices(result: TensorCollection, return_type: type) -> tuple:
+    """Splits ``result``, whose leaves are ``values`` and ``indices`` entries, into a ``return_type`` of two tensordicts."""
+    values_dict = {}
+    indices_dict = {}
+    for key in result.keys(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
+        if key[-1] == "values":
+            values_dict[key] = key[:-1]
+        else:
+            indices_dict[key] = key[:-1]
+    return return_type(
+        result.split_keys(values_dict, indices_dict)[:2],
+    )
+
+
 def _warn_negative_dim_with_reduce(reduction_name: str, dim) -> None:
     """Warns that ``reduce=True`` counts a negative dim from the end of the leaves (#2044)."""
     warnings.warn(
@@ -350,19 +364,7 @@ class _Reductions:
             # cummax and cummin
             return result
         if dim is not NO_DEFAULT and dim is not None and return_indices:
-            # Split the tensordict
-            from torch.return_types import min
-
-            values_dict = {}
-            indices_dict = {}
-            for key in result.keys(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
-                if key[-1] == "values":
-                    values_dict[key] = key[:-1]
-                else:
-                    indices_dict[key] = key[:-1]
-            return min(
-                result.split_keys(values_dict, indices_dict)[:2],
-            )
+            return _split_values_indices(result, torch.return_types.min)
         return result
 
     @overload
@@ -528,19 +530,7 @@ class _Reductions:
             # cummax and cummin
             return result
         if dim is not NO_DEFAULT and dim is not None and return_indices:
-            # Split the tensordict
-            from torch.return_types import max
-
-            values_dict = {}
-            indices_dict = {}
-            for key in result.keys(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
-                if key[-1] == "values":
-                    values_dict[key] = key[:-1]
-                else:
-                    indices_dict[key] = key[:-1]
-            return max(
-                result.split_keys(values_dict, indices_dict)[:2],
-            )
+            return _split_values_indices(result, torch.return_types.max)
         return result
 
     @overload
@@ -611,19 +601,7 @@ class _Reductions:
         if isinstance(result, (torch.Tensor, torch.return_types.cummin)):
             return result
         if dim is not NO_DEFAULT and return_indices:
-            # Split the tensordict
-            from torch.return_types import cummin
-
-            values_dict = {}
-            indices_dict = {}
-            for key in result.keys(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
-                if key[-1] == "values":
-                    values_dict[key] = key[:-1]
-                else:
-                    indices_dict[key] = key[:-1]
-            return cummin(
-                result.split_keys(values_dict, indices_dict)[:2],
-            )
+            return _split_values_indices(result, torch.return_types.cummin)
         return result
 
     @overload
@@ -694,19 +672,7 @@ class _Reductions:
         if isinstance(result, (torch.Tensor, torch.return_types.cummax)):
             return result
         if dim is not NO_DEFAULT and return_indices:
-            # Split the tensordict
-            from torch.return_types import cummax
-
-            values_dict = {}
-            indices_dict = {}
-            for key in result.keys(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
-                if key[-1] == "values":
-                    values_dict[key] = key[:-1]
-                else:
-                    indices_dict[key] = key[:-1]
-            return cummax(
-                result.split_keys(values_dict, indices_dict)[:2],
-            )
+            return _split_values_indices(result, torch.return_types.cummax)
         return result
 
     @overload
