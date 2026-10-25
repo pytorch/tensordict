@@ -2394,14 +2394,36 @@ class PersistentTensorDict(
             kwargs,
         )
 
-    def _to_numpy(self, value):
+    def _to_numpy(self, value, key: NestedKey):
         if hasattr(value, "requires_grad") and value.requires_grad:
             raise RuntimeError("Cannot set a tensor that has requires_grad=True.")
         if isinstance(value, torch.Tensor):
             if _is_unbatched(value):
                 # the file has no place for the class (#3264)
                 _warn_unbatched_saved_as_plain()
-            out = value.cpu().detach().numpy()
+            try:
+                out = value.cpu().detach().numpy()
+            except (TypeError, RuntimeError) as err:
+                # name the entry instead of torch's bare error (#3265)
+                full_key = tuple(
+                    p for p in self.file.name.split("/") if p
+                ) + _unravel_key_to_tuple(key)
+                if value.is_nested:
+                    limit = (
+                        "h5 and zarr files can't store nested tensors: pad the "
+                        "entry first, for example with "
+                        "torch.nested.to_padded_tensor, or save with torch.save."
+                    )
+                else:
+                    limit = (
+                        "h5 and zarr files hold numpy dtypes only: convert the "
+                        "entry first, for example with .float(), or save with "
+                        "memmap or torch.save."
+                    )
+                raise type(err)(
+                    f"Cannot write the entry {full_key} to the "
+                    f"{self._backend.name} file: {str(err).rstrip('.')}. {limit}"
+                ) from err
         elif isinstance(value, dict):
             out = TensorDict(value, [])
         elif is_non_tensor(value):
@@ -2438,7 +2460,7 @@ class PersistentTensorDict(
         if not validated:
             value = self._validate_value(value, check_shape=idx is None, key=key)
         non_tensor = is_non_tensor(value)
-        value = self._to_numpy(value)
+        value = self._to_numpy(value, key)
         if not inplace:
             if idx is not None:
                 raise RuntimeError("Cannot pass an index to _set when inplace=False.")

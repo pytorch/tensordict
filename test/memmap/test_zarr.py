@@ -104,6 +104,32 @@ class TestZarrRoundTrip:
         with pytest.raises((TypeError, RuntimeError, ValueError)):
             td.to_zarr(tmp_path / "s.zarr")
 
+    @pytest.mark.parametrize(
+        "dtype", [torch.bfloat16, torch.complex32, torch.float8_e4m3fn], ids=str
+    )
+    def test_unsupported_dtype_error_names_entry(self, tmp_path, dtype):
+        # #3265: the error named no key
+        td = TensorDict(
+            obs=TensorDict(w=torch.zeros(2, dtype=dtype), batch_size=[2]),
+            batch_size=[2],
+        )
+        with pytest.raises(TypeError, match=r"\('obs', 'w'\).*zarr.*memmap"):
+            td.to_zarr(tmp_path / "d.zarr")
+        ztd = PersistentTensorDict(
+            filename=tmp_path / "s.zarr", backend="zarr", mode="w"
+        )
+        with pytest.raises(TypeError, match=r"\('x', 'y'\).*zarr"):
+            ztd["x", "y"] = torch.zeros(2, dtype=dtype)
+        ztd.close()
+
+    @pytest.mark.parametrize("layout", [torch.jagged, torch.strided], ids=str)
+    def test_nested_tensor_error_names_entry(self, tmp_path, layout):
+        # #3265: the error named no key
+        nt = torch.nested.nested_tensor([torch.zeros(2), torch.zeros(3)], layout=layout)
+        td = TensorDict(obs=TensorDict(j=nt, batch_size=[2]), batch_size=[2])
+        with pytest.raises(RuntimeError, match=r"\('obs', 'j'\).*zarr.*nested"):
+            td.to_zarr(tmp_path / "d.zarr")
+
     def test_names_roundtrip(self, tmp_path):
         td = TensorDict({"a": torch.randn(3, 4)}, batch_size=[3, 4], names=["x", "y"])
         td.to_zarr(tmp_path / "s.zarr")

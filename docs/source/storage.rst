@@ -442,6 +442,10 @@ This example writes 500 readings of 4 sensors:
   >>> PersistentTensorDict.from_h5(root / "data.h5")["sensors"].shape
   torch.Size([500, 4])
 
+HDF5 holds dense tensors with numpy dtypes only: writing a ``bfloat16`` or
+nested tensor raises an error that names the entry. The ``"memmap"`` backend
+stores ``bfloat16``, and :func:`torch.save` stores both.
+
 .. _storage-zarr:
 
 zarr
@@ -452,6 +456,8 @@ tensor as a zarr array and each nested tensordict as a zarr group. The store
 can be a local directory, a ``zarr.storage.ZipStore``, or any other
 ``zarr.abc.store.Store``. You can read and write separate chunks in parallel.
 The zarr backend needs ``zarr>=3.1.1`` (``pip install "tensordict[zarr]"``).
+Like HDF5, zarr holds dense tensors with numpy dtypes only: writing a
+``bfloat16`` or nested tensor raises an error that names the entry.
 
 :meth:`~tensordict.TensorDictBase.to_zarr` writes a tensordict, and
 :meth:`~tensordict.TensorDictBase.from_zarr` reads it back. ``to_zarr`` stores
