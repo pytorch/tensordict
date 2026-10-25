@@ -17,7 +17,6 @@ from tensordict._pytree import _register_td_node
 from tensordict._td import _StateFromSource, TensorDict
 from tensordict.base import (
     _is_tensor_collection,
-    _PACKAGE_DIR,
     _register_tensor_class,
     NO_DEFAULT,
     TensorDictBase,
@@ -28,6 +27,7 @@ from tensordict.utils import (
     _is_non_tensor,
     _is_tensorclass,
     _unravel_key_to_tuple,
+    _user_stacklevel,
 )
 from torch.compiler import is_compiling
 
@@ -205,10 +205,6 @@ def _warn_missing_required(
     # Dynamo cannot trace warnings.warn: a compiled call stays silent.
     if not missing or is_compiling():
         return
-    # point to the first frame outside tensordict: the user's call
-    frame, stacklevel = sys._getframe(1), 2
-    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
-        frame, stacklevel = frame.f_back, stacklevel + 1
     warnings.warn(
         f"{call.format(cls.__name__)} returns an instance of {cls.__name__} that "
         f"misses the required field(s) {', '.join(sorted(missing))}. Starting "
@@ -216,7 +212,7 @@ def _warn_missing_required(
         f"that the constructor raises. Pass these fields, or {opt_out} to keep "
         "the instance without them.",
         FutureWarning,
-        stacklevel=stacklevel,
+        stacklevel=_user_stacklevel(),
     )
 
 

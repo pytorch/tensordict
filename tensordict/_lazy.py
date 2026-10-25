@@ -11,7 +11,6 @@ import numbers
 import operator
 import os
 import re
-import sys
 import textwrap
 import warnings
 import weakref
@@ -69,7 +68,6 @@ from tensordict.base import (
     _NESTED_TENSORS_AS_LISTS_NONTENSOR,
     _NestedReadsCopies,
     _on_copies,
-    _PACKAGE_DIR,
     _READ_ONLY_CALL,
     _register_tensor_class,
     _rename_entries,
@@ -1418,12 +1416,7 @@ class LazyStackedTensorDict(TensorDictBase):
             dropped = list(names)
             del dropped[stack_dim]
             if dropped or any(td.batch_dims for td in tensordicts):
-                # point to the first frame outside tensordict: the user's call
-                frame, stacklevel = sys._getframe(1), 2
-                while frame is not None and frame.f_code.co_filename.startswith(
-                    _PACKAGE_DIR
-                ):
-                    frame, stacklevel = frame.f_back, stacklevel + 1
+                stacklevel = _user_stacklevel()
                 if all(td.batch_dims == len(dropped) for td in tensordicts):
                     warnings.warn(
                         "LazyStackedTensorDict.from_dict without a batch_size "

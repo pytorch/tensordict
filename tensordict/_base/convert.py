@@ -16,7 +16,6 @@ from __future__ import annotations
 import collections
 import importlib.util
 import numbers
-import sys
 import uuid
 import warnings
 import weakref
@@ -47,7 +46,6 @@ from tensordict.base import (
     _is_leaf_nontensor,
     _is_tensor_collection,
     _maybe_preserve_module_state,
-    _PACKAGE_DIR,
     _raise_on_exclusive_keys,
     _set_tensor_dict,
     _wrap_extra_state,
@@ -157,10 +155,6 @@ def _pytree_dict_key(key):
 
 def _warn_structseq_keys(obj) -> None:
     """Warns that ``from_any`` will key a structseq by its field names."""
-    # point to the first frame outside tensordict: the user's call
-    frame, stacklevel = sys._getframe(1), 2
-    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
-        frame, stacklevel = frame.f_back, stacklevel + 1
     obj_type = type(obj)
     positional = [str(i) for i in range(len(obj))]
     named = list(obj_type.__match_args__)
@@ -171,7 +165,7 @@ def _warn_structseq_keys(obj) -> None:
         "from_namedtuple gives. Pass it to from_namedtuple to get the field "
         "names now, or convert it with tuple() to keep the keys of a tuple.",
         FutureWarning,
-        stacklevel=stacklevel,
+        stacklevel=_user_stacklevel(),
     )
 
 

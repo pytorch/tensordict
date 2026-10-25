@@ -13,7 +13,6 @@ mixin imports in ``tensordict/base.py`` gives the other rules.
 
 from __future__ import annotations
 
-import sys
 import warnings
 from typing import Callable, Iterable, Literal, overload, Tuple
 
@@ -25,23 +24,14 @@ from tensordict._tensorcollection import TensorCollection
 from tensordict.base import (
     _is_tensor_collection,
     _NESTED_TENSORS_AS_LISTS,
-    _PACKAGE_DIR,
     NO_DEFAULT,
     Self,
 )
-from tensordict.utils import _maybe_correct_neg_dim
+from tensordict.utils import _maybe_correct_neg_dim, _user_stacklevel
 
 # dim=() reduces over every element, as in torch.sum(x, dim=()), except in
 # these reductions, which keep raising for it
 _NO_EMPTY_DIM_REDUCTIONS = frozenset({"max", "min", "cummax", "cummin", "quantile"})
-
-
-def _user_stacklevel() -> int:
-    """Returns the ``stacklevel`` that points the caller's warning to the first frame outside tensordict."""
-    frame, stacklevel = sys._getframe(1), 1
-    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
-        frame, stacklevel = frame.f_back, stacklevel + 1
-    return stacklevel
 
 
 def _warn_negative_dim_with_reduce(reduction_name: str, dim) -> None:
