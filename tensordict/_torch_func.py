@@ -661,7 +661,6 @@ def _lazy_stack_result(list_of_tensordicts, dim, clz, is_tc):
 def _stack(
     list_of_tensordicts: Sequence[TensorDictBase],
     dim: int = 0,
-    device: DeviceType | None = None,
     out: T | None = None,
     strict: bool = False,
     contiguous: bool = False,
@@ -1199,7 +1198,6 @@ def _grad(
     grad_outputs: TensorDictBase | Tuple[TensorDictBase, ...] | None = None,
     **kwargs: Any,
 ) -> TensorDict:
-    from tensordict.base import _NESTED_TENSORS_AS_LISTS
 
     if isinstance(outputs, tuple) and len(outputs) > 1:
         raise ValueError(
@@ -1239,19 +1237,13 @@ def _grad(
         )
 
     if grad_outputs is not None:
-        tup_grad_outputs = tuple(
-            grad_outputs._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
-        )
+        tup_grad_outputs = tuple(grad_outputs._values_list(True, True))
     else:
         tup_grad_outputs = None
 
-    tup_outputs = tuple(
-        outputs._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
-    )
+    tup_outputs = tuple(outputs._values_list(True, True))
 
-    keys, all_inputs_raw = inputs._items_list(
-        True, True, is_leaf=_NESTED_TENSORS_AS_LISTS
-    )
+    keys, all_inputs_raw = inputs._items_list(True, True)
 
     all_grads = torch.autograd.grad(
         tup_outputs, all_inputs_raw, tup_grad_outputs, **kwargs

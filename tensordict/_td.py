@@ -69,6 +69,7 @@ from tensordict.base import (
     _warn_lazy_is_empty,
     _warn_scalar_over_non_tensor,
     _warn_set_at_cast,
+    _warn_update_inserts_whole_entry,
     _warn_update_keys_narrowed,
     _wrap_extra_state,
     _write_back_members,
@@ -108,6 +109,7 @@ from tensordict.utils import (
     _pass_through_cls,
     _prune_selected_keys,
     _remove_batch_dim,
+    _selection_trie,
     _set_item,
     _set_max_batch_size,
     _shape,
@@ -129,7 +131,7 @@ from tensordict.utils import (
 )
 from torch import Tensor
 from torch._functorch.vmap import _maybe_remove_batch_dim
-from torch.compiler import is_compiling
+from torch.compiler import is_compiling, is_dynamo_compiling
 from torch.nn.modules.module import _EXTRA_STATE_KEY_SUFFIX
 from torch.utils._pytree import tree_map
 
@@ -536,7 +538,6 @@ class TensorDict(TensorDictBase):
         if device is not None:
             if non_blocking is None:
                 sub_non_blocking = True
-                non_blocking = False
             else:
                 sub_non_blocking = non_blocking
             if type(device) is not torch.device:
@@ -3285,8 +3286,6 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
     """A TensorDict that only sees an index of the stored tensors."""
 
     _lazy = True
-    _inplace_set = True
-    _safe = False
     _masking_on_dense_copy = True
     _memmap_inplace_unsupported = True
     _pin_memory_unsupported = True
@@ -3380,9 +3379,6 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
         for key in self.keys():
             if _is_tensor_collection(self.entry_class(key)):
                 raise RuntimeError("Cannot rename nested sub-tensordict dimensions.")
-
-    def _preallocate(self, key: NestedKey, value: CompatibleType) -> Self:
-        return self._source.set(key, value)
 
     def _convert_inplace(self, inplace, key):
         has_key = key in self.keys()
@@ -3650,6 +3646,9 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
                 "Cannot use _SubTensorDict.update with a LazyStackedTensorDict that has exclusive keys."
             )
         keys = set(self.keys(False))
+        # whether keys_to_update has a deeper key, under which an entry that
+        # self lacks is written whole (#3360): set at the first such entry
+        nested_keys = selection = None
         for input_key, value in input_dict_or_td.items():
             key = _unravel_key_to_tuple(input_key)
             firstkey, subkey = key[0], key[1:]
@@ -3710,6 +3709,16 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
                         non_blocking=non_blocking,
                     )
             else:
+                if keys_to_update is not None and type(value) is not Tensor:
+                    # a tensor is written whole either way: skip the check
+                    if nested_keys is None:
+                        nested_keys = tuple in map(type, keys_to_update) and (
+                            not is_dynamo_compiling()
+                        )
+                    if nested_keys:
+                        if selection is None:
+                            selection = _selection_trie(keys_to_update)
+                        _warn_update_inserts_whole_entry(key, value, selection, is_leaf)
                 self._set_tuple(
                     key,
                     value,
@@ -4010,11 +4019,6 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
     def _propagate_unlock(self):
         return []
 
-    def _remove_lock(self, lock_id):
-        raise RuntimeError(
-            "Cannot unlock a _SubTensorDict. Unlock the parent tensordict instead."
-        )
-
     # Override: only the parent tensordict can be locked.
     def _propagate_lock(self, lock_ids=None, *, is_compiling):
         raise RuntimeError(
@@ -4260,7 +4264,7 @@ class _TensorDictKeysView:
         )
 
         if isinstance(tensordict, LazyStackedTensorDict):
-            return _iter_items_lazystack(tensordict, return_none_for_het_values=True)
+            return _iter_items_lazystack(tensordict)
         if isinstance(tensordict, _CustomOpTensorDict):
             # it's possible that a TensorDict contains a nested LazyStackedTensorDict,
             # or _CustomOpTensorDict, so as we iterate through the contents we need to

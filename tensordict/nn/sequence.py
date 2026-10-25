@@ -12,6 +12,7 @@ from typing import Any, Callable, Iterable, List, overload, TYPE_CHECKING
 
 from tensordict._nestedkey import NestedKey
 from tensordict._td import TensorDict
+from tensordict.base import _update_keeping_whole_entries
 from tensordict.nn.common import (
     dispatch,
     TensorDictModule,
@@ -538,7 +539,9 @@ class TensorDictSequential(TensorDictModule):
                             if key in out.keys(include_nested=True)
                         ]
                         if out_keys:
-                            sub_td.update(out, keys_to_update=out_keys)
+                            _update_keeping_whole_entries(
+                                sub_td, out, keys_to_update=out_keys
+                            )
         return tensordict
 
     def _module_iter(self):
@@ -620,7 +623,9 @@ class TensorDictSequential(TensorDictModule):
             )
         if tensordict_out is not None:
             result = tensordict_out
-            result.update(tensordict_exec, keys_to_update=self.out_keys)
+            _update_keeping_whole_entries(
+                result, tensordict_exec, keys_to_update=self.out_keys
+            )
         else:
             result = tensordict_exec
             if self._select_before_return:
@@ -635,7 +640,9 @@ class TensorDictSequential(TensorDictModule):
                     ]
                 else:
                     keys = list(set(self.out_keys).union(tensordict.keys(True, True)))
-                return tensordict.update(result, keys_to_update=keys)
+                return _update_keeping_whole_entries(
+                    tensordict, result, keys_to_update=keys
+                )
         return result
 
     def __len__(self) -> int:

@@ -15,7 +15,6 @@ from torch.utils._contextlib import _DecoratorContextManager
 
 __all__ = [
     "_REPR_OPTIONS",
-    "_legacy_lazy",
     "capture_non_tensor_stack",
     "get_printoptions",
     "lazy_legacy",
@@ -333,15 +332,6 @@ def lazy_legacy(allow_none=False):
     if _LAZY_OP is None:
         return _DEFAULT_LAZY_OP
     return _strtobool(_LAZY_OP) if isinstance(_LAZY_OP, str) else _LAZY_OP
-
-
-def _legacy_lazy(func):
-    if not func.__name__.startswith("_legacy_"):
-        raise NameError(
-            f"The function name {func.__name__} must start with _legacy_ if it's decorated with _legacy_lazy."
-        )
-    func.LEGACY = True
-    return func
 
 
 _CAPTURE_NONTENSOR_STACK_REPLACEMENT = (

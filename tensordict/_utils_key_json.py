@@ -11,7 +11,6 @@ import json
 __all__ = [
     "_decode_key_from_filesystem",
     "_encode_key_for_filesystem",
-    "_get_robust_key_setting",
     "_get_robust_key_setting_with_warning",
     "_is_safe_legacy_key",
     "_json_dumps",
@@ -62,13 +61,6 @@ def _is_safe_legacy_key(key: str, *, is_collection: bool = False) -> bool:
 
 def _get_robust_key_setting_with_warning(key: str, robust_key) -> bool:
     """Handle the robust_key parameter after the robust default migration."""
-    if robust_key is None:
-        return True
-    return robust_key
-
-
-def _get_robust_key_setting(robust_key) -> bool:
-    """Handle the robust_key parameter without key-specific logic."""
     if robust_key is None:
         return True
     return robust_key

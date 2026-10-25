@@ -611,7 +611,6 @@ class _Serialization:
             "is_locked": self._is_locked,
         }
 
-    # @cache  # noqa: B019
     def _reduce_vals_and_metadata(self, *, dtype=NO_DEFAULT, requires_metadata):
         """Returns a nested dictionary of metadata, a flat Dict[NestedKey, Tensor] containing tensor data and a list of tensor sizes."""
         from tensordict.base import TensorDictBase
@@ -665,7 +664,6 @@ class _Serialization:
                 leaf_metadata = [
                     _DTYPE_TO_STR_DTYPE[dtype],
                     list(shape),
-                    # _DEVICE2STRDEVICE[device],
                     start,
                     stop,
                     pad,
@@ -808,7 +806,6 @@ class _Serialization:
                 metadata_dict,
                 value.dtype,
                 value.shape,
-                # value.device,
                 flat_size,
             )
 
@@ -1076,7 +1073,6 @@ class _Serialization:
             total_storage[-8:] = len_metadata
             total_storage[-8 - metadata_dict_json.numel() : -8] = metadata_dict_json
             storage = total_storage[:-suffix]
-            # assert len(storage.untyped_storage()) == filesize
 
         offsets = torch.tensor([0] + flat_size).cumsum(0).tolist()
 
@@ -1314,9 +1310,6 @@ class _Serialization:
                     f.write(total_storage._handler.buffer)
             result._consolidated["filename"] = Path(filename).resolve()
             result._consolidated["file_id"] = _file_id(filename)
-            # with open(Path(filename).with_suffix(".json"), "wb") as f:
-            #     metadata_dict["size"] = filesize
-            #     f.write(json.dumps(metadata_dict))
         if consolidate_futures is not None:
             return TensorDictFuture(consolidate_futures, result)
         return result
@@ -1345,8 +1338,6 @@ class _Serialization:
             ...     print(loaded["b", "c"], loaded.is_consolidated())
             tensor([1., 1., 1.]) True
         """
-        # with open(Path(filename).with_suffix(".json"), "rb") as f:
-        #     metadata = json.loads(f.read())
         file = torch.from_file(
             str(filename),
             dtype=torch.uint8,

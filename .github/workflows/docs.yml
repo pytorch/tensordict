@@ -106,7 +106,7 @@ jobs:
           # Test tensordict installation
           mkdir _tmp
           cd _tmp
-          PYOPENGL_PLATFORM=egl MUJOCO_GL=egl python -c "from tensordict import *"
+          python -c "from tensordict import *"
           cd ..
 
           # Set sanitize version for releases

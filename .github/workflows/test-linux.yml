@@ -12,9 +12,6 @@ on:
   workflow_dispatch:
   workflow_call:
 
-env:
-  CHANNEL: "nightly"
-
 concurrency:
   # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
   # On master, we want all builds to complete even if merging happens faster to make it easier to discover at which point something broke.
@@ -264,6 +261,11 @@ jobs:
           # The ONNX export tests skip without onnx. One job installs it: a
           # released Python with stable torch, which onnxruntime supports.
           TD_INSTALL_ONNX: ${{ matrix.python_version == '3.14' && '1' || '' }}
+          # The pyright typing tests skip without pyright. One job with a
+          # stable torch installs a pinned pyright (install.sh); the variable
+          # below stops pyright from asking PyPI for its latest version.
+          TD_INSTALL_PYRIGHT: ${{ matrix.python_version == '3.10' && '1' || '' }}
+          PYRIGHT_PYTHON_IGNORE_WARNINGS: "1"
           ARCH: x86_64
           RUNNER_ARTIFACT_DIR: ${{ github.workspace }}/artifacts
         run: |

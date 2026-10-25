@@ -1533,10 +1533,7 @@ class _Reductions:
             # It is not very memory-efficient to do this, but it's the easiest to cover all use cases
             if dim is NO_DEFAULT:
                 agglomerate = [
-                    val.contiguous().flatten()
-                    for val in self._values_list(
-                        True, True, is_leaf=_NESTED_TENSORS_AS_LISTS
-                    )
+                    val.contiguous().flatten() for val in self._values_list(True, True)
                 ]
                 _check_has_tensor_leaves(reduction_name, agglomerate)
                 agglomerate = torch.cat(agglomerate, dim=0)
@@ -1545,9 +1542,7 @@ class _Reductions:
                     return getattr(torch, reduction_name)(agglomerate, q, **kwargs)
                 return getattr(torch, reduction_name)(agglomerate, **kwargs)
             else:
-                agglomerate = list(
-                    self._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
-                )
+                agglomerate = list(self._values_list(True, True))
                 # With feature dims, a negative dim counts from the end of the
                 # leaves, not of the batch dims
                 warn_negative_dim = (

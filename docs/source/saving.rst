@@ -263,20 +263,38 @@ A killed append can leave its new ``meta.json`` files behind, as
 writes every temporary file before it replaces any ``meta.json``, and it
 replaces the top one first: the one in the directory itself, or in its
 ``_tensordict`` subdirectory for a saved tensorclass. If
-``.meta.json.append.tmp`` is still there, no ``meta.json`` was replaced and
-the temporary files may be incomplete: delete every one of them, and the
-directory holds the old rows. Otherwise every temporary file is complete:
-rename each one over the ``meta.json`` next to it, which completes the
-append. Decide by this file, not by whether ``load_memmap`` raises, which
-it doesn't for every tree:
+``.meta.json.append.tmp`` is gone from the top directory and the top
+``meta.json`` already has the number of rows of every temporary file, the
+append got past its first replacement and every temporary file is
+complete: renaming each one over the ``meta.json`` next to it completes the
+append. Otherwise no ``meta.json`` was replaced, or the rollback of a
+failed append put the old ones back, and the temporary files may be
+incomplete: they must all be deleted, and the directory holds the old rows.
+The next ``append_memmap`` to the directory applies this rule before it
+appends, so you can append again with no manual step.
+
+To read the directory without appending, apply the same rule yourself.
+Decide by these files, not by whether ``load_memmap`` raises, which it
+doesn't for every tree:
 
 .. code-block:: python
 
+    import json
     import os
 
     saved = root / "particles"  # or its "_tensordict" for a tensorclass
-    replaced = not (saved / ".meta.json.append.tmp").exists()
-    for tmp in saved.rglob(".meta.json.append.tmp"):
+    leftovers = list(saved.rglob(".meta.json.append.tmp"))
+
+    def num_rows(path):
+        try:
+            return json.loads(path.read_bytes())["shape"][0]
+        except ValueError:  # an incomplete temporary file
+            return None
+
+    replaced = not (saved / ".meta.json.append.tmp").exists() and all(
+        num_rows(tmp) == num_rows(saved / "meta.json") for tmp in leftovers
+    )
+    for tmp in leftovers:
         if replaced:
             os.replace(tmp, tmp.with_name("meta.json"))
         else:

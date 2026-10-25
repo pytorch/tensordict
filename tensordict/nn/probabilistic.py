@@ -18,7 +18,11 @@ import torch
 from tensordict._deprecation import deprecated, deprecated_attributes, warn_deprecated
 from tensordict._nestedkey import NestedKey
 from tensordict._td import TensorDict
-from tensordict.base import _is_inside, is_tensor_collection
+from tensordict.base import (
+    _is_inside,
+    _update_keeping_whole_entries,
+    is_tensor_collection,
+)
 from tensordict.nn.common import dispatch, TensorDictModuleBase
 from tensordict.nn.distributions.composite import (
     _add_suffix,
@@ -679,7 +683,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         if log_prob_keys is None:
             if len(out_keys) == 1 and log_prob_key is not None:
                 log_prob_keys = [log_prob_key]
-            elif composite_lp_aggregate(nowarn=True):
+            elif composite_lp_aggregate():
                 if len(out_keys) == 1:
                     log_prob_keys = ["sample_log_prob"]
                 else:
@@ -688,19 +692,17 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 log_prob_keys = [
                     _add_suffix(key, "_log_prob") for key in self._out_keys
                 ]
-        elif composite_lp_aggregate(nowarn=True):
+        elif composite_lp_aggregate():
             raise RuntimeError(
                 "composite_lp_aggregate is set to True but log_prob_keys were passed. "
                 "When composite_lp_aggregate() returns ``True``, log_prob_key must be used instead."
             )
-        self._trigger_warning_lpk = len(self._out_keys) > 1
         if log_prob_key is None:
-            if composite_lp_aggregate(nowarn=True):
+            if composite_lp_aggregate():
                 log_prob_key = "sample_log_prob"
-                self._trigger_warning_lpk = True
             elif len(out_keys) == 1:
                 log_prob_key = _add_suffix(out_keys[0], "_log_prob")
-        elif len(out_keys) > 1 and not composite_lp_aggregate(nowarn=True):
+        elif len(out_keys) > 1 and not composite_lp_aggregate():
             raise RuntimeError(
                 "composite_lp_aggregate is set to `False` but a `log_prob_key` was passed. "
                 "When composite_lp_aggregate() returns ``False``, log_prob_keys must be used instead."
@@ -727,7 +729,6 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
         if return_log_prob:
             self._check_log_prob_keys(log_prob_keys, log_prob_key)
         self.n_empirical_estimate = n_empirical_estimate
-        self._dist = None
         if cache_dist:
             warn_deprecated(
                 "ProbabilisticTensorDictModule(cache_dist=True)", removal="0.17"
@@ -847,7 +848,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
                 changed since the module was built, or if it is ``False`` and
                 the module has several sampled keys (use :attr:`log_prob_keys`).
         """
-        clpa = composite_lp_aggregate(nowarn=True)
+        clpa = composite_lp_aggregate()
         if clpa != self._composite_lp_aggreate_at_init:
             raise RuntimeError(
                 f"composite_lp_aggregate is set to `{clpa}`, but the class was instantiated with `{self._composite_lp_aggreate_at_init}` "
@@ -875,7 +876,7 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             RuntimeError: if :func:`~tensordict.nn.composite_lp_aggregate`
                 changed since the module was built.
         """
-        clpa = composite_lp_aggregate(nowarn=True)
+        clpa = composite_lp_aggregate()
         if clpa != self._composite_lp_aggreate_at_init:
             raise RuntimeError(
                 f"composite_lp_aggregate is set to `{clpa}`, but the class was instantiated with `{self._composite_lp_aggreate_at_init}` "
@@ -1165,12 +1166,6 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             else:
                 log_prob = dist.log_prob(*out_tensors)
                 tensordict_out.set(self.log_prob_key, log_prob)
-            # raise RuntimeError(
-            #     "ProbabilisticTensorDictModule.return_log_prob = True is incompatible with settings in which "
-            #     "the submodule is responsible for sampling. To manually gather the log-probability, call first "
-            #     "\n>>> dist, tensordict = tensordict_module.get_dist(tensordict)"
-            #     "\n>>> tensordict.set('sample_log_prob', dist.log_prob(tensordict.get(sample_key))"
-            # )
         return tensordict_out
 
     def _resolve_generator(
@@ -1815,7 +1810,9 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                 tensordict_exec = tds._run_module(m, tensordict_exec, **module_kwargs)
             if tensordict_out is None:
                 return tensordict_exec
-            return tensordict_out.update(tensordict_exec, keys_to_update=tds.out_keys)
+            return _update_keeping_whole_entries(
+                tensordict_out, tensordict_exec, keys_to_update=tds.out_keys
+            )
 
     @property
     def log_prob_keys(self):
@@ -1992,8 +1989,6 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                 td_copy = tdm(td_copy)
         if len(dists) == 0:
             raise RuntimeError(f"No distribution module found in {self}.")
-        # elif len(dists) == 1:
-        #     return dist
         return CompositeDistribution.from_distributions(
             td_copy,
             dists,
@@ -2254,7 +2249,9 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
 
         if tensordict_out is not None:
             result = tensordict_out
-            result.update(tensordict_exec, keys_to_update=self.out_keys)
+            _update_keeping_whole_entries(
+                result, tensordict_exec, keys_to_update=self.out_keys
+            )
         else:
             result = tensordict_exec
             if self._select_before_return:
@@ -2269,7 +2266,9 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                     ]
                 else:
                     keys = list(set(self.out_keys).union(tensordict.keys(True, True)))
-                return tensordict.update(result, keys_to_update=keys)
+                return _update_keeping_whole_entries(
+                    tensordict, result, keys_to_update=keys
+                )
         return result
 
 

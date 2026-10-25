@@ -823,6 +823,12 @@ The three forms of the class options differ for type checkers:
   ``batch_size`` and ``device`` arguments. In code that a type checker reads,
   use a subclass of ``TensorClass``.
 
+Type checkers read torch's own signatures for ``torch.stack`` and
+``torch.cat``, which take and return a ``Tensor``, so they reject a list of
+tensorclass instances there. Use :func:`tensordict.stack` and
+:func:`tensordict.cat`, or the classmethods (``Obs.stack``, ``Obs.cat``),
+which return the type of the inputs.
+
 mypy reports each ``frozen=True`` tensorclass as "Frozen dataclass cannot
 inherit from a non-frozen dataclass". These statements hold for pyright
 1.1.414 and mypy 2.4.0.

@@ -493,7 +493,6 @@ class _Distributed:
         _tag: int = -1,
         pseudo_rand: bool = False,
         group: "torch.distributed.ProcessGroup" | None = None,
-        non_blocking: bool = False,
         group_src: int | None = None,
     ) -> int:
         from torch import distributed as dist
@@ -523,9 +522,7 @@ class _Distributed:
                 group.recv([value], group_src, _tag).wait()
             else:
                 dist.recv(value, src=src, tag=_tag, group=group)
-            self._set_str(
-                key, value, inplace=True, validated=True, non_blocking=non_blocking
-            )
+            self._set_str(key, value, inplace=True, validated=True, non_blocking=False)
 
         return _tag
 

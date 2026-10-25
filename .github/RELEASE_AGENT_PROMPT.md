@@ -155,7 +155,7 @@ Choose the commits with these rules:
 
 Create `release/X.Y.0` from the `main` commit that the maintainer names, or
 else from the head of `main` once its CI passes. Once you have pushed the
-branch (step 4), open a PR that sets the three version files on `main` (see
+branch (step 4), open a PR that sets the version files on `main` (see
 below) to X.(Y+1).0, for example 0.16.0 after `release/0.15.0`. They set the
 version of the dev builds and source installs of `main`, which would otherwise
 sort below the release. `test_deprecation_deadlines`
@@ -165,15 +165,15 @@ them.
 
 ### Bump the version
 
-All the version files must have the new version: `version.txt`,
-`.github/scripts/version.txt` and `.github/scripts/version_script.sh`, and on
-the 0.14 line also `.github/scripts/version_script_windows.sh`. The Release
-workflow checks them.
+Both version files must have the new version: `version.txt` and
+`.github/scripts/version_script.sh`. Branches made from v0.15.3 or an older tag
+also have `.github/scripts/version.txt`, and the 0.14 line also
+`.github/scripts/version_script_windows.sh`. The Release workflow checks them.
 
 ```bash
 echo "$VERSION" > version.txt
-echo "$VERSION" > .github/scripts/version.txt
 sed -i "s/^BASE_VERSION=.*/BASE_VERSION=$VERSION/" .github/scripts/version_script.sh
+[ -f .github/scripts/version.txt ] && echo "$VERSION" > .github/scripts/version.txt
 [ -f .github/scripts/version_script_windows.sh ] && sed -i "s/^BASE_VERSION=.*/BASE_VERSION=$VERSION/" .github/scripts/version_script_windows.sh
 ```
 

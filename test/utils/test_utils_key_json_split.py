@@ -31,7 +31,6 @@ def test_filesystem_key_roundtrip_and_default():
     assert utils_module._decode_key_from_filesystem(encoded) == key
     assert utils_module._encode_key_for_filesystem(key, robust=False) == key
     assert utils_module._get_robust_key_setting_with_warning(key, None) is True
-    assert utils_module._get_robust_key_setting(None) is True
     assert utils_module._is_safe_legacy_key("ordinary")
     assert not utils_module._is_safe_legacy_key("../outside")
     assert not utils_module._is_safe_legacy_key("C:outside")

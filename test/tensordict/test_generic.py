@@ -91,7 +91,6 @@ from torch.utils._python_dispatch import TorchDispatchMode
 from torch.utils._pytree import tree_leaves
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
-    IS_FB = True
     from pytorch.tensordict.test._utils_internal import (
         _TypedTD,
         decompose,
@@ -103,7 +102,6 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         TestTensorDictsBase,
     )
 else:
-    IS_FB = False
     from _utils_internal import (
         _TypedTD,
         decompose,
@@ -125,15 +123,12 @@ try:
 except ImportError:
     _has_h5py = False
 
-_has_onnx = importlib.util.find_spec("onnxruntime", None) is not None
 _has_safetensors = importlib.util.find_spec("safetensors", None) is not None
 
 PYTORCH_TEST_FBCODE = os.getenv("PYTORCH_TEST_FBCODE")
 
 _IS_OSX = platform.system() == "Darwin"
 _IS_WINDOWS = sys.platform == "win32"
-
-TD_BATCH_SIZE = 4
 
 # Capture all warnings
 pytestmark = [
@@ -157,9 +152,6 @@ pytestmark = [
         "ignore:Lazy modules are a new feature under heavy development so changes to the API or functionality"
     ),
     pytest.mark.filterwarnings(
-        "ignore:The content of the stacked NonTensorData objects matched in value but not identity"
-    ),
-    pytest.mark.filterwarnings(
         "ignore:No PYTORCH_KERNEL_CACHE_PATH or HOME environment variable set"
     ),
     # On free-threaded Python, urllib3 imports brotli inside the streaming tests,
@@ -170,7 +162,6 @@ pytestmark = [
     pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning"),
 ]
 
-mp_ctx = "spawn"
 cur_device = "cpu"
 npu_device_count = 0
 if torch.cuda.is_available():
@@ -8888,6 +8879,39 @@ class TestGeneric:
             sub.masked_select(torch.ones(2, dtype=torch.bool), inplace=True)
         assert sub.batch_size == (2,)
 
+    @pytest.mark.parametrize("op", ["flatten", "unflatten", "repeat", "gather"])
+    @pytest.mark.parametrize("container", ["sub_tensordict", "h5_slice", "lazy_stack"])
+    def test_inplace_shape_op_lazy_names_class(self, op, container, tmp_path):
+        # #3371: these ops named LazyStackedTensorDict in their error for any
+        # lazy container, such as the slice of a PersistentTensorDict.
+        source = TensorDict({"a": torch.zeros(4, 2, 3)}, [4, 2])
+        if container == "sub_tensordict":
+            td = source._get_sub_tensordict(slice(1, 3))
+        elif container == "h5_slice":
+            if not _has_h5py:
+                pytest.skip("h5py not found.")
+            source = PersistentTensorDict.from_dict(source, filename=tmp_path / "td.h5")
+            td = source[1:3]
+        else:
+            source = None
+            td = LazyStackedTensorDict(*TensorDict({"a": torch.zeros(2, 2, 3)}, [2, 2]))
+        args = {
+            "flatten": (0, 1),
+            "unflatten": (0, (1, 2)),
+            "repeat": (2, 1),
+            "gather": (0, torch.zeros(2, 2, dtype=torch.long)),
+        }[op]
+        with pytest.raises(
+            NotImplementedError,
+            match=f"{op}.inplace=True. is not supported on {type(td).__name__};",
+        ):
+            getattr(td, op)(*args, inplace=True)
+        assert td.batch_size == (2, 2)
+        assert td["a"].shape == (2, 2, 3)
+        if source is not None:
+            assert type(td).__name__ != "LazyStackedTensorDict"
+            assert source.batch_size == (4, 2)
+
     @pytest.mark.parametrize(
         "op",
         [
@@ -11725,6 +11749,164 @@ class TestGeneric:
         expected = torch.cat([expected, rows(4, 2)])
         assert loaded.batch_size == expected.batch_size
         assert loaded["sub"].batch_size == expected.batch_size
+        assert (loaded == expected).all()
+
+    @pytest.mark.parametrize(
+        "tree", ["nested", "empty_nested", "entry_named_tensordict", "tensorclass"]
+    )
+    @pytest.mark.parametrize("replaced", [True, False])
+    def test_append_memmap_killed_then_append(
+        self, tmp_path, monkeypatch, tree, replaced
+    ):
+        # #3249: the next append_memmap finishes an append that was killed
+        # after the first meta.json was replaced, and rolls back one killed
+        # before, with no manual step.
+        module = tmp_path / "_td_test_3249_classes.py"
+        module.write_text(
+            "import torch\n"
+            "from tensordict import TensorDict, tensorclass\n"
+            "@tensorclass\n"
+            "class Pair:\n"
+            "    a: torch.Tensor\n"
+            "    nested: TensorDict\n"
+            "def rows(tree, num_rows, value):\n"
+            "    a = torch.full((num_rows,), float(value))\n"
+            "    b = TensorDict(b=a.clone(), batch_size=[num_rows])\n"
+            "    if tree == 'tensorclass':\n"
+            "        return Pair(a=a, nested=b, batch_size=[num_rows])\n"
+            "    if tree == 'empty_nested':\n"
+            "        b = TensorDict(batch_size=[num_rows])\n"
+            "    name = '_tensordict' if tree == 'entry_named_tensordict' else 'n'\n"
+            "    return TensorDict({'a': a, name: b}, batch_size=[num_rows])\n"
+        )
+        monkeypatch.syspath_prepend(str(tmp_path))
+        rows = importlib.import_module("_td_test_3249_classes").rows
+        saved = tmp_path / "saved"
+        rows(tree, 3, 0).memmap(saved)
+        # Kill the child right after the first meta.json is replaced, or right
+        # before.
+        code = (
+            "import os\n"
+            "from tensordict import append_memmap\n"
+            "from _td_test_3249_classes import rows\n"
+            "replace = os.replace\n"
+            "def replace_and_die(src, dst):\n"
+            f"    if {replaced}:\n"
+            "        replace(src, dst)\n"
+            "    os._exit(9)\n"
+            "os.replace = replace_and_die\n"
+            f"append_memmap({str(saved)!r}, rows({tree!r}, 2, 1))\n"
+        )
+        # The child imports the tensordict that this test imports.
+        package_root = os.path.dirname(os.path.dirname(tensordict.__file__))
+        pythonpath = os.pathsep.join(
+            filter(None, [package_root, str(tmp_path), os.environ.get("PYTHONPATH")])
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            env={**os.environ, "PYTHONPATH": pythonpath},
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        assert result.returncode == 9, result.stderr
+        assert list(saved.rglob(".meta.json.append.tmp"))
+        tensordict.append_memmap(saved, rows(tree, 4, 2))
+        assert not list(saved.rglob(".meta.json.append.tmp"))
+        parts = [rows(tree, 3, 0), rows(tree, 2, 1), rows(tree, 4, 2)]
+        expected = torch.cat(parts if replaced else [parts[0], parts[2]])
+        loaded = tensordict.load_memmap(saved)
+        assert type(loaded) is type(expected)
+        assert loaded.batch_size == expected.batch_size
+        for key in expected.keys(True, True):
+            assert loaded.get(key).shape == expected.get(key).shape
+        assert (loaded == expected).all()
+
+    @pytest.mark.parametrize("failed_replace", [0, 1])
+    def test_append_memmap_killed_rollback(self, tmpdir, monkeypatch, failed_replace):
+        # #3249: a process killed while it rolls back a failed append has put
+        # back the old meta.json files and deleted the top temporary file, but
+        # not the others. The next append rolls back the rest instead of
+        # renaming them over the old meta.json files.
+        self._append_memmap_rows(3, 0).memmap(tmpdir)
+
+        class Killed(BaseException):
+            pass
+
+        replace = os.replace
+        num_calls = []
+
+        def failing_replace(src, dst):
+            num_calls.append(None)
+            if len(num_calls) > failed_replace:
+                raise OSError("disk full")
+            replace(src, dst)
+
+        remove = os.remove
+
+        def remove_and_die(path):
+            remove(path)
+            raise Killed
+
+        monkeypatch.setattr(os, "replace", failing_replace)
+        monkeypatch.setattr(os, "remove", remove_and_die)
+        with pytest.raises(Killed):
+            tensordict.append_memmap(tmpdir, self._append_memmap_rows(2, 1))
+        monkeypatch.undo()
+        assert not (Path(tmpdir) / ".meta.json.append.tmp").exists()
+        assert list(Path(tmpdir).rglob(".meta.json.append.tmp"))
+        tensordict.append_memmap(tmpdir, self._append_memmap_rows(4, 2))
+        assert not list(Path(tmpdir).rglob(".meta.json.append.tmp"))
+        expected = torch.cat(
+            [self._append_memmap_rows(3, 0), self._append_memmap_rows(4, 2)]
+        )
+        loaded = tensordict.load_memmap(tmpdir)
+        assert loaded.batch_size == expected.batch_size
+        assert (loaded == expected).all()
+
+    def test_append_memmap_killed_during_repair(self, tmpdir, monkeypatch):
+        # #3249: an append killed before its first replacement leaves every
+        # temporary file. If the next append is killed while it deletes them,
+        # the one after that still rolls back the rest.
+        self._append_memmap_rows(3, 0).memmap(tmpdir)
+
+        class Killed(BaseException):
+            pass
+
+        def replace_and_die(src, dst):
+            raise Killed
+
+        def die(path):
+            raise Killed
+
+        # Killed at the first os.replace, and again at the first os.remove of
+        # the rollback, so that every temporary file stays.
+        monkeypatch.setattr(os, "replace", replace_and_die)
+        monkeypatch.setattr(os, "remove", die)
+        with pytest.raises(Killed):
+            tensordict.append_memmap(tmpdir, self._append_memmap_rows(2, 1))
+        monkeypatch.undo()
+        num_leftovers = len(list(Path(tmpdir).rglob(".meta.json.append.tmp")))
+        assert num_leftovers > 2
+        remove = os.remove
+
+        def remove_and_die(path):
+            remove(path)
+            raise Killed
+
+        monkeypatch.setattr(os, "remove", remove_and_die)
+        with pytest.raises(Killed):
+            tensordict.append_memmap(tmpdir, self._append_memmap_rows(2, 1))
+        monkeypatch.undo()
+        leftovers = list(Path(tmpdir).rglob(".meta.json.append.tmp"))
+        assert len(leftovers) == num_leftovers - 1
+        tensordict.append_memmap(tmpdir, self._append_memmap_rows(4, 2))
+        assert not list(Path(tmpdir).rglob(".meta.json.append.tmp"))
+        expected = torch.cat(
+            [self._append_memmap_rows(3, 0), self._append_memmap_rows(4, 2)]
+        )
+        loaded = tensordict.load_memmap(tmpdir)
+        assert loaded.batch_size == expected.batch_size
         assert (loaded == expected).all()
 
     def test_memmap_format_version(self, tmp_path):

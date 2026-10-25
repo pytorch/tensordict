@@ -1491,7 +1491,6 @@ _DIRECT_DELEGATES = [
     "_stack_onto_",
     "keys",
     "entry_class",
-    "_check_is_shared",
     "_check_device",
     "is_contiguous",
     "popitem",

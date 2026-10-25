@@ -122,9 +122,8 @@ Options and utilities:
   `set_capture_non_tensor_stack`, `set_list_to_stack` and their getters.
   `utils.py` re-exports them.
 - `utils.py`: shared helpers, including `logger` and `timeit`.
-- `_contextlib.py`: decorator context managers, and `LAST_OP_MAPS`, the
-  functions that undo an operation at the end of a `with` block, as in
-  `with td.permute(1, 0) as tdp:`.
+- `_contextlib.py`: `LAST_OP_MAPS`, the functions that undo an operation at
+  the end of a `with` block, as in `with td.permute(1, 0) as tdp:`.
 - `_deprecation.py`: the helpers that deprecate a function, a method, a
   property or a module attribute. Each takes the release that removes the
   name, and `test_deprecation_deadlines` fails once `version.txt` reaches it.
@@ -437,7 +436,9 @@ touches these places:
    undone at the end of a `with` block.
 6. Stubs: the signature in `tensorclass.pyi` and `_tensorcollection.pyi`.
    `test_tensorclass_stub_methods` fails if a public `TensorDict` method is
-   missing from `tensorclass.pyi`. No test checks `_tensorcollection.pyi`.
+   missing from `tensorclass.pyi`, and `test_tensorcollection_stub_methods`
+   fails if `_tensorcollection.pyi` and `TensorDictBase` disagree on a
+   public attribute.
 7. Docs: a new public class or function goes in
    `docs/source/reference/{td,tc,nn,ttd}.rst`. Methods appear on their
    class's page, and a notable one can get a section, as `backward` did.
@@ -490,4 +491,4 @@ touches these places:
   tests with `.github/unittest/rl_linux_optdeps/scripts/run_all.sh`. Other
   CI helpers are in `.github/scripts/`.
 - Lint: `.pre-commit-config.yaml`, which runs `scripts/check_rst_titles.py`.
-- Packaging: `setup.py`, `pyproject.toml`, `version.txt` and `packaging/`.
+- Packaging: `setup.py`, `pyproject.toml` and `version.txt`.
