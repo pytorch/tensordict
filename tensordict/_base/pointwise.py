@@ -1085,7 +1085,7 @@ class _PointwiseOps:
             _foreach("log_", vals)
         return self
 
-    def softmax(self, dim: int, dtype: torch.dtype | None = None):  # noqa: D417
+    def softmax(self, dim: int, dtype: torch.dtype | None = None):
         """Returns a new tensordict with :func:`torch.softmax` applied to every leaf along a batch dimension.
 
         A :class:`~tensordict.LazyStackedTensorDict`, also a nested one, gives
@@ -1466,7 +1466,7 @@ class _PointwiseOps:
         other: TensorCollection | torch.Tensor,
         *,
         default: str | CompatibleType | None = None,
-    ) -> Self:  # noqa: D417
+    ) -> Self:
         r"""Returns a new tensordict with the bitwise AND of every leaf and ``other``.
 
         .. math::
@@ -1527,7 +1527,7 @@ class _PointwiseOps:
         other: TensorCollection | torch.Tensor,
         *,
         default: str | CompatibleType | None = None,
-    ) -> Self:  # noqa: D417
+    ) -> Self:
         r"""Returns a new tensordict with the logical AND of every leaf and ``other``.
 
         Nonzero elements count as ``True``, and the leaves of the result are
@@ -1592,7 +1592,7 @@ class _PointwiseOps:
         *,
         alpha: float | None = None,
         default: str | CompatibleType | None = None,
-    ) -> Self:  # noqa: D417
+    ) -> Self:
         r"""Returns a new tensordict with ``other``, scaled by ``alpha``, added to every leaf.
 
         ``td + other`` and ``other + td`` call this method.
@@ -1858,7 +1858,7 @@ class _PointwiseOps:
         other1: TensorDictBase | torch.Tensor,
         other2: TensorDictBase | torch.Tensor,
         value: float | None = 1,
-    ) -> Self:  # noqa: D417
+    ) -> Self:
         r"""Returns a new tensordict with ``value * other1 / other2`` added to every leaf.
 
         .. math::
@@ -1952,7 +1952,7 @@ class _PointwiseOps:
         other2: TensorDictBase | torch.Tensor,
         *,
         value: float | None = 1,
-    ) -> Self:  # noqa: D417
+    ) -> Self:
         r"""Returns a new tensordict with ``value * other1 * other2`` added to every leaf.
 
         .. math::
@@ -2048,7 +2048,7 @@ class _PointwiseOps:
         *,
         alpha: float | None = None,
         default: str | CompatibleType | None = None,
-    ) -> Self:  # noqa: D417
+    ) -> Self:
         r"""Returns a new tensordict with ``other``, scaled by ``alpha``, subtracted from every leaf.
 
         ``td - other`` calls this method, and ``other - td`` calls
@@ -2156,7 +2156,7 @@ class _PointwiseOps:
         *,
         alpha: float | None = None,
         default: str | CompatibleType | None = None,
-    ) -> Self:  # noqa: D417
+    ) -> Self:
         r"""Returns a new tensordict with every leaf, scaled by ``alpha``, subtracted from ``other``.
 
         ``other - td`` calls this method.
@@ -2316,7 +2316,7 @@ class _PointwiseOps:
         other: TensorCollection | torch.Tensor,
         *,
         default: str | CompatibleType | None = None,
-    ) -> Self:  # noqa: D417
+    ) -> Self:
         r"""Returns a new tensordict with every leaf multiplied by ``other``.
 
         ``td * other`` and ``other * td`` call this method.
@@ -2439,7 +2439,7 @@ class _PointwiseOps:
         other: TensorCollection | torch.Tensor,
         *,
         default: str | CompatibleType | None = None,
-    ) -> Self:  # noqa: D417
+    ) -> Self:
         """Returns a new tensordict with the element-wise maximum of every leaf and ``other``.
 
         Args:
@@ -2557,7 +2557,7 @@ class _PointwiseOps:
         other: TensorCollection | torch.Tensor,
         *,
         default: str | CompatibleType | None = None,
-    ) -> Self:  # noqa: D417
+    ) -> Self:
         """Returns a new tensordict with the element-wise minimum of every leaf and ``other``.
 
         Args:
@@ -2679,7 +2679,7 @@ class _PointwiseOps:
         other: TensorDictBase | torch.Tensor,
         *,
         default: str | CompatibleType | None = None,
-    ) -> Self:  # noqa: D417
+    ) -> Self:
         """Returns a new tensordict with every leaf clamped to at most ``other``.
 
         Args:
@@ -2809,7 +2809,7 @@ class _PointwiseOps:
         self,
         other: TensorDictBase | torch.Tensor,
         default: str | CompatibleType | None = None,
-    ) -> Self:  # noqa: D417
+    ) -> Self:
         """Returns a new tensordict with every leaf clamped to at least ``other``.
 
         Args:
@@ -2881,7 +2881,7 @@ class _PointwiseOps:
         max: TensorDictBase | torch.Tensor | float | None = None,
         *,
         out=None,
-    ) -> Self:  # noqa: D417, W605
+    ) -> Self:
         r"""Returns a new tensordict with every leaf clamped into the range ``[min, max]``.
 
         .. math::
@@ -2985,7 +2985,7 @@ class _PointwiseOps:
         other: TensorDictBase | torch.Tensor,
         *,
         default: str | CompatibleType | None = None,
-    ) -> Self:  # noqa: D417
+    ) -> Self:
         r"""Returns a new tensordict with every leaf raised to the power ``other``.
 
         ``td ** other`` calls this method. ``other ** td`` with a number
@@ -3071,7 +3071,7 @@ class _PointwiseOps:
         other: TensorDictBase | torch.Tensor,
         *,
         default: str | CompatibleType | None = None,
-    ) -> Self:  # noqa: D417
+    ) -> Self:
         r"""Returns a new tensordict with every leaf divided by ``other``.
 
         ``td / other`` calls this method. Integer leaves are promoted to the
@@ -3241,7 +3241,7 @@ class _PointwiseOps:
         out: TensorDictBase | None = None,
         pad: int | bool = None,
         update_batch_size: bool = False,
-    ) -> Self:  # noqa: D417
+    ) -> Self:
         """Returns a tensordict with the leaves where ``condition`` is ``True`` and ``other`` elsewhere.
 
         :func:`torch.where` is applied to every leaf. ``condition`` is aligned

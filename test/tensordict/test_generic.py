@@ -119,7 +119,7 @@ else:
 _has_streaming = importlib.util.find_spec("streaming", None) is not None
 
 try:
-    import h5py  # noqa
+    import h5py
 
     _has_h5py = True
 except ImportError:

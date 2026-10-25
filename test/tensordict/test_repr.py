@@ -385,7 +385,7 @@ class TestTensorDictRepr:
 
     def test_repr_memmap(self, device, dtype):
         tensordict = self.memmap_td(device, dtype)
-        # tensor_device = device if device else tensordict["a"].device  # noqa: F841
+        # tensor_device = device if device else tensordict["a"].device
         expected = f"""TensorDict(
     fields={{
         a: MemoryMappedTensor(shape=torch.Size([4, 3, 2, 1, 5]), device=cpu, dtype={dtype}, is_shared=False)}},
@@ -873,7 +873,7 @@ class TestSetPrintoptions:
         with set_printoptions(verbose=True):
             td = TensorDict({"a": torch.randn(3, 4)})
             after = get_printoptions()
-            repr(td)  # noqa
+            repr(td)
         assert before == after
 
     def test_verbose_false_restores(self):

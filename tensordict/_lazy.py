@@ -1288,7 +1288,7 @@ class LazyStackedTensorDict(TensorDictBase):
         return all(td._is_memmap for td in self.tensordicts)
 
     @property
-    @_cache_while_locked  # noqa: B019
+    @_cache_while_locked
     def _has_exclusive_keys(self):
         keys = None
         for td in self.tensordicts:
@@ -1546,7 +1546,7 @@ class LazyStackedTensorDict(TensorDictBase):
 
     # Override: the names come from the members and the stack dim.
     @TensorDictBase.names.getter
-    @_cache_while_locked  # noqa
+    @_cache_while_locked
     def names(self):
         if not self.tensordicts:
             names = self._empty_stack_names
@@ -2550,7 +2550,7 @@ class LazyStackedTensorDict(TensorDictBase):
             vals.append(val)
         return vals
 
-    @_cache_while_locked  # noqa: B019
+    @_cache_while_locked
     def _get_str(
         self,
         key: NestedKey,
@@ -2703,7 +2703,7 @@ class LazyStackedTensorDict(TensorDictBase):
         padding_side: str = "right",
         layout: torch.layout | None = None,
         padding_value: float | int | bool = 0.0,
-    ) -> Self:  # noqa: D417
+    ) -> Self:
         """Stacks tensordicts into a lazy stack.
 
         The result keeps each input as a separate tensordict, so the inputs
@@ -2922,7 +2922,7 @@ class LazyStackedTensorDict(TensorDictBase):
 
         return _stack(items, dim=dim, out=out, strict=strict, maybe_dense_stack=True)
 
-    @_cache_while_locked  # noqa: B019
+    @_cache_while_locked
     def _add_batch_dim(self, *, in_dim, vmap_level):
         if self.is_memmap():
             td = LazyStackedTensorDict.lazy_stack(
@@ -2998,7 +2998,7 @@ class LazyStackedTensorDict(TensorDictBase):
         )
         return out
 
-    @_cache_while_locked  # noqa: B019
+    @_cache_while_locked
     def _remove_batch_dim(self, vmap_level, batch_size, out_dim):
         if self._hook_out is not None:
             # this is the hacked version. We just need to remove the hook_out and
@@ -3038,7 +3038,7 @@ class LazyStackedTensorDict(TensorDictBase):
             result.lock_()
         return result
 
-    @_cache_while_locked  # noqa: B019
+    @_cache_while_locked
     def _maybe_remove_batch_dim(self, funcname, vmap_level, batch_size, out_dim):
         if self._hook_out is not None:
             # this is the hacked version. We just need to remove the hook_out and
@@ -3464,7 +3464,7 @@ class LazyStackedTensorDict(TensorDictBase):
             result.append((key, torch.stack([val0, *vals], self.stack_dim)))
         return tuple(result)
 
-    @_cache_while_locked  # noqa: B019
+    @_cache_while_locked
     def _key_list(self):
         if not self.tensordicts:
             return []
@@ -5874,12 +5874,12 @@ class _CustomOpTensorDict(TensorDictBase):
 
     # These attributes should never be set
     @property
-    @_cache_while_locked  # noqa
+    @_cache_while_locked
     def _is_shared(self):
         return self._source._is_shared
 
     @property
-    @_cache_while_locked  # noqa
+    @_cache_while_locked
     def _is_memmap(self):
         return self._source._is_memmap
 
@@ -6109,7 +6109,7 @@ class _CustomOpTensorDict(TensorDictBase):
             f"\n\top={self.custom_op}({custom_op_kwargs_str}))"
         )
 
-    # @_cache_while_locked  # noqa: B019
+    # @_cache_while_locked
     def keys(
         self,
         include_nested: bool = False,

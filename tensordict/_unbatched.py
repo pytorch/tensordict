@@ -126,7 +126,7 @@ class _UnbatchedTensorMixin:
 
     def _maybe_remove_batch_dim(
         self,
-        funcname=None,  # noqa: ANN001
+        funcname=None,
         *,
         vmap_level: int,
         batch_size: int,

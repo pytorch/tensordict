@@ -611,7 +611,7 @@ class _Serialization:
             "is_locked": self._is_locked,
         }
 
-    # @cache  # noqa: B019
+    # @cache
     def _reduce_vals_and_metadata(self, *, dtype=NO_DEFAULT, requires_metadata):
         """Returns a nested dictionary of metadata, a flat Dict[NestedKey, Tensor] containing tensor data and a list of tensor sizes."""
         from tensordict.base import TensorDictBase

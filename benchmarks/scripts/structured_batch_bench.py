@@ -945,7 +945,7 @@ def section_d(device, quick, data_dir):
             try:
                 fn()
                 probes[name] = "ok"
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 probes[name] = f"{type(e).__name__}: {str(e).splitlines()[0][:120]}"
     finally:
         shutil.rmtree(probe_dir, ignore_errors=True)

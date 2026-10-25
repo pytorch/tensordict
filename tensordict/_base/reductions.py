@@ -219,7 +219,7 @@ class _Reductions:
         keepdim: bool = False,
         *,
         reduce: bool | None = None,
-    ) -> Self | torch.Tensor:  # noqa: D417
+    ) -> Self | torch.Tensor:
         """Returns the minimum of every leaf, over all its elements or along a batch dimension.
 
         Like :meth:`~.min` with ``return_indices=False``: the result holds the
@@ -294,7 +294,7 @@ class _Reductions:
         *,
         reduce: bool | None = None,
         return_indices: bool = True,
-    ) -> Self | torch.Tensor:  # noqa: D417
+    ) -> Self | torch.Tensor:
         """Returns the minimum of every leaf, over all its elements or along a batch dimension.
 
         Without ``dim``, the result is a tensordict of scalar leaves. With ``dim``,
@@ -397,7 +397,7 @@ class _Reductions:
         keepdim: bool = False,
         *,
         reduce: bool | None = None,
-    ) -> Self | torch.Tensor:  # noqa: D417
+    ) -> Self | torch.Tensor:
         """Returns the maximum of every leaf, over all its elements or along a batch dimension.
 
         Like :meth:`~.max` with ``return_indices=False``: the result holds the
@@ -472,7 +472,7 @@ class _Reductions:
         *,
         reduce: bool | None = None,
         return_indices: bool = True,
-    ) -> Self | torch.Tensor:  # noqa: D417
+    ) -> Self | torch.Tensor:
         """Returns the maximum of every leaf, over all its elements or along a batch dimension.
 
         Without ``dim``, the result is a tensordict of scalar leaves. With ``dim``,
@@ -576,7 +576,7 @@ class _Reductions:
         *,
         reduce: bool | None = None,
         return_indices: bool = True,
-    ) -> Self | torch.Tensor:  # noqa: D417
+    ) -> Self | torch.Tensor:
         """Returns the cumulative minimum of every leaf along a batch dimension.
 
         As with :func:`torch.cummin`, the result is a named tuple of two
@@ -659,7 +659,7 @@ class _Reductions:
         *,
         reduce: bool | None = None,
         return_indices: bool = True,
-    ) -> Self | torch.Tensor:  # noqa: D417
+    ) -> Self | torch.Tensor:
         """Returns the cumulative maximum of every leaf along a batch dimension.
 
         As with :func:`torch.cummax`, the result is a named tuple of two
@@ -757,7 +757,7 @@ class _Reductions:
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
         key_transform: Callable[[NestedKey], NestedKey] | None = None,
-    ) -> Self | torch.Tensor:  # noqa: D417
+    ) -> Self | torch.Tensor:
         """Returns the mean of every leaf, over all its elements or along batch dimensions.
 
         Args:
@@ -865,7 +865,7 @@ class _Reductions:
         *,
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
-    ) -> Self | torch.Tensor:  # noqa: D417
+    ) -> Self | torch.Tensor:
         """Returns the mean of the non-NaN elements of every leaf.
 
         Works as :meth:`~.mean`, but ignores NaN values.
@@ -943,7 +943,7 @@ class _Reductions:
         *,
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
-    ) -> Self | torch.Tensor:  # noqa: D417
+    ) -> Self | torch.Tensor:
         """Returns the product of every leaf, over all its elements or along a batch dimension.
 
         Args:
@@ -1046,7 +1046,7 @@ class _Reductions:
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
         key_transform: Callable[[NestedKey], NestedKey] | None = None,
-    ) -> Self | torch.Tensor:  # noqa: D417
+    ) -> Self | torch.Tensor:
         """Returns the sum of every leaf, over all its elements or along batch dimensions.
 
         Args:
@@ -1151,7 +1151,7 @@ class _Reductions:
         *,
         dtype: torch.dtype | None = None,
         reduce: bool | None = None,
-    ) -> Self | torch.Tensor:  # noqa: D417
+    ) -> Self | torch.Tensor:
         """Returns the sum of the non-NaN elements of every leaf.
 
         Works as :meth:`~.sum`, but counts NaN values as zero.
@@ -1241,7 +1241,7 @@ class _Reductions:
         correction: int = 1,
         reduce: bool | None = None,
         key_transform: Callable[[NestedKey], NestedKey] | None = None,
-    ) -> Self | torch.Tensor:  # noqa: D417
+    ) -> Self | torch.Tensor:
         """Returns the standard deviation of every leaf, over all its elements or along batch dimensions.
 
         Args:
@@ -1361,7 +1361,7 @@ class _Reductions:
         correction: int = 1,
         reduce: bool | None = None,
         key_transform: Callable[[NestedKey], NestedKey] | None = None,
-    ) -> Self | torch.Tensor:  # noqa: D417
+    ) -> Self | torch.Tensor:
         """Returns the variance of every leaf, over all its elements or along batch dimensions.
 
         Args:
@@ -1485,7 +1485,7 @@ class _Reductions:
         interpolation: str = "linear",
         reduce: bool | None = None,
         key_transform: Callable[[NestedKey], NestedKey] | None = None,
-    ) -> Self | torch.Tensor:  # noqa: D417
+    ) -> Self | torch.Tensor:
         """Returns the ``q``-th quantile of every leaf, over all its elements or along a batch dimension.
 
         Args:
@@ -1829,7 +1829,7 @@ class _Reductions:
             names=None,
         )
 
-    def logsumexp(self, dim=None, keepdim=False, *, out=None):  # noqa: D417
+    def logsumexp(self, dim=None, keepdim=False, *, out=None):
         """Returns the log of the summed exponentials of every leaf along batch dimensions.
 
         The computation is numerically stable, as with :func:`torch.logsumexp`.

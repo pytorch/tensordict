@@ -509,7 +509,7 @@ class _set_dispatch_td_nn_modules(_DecoratorContextManager):
 # Reproduce StrEnum for python<3.11
 
 
-class _StrEnum(str, Enum):  # noqa
+class _StrEnum(str, Enum):
     # As in enum.StrEnum, str() and format() give the value, not the name.
     __str__ = str.__str__
     __format__ = str.__format__

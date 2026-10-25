@@ -887,7 +887,7 @@ class TensorDict(TensorDictBase):
         return True
 
     # Functorch compatibility
-    @_cache_while_locked  # noqa: B019
+    @_cache_while_locked
     def _add_batch_dim(self, *, in_dim: int, vmap_level: int) -> Self:
         td = self
 
@@ -921,7 +921,7 @@ class TensorDict(TensorDictBase):
         )
         return out
 
-    @_cache_while_locked  # noqa: B019
+    @_cache_while_locked
     def _remove_batch_dim(self, vmap_level: int, batch_size: int, out_dim: int) -> Self:
         new_batch_size = list(self.batch_size)
         new_batch_size.insert(out_dim, batch_size)
@@ -953,7 +953,7 @@ class TensorDict(TensorDictBase):
         )
         return out
 
-    @_cache_while_locked  # noqa: B019
+    @_cache_while_locked
     def _maybe_remove_batch_dim(
         self, funcname: str, vmap_level: int, batch_size: int, out_dim: int
     ) -> Self:
@@ -3099,7 +3099,7 @@ class TensorDict(TensorDictBase):
                 sort=sort,
             )
 
-    @_cache_while_locked  # noqa: B019
+    @_cache_while_locked
     def _nested_keys(
         self,
         include_nested: bool = False,
@@ -3595,7 +3595,7 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
         )
         return self
 
-    # @_cache_while_locked  # noqa: B019
+    # @_cache_while_locked
     def keys(
         self,
         include_nested: bool = False,

@@ -16,7 +16,8 @@ exclude = ["*.md"]
 # usort checked before ruff replaced them.
 # TC004: a name imported under TYPE_CHECKING and used at run time, which only
 # fails when that code runs.
-select = ["E", "W", "F", "B", "C4", "T20", "D", "I", "TC004"]
+# RUF100: a noqa directive that suppresses nothing.
+select = ["E", "W", "F", "B", "C4", "T20", "D", "I", "TC004", "RUF100"]
 ignore = [
     "E402",  # imports below module code: several modules re-export at their end
     "E501",  # line length is the formatter's job
