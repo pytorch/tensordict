@@ -2594,12 +2594,28 @@ _UPDATE_MEMBERS_CALL = local()
 
 
 @lru_cache(maxsize=128)
-def _update_selection_trie(keys_to_update: tuple) -> dict:
-    """``_selection_trie(keys_to_update)``, cached, as ``update`` gets the same keys at each step (#3360).
+def _update_selection_trie(
+    keys_to_update: tuple,
+) -> tuple[dict, dict[tuple[str], frozenset]] | bool:
+    """``_selection_trie(keys_to_update)`` and the entries it covers, cached, as ``update`` gets the same keys at each step (#3360).
 
-    The callers must not change the trie.
+    ``False`` when no key is deeper than one level. Else the trie, and for each
+    first part of a key, the entries under it that a key lists with nothing
+    deeper: a tensordict holding only those is written as listed. The callers
+    must not change either.
     """
-    return _selection_trie(keys_to_update)
+    if tuple not in map(type, keys_to_update):
+        return False
+    trie = _selection_trie(keys_to_update)
+    covered = {
+        (part,): frozenset(
+            entry
+            for entry, child in node.items()
+            if entry is not None and child == {None: True}
+        )
+        for part, node in trie.items()
+    }
+    return trie, covered
 
 
 def _warn_update_inserts_whole_entry(
@@ -6875,7 +6891,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         selection = None
         # whether keys_to_update has a deeper key, under which an entry that
-        # self lacks is written whole (#3360): set at the first such entry
+        # self lacks is written whole (#3360): set at the first such entry, to
+        # False or to _update_selection_trie(keys_to_update)
         nested_keys = None
         for input_key, value in input_dict_or_td.items():
             key = _unravel_key_to_tuple(input_key)
@@ -7035,13 +7052,18 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             elif keys_to_update is not None and type(value) is not Tensor:
                 # a tensor is written whole either way: skip the check
                 if nested_keys is None:
-                    nested_keys = tuple in map(type, keys_to_update) and (
-                        not is_dynamo_compiling()
+                    nested_keys = not is_dynamo_compiling() and _update_selection_trie(
+                        tuple(keys_to_update)
                     )
-                if nested_keys:
-                    if selection is None:
-                        selection = _update_selection_trie(tuple(keys_to_update))
-                    _warn_update_inserts_whole_entry(key, value, selection, is_leaf)
+                # skip a tensordict whose entries are all listed, nothing deeper
+                if nested_keys and not (
+                    type(value) is _TENSORDICT_TYPE
+                    and key in nested_keys[1]
+                    and value._tensordict.keys() <= nested_keys[1][key]
+                ):
+                    _warn_update_inserts_whole_entry(
+                        key, value, nested_keys[0], is_leaf
+                    )
 
             self._set_tuple(
                 key,
