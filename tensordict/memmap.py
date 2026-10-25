@@ -21,7 +21,6 @@ from tensordict._deprecation import deprecated
 from tensordict._indexing import _expand_ellipsis, _INT, _NONE, _read_element, _SLICE
 from tensordict.utils import (
     _maybe_correct_neg_dim,
-    _NESTED_TENSOR_ERR,
     _shape,
     _zip_strict,
     IndexType,
@@ -452,13 +451,9 @@ class MemoryMappedTensor(torch.Tensor):
         if filename is None:
             handler = _FileHandler(input.dtype.itemsize * shape_numel)
             if isinstance(shape, torch.Tensor):
-                func_offset_stride = getattr(
-                    torch, "_nested_compute_contiguous_strides_offsets", None
+                offsets_strides = torch._nested_compute_contiguous_strides_offsets(
+                    shape
                 )
-                if func_offset_stride is not None:
-                    offsets_strides = func_offset_stride(shape)
-                else:
-                    raise RuntimeError(_NESTED_TENSOR_ERR)
                 result = torch.frombuffer(memoryview(handler.buffer), dtype=input.dtype)
                 if copy_data:
                     result.untyped_storage().copy_(input.untyped_storage())
@@ -483,13 +478,9 @@ class MemoryMappedTensor(torch.Tensor):
                 device=torch.device("cpu"),
             )
             if isinstance(shape, torch.Tensor):
-                func_offset_stride = getattr(
-                    torch, "_nested_compute_contiguous_strides_offsets", None
+                offsets_strides = torch._nested_compute_contiguous_strides_offsets(
+                    shape
                 )
-                if func_offset_stride is not None:
-                    offsets_strides = func_offset_stride(shape)
-                else:
-                    raise RuntimeError(_NESTED_TENSOR_ERR)
                 if copy_data:
                     result.untyped_storage().copy_(input.untyped_storage())
                 result = torch._nested_view_from_buffer(
@@ -582,17 +573,9 @@ class MemoryMappedTensor(torch.Tensor):
         tensor = torch.tensor(storage, dtype=dtype, device=device)
         if shape is not None:
             if isinstance(shape, torch.Tensor):
-                func_offset_stride = getattr(
-                    torch, "_nested_compute_contiguous_strides_offsets", None
+                offsets_strides = torch._nested_compute_contiguous_strides_offsets(
+                    shape
                 )
-                if func_offset_stride is not None:
-                    offsets_strides = func_offset_stride(shape)
-                else:
-                    raise RuntimeError(
-                        "The PyTorch version isn't compatible with memmap "
-                        "nested tensors. Please upgrade to a more recent "
-                        "version."
-                    )
                 tensor = torch._nested_view_from_buffer(
                     tensor,
                     shape,
@@ -951,13 +934,9 @@ class MemoryMappedTensor(torch.Tensor):
                 handler = _FileHandler(dtype.itemsize * shape_numel)
 
                 # buffer
-                func_offset_stride = getattr(
-                    torch, "_nested_compute_contiguous_strides_offsets", None
+                offsets_strides = torch._nested_compute_contiguous_strides_offsets(
+                    shape
                 )
-                if func_offset_stride is not None:
-                    offsets_strides = func_offset_stride(shape)
-                else:
-                    raise RuntimeError(_NESTED_TENSOR_ERR)
                 result = torch.frombuffer(memoryview(handler.buffer), dtype=dtype)
                 result = torch._nested_view_from_buffer(
                     result,
@@ -979,13 +958,9 @@ class MemoryMappedTensor(torch.Tensor):
                     # needed when device ctx differs
                     device=torch.device("cpu"),
                 )
-                func_offset_stride = getattr(
-                    torch, "_nested_compute_contiguous_strides_offsets", None
+                offsets_strides = torch._nested_compute_contiguous_strides_offsets(
+                    shape
                 )
-                if func_offset_stride is not None:
-                    offsets_strides = func_offset_stride(shape)
-                else:
-                    raise RuntimeError(_NESTED_TENSOR_ERR)
                 result = torch._nested_view_from_buffer(
                     result,
                     shape,
@@ -994,7 +969,6 @@ class MemoryMappedTensor(torch.Tensor):
                 result = cls(result)
                 result.filename = filename
                 return result
-            return result
 
         if shape:
             if isinstance(shape[0], (list, tuple)) and len(shape) == 1:
@@ -1133,17 +1107,7 @@ class MemoryMappedTensor(torch.Tensor):
             )
 
         if isinstance(shape, torch.Tensor):
-            func_offset_stride = getattr(
-                torch, "_nested_compute_contiguous_strides_offsets", None
-            )
-            if func_offset_stride is not None:
-                offsets_strides = func_offset_stride(shape)
-            else:
-                raise RuntimeError(
-                    "The PyTorch version isn't compatible with memmap "
-                    "nested tensors. Please upgrade to a more recent "
-                    "version."
-                )
+            offsets_strides = torch._nested_compute_contiguous_strides_offsets(shape)
             tensor = torch.from_file(
                 str(filename),
                 shared=writable,
@@ -1207,17 +1171,7 @@ class MemoryMappedTensor(torch.Tensor):
     def _from_handler(cls, handler, dtype, shape, index=None):
         out = torch.frombuffer(memoryview(handler.buffer), dtype=dtype)
         if isinstance(shape, torch.Tensor):
-            func_offset_stride = getattr(
-                torch, "_nested_compute_contiguous_strides_offsets", None
-            )
-            if func_offset_stride is not None:
-                offsets_strides = func_offset_stride(shape)
-            else:
-                raise RuntimeError(
-                    "The PyTorch version isn't compatible with memmap "
-                    "nested tensors. Please upgrade to a more recent "
-                    "version."
-                )
+            offsets_strides = torch._nested_compute_contiguous_strides_offsets(shape)
             out = torch._nested_view_from_buffer(
                 out,
                 shape,

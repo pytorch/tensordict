@@ -12,7 +12,6 @@ import json
 import math
 import os
 import pickle
-import sys
 import tempfile
 import warnings
 import weakref
@@ -41,7 +40,6 @@ from tensordict.base import (
     _default_is_leaf,
     _is_leaf_nontensor,
     _normalize_from_dict_args,
-    _PACKAGE_DIR,
     _register_tensor_class,
     BEST_ATTEMPT_INPLACE,
     is_tensor_collection,
@@ -57,6 +55,7 @@ from tensordict.utils import (
     _NUMPY_TO_TORCH_DTYPE_DICT,
     _TORCH_TO_NUMPY_DTYPE_DICT,
     _UNBATCHED_SAVE,
+    _user_stacklevel,
     _warn_unbatched_saved_as_plain,
     expand_right,
     IndexType,
@@ -346,12 +345,6 @@ class _H5Backend(_PersistentBackend):
     def read_non_tensor(self, node):
         value = node[()]
         if isinstance(value, bytes) and node.attrs.get(_H5_STR_ATTR, False):
-            # point to the first frame outside tensordict: the user's call
-            frame, stacklevel = sys._getframe(1), 2
-            while frame is not None and frame.f_code.co_filename.startswith(
-                _PACKAGE_DIR
-            ):
-                frame, stacklevel = frame.f_back, stacklevel + 1
             warnings.warn(
                 f"The h5 backend of PersistentTensorDict reads the string "
                 f"{node.name!r}, which tensordict wrote, as bytes. Starting with "
@@ -359,7 +352,7 @@ class _H5Backend(_PersistentBackend):
                 "as the other backends do. To support both, decode only bytes: "
                 "`value.decode() if isinstance(value, bytes) else value`.",
                 FutureWarning,
-                stacklevel=stacklevel,
+                stacklevel=_user_stacklevel(),
             )
         return value
 
@@ -725,12 +718,6 @@ class _ZarrBackend(_PersistentBackend):
                 "when the saved data is trusted."
             )
         if self.allow_pickle is None:
-            # point to the first frame outside tensordict: the user's call
-            frame, stacklevel = sys._getframe(1), 2
-            while frame is not None and frame.f_code.co_filename.startswith(
-                _PACKAGE_DIR
-            ):
-                frame, stacklevel = frame.f_back, stacklevel + 1
             warnings.warn(
                 "PersistentTensorDict is loading a pickled non-tensor zarr field. "
                 "This is only safe for trusted data. Starting with TensorDict "
@@ -738,7 +725,7 @@ class _ZarrBackend(_PersistentBackend):
                 "allow_pickle=True to acknowledge trusted data or "
                 "allow_pickle=False to reject pickle now.",
                 FutureWarning,
-                stacklevel=stacklevel,
+                stacklevel=_user_stacklevel(),
             )
         return pickle.loads(node[...].tobytes())
 

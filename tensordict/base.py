@@ -1777,7 +1777,6 @@ _READ_ONLY_CALL = local()
 # Set while empty() builds a result for the names it was given, so that the
 # empty() calls it makes do not warn of the names again.
 _EMPTY_NAMES_CALL = local()
-_PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__)) + os.sep
 
 
 def _normalize_from_dict_args(input_dict, *, batch_size, batch_dims):
@@ -1825,10 +1824,6 @@ def _warn_read_only(method: str) -> None:
     """Warns that the in-place ``method`` leaves a file opened read-only unchanged."""
     if getattr(_READ_ONLY_CALL, "running", False):
         return
-    # point to the first frame outside tensordict: the user's call
-    frame, stacklevel = sys._getframe(1), 2
-    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
-        frame, stacklevel = frame.f_back, stacklevel + 1
     warnings.warn(
         deprecation_message(
             f"Calling {method}() on a tensordict stored in a file opened "
@@ -1839,16 +1834,12 @@ def _warn_read_only(method: str) -> None:
         "write the result, or call to_tensordict() first to change a copy in "
         "memory.",
         FutureWarning,
-        stacklevel=stacklevel,
+        stacklevel=_user_stacklevel(),
     )
 
 
 def _warn_names_length(names: list, batch_dims: int) -> None:
     """Warns that ``names``, of the wrong length, is accepted because of its None entries, which raises from 0.17 (#2600)."""
-    # point to the first frame outside tensordict: the user's call
-    frame, stacklevel = sys._getframe(1), 2
-    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
-        frame, stacklevel = frame.f_back, stacklevel + 1
     warnings.warn(
         f"Got the dimension names {names} for {batch_dims} batch dims. The "
         "list has the wrong length, but is accepted today because of its None "
@@ -1856,16 +1847,12 @@ def _warn_names_length(names: list, batch_dims: int) -> None:
         "the default will change to raising a ValueError, as for any other "
         "list of the wrong length. Pass one name per batch dim.",
         FutureWarning,
-        stacklevel=stacklevel,
+        stacklevel=_user_stacklevel(),
     )
 
 
 def _warn_stack_dim_name_taken(name: str) -> None:
     """Warns that the stack dim ``name`` of a lazy stack is also a dim name of its members, which raises from 0.17 (#2690)."""
-    # point to the first frame outside tensordict: the user's call
-    frame, stacklevel = sys._getframe(1), 2
-    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
-        frame, stacklevel = frame.f_back, stacklevel + 1
     warnings.warn(
         f"The stack dim name {name!r} is also the name of a dim of the "
         "stacked tensordicts, so the lazy stack has non-unique dimension "
@@ -1873,7 +1860,7 @@ def _warn_stack_dim_name_taken(name: str) -> None:
         "default will change to raising a ValueError, as on a TensorDict. "
         "Give the stack dim a name the stacked tensordicts do not use.",
         FutureWarning,
-        stacklevel=stacklevel,
+        stacklevel=_user_stacklevel(),
     )
 
 
@@ -1885,10 +1872,6 @@ def _warn_scalar_over_non_tensor(
     key: str, value: bool | int | float | np.bool_ | np.integer | np.floating
 ) -> None:
     """Warns that ``value``, written over the non-tensor entry ``key``, becomes a tensor today."""
-    # point to the first frame outside tensordict: the user's call
-    frame, stacklevel = sys._getframe(1), 2
-    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
-        frame, stacklevel = frame.f_back, stacklevel + 1
     warnings.warn(
         f"The {type(value).__name__} written over the NonTensorData entry "
         f"{key!r} is stored as a 0-d tensor today. Starting with TensorDict "
@@ -1896,7 +1879,7 @@ def _warn_scalar_over_non_tensor(
         "the entry it replaces. Write torch.tensor(value) to keep the tensor, "
         "or NonTensorData(value) to keep the non-tensor entry now.",
         FutureWarning,
-        stacklevel=stacklevel,
+        stacklevel=_user_stacklevel(),
     )
 
 
@@ -1946,10 +1929,6 @@ def _warn_tuple_dtype(value: tuple, array: np.ndarray) -> None:
         new = {torch.float16: torch.complex32, torch.float32: torch.complex64}.get(new)
         if new is None:
             return
-    # point to the first frame outside tensordict: the user's call
-    frame, stacklevel = sys._getframe(1), 2
-    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
-        frame, stacklevel = frame.f_back, stacklevel + 1
     warnings.warn(
         f"A tuple of numbers is stored as a {old} tensor today. Starting with "
         "TensorDict 0.16, the default will change to the tensor that "
@@ -1957,7 +1936,7 @@ def _warn_tuple_dtype(value: tuple, array: np.ndarray) -> None:
         f"torch.tensor(value) to get {new} now, or "
         f"torch.tensor(value, dtype={old}) or a NumPy array to keep {old}.",
         FutureWarning,
-        stacklevel=stacklevel,
+        stacklevel=_user_stacklevel(),
     )
 
 
@@ -1977,10 +1956,6 @@ def _warn_set_at_cast(
     if is_compiling():
         # Dynamo can trace neither the frame walk nor warnings.warn
         return
-    # point to the first frame outside tensordict: the user's call
-    frame, stacklevel = sys._getframe(1), 2
-    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
-        frame, stacklevel = frame.f_back, stacklevel + 1
     if key is None:
         message = (
             f"The {type(value).__name__} written with [index] = value is cast "
@@ -1998,7 +1973,7 @@ def _warn_set_at_cast(
             "Write torch.tensor(value) to keep the tensor, or "
             "NonTensorData(value) to store it as non-tensor data now."
         )
-    warnings.warn(message, FutureWarning, stacklevel=stacklevel)
+    warnings.warn(message, FutureWarning, stacklevel=_user_stacklevel())
 
 
 def _set_at_each_key(
@@ -2151,10 +2126,6 @@ def _warn_empty_names(
         return
     else:
         future = "raises a ValueError for these names"
-    # point to the first frame outside tensordict: the user's call
-    frame, stacklevel = sys._getframe(1), 2
-    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
-        frame, stacklevel = frame.f_back, stacklevel + 1
     result = "the names that the names setter would not give"
     future_size = ""
     if resized:
@@ -2167,7 +2138,7 @@ def _warn_empty_names(
         f"does, which {future}. Pass one name per batch dim, "
         "with no name used twice.",
         FutureWarning,
-        stacklevel=stacklevel,
+        stacklevel=_user_stacklevel(),
     )
 
 
@@ -2751,11 +2722,7 @@ def _warn_get_kwargs(
         )
     else:
         return
-    # point to the first frame outside tensordict: the user's call
-    frame, stacklevel = sys._getframe(1), 2
-    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
-        frame, stacklevel = frame.f_back, stacklevel + 1
-    warnings.warn(message, FutureWarning, stacklevel=stacklevel)
+    warnings.warn(message, FutureWarning, stacklevel=_user_stacklevel())
 
 
 def _unwrap(td: TensorDictBase) -> TensorDictBase:
@@ -3246,15 +3213,11 @@ def _copy_leaves(
 
 def _warn_update_skipped(skipped: list) -> None:
     """Warns that ``update_`` skipped the non-tensor entries under the keys ``skipped``."""
-    # point to the first frame outside tensordict: the user's call
-    frame, stacklevel = sys._getframe(1), 2
-    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
-        frame, stacklevel = frame.f_back, stacklevel + 1
     warnings.warn(
         f"update_() skipped the non-tensor entries {skipped} of the source: "
         "the shared or memory-mapped destination cannot store their values.",
         UserWarning,
-        stacklevel=stacklevel,
+        stacklevel=_user_stacklevel(),
     )
 
 

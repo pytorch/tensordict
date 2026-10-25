@@ -118,80 +118,9 @@ __all__ = [
 ]
 
 
-# Utility function to wrap C++ functorch functions for torch.compile support
-def _wrap_functorch_function(func):
-    """Wrap a functorch C++ function to make it compatible with torch.compile.
-
-    PyTorch's Dynamo compiler cannot trace C++ functions from torch._C._functorch.
-    This wrapper uses torch.compiler.allow_in_graph to allow compilation through
-    these functions.
-
-    Args:
-        func: The C++ function to wrap
-
-    Returns:
-        The wrapped function
-    """
-    return allow_in_graph(func)
-
-
-def _import_and_wrap_functorch(*names, wrap_names=None):
-    """Import functorch C++ functions and optionally wrap them for torch.compile.
-
-    This utility handles the common pattern of importing functions from
-    torch._C._functorch and wrapping those that need to be compatible with
-    torch.compile.
-
-    Args:
-        *names: Names of functions to import from torch._C._functorch
-        wrap_names: Optional list/set of function names to wrap with allow_in_graph.
-                   If None, wraps all functions that start with '_' (private functions).
-
-    Returns:
-        Tuple of imported (and optionally wrapped) functions in the same order as names
-
-    Example:
-        >>> _add_batch_dim, _remove_batch_dim, is_batchedtensor = _import_and_wrap_functorch(
-        ...     '_add_batch_dim', '_remove_batch_dim', 'is_batchedtensor'
-        ... )
-    """
-    from torch._C._functorch import (  # @manual=fbcode//caffe2:torch
-        _add_batch_dim as _functorch_add_batch_dim,
-        _remove_batch_dim as _functorch_remove_batch_dim,
-        get_unwrapped as _functorch_get_unwrapped,
-        is_batchedtensor as _functorch_is_batchedtensor,
-    )
-
-    # Map of available functions
-    available_funcs = {
-        "_add_batch_dim": _functorch_add_batch_dim,
-        "_remove_batch_dim": _functorch_remove_batch_dim,
-        "get_unwrapped": _functorch_get_unwrapped,
-        "is_batchedtensor": _functorch_is_batchedtensor,
-    }
-
-    # Determine which functions to wrap
-    if wrap_names is None:
-        # By default, wrap all private functions (starting with '_')
-        wrap_names = {name for name in names if name.startswith("_")}
-    else:
-        wrap_names = set(wrap_names)
-
-    # Get and optionally wrap the requested functions
-    result = []
-    for name in names:
-        if name not in available_funcs:
-            raise ValueError(f"Function '{name}' not available in torch._C._functorch")
-        func = available_funcs[name]
-        if name in wrap_names:
-            func = _wrap_functorch_function(func)
-        result.append(func)
-
-    return tuple(result) if len(result) > 1 else result[0]
-
-
-# Import and wrap _add_batch_dim for compilation support
-_add_batch_dim_c = _import_and_wrap_functorch("_add_batch_dim")
+# Dynamo cannot trace these C++ functions: allow_in_graph lets torch.compile call them
+_add_batch_dim = allow_in_graph(torch._C._functorch._add_batch_dim)
+_remove_batch_dim = allow_in_graph(torch._C._functorch._remove_batch_dim)
 
 
 if not _has_funcdim:
@@ -3533,7 +3462,7 @@ class _add_batch_dim_pre_hook:
     def __call__(self, mod: torch.nn.Module, args, kwargs):
         for name, param in list(mod.named_parameters(recurse=False)):
             if hasattr(param, "in_dim") and hasattr(param, "vmap_level"):
-                param = _add_batch_dim_c(param, param.in_dim, param.vmap_level)
+                param = _add_batch_dim(param, param.in_dim, param.vmap_level)
                 delattr(mod, name)
                 setattr(mod, name, param)
         for key, val in list(mod._forward_pre_hooks.items()):

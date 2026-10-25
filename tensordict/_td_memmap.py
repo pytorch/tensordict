@@ -182,6 +182,16 @@ def _populate_memmap(
     return memmap_tensor
 
 
+def _write_nested_shape(filename: str, shape: torch.Tensor) -> None:
+    """Writes ``shape``, the nested shape of the leaf stored in ``filename``, to the ``.shape.memmap`` file beside it."""
+    MemoryMappedTensor.from_tensor(
+        shape,
+        filename=Path(filename).with_suffix(".shape.memmap"),
+        existsok=True,
+        copy_data=True,
+    )
+
+
 def _populate_empty(
     *,
     dest,
@@ -192,24 +202,9 @@ def _populate_empty(
     robust_key,
 ):
     """Populates ``dest`` with an empty memory-mapped tensor."""
-    from .utils import _encode_key_for_filesystem, _get_robust_key_setting_with_warning
-
-    if prefix is None:
-        filename = None
-    else:
-        effective_robust_key = _get_robust_key_setting_with_warning(key, robust_key)
-        safe_key = _encode_key_for_filesystem(key, robust=effective_robust_key)
-        filename = str(prefix / f"{safe_key}.memmap")
-    if isinstance(shape, torch.Tensor):
-        if prefix is not None:
-            shape_filename = Path(filename)
-            shape_filename = shape_filename.with_suffix(".shape.memmap")
-            MemoryMappedTensor.from_tensor(
-                shape,
-                filename=shape_filename,
-                existsok=True,
-                copy_data=True,
-            )
+    filename = _memmap_filename(prefix, key, robust_key)
+    if isinstance(shape, torch.Tensor) and prefix is not None:
+        _write_nested_shape(filename, shape)
     memmap_tensor = MemoryMappedTensor.empty(
         shape=shape,
         dtype=dtype,
@@ -231,24 +226,9 @@ def _populate_storage(
     robust_key,
 ):
     """Populates ``dest`` with a memory-mapped tensor backed by ``storage``."""
-    from .utils import _encode_key_for_filesystem, _get_robust_key_setting_with_warning
-
-    if prefix is None:
-        filename = None
-    else:
-        effective_robust_key = _get_robust_key_setting_with_warning(key, robust_key)
-        safe_key = _encode_key_for_filesystem(key, robust=effective_robust_key)
-        filename = str(prefix / f"{safe_key}.memmap")
-    if isinstance(shape, torch.Tensor):
-        if prefix is not None:
-            shape_filename = Path(filename)
-            shape_filename = shape_filename.with_suffix(".shape.memmap")
-            MemoryMappedTensor.from_tensor(
-                shape,
-                filename=shape_filename,
-                existsok=True,
-                copy_data=True,
-            )
+    filename = _memmap_filename(prefix, key, robust_key)
+    if isinstance(shape, torch.Tensor) and prefix is not None:
+        _write_nested_shape(filename, shape)
     memmap_tensor = MemoryMappedTensor.from_storage(
         storage=storage,
         shape=shape,

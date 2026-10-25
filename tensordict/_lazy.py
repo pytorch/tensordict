@@ -11,7 +11,6 @@ import numbers
 import operator
 import os
 import re
-import sys
 import textwrap
 import warnings
 import weakref
@@ -69,7 +68,6 @@ from tensordict.base import (
     _NESTED_TENSORS_AS_LISTS_NONTENSOR,
     _NestedReadsCopies,
     _on_copies,
-    _PACKAGE_DIR,
     _READ_ONLY_CALL,
     _register_tensor_class,
     _rename_entries,
@@ -92,6 +90,7 @@ from tensordict.base import (
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.persistent import PersistentTensorDict
 from tensordict.utils import (
+    _add_batch_dim,
     _as_context_manager,
     _cache_while_locked,
     _canonicalize_tensor,
@@ -101,7 +100,6 @@ from tensordict.utils import (
     _convert_list_to_stack,
     _erase_cache_first,
     _GENERIC_NESTED_ERR,
-    _import_and_wrap_functorch,
     _infer_size_impl,
     _is_non_tensor,
     _is_unbatched,
@@ -112,6 +110,7 @@ from tensordict.utils import (
     _pass_through,
     _positional_non_blocking,
     _recursive_unbind_list,
+    _remove_batch_dim,
     _REPR_OPTIONS,
     _shape,
     _td_fields,
@@ -123,6 +122,7 @@ from tensordict.utils import (
     _zip_strict,
     DeviceType,
     expand_right,
+    ftdim,
     IndexType,
     is_non_tensor,
     is_tensorclass,
@@ -132,21 +132,6 @@ from tensordict.utils import (
 from torch import Tensor
 from torch.compiler import is_compiling, is_dynamo_compiling
 from torch.nn.utils.rnn import pad_sequence
-
-try:
-    from functorch import dim as ftdim
-
-    _has_funcdim = True
-except ImportError:
-    from tensordict.utils import _ftdim_mock as ftdim
-
-    _has_funcdim = False
-
-_add_batch_dim, _remove_batch_dim = _import_and_wrap_functorch(
-    "_add_batch_dim",
-    "_remove_batch_dim",
-)
-
 
 if TYPE_CHECKING:
     from typing_extensions import Self
@@ -1434,12 +1419,7 @@ class LazyStackedTensorDict(TensorDictBase):
             dropped = list(names)
             del dropped[stack_dim]
             if dropped or any(td.batch_dims for td in tensordicts):
-                # point to the first frame outside tensordict: the user's call
-                frame, stacklevel = sys._getframe(1), 2
-                while frame is not None and frame.f_code.co_filename.startswith(
-                    _PACKAGE_DIR
-                ):
-                    frame, stacklevel = frame.f_back, stacklevel + 1
+                stacklevel = _user_stacklevel()
                 if all(td.batch_dims == len(dropped) for td in tensordicts):
                     warnings.warn(
                         "LazyStackedTensorDict.from_dict without a batch_size "
