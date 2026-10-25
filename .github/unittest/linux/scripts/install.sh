@@ -56,6 +56,13 @@ python -c "import numpy; print('Installed numpy', numpy.__version__)"
 if [ -n "${TD_INSTALL_ONNX:-}" ]; then
   python -m pip install onnx onnxscript onnxruntime
 fi
+# pyright, for the pyright typing tests, in the job that sets
+# TD_INSTALL_PYRIGHT. Pinned because the tests count exact error lines; the
+# pin matches docs/source/typed_tensordict.rst. The nodejs extra brings Node.js
+# as a wheel, so pyright downloads nothing at test time.
+if [ -n "${TD_INSTALL_PYRIGHT:-}" ]; then
+  python -m pip install "pyright[nodejs]==1.1.414"
+fi
 python -m pip install -e . --no-deps
 
 # smoke test
