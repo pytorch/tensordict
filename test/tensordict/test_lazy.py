@@ -5634,11 +5634,6 @@ class TestLazyStackedTensorDict:
             assert padded.shape == (len(sizes), *batch_size, max(rows), 3)
             assert (padded[missing] == -1).all()
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=AssertionError,
-        reason="#3219: the empty entry takes the batch size of another member",
-    )
     def test_densify_exclusive_key_member_batch_size(self):
         # members with different batch sizes: the empty entry of the member
         # that lacks the key should have that member's batch size
@@ -5648,6 +5643,62 @@ class TestLazyStackedTensorDict:
         b = TensorDict(pos=torch.zeros(3, 4, 3), batch_size=[3])
         out = LazyStackedTensorDict(a, b).densify(layout=torch.strided)
         assert [t.shape for t in out["forces"].unbind(0)] == [(2, 5, 3), (3, 0, 3)]
+
+    def test_densify_exclusive_key_member_batch_size_jagged(self):
+        # members with different batch sizes and a key that one lacks: the
+        # empty entry has that member's batch size and no rows, so it differs
+        # from the other entry in two dims, which the jagged layout cannot
+        # hold. The empty entry took the batch size of the other member, and
+        # gave the member the wrong number of rows (#3219)
+        a = TensorDict(x=torch.zeros(2, 4), y=torch.ones(2, 4), batch_size=[2])
+        b = TensorDict(x=torch.zeros(3, 4), batch_size=[3])
+        td = LazyStackedTensorDict(a, b)
+        with pytest.raises(RuntimeError, match="jagged layout"):
+            td.densify(layout=torch.jagged)
+        out = td.densify(layout=torch.strided)
+        assert [t.shape for t in out["y"].unbind(0)] == [(2, 4), (3, 0)]
+        assert [t.shape for t in out["x"].unbind(0)] == [(2, 4), (3, 4)]
+        # a key with only batch dims: one ragged dim, the jagged layout works
+        a = TensorDict(x=torch.zeros(2), y=torch.ones(2), batch_size=[2])
+        b = TensorDict(x=torch.zeros(3), batch_size=[3])
+        out = LazyStackedTensorDict(a, b).densify(layout=torch.jagged)
+        assert out["y"].layout == torch.jagged
+        assert [t.shape for t in out["y"].unbind(0)] == [(2,), (0,)]
+
+    def test_densify_exclusive_key_member_batch_size_nested(self):
+        # the empty entry has the batch size of its member in a lazy stack
+        # held by a tensordict, under a sub-tensordict, in a stack of lazy
+        # stacks and with two batch dims per member (#3219)
+        a = TensorDict(
+            x=torch.zeros(2, 4),
+            y=torch.ones(2, 5, 3),
+            sub=TensorDict(z=torch.ones(2, 5, 3), batch_size=[2]),
+            batch_size=[2],
+        )
+        b = TensorDict(
+            x=torch.zeros(3, 4), sub=TensorDict(batch_size=[3]), batch_size=[3]
+        )
+        out = TensorDict(s=LazyStackedTensorDict(a, b)).densify()
+        for key in (("s", "y"), ("s", "sub", "z")):
+            assert [t.shape for t in out[key].unbind(0)] == [(2, 5, 3), (3, 0, 3)]
+        out = LazyStackedTensorDict(
+            LazyStackedTensorDict(a.clone(), a.clone()),
+            LazyStackedTensorDict(b.clone(), b.clone()),
+        ).densify()
+        assert [t.shape for t in out["y"].unbind(0)] == [(2, 2, 5, 3), (2, 3, 0, 3)]
+        a = TensorDict(
+            x=torch.zeros(2, 3, 4), y=torch.ones(2, 3, 4, 3), batch_size=[2, 3]
+        )
+        b = TensorDict(x=torch.zeros(2, 1, 4), batch_size=[2, 1])
+        out = LazyStackedTensorDict(a, b).densify()
+        assert [t.shape for t in out["y"].unbind(0)] == [(2, 3, 4, 3), (2, 1, 0, 3)]
+        # a member with a ragged batch dim keeps the shape of the other member
+        a = TensorDict(y=torch.ones(2, 2, 5, 3), batch_size=[2, 2])
+        b = LazyStackedTensorDict(
+            TensorDict(batch_size=[2]), TensorDict(batch_size=[3])
+        )
+        out = LazyStackedTensorDict(a, b).densify()
+        assert [t.shape for t in out["y"].unbind(0)] == [(2, 2, 5, 3), (2, 2, 0, 3)]
 
     def test_get_item_shape_heterogeneous(self):
         td = LazyStackedTensorDict(
