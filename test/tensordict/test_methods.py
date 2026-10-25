@@ -5497,10 +5497,11 @@ class TestTensorDicts(TestTensorDictsBase):
             },
             batch_size=(4, 3, 2, 1),
         )
-        td.update(
-            other_td,
-            keys_to_update=(("My", ("father",), "was"), ("My", "relentlessly")),
-        )
+        with pytest.warns(FutureWarning, match="deeper keys under an entry"):
+            td.update(
+                other_td,
+                keys_to_update=(("My", ("father",), "was"), ("My", "relentlessly")),
+            )
         assert ("My", "father", "was") in td.keys(True)
         assert ("My", ("father",), "was") in td.keys(True)
         assert ("My", "relentlessly") in td.keys(True)
