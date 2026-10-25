@@ -2588,7 +2588,8 @@ def _warn_update_invalid_key() -> None:
 
 
 # Set while update() writes the members of a lazy stack one by one, so that
-# they warn once in all (#3360).
+# they warn once in all, and while the nn modules write their outputs, so that
+# they do not warn (#3360).
 _UPDATE_MEMBERS_CALL = local()
 
 
@@ -2603,6 +2604,9 @@ def _warn_update_inserts_whole_entry(
     ``select`` and an update into an existing entry keep only the listed keys.
     """
     if is_dynamo_compiling():
+        return
+    state = getattr(_UPDATE_MEMBERS_CALL, "warned", None)
+    if state:
         return
     if not isinstance(value, dict) and (
         not _is_tensor_collection(type(value)) or is_leaf(type(value))
@@ -2632,9 +2636,6 @@ def _warn_update_inserts_whole_entry(
     except Exception:
         # a value that the update rejects: it raises its own error
         return
-    state = getattr(_UPDATE_MEMBERS_CALL, "warned", None)
-    if state:
-        return
     if state is False:
         _UPDATE_MEMBERS_CALL.warned = True
     # Fixed text: the keys would make Python warn again for each new value (#3232).
@@ -2651,30 +2652,23 @@ def _warn_update_inserts_whole_entry(
     )
 
 
-def _keys_to_update_as_main(
-    dest: TensorCollection, keys: Sequence[NestedKey]
-) -> list[NestedKey]:
-    """``keys`` with each key that runs under an entry that ``dest`` lacks cut to the key of that entry.
+def _update_keeping_whole_entries(
+    dest: TensorCollection, source: Any, **kwargs: Any
+) -> TensorCollection:
+    """``dest.update(source, **kwargs)`` without the warning that update writes an entry whole (#3360).
 
-    ``dest.update(source, keys_to_update=...)`` then writes what it writes on
-    main, whole entries included, now and after 0.17, and does not warn
-    (#3360). The ``tensordict.nn`` modules use it to keep their outputs;
-    whether these should narrow is #3367.
+    The ``tensordict.nn`` modules write their outputs with it: they keep
+    their outputs as they are until 0.17. Whether these narrow in 0.17 with
+    ``update`` is #3367.
     """
-    result = {}
-    for key in keys:
-        key = _unravel_key_to_tuple(key)
-        node = dest
-        for i, part in enumerate(key[:-1]):
-            node = node.get(part, None)
-            if node is None:
-                key = key[: i + 1]
-                break
-            if _is_leaf_nontensor(type(node)):
-                # update writes the entry whole, without a warning
-                break
-        result[key[0] if len(key) == 1 else key] = None
-    return list(result)
+    if is_dynamo_compiling():
+        return dest.update(source, **kwargs)
+    state = getattr(_UPDATE_MEMBERS_CALL, "warned", None)
+    _UPDATE_MEMBERS_CALL.warned = True
+    try:
+        return dest.update(source, **kwargs)
+    finally:
+        _UPDATE_MEMBERS_CALL.warned = state
 
 
 def _warn_unsupported_operand(op: str, other: Any, result: bool) -> None:

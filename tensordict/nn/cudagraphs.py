@@ -15,7 +15,7 @@ from typing import Any, Callable, List
 import torch
 from tensordict._nestedkey import NestedKey
 from tensordict.base import (
-    _keys_to_update_as_main,
+    _update_keeping_whole_entries,
     is_tensor_collection,
     TensorDictBase,
 )
@@ -393,12 +393,13 @@ class CudaGraphModule:
                     self.graph.replay()
                     if self._out_matches_in:
                         # Clone: the graph overwrites ``self._out`` on the next replay.
-                        result = tensordict.update(  # type-ignore[unreachable]
-                            self._out,
-                            keys_to_update=_keys_to_update_as_main(
-                                tensordict, self._selected_keys
-                            ),
-                            clone=True,
+                        result = (
+                            _update_keeping_whole_entries(  # type-ignore[unreachable]
+                                tensordict,
+                                self._out,
+                                keys_to_update=self._selected_keys,
+                                clone=True,
+                            )
                         )
                     elif tensordict_out is not None:
                         result = tensordict_out.update(self._out, clone=True)

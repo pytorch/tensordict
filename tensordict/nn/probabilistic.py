@@ -20,7 +20,7 @@ from tensordict._nestedkey import NestedKey
 from tensordict._td import TensorDict
 from tensordict.base import (
     _is_inside,
-    _keys_to_update_as_main,
+    _update_keeping_whole_entries,
     is_tensor_collection,
 )
 from tensordict.nn.common import dispatch, TensorDictModuleBase
@@ -1819,9 +1819,8 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                 tensordict_exec = tds._run_module(m, tensordict_exec, **module_kwargs)
             if tensordict_out is None:
                 return tensordict_exec
-            return tensordict_out.update(
-                tensordict_exec,
-                keys_to_update=_keys_to_update_as_main(tensordict_out, tds.out_keys),
+            return _update_keeping_whole_entries(
+                tensordict_out, tensordict_exec, keys_to_update=tds.out_keys
             )
 
     @property
@@ -2261,9 +2260,8 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
 
         if tensordict_out is not None:
             result = tensordict_out
-            result.update(
-                tensordict_exec,
-                keys_to_update=_keys_to_update_as_main(result, self.out_keys),
+            _update_keeping_whole_entries(
+                result, tensordict_exec, keys_to_update=self.out_keys
             )
         else:
             result = tensordict_exec
@@ -2279,8 +2277,8 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                     ]
                 else:
                     keys = list(set(self.out_keys).union(tensordict.keys(True, True)))
-                return tensordict.update(
-                    result, keys_to_update=_keys_to_update_as_main(tensordict, keys)
+                return _update_keeping_whole_entries(
+                    tensordict, result, keys_to_update=keys
                 )
         return result
 

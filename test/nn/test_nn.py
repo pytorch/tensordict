@@ -1791,6 +1791,36 @@ class TestTDSequence:
             ("next", "z"),
         }
 
+        # Lazy stacks whose members differ in holding "next": a member that
+        # holds it gets only the listed keys there, the other one all of it.
+        def dump(tensordict):
+            return {k: v.tolist() for k, v in tensordict.items(True, True)}
+
+        input = TensorDict(x=torch.zeros(2), next={"q": torch.ones(2)}, batch_size=[2])
+        out = lazy_stack([TensorDict(next={"q": torch.full((), 5.0)}), TensorDict()])
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            TensorDictSequential(*modules())(input, tensordict_out=out)
+        everything = {("nested", "y"): 1.0, "loc": 6.0, ("next", "h"): 2.0}
+        everything["next", "z"] = 8.0
+        assert [dump(member) for member in out.tensordicts] == [
+            {**everything, ("next", "q"): 5.0},
+            {**everything, ("next", "q"): 1.0},
+        ]
+        input = lazy_stack(
+            [
+                TensorDict(x=torch.zeros(()), next={"q": torch.ones(())}),
+                TensorDict(x=torch.zeros(())),
+            ]
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            output = selected(input)
+        assert [dump(member) for member in output.tensordicts] == [
+            {"x": 0.0, ("next", "q"): 1.0, ("next", "z"): 8.0},
+            {"x": 0.0, ("next", "h"): 2.0, ("next", "z"): 8.0},
+        ]
+
     @pytest.mark.parametrize("stack_dim", [0, 1])
     @pytest.mark.parametrize("module_inplace", [True, False, "empty"])
     def test_partial_tolerant_lazy_stack_keeps_outputs(self, module_inplace, stack_dim):
