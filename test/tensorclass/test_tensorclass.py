@@ -1289,7 +1289,13 @@ def test_issue_3353_installed_wheel_pyright(installed_wheel, tmp_path, python_ve
 # not of the class they are called on, and a list of tensors gives a tensor.
 _ISSUE_3271_SOURCE = """import torch
 from typing_extensions import assert_type
-from tensordict import LazyStackedTensorDict, TensorClass, TensorDict, TypedTensorDict
+from tensordict import (
+    LazyStackedTensorDict,
+    TensorClass,
+    TensorDict,
+    TypedTensorDict,
+    tensorclass,
+)
 from torch import Tensor
 
 class Observation(TensorClass):
@@ -1324,6 +1330,16 @@ t = torch.zeros(3)
 assert_type(TensorDict.stack([t, t]), Tensor)
 assert_type(TensorDict.cat((t, t)), Tensor)
 assert TensorDict.stack([t, t]).shape == torch.Size([2, 3])
+
+# Type checkers do not see a @tensorclass decorator class as a tensorclass
+# (docs/source/tensorclass.rst): the result stays Any, with no error.
+@tensorclass
+class Step:
+    obs: Tensor
+
+step = Step(obs=torch.zeros(3))
+pair: Step = TensorDict.stack([step, step])
+assert TensorDict.cat([pair, pair]).obs.shape == torch.Size([4, 3])
 """
 
 
@@ -1339,6 +1355,7 @@ def test_issue_3271_source_runs(tmp_path):
         "assert type(LazyStackedTensorDict.stack([td, td])) is TensorDict\n"
         "assert type(TensorDict.stack([lazy, lazy])) is LazyStackedTensorDict\n"
         "assert type(TensorDict.cat((t, t))) is Tensor\n"
+        "assert type(TensorDict.cat([pair, pair])) is Step\n"
     )
     runpy.run_path(str(path), run_name="__main__")
 

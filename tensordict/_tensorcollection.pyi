@@ -664,7 +664,8 @@ class TensorCollection:
         out: torch.Tensor | None = None,
     ) -> torch.Tensor: ...
     # The result has the type of the inputs, not of cls: a list of tensors
-    # gives a tensor.
+    # gives a tensor. The last overload keeps other inputs, such as instances
+    # of a @tensorclass decorator class, typed Any rather than rejected.
     @overload
     @classmethod
     def stack(
@@ -677,6 +678,9 @@ class TensorCollection:
     ) -> Tensor: ...
     @overload
     @classmethod
+    def stack(cls, input: Sequence[Any], dim: int = 0, *, out: Any = None) -> Any: ...
+    @overload
+    @classmethod
     def cat(
         cls, input: Sequence[_TC], dim: int = 0, *, out: _TC | None = None
     ) -> _TC: ...
@@ -685,6 +689,9 @@ class TensorCollection:
     def cat(
         cls, input: Sequence[Tensor], dim: int = 0, *, out: Tensor | None = None
     ) -> Tensor: ...
+    @overload
+    @classmethod
+    def cat(cls, input: Sequence[Any], dim: int = 0, *, out: Any = None) -> Any: ...
     @classmethod
     def lazy_stack(
         cls, input, dim: int = 0, *, out: Incomplete | None = None, **kwargs
