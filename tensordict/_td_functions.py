@@ -13,7 +13,7 @@ from typing import Any, Sequence, TYPE_CHECKING
 import torch
 from tensordict._archive import _tensor_chunks
 from tensordict._nestedkey import NestedKey
-from tensordict._td_memmap import _memmap_filename
+from tensordict._td_memmap import _class_id, _memmap_filename
 from tensordict._tensorcollection import TensorCollection
 from tensordict._utils_key_json import json_dumps
 from tensordict.utils import is_non_tensor, is_tensorclass
@@ -654,13 +654,15 @@ def append_memmap(
     files behind as ``.meta.json.append.tmp`` files. They are all written
     before the first ``meta.json`` is replaced, and the top ``meta.json``,
     in the ``_tensordict`` subdirectory for a tensorclass, is replaced
-    first. If ``.meta.json.append.tmp`` is still in the top directory, no
-    ``meta.json`` was replaced: delete every temporary file, which may be
-    incomplete, and the directory holds the old rows. Otherwise, rename each
-    temporary file over the ``meta.json`` next to it, which completes the
-    append. Decide by this file, not by whether
-    :func:`~tensordict.load_memmap` raises, which it doesn't for every tree.
-    Each append maps the whole saved tree, as :func:`~tensordict.load_memmap`
+    first. The next ``append_memmap`` to the directory finds these files
+    first and decides by the top one. If ``.meta.json.append.tmp`` is still
+    in the top directory, no ``meta.json`` was replaced: it deletes every
+    temporary file, which may be incomplete, and the directory holds the old
+    rows. Otherwise, it renames each temporary file over the ``meta.json``
+    next to it, which completes the killed append. To read the directory
+    without appending, apply the same rule yourself (see :ref:`saving`), and
+    decide by this file, not by whether :func:`~tensordict.load_memmap`
+    raises, which it doesn't for every tree. Each append maps the whole saved tree, as :func:`~tensordict.load_memmap`
     does, to read its structure, so many small appends to a save with many
     leaves are slow. See :ref:`saving`.
 
@@ -714,6 +716,7 @@ def append_memmap(
         raise TypeError(
             f"rows must be a tensordict or a tensorclass, got {type(rows)}."
         )
+    _finish_killed_append(prefix)
     saved = load_memmap(prefix, allow_pickle=allow_pickle)
     if not saved.batch_dims or not rows.batch_dims:
         raise ValueError(
@@ -764,19 +767,60 @@ def append_memmap(
             os.replace(tmp_file, metadata_file)
             num_replaced += 1
     except BaseException:
-        # Put back the meta.json files already replaced, then the leaves.
+        # Delete the temporary files, the top one last, so that a process
+        # killed here leaves nothing that _finish_killed_append would rename
+        # over an old meta.json. Then put back the meta.json files already
+        # replaced, then the leaves.
+        for tmp_file, _, _ in reversed(replacements):
+            if tmp_file.exists():
+                os.remove(tmp_file)
         for _, metadata_file, old_metadata in replacements[:num_replaced]:
             with open(metadata_file, "wb") as f:
                 f.write(old_metadata)
-        for tmp_file, _, _ in replacements:
-            if tmp_file.exists():
-                os.remove(tmp_file)
         for filename, size in old_sizes.items():
             if size is None:
                 os.remove(filename)
             else:
                 os.truncate(filename, size)
         raise
+
+
+def _finish_killed_append(prefix: Path) -> None:
+    """Finishes, or rolls back, an append_memmap that was killed midway.
+
+    A killed append leaves ``.meta.json.append.tmp`` files. They were all
+    complete before the top ``meta.json`` was replaced, which was replaced
+    first. If the top temporary file is still there, delete every one;
+    otherwise rename each one over the ``meta.json`` next to it.
+    """
+    import tensordict.base
+
+    tmp_name = ".meta.json.append.tmp"
+    leftovers = [
+        Path(root, tmp_name) for root, _, files in os.walk(prefix) if tmp_name in files
+    ]
+    if not leftovers or not (prefix / "meta.json").is_file():
+        return
+    # The top level is in _tensordict for a tensorclass, as in _check_append.
+    # Find the class as load_memmap does: a TensorDict can hold an entry
+    # named _tensordict.
+    with open(prefix / "meta.json", "rb") as f:
+        metadata = json.loads(f.read())
+    accepted_classes = tensordict.base._ACCEPTED_CLASSES
+    class_id = metadata.get("_class")
+    saved_cls = next(
+        (c for c in accepted_classes if class_id and _class_id(c) == class_id), None
+    ) or next((c for c in accepted_classes if str(c) == metadata.get("_type")), None)
+    if saved_cls is None:
+        # load_memmap cannot load it either, and raises.
+        return
+    top = prefix / "_tensordict" if is_tensorclass(saved_cls) else prefix
+    replaced = not (top / tmp_name).exists()
+    for tmp_file in leftovers:
+        if replaced:
+            os.replace(tmp_file, tmp_file.with_name("meta.json"))
+        else:
+            os.remove(tmp_file)
 
 
 def _check_append(saved, rows, key, leaves, metadata_files) -> None:

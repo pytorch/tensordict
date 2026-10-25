@@ -264,11 +264,15 @@ writes every temporary file before it replaces any ``meta.json``, and it
 replaces the top one first: the one in the directory itself, or in its
 ``_tensordict`` subdirectory for a saved tensorclass. If
 ``.meta.json.append.tmp`` is still there, no ``meta.json`` was replaced and
-the temporary files may be incomplete: delete every one of them, and the
+the temporary files may be incomplete: they must all be deleted, and the
 directory holds the old rows. Otherwise every temporary file is complete:
-rename each one over the ``meta.json`` next to it, which completes the
-append. Decide by this file, not by whether ``load_memmap`` raises, which
-it doesn't for every tree:
+renaming each one over the ``meta.json`` next to it completes the append.
+The next ``append_memmap`` to the directory applies this rule before it
+appends, so you can append again with no manual step.
+
+To read the directory without appending, apply the same rule yourself.
+Decide by this file, not by whether ``load_memmap`` raises, which it
+doesn't for every tree:
 
 .. code-block:: python
 
