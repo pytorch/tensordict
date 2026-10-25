@@ -952,6 +952,50 @@ class TestH5Serialization:
         assert (h5td.__getitems__(("n", "y")) == h5td["n", "y"]).all()
         h5td.close()
 
+    @pytest.mark.parametrize(
+        "dtype", [torch.bfloat16, torch.complex32, torch.float8_e4m3fn], ids=str
+    )
+    def test_unsupported_dtype_error_names_entry(self, tmp_path, dtype):
+        # #3265: the error named no key
+        td = TensorDict(
+            obs=TensorDict(w=torch.zeros(2, dtype=dtype), batch_size=[2]),
+            batch_size=[2],
+        )
+        with pytest.raises(TypeError, match=r"\('obs', 'w'\).*h5.*memmap"):
+            td.to_h5(tmp_path / "d.h5")
+        h5td = PersistentTensorDict(filename=tmp_path / "s.h5", mode="w")
+        with pytest.raises(TypeError, match=r"\('x', 'y'\).*h5"):
+            h5td["x", "y"] = torch.zeros(2, dtype=dtype)
+        h5td.close()
+
+    @pytest.mark.parametrize("layout", [torch.jagged, torch.strided], ids=str)
+    def test_nested_tensor_error_names_entry(self, tmp_path, layout):
+        # #3265: the error named no key
+        nt = torch.nested.nested_tensor([torch.zeros(2), torch.zeros(3)], layout=layout)
+        td = TensorDict(obs=TensorDict(j=nt, batch_size=[2]), batch_size=[2])
+        with pytest.raises(RuntimeError, match=r"\('obs', 'j'\).*h5.*nested"):
+            td.to_h5(tmp_path / "d.h5")
+
+    @pytest.mark.parametrize(
+        "make, err, hint",
+        [
+            (
+                lambda: torch.zeros(2, dtype=torch.complex64).conj(),
+                RuntimeError,
+                "resolve_conj",
+            ),
+            (lambda: torch.zeros(2).to_sparse(), TypeError, "to_dense"),
+        ],
+        ids=["conj", "sparse"],
+    )
+    def test_other_numpy_error_names_entry(self, tmp_path, make, err, hint):
+        # #3265: a numpy dtype that fails for another reason keeps torch's advice only
+        h5td = PersistentTensorDict(filename=tmp_path / "s.h5", mode="w")
+        with pytest.raises(err, match=rf"\('x', 'y'\).*h5.*{hint}") as info:
+            h5td["x", "y"] = make()
+        assert "numpy dtypes only" not in str(info.value)
+        h5td.close()
+
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 def test_auto_batch_size(tmpdir):
