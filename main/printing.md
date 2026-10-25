@@ -89,6 +89,16 @@ TensorDict(
  is_shared=False)
 ```
 
+The detailed display reads no tensor data either. It prints the tensor
+leaves of an h5 or zarr file ([`PersistentTensorDict`](reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict)) from
+their shape and dtype, and the tensor leaves of a lazy stack from its
+members, without reading the file or stacking the leaves. The text is the
+same as for the same data in memory. `plain=True` is the exception: it
+prints statistics of the values, so it reads them. `show_is_contiguous=True`
+also stacks a lazy leaf when one of its members is not contiguous (a
+`channels_last` tensor, for example), since the contiguity of the result
+depends on their strides.
+
 ## Choose what the display shows
 
 [`set_printoptions`](reference/generated/tensordict.set_printoptions.html#tensordict.set_printoptions) selects the format and the attributes
@@ -276,7 +286,7 @@ of the keys:
 | `show_is_contiguous` | `False` | Show `is_contiguous=`. |
 | `show_is_view` | `False` | Show `is_view=` (whether `._base` is set). |
 | `show_storage_size` | `False` | Show `storage_size=` (bytes). |
-| `plain` | `False` | Append a short value summary (mean/std for floats, min/max for ints). |
+| `plain` | `False` | Append a short value summary (mean/std for floats, min/max for ints). It reads the values: the data of a file, and the stacked leaves of a lazy stack. |
 | `sort_keys` | `"alphabetical"` | Key ordering: `"alphabetical"` (default), `"insertion"` (dict order), or a callable passed as `key` to [`sorted()`](https://docs.python.org/3/builtins/functions.html#sorted). |
 
 ### Read the current options
