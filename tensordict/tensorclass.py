@@ -109,6 +109,7 @@ from tensordict.utils import (  # @manual=//pytorch/tensordict:_C
     is_tensorclass,
     LinkedList,
     list_to_stack,
+    TensorDictFuture,
 )
 from torch import multiprocessing as mp, Tensor
 from torch.compiler import is_compiling, is_dynamo_compiling
@@ -4160,6 +4161,24 @@ def _warn_non_field_keys(self, keys: set[str], method: str) -> None:
     )
 
 
+class _TensorClassFuture(TensorDictFuture):
+    """A :class:`~tensordict.TensorDictFuture` whose :meth:`result` gives the tensorclass.
+
+    ``wrap`` builds the tensorclass from the tensordict once the writes are
+    done, and only once.
+    """
+
+    def __init__(self, future: TensorDictFuture, wrap: Callable) -> None:
+        super().__init__(future.futures, future.resulting_td)
+        self._wrap = wrap
+        self._wrapped = None
+
+    def result(self):
+        if self._wrapped is None:
+            self._wrapped = self._wrap(super().result())
+        return self._wrapped
+
+
 def _wrap_td_method(
     funcname, *, copy_non_tensor=False, no_wrap=False, is_property=False
 ):
@@ -4195,6 +4214,17 @@ def _wrap_td_method(
             result = getattr(td, funcname)(*args, **kwargs)
             if no_wrap:
                 return result
+
+            if isinstance(result, TensorDictFuture):
+                # e.g. consolidate(return_early=True): result() gives the
+                # class, built after the writes so that __post_init__ sees
+                # the data
+                return _TensorClassFuture(
+                    result,
+                    lambda out: (
+                        self if out is td else deliver_result(self, out, kwargs)
+                    ),
+                )
 
             if result is td:
                 return self
