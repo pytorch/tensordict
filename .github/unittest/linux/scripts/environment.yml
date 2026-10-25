@@ -16,6 +16,8 @@ dependencies:
     - numpy
     - mosaicml-streaming
     - mypy
+    # pinned, so a pyright release can't silently change CI (#3358)
+    - pyright==1.1.414
     - pandas
     - pyarrow
     - redis

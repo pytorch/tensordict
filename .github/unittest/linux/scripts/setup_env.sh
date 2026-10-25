@@ -132,7 +132,8 @@ printf "* Installing the test dependencies\n"
 if ${pip_only}; then
     # Install test dependencies (mirrors environment.yml)
     pip install numpy cloudpickle pytest pytest-benchmark pytest-instafail \
-        pytest-rerunfailures pytest-timeout pytest-xdist redis mypy
+        pytest-rerunfailures pytest-timeout pytest-xdist redis mypy \
+        pyright==1.1.414
     # Optional test dependencies, which may have no wheels for this Python yet
     for pkg in h5py orjson mosaicml-streaming safetensors "zarr>=3.1.1"; do
         pip install "${pkg}" || echo "${pkg} not available for Python ${PYTHON_VERSION}, skipping"

@@ -119,7 +119,9 @@ tests = [
     "pytest-instafail",
     "pytest-rerunfailures",
     "pytest-benchmark",
-    "mypy>=1.0.0"
+    "mypy>=1.0.0",
+    # same pin as the CI test environments (#3358)
+    "pyright==1.1.414"
 ]
 h5 = ["h5py>=3.11"]
 # zarr>=3 requires Python>=3.11: the marker keeps universal resolvers (uv)
