@@ -319,7 +319,6 @@ class dispatch:
         # Get the original function's signature
         orig_signature = inspect.signature(func)
 
-        # params = [inspect.Parameter(name='', kind=inspect.Parameter.VAR_POSITIONAL)]
         params = []
         i = -1
         for i, param in enumerate(orig_signature.parameters.values()):
@@ -342,7 +341,6 @@ class dispatch:
 
         # Add the **kwargs parameter
 
-        # for key in self.get_source(func, self_func):
         if i >= 0:
             params.extend(list(orig_signature.parameters.values())[i + 1 :])
         elif i == -1:

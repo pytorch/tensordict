@@ -104,9 +104,6 @@ def _apply_leaves(data, fn, *others):
         raise RuntimeError(
             "Using a LazyStackedTensorDict within a TensorDictParams isn't permitted."
         )
-        # for _data in data.tensordicts:
-        #     _apply_leaves(_data, fn)
-        # return data
     elif isinstance(data, _CustomOpTensorDict):
         _apply_leaves(data._source, fn, *(other._source for other in others))
         return data

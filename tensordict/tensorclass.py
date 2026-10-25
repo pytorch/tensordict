@@ -1937,9 +1937,6 @@ def _tensorclass(
             )
         )
 
-    # if not hasattr(cls, "batch_size") and "batch_size" not in expected_keys:
-    #     cls.batch_size = property(_batch_size, _batch_size_setter)
-
     # Memmap. load and load_memmap are bound to cls (here and in the loop
     # below): load_memmap falls back on the class it is called on when the
     # saved class cannot be found by name.
@@ -2057,12 +2054,6 @@ def _tensorclass(
     # The tensorclass decorator sets it from its flag
     cls._skip_post_init_on_rebuild = False
     return cls
-
-
-# def _batch_size(self):
-#     return self.__dict__["_tensordict"]._batch_size
-# def _batch_size_setter(self, value):
-#     self.__dict__["_tensordict"].batch_size = value
 
 
 def _arg_to_tensordict(arg):
@@ -2428,11 +2419,6 @@ def _init_wrapper(
         non_tensor_required = required_fields - non_tensor_defaults.keys()
     else:
         non_tensor_defaults = non_tensor_required = None
-    # if not required_params and hasattr(cls, "__init_parent__"):
-    #     init_sig_parent = inspect.signature(cls.__init_parent__)
-    #     params_parent = list(init_sig_parent.parameters.values())
-    #     # drop first entry of params which corresponds to self and isn't passed by the user
-    #     required_params = [p.name for p in params_parent[1:] if p.default is inspect._empty]
 
     @functools.wraps(__init__)
     def wrapper(
@@ -2718,8 +2704,6 @@ def _init_wrapper(
                 names=names,
             ),
         )
-        # super(type(self), self).__setattr__("_non_tensordict", {})
-        # super(type(self), self).__setattr__("_is_initialized", True)
         object.__setattr__(self, "_non_tensordict", {})
         object.__setattr__(self, "_is_initialized", True)
 
@@ -3156,7 +3140,6 @@ def _from_tensordict(
             else {}
         )
     # Validating keys of tensordict
-    # tensordict = tensordict.copy()
     tensor_keys = tensordict.keys()
     # TODO: compile doesn't like set() over an arbitrary object
     if is_compiling():
@@ -5425,9 +5408,6 @@ def _set(
         __dict__ = self.__dict__
         if __dict__["_tensordict"].is_locked:
             raise RuntimeError(_LOCK_ERROR)
-        # if key in ("batch_size", "names", "device"):
-        #     # handled by setattr
-        #     return
         expected_keys = cls.__expected_keys__
         if key not in expected_keys:
             raise AttributeError(
@@ -6367,7 +6347,6 @@ def _patch_tc(cls):
     cls.__bool__ = _bool
 
     cls.device = property(_device, _device_setter)
-    # cls.data = property(_data, _data_setter)
     cls.grad = property(_grad)
 
     cls._from_tensordict = classmethod(_from_tensordict)
@@ -6408,9 +6387,6 @@ def _patch_tc(cls):
         setattr(cls, method_name, _wrap_td_method(method_name))
     for method_name in _FALLBACK_METHOD_FROM_TD_NOWRAP:
         is_property = isinstance(getattr(TensorDictBase, method_name, None), property)
-        # if is_property:
-        #     print("method_name", method_name)
-        #     continue
         setattr(
             cls,
             method_name,
@@ -6433,7 +6409,6 @@ def _patch_tc(cls):
     )
 
     return cls
-    # _set_methods(TensorClass)
 
 
 def _is_tensorclass_flags(item: IndexType) -> bool:
@@ -6479,9 +6454,6 @@ class _TensorClassMeta(abc.ABCMeta):
         if cast_filter is NO_DEFAULT:
             cast_filter = getattr(cls, "_cast_filter", None)
         if name == "TensorClass":
-            # if "tensordict.tensorclass" in namespace.get(
-            #     "__module__", ""
-            # ):
             cls = _patch_tc(cls)
             # ideally we could make it a dataclass but that won't work because:
             # - we cannot have a frozen dataclass inherit from a non frozen one
@@ -6925,19 +6897,6 @@ class NonTensorDataBase(TensorClass):
                         # values that cannot be compared (dicts holding
                         # arrays, data frames) keep the empty result
                         pass
-                # # Handle comparison with scalar values (like 0, 1, etc.)
-                # # For non-tensor data, we should return a boolean tensor
-                # if isinstance(other, (int, float, bool)) or (isinstance(other, torch.Tensor) and other.numel() == 1):
-                #     eqval = self.data == other
-                #     if isinstance(eqval, torch.Tensor):
-                #         return eqval
-                #     if isinstance(eqval, np.ndarray):
-                #         return torch.as_tensor(eqval, device=self.device)
-                #     return torch.full(
-                #         self.batch_size,
-                #         bool(eqval),
-                #         device=self.device,
-                #     )
                 return old_eq(self, other)
 
             cls.__eq__ = __eq__
@@ -6964,19 +6923,6 @@ class NonTensorDataBase(TensorClass):
                         # values that cannot be compared (dicts holding
                         # arrays, data frames) keep the empty result
                         pass
-                # # Handle comparison with scalar values (like 0, 1, etc.)
-                # # For non-tensor data, we should return a boolean tensor
-                # if isinstance(other, (int, float, bool)) or (isinstance(other, torch.Tensor) and other.numel() == 1):
-                #     neqval = self.data != other
-                #     if isinstance(neqval, torch.Tensor):
-                #         return neqval
-                #     if isinstance(neqval, np.ndarray):
-                #         return torch.as_tensor(neqval, device=self.device)
-                #     return torch.full(
-                #         self.batch_size,
-                #         bool(neqval),
-                #         device=self.device,
-                #     )
                 return _ne(self, other)
 
             cls.__ne__ = __ne__
@@ -7788,7 +7734,6 @@ class NonTensorData(NonTensorDataBase):
             >>> expanded.batch_size, expanded.tolist()
             (torch.Size([3, 2]), [['a', 'a'], ['a', 'a'], ['a', 'a']])
         """
-        # tensordict_dims = self.batch_dims
         shape = _get_shape_from_args(*args, **kwargs)
         if -1 in shape:
             shape = _resolve_expand_shape(shape, self.batch_size)

@@ -857,8 +857,9 @@ class _ZarrBackend(_PersistentBackend):
             value = np.asarray(value)
             dtype = value.dtype
             if attributes:
-                # the strings of a stack, in zarr's variable-length string
-                # type: an element can then be replaced by a longer string
+                # the strings of a stack, in zarr's variable-length
+                # string type: an element can then be replaced by a longer
+                # string
                 attributes = {**(kwargs.get("attributes") or {}), **attributes}
                 kwargs = {**kwargs, "attributes": attributes}
                 dtype = str
