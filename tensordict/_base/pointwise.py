@@ -204,6 +204,14 @@ class _PointwiseOps:
             result.update(items)
         return result
 
+    def _unary_foreach(self, op: str) -> Self:
+        """Returns a new tensordict with the unary op ``op`` (``"abs"``, ``"exp"``...) applied to every leaf by ``_foreach``, or a copy of ``self`` if it has no leaves."""
+        keys, vals = self._items_list(True, True)
+        if not vals:
+            return self.copy()
+        vals = _foreach(op, vals)
+        return self._rebuild_from_items(keys, vals)
+
     def __abs__(self) -> Self:
         """Returns ``abs(td)``, a new tensordict with the absolute value of every leaf.
 
@@ -631,11 +639,7 @@ class _PointwiseOps:
             >>> td["a"]
             tensor([1., 2.])
         """
-        keys, vals = self._items_list(True, True)
-        if not vals:
-            return self.copy()
-        vals = _foreach("abs", vals)
-        return self._rebuild_from_items(keys, vals)
+        return self._unary_foreach("abs")
 
     @_write_back_inplace
     def abs_(self) -> Self:
@@ -647,11 +651,7 @@ class _PointwiseOps:
 
     def acos(self) -> Self:
         """Returns a new tensordict with :func:`torch.acos` applied to every leaf."""
-        keys, vals = self._items_list(True, True)
-        if not vals:
-            return self.copy()
-        vals = _foreach("acos", vals)
-        return self._rebuild_from_items(keys, vals)
+        return self._unary_foreach("acos")
 
     @_write_back_inplace
     def acos_(self) -> Self:
@@ -663,11 +663,7 @@ class _PointwiseOps:
 
     def exp(self) -> Self:
         """Returns a new tensordict with :func:`torch.exp` applied to every leaf."""
-        keys, vals = self._items_list(True, True)
-        if not vals:
-            return self.copy()
-        vals = _foreach("exp", vals)
-        return self._rebuild_from_items(keys, vals)
+        return self._unary_foreach("exp")
 
     @_write_back_inplace
     def exp_(self) -> Self:
@@ -703,11 +699,7 @@ class _PointwiseOps:
 
     def reciprocal(self) -> Self:
         """Returns a new tensordict with :func:`torch.reciprocal` applied to every leaf."""
-        keys, vals = self._items_list(True, True)
-        if not vals:
-            return self.copy()
-        vals = _foreach("reciprocal", vals)
-        return self._rebuild_from_items(keys, vals)
+        return self._unary_foreach("reciprocal")
 
     @_write_back_inplace
     def reciprocal_(self) -> Self:
@@ -719,11 +711,7 @@ class _PointwiseOps:
 
     def sigmoid(self) -> Self:
         """Returns a new tensordict with :func:`torch.sigmoid` applied to every leaf."""
-        keys, vals = self._items_list(True, True)
-        if not vals:
-            return self.copy()
-        vals = _foreach("sigmoid", vals)
-        return self._rebuild_from_items(keys, vals)
+        return self._unary_foreach("sigmoid")
 
     @_write_back_inplace
     def sigmoid_(self) -> Self:
@@ -735,11 +723,7 @@ class _PointwiseOps:
 
     def sign(self) -> Self:
         """Returns a new tensordict with :func:`torch.sign` applied to every leaf."""
-        keys, vals = self._items_list(True, True)
-        if not vals:
-            return self.copy()
-        vals = _foreach("sign", vals)
-        return self._rebuild_from_items(keys, vals)
+        return self._unary_foreach("sign")
 
     @_write_back_inplace
     def sign_(self) -> Self:
@@ -751,11 +735,7 @@ class _PointwiseOps:
 
     def sin(self) -> Self:
         """Returns a new tensordict with :func:`torch.sin` applied to every leaf."""
-        keys, vals = self._items_list(True, True)
-        if not vals:
-            return self.copy()
-        vals = _foreach("sin", vals)
-        return self._rebuild_from_items(keys, vals)
+        return self._unary_foreach("sin")
 
     @_write_back_inplace
     def sin_(self) -> Self:
@@ -767,11 +747,7 @@ class _PointwiseOps:
 
     def sinh(self) -> Self:
         """Returns a new tensordict with :func:`torch.sinh` applied to every leaf."""
-        keys, vals = self._items_list(True, True)
-        if not vals:
-            return self.copy()
-        vals = _foreach("sinh", vals)
-        return self._rebuild_from_items(keys, vals)
+        return self._unary_foreach("sinh")
 
     @_write_back_inplace
     def sinh_(self) -> Self:
@@ -783,11 +759,7 @@ class _PointwiseOps:
 
     def tan(self) -> Self:
         """Returns a new tensordict with :func:`torch.tan` applied to every leaf."""
-        keys, vals = self._items_list(True, True)
-        if not vals:
-            return self.copy()
-        vals = _foreach("tan", vals)
-        return self._rebuild_from_items(keys, vals)
+        return self._unary_foreach("tan")
 
     @_write_back_inplace
     def tan_(self) -> Self:
@@ -799,11 +771,7 @@ class _PointwiseOps:
 
     def tanh(self) -> Self:
         """Returns a new tensordict with :func:`torch.tanh` applied to every leaf."""
-        keys, vals = self._items_list(True, True)
-        if not vals:
-            return self.copy()
-        vals = _foreach("tanh", vals)
-        return self._rebuild_from_items(keys, vals)
+        return self._unary_foreach("tanh")
 
     @_write_back_inplace
     def tanh_(self) -> Self:
@@ -815,11 +783,7 @@ class _PointwiseOps:
 
     def trunc(self) -> Self:
         """Returns a new tensordict with :func:`torch.trunc` applied to every leaf."""
-        keys, vals = self._items_list(True, True)
-        if not vals:
-            return self.copy()
-        vals = _foreach("trunc", vals)
-        return self._rebuild_from_items(keys, vals)
+        return self._unary_foreach("trunc")
 
     @_write_back_inplace
     def trunc_(self) -> Self:
@@ -831,11 +795,7 @@ class _PointwiseOps:
 
     def lgamma(self) -> Self:
         """Returns a new tensordict with :func:`torch.lgamma` applied to every leaf."""
-        keys, vals = self._items_list(True, True)
-        if not vals:
-            return self.copy()
-        vals = _foreach("lgamma", vals)
-        return self._rebuild_from_items(keys, vals)
+        return self._unary_foreach("lgamma")
 
     @_write_back_inplace
     def lgamma_(self) -> Self:
@@ -847,11 +807,7 @@ class _PointwiseOps:
 
     def frac(self) -> Self:
         """Returns a new tensordict with :func:`torch.frac` applied to every leaf."""
-        keys, vals = self._items_list(True, True)
-        if not vals:
-            return self.copy()
-        vals = _foreach("frac", vals)
-        return self._rebuild_from_items(keys, vals)
+        return self._unary_foreach("frac")
 
     @_write_back_inplace
     def frac_(self) -> Self:
@@ -863,11 +819,7 @@ class _PointwiseOps:
 
     def expm1(self) -> Self:
         """Returns a new tensordict with :func:`torch.expm1` applied to every leaf."""
-        keys, vals = self._items_list(True, True)
-        if not vals:
-            return self.copy()
-        vals = _foreach("expm1", vals)
-        return self._rebuild_from_items(keys, vals)
+        return self._unary_foreach("expm1")
 
     @_write_back_inplace
     def expm1_(self) -> Self:
@@ -879,11 +831,7 @@ class _PointwiseOps:
 
     def log(self) -> Self:
         """Returns a new tensordict with :func:`torch.log` applied to every leaf."""
-        keys, vals = self._items_list(True, True)
-        if not vals:
-            return self.copy()
-        vals = _foreach("log", vals)
-        return self._rebuild_from_items(keys, vals)
+        return self._unary_foreach("log")
 
     @_write_back_inplace
     def log_(self) -> Self:
@@ -946,11 +894,7 @@ class _PointwiseOps:
 
     def log10(self) -> Self:
         """Returns a new tensordict with :func:`torch.log10` applied to every leaf."""
-        keys, vals = self._items_list(True, True)
-        if not vals:
-            return self.copy()
-        vals = _foreach("log10", vals)
-        return self._rebuild_from_items(keys, vals)
+        return self._unary_foreach("log10")
 
     @_write_back_inplace
     def log10_(self) -> Self:
@@ -962,11 +906,7 @@ class _PointwiseOps:
 
     def log1p(self) -> Self:
         """Returns a new tensordict with :func:`torch.log1p` applied to every leaf."""
-        keys, vals = self._items_list(True, True)
-        if not vals:
-            return self.copy()
-        vals = _foreach("log1p", vals)
-        return self._rebuild_from_items(keys, vals)
+        return self._unary_foreach("log1p")
 
     @_write_back_inplace
     def log1p_(self) -> Self:
@@ -978,11 +918,7 @@ class _PointwiseOps:
 
     def log2(self) -> Self:
         """Returns a new tensordict with :func:`torch.log2` applied to every leaf."""
-        keys, vals = self._items_list(True, True)
-        if not vals:
-            return self.copy()
-        vals = _foreach("log2", vals)
-        return self._rebuild_from_items(keys, vals)
+        return self._unary_foreach("log2")
 
     @_write_back_inplace
     def log2_(self) -> Self:
@@ -994,11 +930,7 @@ class _PointwiseOps:
 
     def ceil(self) -> Self:
         """Returns a new tensordict with :func:`torch.ceil` applied to every leaf."""
-        keys, vals = self._items_list(True, True)
-        if not vals:
-            return self.copy()
-        vals = _foreach("ceil", vals)
-        return self._rebuild_from_items(keys, vals)
+        return self._unary_foreach("ceil")
 
     @_write_back_inplace
     def ceil_(self) -> Self:
@@ -1010,11 +942,7 @@ class _PointwiseOps:
 
     def floor(self) -> Self:
         """Returns a new tensordict with :func:`torch.floor` applied to every leaf."""
-        keys, vals = self._items_list(True, True)
-        if not vals:
-            return self.copy()
-        vals = _foreach("floor", vals)
-        return self._rebuild_from_items(keys, vals)
+        return self._unary_foreach("floor")
 
     @_write_back_inplace
     def floor_(self) -> Self:
@@ -1026,11 +954,7 @@ class _PointwiseOps:
 
     def round(self) -> Self:
         """Returns a new tensordict with :func:`torch.round` applied to every leaf."""
-        keys, vals = self._items_list(True, True)
-        if not vals:
-            return self.copy()
-        vals = _foreach("round", vals)
-        return self._rebuild_from_items(keys, vals)
+        return self._unary_foreach("round")
 
     @_write_back_inplace
     def round_(self) -> Self:
@@ -1042,11 +966,7 @@ class _PointwiseOps:
 
     def erf(self) -> Self:
         """Returns a new tensordict with :func:`torch.erf` applied to every leaf."""
-        keys, vals = self._items_list(True, True)
-        if not vals:
-            return self.copy()
-        vals = _foreach("erf", vals)
-        return self._rebuild_from_items(keys, vals)
+        return self._unary_foreach("erf")
 
     @_write_back_inplace
     def erf_(self) -> Self:
@@ -1058,11 +978,7 @@ class _PointwiseOps:
 
     def erfc(self) -> Self:
         """Returns a new tensordict with :func:`torch.erfc` applied to every leaf."""
-        keys, vals = self._items_list(True, True)
-        if not vals:
-            return self.copy()
-        vals = _foreach("erfc", vals)
-        return self._rebuild_from_items(keys, vals)
+        return self._unary_foreach("erfc")
 
     @_write_back_inplace
     def erfc_(self) -> Self:
@@ -1074,11 +990,7 @@ class _PointwiseOps:
 
     def asin(self) -> Self:
         """Returns a new tensordict with :func:`torch.asin` applied to every leaf."""
-        keys, vals = self._items_list(True, True)
-        if not vals:
-            return self.copy()
-        vals = _foreach("asin", vals)
-        return self._rebuild_from_items(keys, vals)
+        return self._unary_foreach("asin")
 
     @_write_back_inplace
     def asin_(self) -> Self:
@@ -1090,11 +1002,7 @@ class _PointwiseOps:
 
     def atan(self) -> Self:
         """Returns a new tensordict with :func:`torch.atan` applied to every leaf."""
-        keys, vals = self._items_list(True, True)
-        if not vals:
-            return self.copy()
-        vals = _foreach("atan", vals)
-        return self._rebuild_from_items(keys, vals)
+        return self._unary_foreach("atan")
 
     @_write_back_inplace
     def atan_(self) -> Self:
@@ -1106,11 +1014,7 @@ class _PointwiseOps:
 
     def cos(self) -> Self:
         """Returns a new tensordict with :func:`torch.cos` applied to every leaf."""
-        keys, vals = self._items_list(True, True)
-        if not vals:
-            return self.copy()
-        vals = _foreach("cos", vals)
-        return self._rebuild_from_items(keys, vals)
+        return self._unary_foreach("cos")
 
     @_write_back_inplace
     def cos_(self) -> Self:
@@ -1122,11 +1026,7 @@ class _PointwiseOps:
 
     def cosh(self) -> Self:
         """Returns a new tensordict with :func:`torch.cosh` applied to every leaf."""
-        keys, vals = self._items_list(True, True)
-        if not vals:
-            return self.copy()
-        vals = _foreach("cosh", vals)
-        return self._rebuild_from_items(keys, vals)
+        return self._unary_foreach("cosh")
 
     @_write_back_inplace
     def cosh_(self) -> Self:
@@ -2503,11 +2403,7 @@ class _PointwiseOps:
 
     def sqrt(self) -> Self:
         """Returns a new tensordict with :func:`torch.sqrt` applied to every leaf."""
-        keys, vals = self._items_list(True, True)
-        if not vals:
-            return self.copy()
-        vals = _foreach("sqrt", vals)
-        return self._rebuild_from_items(keys, vals)
+        return self._unary_foreach("sqrt")
 
     # Filling
     def zero_(self) -> Self:
