@@ -3,7 +3,8 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 import atexit
-import math
+import json
+import os
 import pathlib
 import shutil
 import tempfile
@@ -12,7 +13,6 @@ import warnings
 from functools import wraps
 from unittest import mock
 
-import numpy as np
 import torch
 from filelock import FileLock
 from tensordict import (
@@ -39,13 +39,6 @@ def legacy_lazy_mode():
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", "The legacy lazy mode", DeprecationWarning)
         return set_lazy_legacy(True)
-
-
-def prod(sequence):
-    if hasattr(math, "prod"):
-        return math.prod(sequence)
-    else:
-        return int(np.prod(sequence))
 
 
 def streaming_dataset(**kwargs):
@@ -110,7 +103,7 @@ def get_available_devices():
                 devices += [torch.device(f"npu:{i}")]
                 if i == 1:
                     break
-    # TODO: MPS and NPU would be worth considering but it's a lot of work
+    # TODO: MPS would be worth considering but it's a lot of work
     # for example, many ops are tested with various dtypes but MPS struggles with
     # float64. Shared mem can also cause trouble.
     # if torch.backends.mps.is_available():
@@ -119,6 +112,44 @@ def get_available_devices():
     #         if i == 1:
     #             break
     return devices
+
+
+_UPDATE_KNOWN_FAILURES = bool(os.environ.get("TENSORDICT_UPDATE_KNOWN_FAILURES"))
+
+
+def _describe(err):
+    return f"raises {type(err).__name__}: {str(err).splitlines()[0][:80] if str(err) else ''}"
+
+
+def check_known_failures(key, failures, path, known_failures, hint=None):
+    """Compare ``failures`` ({case: reason}) with the known failures of ``key`` in ``path``.
+
+    ``known_failures`` is the content of ``path`` when the tests started. With
+    ``TENSORDICT_UPDATE_KNOWN_FAILURES`` set, the list of ``key`` in ``path`` is
+    rewritten instead. ``hint`` ends the message of a failure.
+    """
+    if _UPDATE_KNOWN_FAILURES:
+        known = json.loads(path.read_text())
+        known[key] = sorted(failures)
+        path.write_text(json.dumps(dict(sorted(known.items())), indent=1) + "\n")
+        return
+    known = set(known_failures.get(key, ()))
+    new = {case: reason for case, reason in failures.items() if case not in known}
+    fixed = sorted(known.difference(failures))
+    message = []
+    if new:
+        message.append(
+            f"{len(new)} cases fail and are not known failures:\n"
+            + "\n".join(f"  {case}: {reason}" for case, reason in sorted(new.items()))
+        )
+    if fixed:
+        message.append(
+            f"{len(fixed)} known failures pass now; remove them from "
+            f"{path.name} under {key!r}:\n" + "\n".join(f"  {case}" for case in fixed)
+        )
+    if message and hint:
+        message.append(hint)
+    assert not message, "\n".join(message)
 
 
 @tensorclass
