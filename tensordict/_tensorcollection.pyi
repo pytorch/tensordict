@@ -72,6 +72,7 @@ BEST_ATTEMPT_INPLACE: Incomplete
 CompatibleType: TypeAlias = Tensor
 
 T = TypeVar("T", bound="TensorCollection")
+_TC = TypeVar("_TC", bound="TensorCollection | TensorClass")
 
 if TYPE_CHECKING:
     from typing_extensions import Self
@@ -662,10 +663,28 @@ class TensorCollection:
         sorted: bool | list[NestedKey] | None = None,
         out: torch.Tensor | None = None,
     ) -> torch.Tensor: ...
+    # The result has the type of the inputs, not of cls: a list of tensors
+    # gives a tensor.
+    @overload
     @classmethod
-    def stack(cls, input, dim: int = 0, *, out: Incomplete | None = None): ...
+    def stack(
+        cls, input: Sequence[_TC], dim: int = 0, *, out: _TC | None = None
+    ) -> _TC: ...
+    @overload
     @classmethod
-    def cat(cls, input, dim: int = 0, *, out: Incomplete | None = None): ...
+    def stack(
+        cls, input: Sequence[Tensor], dim: int = 0, *, out: Tensor | None = None
+    ) -> Tensor: ...
+    @overload
+    @classmethod
+    def cat(
+        cls, input: Sequence[_TC], dim: int = 0, *, out: _TC | None = None
+    ) -> _TC: ...
+    @overload
+    @classmethod
+    def cat(
+        cls, input: Sequence[Tensor], dim: int = 0, *, out: Tensor | None = None
+    ) -> Tensor: ...
     @classmethod
     def lazy_stack(
         cls, input, dim: int = 0, *, out: Incomplete | None = None, **kwargs
