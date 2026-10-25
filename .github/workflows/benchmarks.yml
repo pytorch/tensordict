@@ -122,9 +122,9 @@ jobs:
           set -x
           source .venv/local/bin/activate
           cd benchmarks/
-          # Check Python version to ensure compatibility with PyTorch Dynamo
+          # Check that the venv runs the matrix Python version
           uv run --active python --version
-          uv run --active python -c "import sys; actual_version = f'{sys.version_info.major}.{sys.version_info.minor}'; expected_version = '${{ matrix.python-version }}'; print(f'Expected: {expected_version}, Actual: {actual_version}'); exit(1) if actual_version != expected_version else None; exit(1) if sys.version_info >= (3, 13) else print(f'Python version check passed: {actual_version}')"
+          uv run --active python -c "import sys; actual_version = f'{sys.version_info.major}.{sys.version_info.minor}'; expected_version = '${{ matrix.python-version }}'; print(f'Expected: {expected_version}, Actual: {actual_version}'); exit(1) if actual_version != expected_version else print(f'Python version check passed: {actual_version}')"
           export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
           export TD_GET_DEFAULTS_TO_NONE=1
           # The GPU job runs only the benchmarks marked gpu, which run on CUDA

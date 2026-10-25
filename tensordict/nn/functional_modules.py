@@ -80,7 +80,6 @@ def set_tensor_dict(module_dict, module, name: str, tensor: torch.Tensor) -> Non
         module_dict[name] = tensor
 
 
-_RESET_OLD_TENSORDICT = True
 import torch._functorch.vmap as vmap_src  # @manual=fbcode//caffe2:torch
 from torch._functorch.vmap import (  # @manual=fbcode//caffe2:torch
     _add_batch_dim,

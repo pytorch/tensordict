@@ -319,7 +319,6 @@ class dispatch:
         # Get the original function's signature
         orig_signature = inspect.signature(func)
 
-        # params = [inspect.Parameter(name='', kind=inspect.Parameter.VAR_POSITIONAL)]
         params = []
         i = -1
         for i, param in enumerate(orig_signature.parameters.values()):
@@ -342,7 +341,6 @@ class dispatch:
 
         # Add the **kwargs parameter
 
-        # for key in self.get_source(func, self_func):
         if i >= 0:
             params.extend(list(orig_signature.parameters.values())[i + 1 :])
         elif i == -1:
@@ -384,7 +382,6 @@ class _OutKeysSelect:
     def __init__(self, out_keys):
         self.out_keys = list(out_keys)
         self._initialized = None
-        self._is_dispatched = None
 
     def _init(self, module):
         if self._initialized:
@@ -489,12 +486,6 @@ class _OutKeysSelect:
             if len(tensordict_in) or len(kwargs):
                 if len(tensordict_in) and isinstance(tensordict_in[0], TensorDictBase):
                     return self._detect_dispatch(tensordict_in[0], kwargs, in_keys)
-                elif (
-                    not len(tensordict_in)
-                    and len(kwargs)
-                    and isinstance(kwargs.get("tensordict"), TensorDictBase)
-                ):
-                    return self._detect_dispatch(kwargs["tensordict"], in_keys)
                 return True
             return not len(in_keys)
         # not a TDBase: must be True

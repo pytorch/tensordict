@@ -8,17 +8,7 @@ import torch
 import torch.nn as nn
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule, TensorDictSequential
-
-try:
-    from tensordict.prototype.fx import symbolic_trace
-
-    _HAS_FX = True
-except ImportError:
-    _HAS_FX = False
-
-pytestmark = pytest.mark.skipif(
-    not _HAS_FX, reason="tensordict.prototype.fx not available"
-)
+from tensordict.prototype.fx import symbolic_trace
 
 
 class Net(nn.Module):

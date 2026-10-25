@@ -10,9 +10,7 @@ import html
 import importlib.util
 import io
 import os
-import platform
 import re
-import sys
 import warnings
 
 import pytest
@@ -52,7 +50,6 @@ else:
     from test_conformance import _CONTAINERS
 
 
-_has_streaming = importlib.util.find_spec("streaming", None) is not None
 _has_ipython = importlib.util.find_spec("IPython", None) is not None
 
 try:
@@ -61,15 +58,6 @@ try:
     _has_h5py = True
 except ImportError:
     _has_h5py = False
-
-_has_onnx = importlib.util.find_spec("onnxruntime", None) is not None
-
-PYTORCH_TEST_FBCODE = os.getenv("PYTORCH_TEST_FBCODE")
-
-_IS_OSX = platform.system() == "Darwin"
-_IS_WINDOWS = sys.platform == "win32"
-
-TD_BATCH_SIZE = 4
 
 # Capture all warnings
 pytestmark = [
@@ -93,21 +81,13 @@ pytestmark = [
         "ignore:Lazy modules are a new feature under heavy development so changes to the API or functionality"
     ),
     pytest.mark.filterwarnings(
-        "ignore:The content of the stacked NonTensorData objects matched in value but not identity"
-    ),
-    pytest.mark.filterwarnings(
         "ignore:No PYTORCH_KERNEL_CACHE_PATH or HOME environment variable set"
     ),
     pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning"),
 ]
 
-mp_ctx = "spawn"
-cur_device = "cpu"
 npu_device_count = 0
-if torch.cuda.is_available():
-    cur_device = "cuda"
-elif is_npu_available():
-    cur_device = "npu"
+if not torch.cuda.is_available() and is_npu_available():
     npu_device_count = torch.npu.device_count()
 
 
@@ -1930,11 +1910,7 @@ _PRINT_XFAILS = {
     **{
         (case, mode): "#3257: detailed printing reads every leaf of an h5 or zarr file"
         for case in (
-            "td_h5",
-            "h5",
-            "h5_in_td",
             "h5_non_tensor",
-            "zarr",
             "zarr_non_tensor",
         )
         for mode in _DETAILED_MODES
@@ -1942,16 +1918,6 @@ _PRINT_XFAILS = {
     ("h5_non_tensor", "plain"): (
         "#3257: printing an h5 string leaf emits the h5 string FutureWarning"
     ),
-    ("memmap_lazy", "detailed_all_flags"): (
-        "#3257: detailed printing of a lazy stack stacks its leaves"
-    ),
-    **{
-        ("unbatched_lazy", mode): (
-            "#3257: detailed printing of a lazy stack stacks its UnbatchedTensor "
-            "leaves, which warns"
-        )
-        for mode in (*_DETAILED_MODES, "plain")
-    },
 }
 
 
@@ -2144,6 +2110,104 @@ class TestPrintEveryContainer:
                 f"printing changed the object: before {before!r:.300}, after {after!r:.300}"
             )
         assert not failures, f"printing {case} with {_PRINT_MODES[mode]}: {failures}"
+
+    @pytest.mark.parametrize("grad", [True, False], ids=["grad", "no_grad"])
+    @pytest.mark.parametrize("mode", list(_PRINT_MODES))
+    @pytest.mark.parametrize(
+        "case",
+        [
+            "h5",
+            "zarr",
+            "td_h5",
+            "h5_in_td",
+            "h5_lazy",
+            "zarr_lazy",
+            "memmap_lazy",
+            "unbatched_lazy",
+            "grad_lazy",
+            "channels_last_lazy",
+            "h5_het_lazy",
+        ],
+    )
+    def test_print_from_metadata(self, case, mode, grad, tmp_path, _backend_reads):
+        # #3257: the tensor leaves of h5 and zarr files and of lazy stacks
+        # print as the same data in memory does, without reading the files,
+        # stacking the leaves or warning; plain=True reads the values.
+        def lazy_of_files(backend):
+            members = []
+            for name in ("a", "b"):
+                (tmp_path / name).mkdir()
+                members.append(_make_print_case(backend, tmp_path / name))
+            return LazyStackedTensorDict(*members)
+
+        if case in ("td_h5", "h5_het_lazy") and not _has_h5py:
+            pytest.skip("h5py is not installed")
+        # the same data in memory, for a lazy stack that cannot be stacked
+        expected_obj = None
+        if case == "h5_het_lazy":
+            # the members' leaves differ in shape, and the first is a file
+            members = [
+                TensorDict(a=torch.zeros(3, 2), b=torch.arange(3), batch_size=[3]),
+                TensorDict(a=torch.zeros(3, 5), b=torch.arange(3), batch_size=[3]),
+            ]
+            expected_obj = LazyStackedTensorDict(*members)
+            obj = LazyStackedTensorDict(
+                members[0].to_h5(tmp_path / "a.h5"), members[1].clone()
+            )
+        elif case.endswith("_lazy") and case.split("_")[0] in ("h5", "zarr"):
+            obj = lazy_of_files(case.split("_")[0])
+        elif case == "channels_last_lazy":
+            # stacking channels_last tensors keeps their memory format
+            t = torch.zeros(2, 3, 4, 5).to(memory_format=torch.channels_last)
+            obj = LazyStackedTensorDict(TensorDict(a=t), TensorDict(a=t.clone()))
+            # contiguous() would make the stacked leaf contiguous
+            expected_obj = TensorDict(a=obj.get("a"), batch_size=[2])
+        elif case == "grad_lazy":
+            obj = LazyStackedTensorDict(
+                TensorDict(a=torch.zeros(3, requires_grad=True), b=torch.zeros(3)),
+                TensorDict(a=torch.zeros(3), b=torch.zeros(3, dtype=torch.float64)),
+            )
+        else:
+            obj = _make_print_case(case, tmp_path)
+        leaf_reads = _LeafReads()
+        _backend_reads.clear()
+        with (
+            torch.set_grad_enabled(grad),
+            set_printoptions(**_PRINT_MODES[mode]),
+            warnings.catch_warnings(record=True) as caught,
+        ):
+            warnings.simplefilter("always")
+            with leaf_reads:
+                out = repr(obj)
+            reads = list(_backend_reads)
+            # the same data in memory, with the leaves of lazy stacks stacked
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                if expected_obj is None:
+                    expected_obj = obj.contiguous()
+                expected = repr(expected_obj)
+        assert not caught, [str(w.message) for w in caught]
+        if mode != "plain":
+            assert not reads, reads
+        # the contiguity of a stack of non-contiguous members needs the stack
+        stacks = mode == "plain" or (
+            case == "channels_last_lazy"
+            and _PRINT_MODES[mode].get("show_is_contiguous", False)
+        )
+        if not stacks:
+            assert "stack" not in leaf_reads.calls, leaf_reads.calls
+
+        def leaves(text):
+            # "a: Tensor(...)" in the detailed display, "a: f32[2]" in the
+            # compact one
+            detailed = re.findall(
+                r"(\w+): ((?:Unbatched)?Tensor\((?:[^()]|\([^()]*\))*\))", text
+            )
+            compact = re.findall(r"(\w+): (\w*\[[-\d,]*\])", text)
+            return sorted(detailed + compact)
+
+        assert leaves(out), out
+        assert leaves(out) == leaves(expected), f"{out}\n!=\n{expected}"
 
     @pytest.mark.parametrize(
         "case",

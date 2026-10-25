@@ -421,13 +421,6 @@ def _worker(rank, world_size, train_data_tc, single_gpu, trainer_transform):
 _IMAGENET_DIR = Path("/datasets01_ontap/imagenet_full_size/061417/")
 
 
-def pytest_addoption(parser):
-    parser.addoption("--world_size", type=int, default=2)
-    parser.addoption("--single_gpu", action="store_true", default=False)
-    parser.addoption("--trainer_transform", action="store_true", default=False)
-    parser.addoption("--fraction", type=int, default=1)
-
-
 @pytest.mark.skipif(
     not _IMAGENET_DIR.exists(),
     reason=f"ImageNet not found at {_IMAGENET_DIR}",

@@ -16,7 +16,6 @@ from __future__ import annotations
 import collections
 import importlib.util
 import numbers
-import sys
 import uuid
 import warnings
 import weakref
@@ -47,7 +46,6 @@ from tensordict.base import (
     _is_leaf_nontensor,
     _is_tensor_collection,
     _maybe_preserve_module_state,
-    _PACKAGE_DIR,
     _raise_on_exclusive_keys,
     _set_tensor_dict,
     _wrap_extra_state,
@@ -69,6 +67,7 @@ from tensordict.utils import (
     _set_max_batch_size,
     _user_stacklevel,
     _warn_batch_dims_ignored,
+    ftdim,
     is_non_tensor,
     LinkedList,
     set_lazy_legacy,
@@ -82,11 +81,6 @@ from torch.utils._pytree import is_structseq_instance, tree_map
 if TYPE_CHECKING:
     from tensordict.base import TensorDictBase
 
-try:
-    from functorch import dim as ftdim
-except ImportError:
-    from tensordict.utils import _ftdim_mock as ftdim
-
 
 def _int_batch_dims(batch_dims):
     # for backward compatibility, from_any ignores a batch_dims that is not an
@@ -98,7 +92,8 @@ def _int_batch_dims(batch_dims):
 
 def _dict_holds_sequence(value: dict) -> bool:
     # from_pytree turns a list or tuple inside a dict into a nested TensorDict,
-    # where from_any (used for namedtuple fields on main) keeps a tensor
+    # where from_any (which earlier releases used for namedtuple fields) keeps
+    # a tensor
     return any(
         _dict_holds_sequence(val)
         if isinstance(val, dict)
@@ -109,7 +104,8 @@ def _dict_holds_sequence(value: dict) -> bool:
 
 def _holds_empty(value) -> bool:
     # from_pytree gives an empty dict or namedtuple a _pytree_type entry, so
-    # auto_batch_size finds no batch dims; from_any leaves it empty, as on main
+    # auto_batch_size finds no batch dims; from_any leaves it empty, as earlier
+    # releases did
     if _is_namedtuple(value):
         value = value._asdict()
     elif not isinstance(value, dict):
@@ -157,10 +153,6 @@ def _pytree_dict_key(key):
 
 def _warn_structseq_keys(obj) -> None:
     """Warns that ``from_any`` will key a structseq by its field names."""
-    # point to the first frame outside tensordict: the user's call
-    frame, stacklevel = sys._getframe(1), 2
-    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
-        frame, stacklevel = frame.f_back, stacklevel + 1
     obj_type = type(obj)
     positional = [str(i) for i in range(len(obj))]
     named = list(obj_type.__match_args__)
@@ -171,7 +163,7 @@ def _warn_structseq_keys(obj) -> None:
         "from_namedtuple gives. Pass it to from_namedtuple to get the field "
         "names now, or convert it with tuple() to keep the keys of a tuple.",
         FutureWarning,
-        stacklevel=stacklevel,
+        stacklevel=_user_stacklevel(),
     )
 
 
@@ -728,7 +720,7 @@ class _Conversion:
             # a list or tuple, the tuples that hold a list, tuple or str, the
             # fields that hold an empty dict, namedtuple or tuple, and the
             # fields that from_pytree does not take (such as a dict holding a
-            # str) go through from_any, as on main.
+            # str) go through from_any, as in earlier releases.
             nested = {}
             for key, value in pytree._asdict().items():
                 if _pytree_field(value) or (
@@ -815,7 +807,8 @@ class _Conversion:
                     val = val.to_dict()
                 elif is_tensor_collection(val):
                     # from_any built it (e.g. for a dict holding a str), not
-                    # from_pytree: convert it as to_namedtuple did on main
+                    # from_pytree: convert it as to_namedtuple did in earlier
+                    # releases
                     val = _dict_to_namedtuple(
                         val.to_dict(retain_none=False), _pytree_type
                     )
@@ -1631,7 +1624,6 @@ class _Conversion:
 
         # we use __dict__ directly to avoid the getattr/setattr overhead whenever we can
         if not is_dynamo and type(module).__setattr__ is __base__setattr__:
-            # if type(module).__setattr__ is __base__setattr__:
             __dict__ = module.__dict__
             _parameters = __dict__["_parameters"]
             _buffers = __dict__["_buffers"]
@@ -1669,9 +1661,8 @@ class _Conversion:
                         )
                         local_out = swap_tensor(module, key, value)
                     else:
-                        new_val = local_out
-                        if return_swap:
-                            local_out = local_out.clone()
+                        new_val = getattr(module, key)
+                        local_out = new_val.clone() if return_swap else new_val
                         new_val.data.copy_(value.data, non_blocking=non_blocking)
             else:
                 if __dict__ is not None:
@@ -2233,12 +2224,6 @@ class _Conversion:
 
         """
         if type(obj) is Tensor or is_tensor_collection(obj):
-            # Conversions from non-tensor data must be done manually
-            # if is_non_tensor(obj):
-            #     from tensordict.tensorclass import LazyStackedTensorDict
-            #     if isinstance(obj, LazyStackedTensorDict):
-            #         return obj
-            #     return cls.from_any(obj.data, auto_batch_size=auto_batch_size)
             return obj
         if isinstance(obj, (dict, UserDict)):
             result = cls.from_dict(

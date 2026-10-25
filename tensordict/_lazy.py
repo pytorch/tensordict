@@ -11,7 +11,6 @@ import numbers
 import operator
 import os
 import re
-import sys
 import textwrap
 import warnings
 import weakref
@@ -69,7 +68,6 @@ from tensordict.base import (
     _NESTED_TENSORS_AS_LISTS_NONTENSOR,
     _NestedReadsCopies,
     _on_copies,
-    _PACKAGE_DIR,
     _READ_ONLY_CALL,
     _register_tensor_class,
     _rename_entries,
@@ -77,6 +75,7 @@ from tensordict.base import (
     _SET_AT_CAST_TYPES,
     _set_at_each_key,
     _unwrap,
+    _UPDATE_MEMBERS_CALL,
     _warn_names_length,
     _warn_read_only,
     _warn_set_at_cast,
@@ -91,6 +90,7 @@ from tensordict.base import (
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.persistent import PersistentTensorDict
 from tensordict.utils import (
+    _add_batch_dim,
     _as_context_manager,
     _cache_while_locked,
     _canonicalize_tensor,
@@ -100,7 +100,6 @@ from tensordict.utils import (
     _convert_list_to_stack,
     _erase_cache_first,
     _GENERIC_NESTED_ERR,
-    _import_and_wrap_functorch,
     _infer_size_impl,
     _is_non_tensor,
     _is_unbatched,
@@ -111,6 +110,7 @@ from tensordict.utils import (
     _pass_through,
     _positional_non_blocking,
     _recursive_unbind_list,
+    _remove_batch_dim,
     _REPR_OPTIONS,
     _shape,
     _td_fields,
@@ -122,6 +122,7 @@ from tensordict.utils import (
     _zip_strict,
     DeviceType,
     expand_right,
+    ftdim,
     IndexType,
     is_non_tensor,
     is_tensorclass,
@@ -129,23 +130,8 @@ from tensordict.utils import (
     NestedKey,
 )
 from torch import Tensor
-from torch.compiler import is_compiling
+from torch.compiler import is_compiling, is_dynamo_compiling
 from torch.nn.utils.rnn import pad_sequence
-
-try:
-    from functorch import dim as ftdim
-
-    _has_funcdim = True
-except ImportError:
-    from tensordict.utils import _ftdim_mock as ftdim
-
-    _has_funcdim = False
-
-_add_batch_dim, _remove_batch_dim = _import_and_wrap_functorch(
-    "_add_batch_dim",
-    "_remove_batch_dim",
-)
-
 
 if TYPE_CHECKING:
     from typing_extensions import Self
@@ -462,6 +448,27 @@ def _copy_fails(dest: Tensor, source: Tensor) -> bool:
 def _raise_if_missing(name, source, dest) -> None:
     if source is not None and dest is None:
         raise KeyError(f"The key {name} was not found in the dest tensordict.")
+
+
+def _update_members(pairs, kwargs: dict) -> None:
+    """Updates each member ``dest`` of a lazy stack with its ``source``, for each ``(dest, source)`` of ``pairs``.
+
+    The members warn once in all that update writes an entry whole (#3360).
+    """
+    if kwargs["keys_to_update"] is None or is_dynamo_compiling():
+        for dest, source in pairs:
+            dest.update(source, **kwargs)
+        return
+    # a nested stack keeps the state of the outer one
+    warned = getattr(_UPDATE_MEMBERS_CALL, "warned", None)
+    if warned is None:
+        _UPDATE_MEMBERS_CALL.warned = False
+    try:
+        for dest, source in pairs:
+            dest.update(source, **kwargs)
+    finally:
+        if warned is None:
+            _UPDATE_MEMBERS_CALL.warned = None
 
 
 def _raise_if_update_fails(
@@ -1038,9 +1045,7 @@ class LazyStackedTensorDict(TensorDictBase):
         if func in LAZY_TD_HANDLED_FUNCTIONS:
             if kwargs is None:
                 kwargs = {}
-            if func not in LAZY_TD_HANDLED_FUNCTIONS or not all(
-                issubclass(t, (Tensor, TensorDictBase)) for t in types
-            ):
+            if not all(issubclass(t, (Tensor, TensorDictBase)) for t in types):
                 return NotImplemented
             return LAZY_TD_HANDLED_FUNCTIONS[func](*args, **kwargs)
         else:
@@ -1050,7 +1055,6 @@ class LazyStackedTensorDict(TensorDictBase):
     # The names of the batch dims of a stack without members, without the
     # stack dim. None if these dims have no names.
     _empty_stack_names = None
-    _safe = False
     _lazy = True
     _set_at_warns_cast = True
     _leaves_built_on_read = True
@@ -1172,9 +1176,7 @@ class LazyStackedTensorDict(TensorDictBase):
         ndim = self.ndim
         if device is not NO_DEFAULT:
             kwargs["device"] = device
-        if (
-            empty_lazy and len(size) > self.stack_dim
-        ):  # eg, stack_dim is 1 and size is (3, 4)
+        if len(size) > self.stack_dim:  # eg, stack_dim is 1 and size is (3, 4)
             sub_size = list(size)
             # TODO: consider starting from the end?
             stack_dim = self.stack_dim  # - self.ndim
@@ -1204,7 +1206,7 @@ class LazyStackedTensorDict(TensorDictBase):
             feature_shape = tensor.shape[ndim:]
             size = torch.Size((*size, *feature_shape))
             kwargs_copy = kwargs
-            if empty_lazy and is_tensor_collection(tensor):
+            if is_tensor_collection(tensor):
                 kwargs_copy = dict(kwargs)
                 kwargs_copy["empty_lazy"] = empty_lazy
             return getattr(tensor, funcname)(
@@ -1235,7 +1237,6 @@ class LazyStackedTensorDict(TensorDictBase):
         device: torch.device | None = None,
         names: Sequence[str] | None = None,
         stack_dim_name: str | None = None,
-        strict_shape: bool = False,
     ) -> None:
         self = cls.__new__(cls)
         self._is_locked = None
@@ -1418,12 +1419,7 @@ class LazyStackedTensorDict(TensorDictBase):
             dropped = list(names)
             del dropped[stack_dim]
             if dropped or any(td.batch_dims for td in tensordicts):
-                # point to the first frame outside tensordict: the user's call
-                frame, stacklevel = sys._getframe(1), 2
-                while frame is not None and frame.f_code.co_filename.startswith(
-                    _PACKAGE_DIR
-                ):
-                    frame, stacklevel = frame.f_back, stacklevel + 1
+                stacklevel = _user_stacklevel()
                 if all(td.batch_dims == len(dropped) for td in tensordicts):
                     warnings.warn(
                         "LazyStackedTensorDict.from_dict without a batch_size "
@@ -3216,13 +3212,23 @@ class LazyStackedTensorDict(TensorDictBase):
                         none_shape = a_shape[:-1] + (0,)
                     for tensor in list_of_entries:
                         if tensor is not None:
-                            a_tensor = tensor.new_zeros(none_shape)
+                            a_tensor = tensor
                             break
+                    # each empty entry has the batch size of the member it
+                    # stands in for (#3219), unless that member is a lazy
+                    # stack with a ragged batch dim
+                    kept = min(rows, len(a_shape) - 1)
                     list_of_entries = [
-                        tensor if tensor is not None else a_tensor
-                        for tensor in list_of_entries
+                        tensor
+                        if tensor is not None
+                        else a_tensor.new_zeros(
+                            none_shape
+                            if -1 in td.batch_size[:kept]
+                            else td.batch_size[:kept] + none_shape[kept:]
+                        )
+                        for td, tensor in zip(self.tensordicts, list_of_entries)
                     ]
-                    shapes.update({a_shape, none_shape})
+                    shapes.update(tensor.shape for tensor in list_of_entries)
                 if len(shapes) == 1:
                     tensor = torch.stack(list_of_entries, self.stack_dim)
                 else:
@@ -3710,8 +3716,6 @@ class LazyStackedTensorDict(TensorDictBase):
         executor: ThreadPoolExecutor,
         futures: List[Future],
         local_futures: List,
-        subs_results: Dict[Future, Any] | None = None,
-        multithread_set: bool = False,  # Experimental
         **constructor_kwargs,
     ) -> None:
         if inplace and any(
@@ -3733,8 +3737,6 @@ class LazyStackedTensorDict(TensorDictBase):
                     executor=executor,
                     futures=futures,
                     local_futures=local_futures,
-                    subs_results=subs_results,
-                    multithread_set=multithread_set,
                     **constructor_kwargs,
                 )
                 if result is not None:
@@ -3760,8 +3762,6 @@ class LazyStackedTensorDict(TensorDictBase):
                 executor=executor,
                 futures=futures,
                 local_futures=local_future,
-                subs_results=subs_results,
-                multithread_set=multithread_set,
             )
             results.append(local_out)
         if filter_empty and all(r is None for r in results):
@@ -4216,10 +4216,7 @@ class LazyStackedTensorDict(TensorDictBase):
             if dim is NO_DEFAULT:
                 # It is not very memory-efficient to do this, but it's the easiest to cover all use cases
                 agglomerate = [
-                    val.contiguous().flatten()
-                    for val in self._values_list(
-                        True, True, is_leaf=_NESTED_TENSORS_AS_LISTS
-                    )
+                    val.contiguous().flatten() for val in self._values_list(True, True)
                 ]
                 agglomerate = torch.cat(agglomerate, dim=-1)
                 return getattr(torch, reduction_name)(agglomerate, **kwargs)
@@ -4382,7 +4379,6 @@ class LazyStackedTensorDict(TensorDictBase):
         _tag: int = -1,
         pseudo_rand: bool = False,
         group: "torch.distributed.ProcessGroup" | None = None,
-        non_blocking: bool = False,
         group_src: int | None = None,
     ) -> int:
         for td in self.tensordicts:
@@ -4391,7 +4387,6 @@ class LazyStackedTensorDict(TensorDictBase):
                 _tag=_tag,
                 pseudo_rand=pseudo_rand,
                 group=group,
-                non_blocking=non_blocking,
                 group_src=group_src,
             )
         return _tag
@@ -4785,8 +4780,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 raise ValueError(
                     "cannot update stacked tensordicts with different shapes when update_batch_size=False."
                 )
-            for td_dest, td_source in zip(self.tensordicts, sources):
-                td_dest.update(td_source, **kwargs)
+            _update_members(zip(self.tensordicts, sources), kwargs)
             if update_batch_size:
                 self._reset_member_batch_size()
             if len(sources) > n and update_batch_size:
@@ -4827,10 +4821,12 @@ class LazyStackedTensorDict(TensorDictBase):
                 raise ValueError(
                     "cannot update stacked tensordicts with different shapes."
                 ) from err
-        for td_dest, td_source in _zip_strict(
-            self_upd.tensordicts, input_dict_or_td.unbind(self_upd.stack_dim)
-        ):
-            td_dest.update(td_source, **kwargs)
+        _update_members(
+            _zip_strict(
+                self_upd.tensordicts, input_dict_or_td.unbind(self_upd.stack_dim)
+            ),
+            kwargs,
+        )
         if update_batch_size:
             self_upd._reset_member_batch_size()
         if self._hook_out is not None:
@@ -5844,7 +5840,6 @@ class LazyStackedTensorDict(TensorDictBase):
 class _CustomOpTensorDict(TensorDictBase):
     """Encodes lazy operations on tensors contained in a TensorDict."""
 
-    _safe = False
     _lazy = True
     _masking_on_dense_copy = True
 
@@ -6452,9 +6447,6 @@ class _CustomOpTensorDict(TensorDictBase):
         self._source.unlock_()
         return self
 
-    def _remove_lock(self, lock_id):
-        return self._source._remove_lock(lock_id)
-
     @_erase_cache_first
     def _propagate_lock(self, lock_ids, *, is_compiling):
         return self._source._propagate_lock(lock_ids, is_compiling=is_compiling)
@@ -6810,7 +6802,7 @@ class _PermutedTensorDict(_CustomOpTensorDict):
 
 
 def _iter_items_lazystack(
-    tensordict: LazyStackedTensorDict, return_none_for_het_values: bool = False
+    tensordict: LazyStackedTensorDict,
 ) -> Iterator[tuple[str, CompatibleType]]:
     # The keys of every member, as keys() lists them: a sub-tensordict that
     # only some members have cannot be stacked.

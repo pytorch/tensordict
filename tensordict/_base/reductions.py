@@ -13,7 +13,6 @@ mixin imports in ``tensordict/base.py`` gives the other rules.
 
 from __future__ import annotations
 
-import sys
 import warnings
 from typing import Callable, Iterable, Literal, overload, Tuple
 
@@ -25,23 +24,28 @@ from tensordict._tensorcollection import TensorCollection
 from tensordict.base import (
     _is_tensor_collection,
     _NESTED_TENSORS_AS_LISTS,
-    _PACKAGE_DIR,
     NO_DEFAULT,
     Self,
 )
-from tensordict.utils import _maybe_correct_neg_dim
+from tensordict.utils import _maybe_correct_neg_dim, _user_stacklevel
 
 # dim=() reduces over every element, as in torch.sum(x, dim=()), except in
 # these reductions, which keep raising for it
 _NO_EMPTY_DIM_REDUCTIONS = frozenset({"max", "min", "cummax", "cummin", "quantile"})
 
 
-def _user_stacklevel() -> int:
-    """Returns the ``stacklevel`` that points the caller's warning to the first frame outside tensordict."""
-    frame, stacklevel = sys._getframe(1), 1
-    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
-        frame, stacklevel = frame.f_back, stacklevel + 1
-    return stacklevel
+def _split_values_indices(result: TensorCollection, return_type: type) -> tuple:
+    """Splits ``result``, whose leaves are ``values`` and ``indices`` entries, into a ``return_type`` of two tensordicts."""
+    values_dict = {}
+    indices_dict = {}
+    for key in result.keys(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
+        if key[-1] == "values":
+            values_dict[key] = key[:-1]
+        else:
+            indices_dict[key] = key[:-1]
+    return return_type(
+        result.split_keys(values_dict, indices_dict)[:2],
+    )
 
 
 def _warn_negative_dim_with_reduce(reduction_name: str, dim) -> None:
@@ -360,19 +364,7 @@ class _Reductions:
             # cummax and cummin
             return result
         if dim is not NO_DEFAULT and dim is not None and return_indices:
-            # Split the tensordict
-            from torch.return_types import min
-
-            values_dict = {}
-            indices_dict = {}
-            for key in result.keys(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
-                if key[-1] == "values":
-                    values_dict[key] = key[:-1]
-                else:
-                    indices_dict[key] = key[:-1]
-            return min(
-                result.split_keys(values_dict, indices_dict)[:2],
-            )
+            return _split_values_indices(result, torch.return_types.min)
         return result
 
     @overload
@@ -538,19 +530,7 @@ class _Reductions:
             # cummax and cummin
             return result
         if dim is not NO_DEFAULT and dim is not None and return_indices:
-            # Split the tensordict
-            from torch.return_types import max
-
-            values_dict = {}
-            indices_dict = {}
-            for key in result.keys(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
-                if key[-1] == "values":
-                    values_dict[key] = key[:-1]
-                else:
-                    indices_dict[key] = key[:-1]
-            return max(
-                result.split_keys(values_dict, indices_dict)[:2],
-            )
+            return _split_values_indices(result, torch.return_types.max)
         return result
 
     @overload
@@ -621,19 +601,7 @@ class _Reductions:
         if isinstance(result, (torch.Tensor, torch.return_types.cummin)):
             return result
         if dim is not NO_DEFAULT and return_indices:
-            # Split the tensordict
-            from torch.return_types import cummin
-
-            values_dict = {}
-            indices_dict = {}
-            for key in result.keys(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
-                if key[-1] == "values":
-                    values_dict[key] = key[:-1]
-                else:
-                    indices_dict[key] = key[:-1]
-            return cummin(
-                result.split_keys(values_dict, indices_dict)[:2],
-            )
+            return _split_values_indices(result, torch.return_types.cummin)
         return result
 
     @overload
@@ -704,19 +672,7 @@ class _Reductions:
         if isinstance(result, (torch.Tensor, torch.return_types.cummax)):
             return result
         if dim is not NO_DEFAULT and return_indices:
-            # Split the tensordict
-            from torch.return_types import cummax
-
-            values_dict = {}
-            indices_dict = {}
-            for key in result.keys(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
-                if key[-1] == "values":
-                    values_dict[key] = key[:-1]
-                else:
-                    indices_dict[key] = key[:-1]
-            return cummax(
-                result.split_keys(values_dict, indices_dict)[:2],
-            )
+            return _split_values_indices(result, torch.return_types.cummax)
         return result
 
     @overload
@@ -1577,10 +1533,7 @@ class _Reductions:
             # It is not very memory-efficient to do this, but it's the easiest to cover all use cases
             if dim is NO_DEFAULT:
                 agglomerate = [
-                    val.contiguous().flatten()
-                    for val in self._values_list(
-                        True, True, is_leaf=_NESTED_TENSORS_AS_LISTS
-                    )
+                    val.contiguous().flatten() for val in self._values_list(True, True)
                 ]
                 _check_has_tensor_leaves(reduction_name, agglomerate)
                 agglomerate = torch.cat(agglomerate, dim=0)
@@ -1589,9 +1542,7 @@ class _Reductions:
                     return getattr(torch, reduction_name)(agglomerate, q, **kwargs)
                 return getattr(torch, reduction_name)(agglomerate, **kwargs)
             else:
-                agglomerate = list(
-                    self._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
-                )
+                agglomerate = list(self._values_list(True, True))
                 # With feature dims, a negative dim counts from the end of the
                 # leaves, not of the batch dims
                 warn_negative_dim = (

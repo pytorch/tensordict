@@ -26,20 +26,18 @@ import argparse
 import functools
 import itertools
 import json
-import os
 import pathlib
 
 import numpy as np
 import pytest
 import torch
-from _utils_internal import TestTensorDictsBase
+from _utils_internal import _describe, check_known_failures, TestTensorDictsBase
 from tensordict import lazy_stack, TensorDict, UnbatchedTensor
 from tensordict.store import LazyStackedTensorDictStore, TensorDictStore
 from tensordict.store._store import _has_redis
 
 _KNOWN_FAILURES_FILE = pathlib.Path(__file__).with_name("indexing_known_failures.json")
 _KNOWN_FAILURES = json.loads(_KNOWN_FAILURES_FILE.read_text())
-_UPDATE_KNOWN_FAILURES = bool(os.environ.get("TENSORDICT_UPDATE_KNOWN_FAILURES"))
 # Indices that torch rejects for the reference tensor are not part of a pool.
 _TORCH_INDEX_ERRORS = (IndexError, RuntimeError, TypeError, ValueError)
 
@@ -143,34 +141,8 @@ def _torch_index(index):
 
 
 def _check_known_failures(key, failures):
-    """Compare ``failures`` ({case: reason}) with the known failures of ``key``."""
-    if _UPDATE_KNOWN_FAILURES:
-        known = json.loads(_KNOWN_FAILURES_FILE.read_text())
-        known[key] = sorted(failures)
-        _KNOWN_FAILURES_FILE.write_text(
-            json.dumps(dict(sorted(known.items())), indent=1) + "\n"
-        )
-        return
-    known = set(_KNOWN_FAILURES.get(key, ()))
-    new = {case: reason for case, reason in failures.items() if case not in known}
-    fixed = sorted(known.difference(failures))
-    message = []
-    if new:
-        message.append(
-            f"{len(new)} cases fail and are not known failures:\n"
-            + "\n".join(f"  {case}: {reason}" for case, reason in sorted(new.items()))
-        )
-    if fixed:
-        message.append(
-            f"{len(fixed)} known failures pass now; remove them from "
-            f"{_KNOWN_FAILURES_FILE.name} under {key!r}:\n"
-            + "\n".join(f"  {case}" for case in fixed)
-        )
+    message = check_known_failures(key, failures, _KNOWN_FAILURES_FILE, _KNOWN_FAILURES)
     assert not message, "\n".join(message)
-
-
-def _describe(err):
-    return f"raises {type(err).__name__}: {str(err).splitlines()[0][:80] if str(err) else ''}"
 
 
 def _expected_names(batch_size, index, names):

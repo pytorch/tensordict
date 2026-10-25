@@ -1285,6 +1285,134 @@ def test_issue_3353_installed_wheel_pyright(installed_wheel, tmp_path, python_ve
     assert sorted(lines) == expected, result.stdout + result.stderr
 
 
+# #3271: the stack and cat classmethods return the type of their inputs,
+# not of the class they are called on, and a list of tensors gives a tensor.
+_ISSUE_3271_SOURCE = """import torch
+from typing_extensions import assert_type
+from tensordict import (
+    LazyStackedTensorDict,
+    TensorClass,
+    TensorDict,
+    TypedTensorDict,
+    tensorclass,
+)
+from torch import Tensor
+
+class Observation(TensorClass):
+    pixels: Tensor
+
+class State(TypedTensorDict):
+    eta: Tensor
+
+td = TensorDict(a=torch.zeros(4, 3), batch_size=[4])
+assert_type(TensorDict.stack([td, td]), TensorDict)
+assert_type(TensorDict.cat([td, td], dim=0), TensorDict)
+assert_type(TensorDict.stack([td, td], 1, out=TensorDict.stack([td, td], 1)), TensorDict)
+assert_type(LazyStackedTensorDict.stack([td, td]), TensorDict)
+assert TensorDict.stack([td, td]).batch_size == torch.Size([2, 4])
+assert TensorDict.cat([td, td]).batch_size == torch.Size([8])
+
+obs = Observation(pixels=torch.zeros(4, 3), batch_size=[4])
+assert_type(TensorDict.stack([obs, obs]), Observation)
+assert_type(TensorDict.cat([obs, obs]), Observation)
+assert_type(Observation.stack([obs, obs]), Observation)
+assert TensorDict.stack([obs, obs]).pixels.shape == torch.Size([2, 4, 3])
+
+state = State(eta=torch.zeros(5, 3), batch_size=[5])
+assert_type(State.stack([state, state]), State)
+assert_type(State.cat([state, state]), State)
+assert State.stack([state, state]).batch_size == torch.Size([2, 5])
+
+lazy = LazyStackedTensorDict(td, td)
+assert_type(TensorDict.stack([lazy, lazy]), LazyStackedTensorDict)
+
+t = torch.zeros(3)
+assert_type(TensorDict.stack([t, t]), Tensor)
+assert_type(TensorDict.cat((t, t)), Tensor)
+assert TensorDict.stack([t, t]).shape == torch.Size([2, 3])
+
+# Type checkers do not see a @tensorclass decorator class as a tensorclass
+# (docs/source/tensorclass.rst): the result stays Any, with no error.
+@tensorclass
+class Step:
+    obs: Tensor
+
+step = Step(obs=torch.zeros(3))
+pair: Step = TensorDict.stack([step, step])
+assert TensorDict.cat([pair, pair]).obs.shape == torch.Size([4, 3])
+"""
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+def test_issue_3271_source_runs(tmp_path):
+    # The checked source must be correct code, with the result types that it
+    # asserts.
+    path = tmp_path / "user.py"
+    path.write_text(
+        _ISSUE_3271_SOURCE
+        + "assert type(TensorDict.stack([obs, obs])) is Observation\n"
+        "assert type(State.cat([state, state])) is State\n"
+        "assert type(LazyStackedTensorDict.stack([td, td])) is TensorDict\n"
+        "assert type(TensorDict.stack([lazy, lazy])) is LazyStackedTensorDict\n"
+        "assert type(TensorDict.cat((t, t))) is Tensor\n"
+        "assert type(TensorDict.cat([pair, pair])) is Step\n"
+    )
+    runpy.run_path(str(path), run_name="__main__")
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+@pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
+@pytest.mark.parametrize("python_version", ["3.10", "3.12"])
+def test_issue_3271_installed_wheel_mypy(installed_wheel, tmp_path, python_version):
+    # #3271: mypy typed TensorDict.stack and TensorDict.cat as Any.
+    tmp_path.joinpath("user.py").write_text(_ISSUE_3271_SOURCE)
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "mypy",
+            "--config-file=",
+            f"--cache-dir={os.devnull}",
+            f"--python-version={python_version}",
+            "user.py",
+        ],
+        cwd=tmp_path,
+        env=_checker_env(installed_wheel),
+        capture_output=True,
+        text=True,
+        timeout=1200,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.skipif(IS_FB, reason="not working on fbcode")
+@pytest.mark.skipif(not _has_pyright, reason="pyright is not installed")
+@pytest.mark.parametrize("python_version", ["3.10", "3.12"])
+def test_issue_3271_installed_wheel_pyright(installed_wheel, tmp_path, python_version):
+    # #3271: pyright typed TensorDict.stack and TensorDict.cat as Unknown.
+    tmp_path.joinpath("user.py").write_text(_ISSUE_3271_SOURCE)
+    # Keeps pyright from reading a configuration file above tmp_path.
+    tmp_path.joinpath("pyrightconfig.json").write_text("{}")
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pyright",
+            "--pythonpath",
+            sys.executable,
+            "--pythonversion",
+            python_version,
+            "user.py",
+        ],
+        cwd=tmp_path,
+        env=_checker_env(installed_wheel),
+        capture_output=True,
+        text=True,
+        timeout=1200,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 @pytest.mark.skipif(IS_FB, reason="not working on fbcode")
 @pytest.mark.skipif(not _has_mypy, reason="mypy is not installed")
 def test_tensorclass_stub_static_types(tmp_path, monkeypatch):

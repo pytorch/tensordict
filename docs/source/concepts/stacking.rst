@@ -237,6 +237,12 @@ Use these rules to choose:
   ``maybe_dense_stack``. It gives a dense stack when it can, and a lazy stack
   otherwise.
 
+Type checkers read torch's own signatures for ``torch.stack`` and
+``torch.cat``, which take and return a ``Tensor``. In code that a type checker
+reads, use :func:`tensordict.stack` and :func:`tensordict.cat`, or the
+classmethods (``TensorDict.stack``, ``MyClass.stack``): they give the same
+result, and type checkers see that it has the type of the inputs.
+
 .. _stacking-variable-size:
 
 Variable-size data

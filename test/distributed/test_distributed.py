@@ -9,7 +9,6 @@ import importlib.util
 import os
 import pickle
 import socket
-import sys
 import warnings
 from datetime import timedelta
 
@@ -544,10 +543,6 @@ class TestGather:
                 worker.join(timeout=TIMEOUT)
 
 
-@pytest.mark.skipif(
-    sys.version_info.minor <= 7,
-    reason="reduce test is incompatible with python 3.7 or lower (cannot pickle the op Enum).",
-)
 class TestReduce:
     @staticmethod
     def client(memmap_filename, rank, op, async_op, return_premature):

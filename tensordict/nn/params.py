@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import (
     Any,
     Callable,
-    Dict,
     Iterator,
     List,
     OrderedDict,
@@ -55,6 +54,7 @@ from tensordict.utils import (
     _UPDATE_IGNORE_LOCK_WARNED,
     _warn_update_ignore_lock,
     _zip_strict,
+    ftdim,
     IndexType,
     is_batchedtensor,
     is_non_tensor,
@@ -64,15 +64,6 @@ from torch import multiprocessing as mp, nn, Tensor
 from torch.compiler import is_compiling, is_dynamo_compiling
 from torch.nn.parameter import Buffer
 from torch.utils._pytree import tree_map
-
-try:
-    from functorch import dim as ftdim
-
-    _has_funcdim = True
-except ImportError:
-    from tensordict.utils import _ftdim_mock as ftdim
-
-    _has_funcdim = False
 
 if TYPE_CHECKING:
     from typing_extensions import Self
@@ -104,9 +95,6 @@ def _apply_leaves(data, fn, *others):
         raise RuntimeError(
             "Using a LazyStackedTensorDict within a TensorDictParams isn't permitted."
         )
-        # for _data in data.tensordicts:
-        #     _apply_leaves(_data, fn)
-        # return data
     elif isinstance(data, _CustomOpTensorDict):
         _apply_leaves(data._source, fn, *(other._source for other in others))
         return data
@@ -284,20 +272,6 @@ def _fallback_property(func):
         return getattr(type(self._param_td), name).fset(self._param_td, value)
 
     return property(new_func, setter)
-
-
-def _replace(func):
-    name = func.__name__
-
-    @wraps(func)
-    def new_func(self, *args, **kwargs):  # type: ignore[misc]
-        out = getattr(self._param_td, name)(*args, **kwargs)
-        if out is self._param_td:
-            return self
-        self._param_td = out
-        return self
-
-    return new_func
 
 
 def _carry_over(func):
@@ -551,7 +525,6 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             self._param_td.lock_()
         self._reset_params(params=params, buffers=buffers)
         self._is_locked = False
-        self._locked_tensordicts = []
         self._get_post_hook = []
 
     @classmethod
@@ -606,7 +579,6 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             self._param_td.lock_()
         self._reset_params(params=params, buffers=buffers)
         self._is_locked = False
-        self._locked_tensordicts = []
         self._get_post_hook = []
         return self
 
@@ -850,8 +822,6 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         executor: ThreadPoolExecutor,
         futures: List[Future],
         local_futures: List,
-        subs_results: Dict[Future, Any] | None = None,
-        multithread_set: bool = False,  # Experimental
         **constructor_kwargs,
     ) -> None: ...
 

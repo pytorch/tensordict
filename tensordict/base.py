@@ -13,8 +13,6 @@ import gc
 import importlib
 import importlib.util
 import inspect
-
-# JSON backend is now handled by _utils_key_json.json_dumps
 import json
 import operator
 import os.path
@@ -22,7 +20,7 @@ import sys
 import warnings
 import weakref
 from collections.abc import Iterable, Mapping, MutableMapping
-from concurrent.futures import Future, ThreadPoolExecutor, wait
+from concurrent.futures import Future, ThreadPoolExecutor
 from functools import lru_cache, wraps
 from pathlib import Path
 from textwrap import indent
@@ -206,14 +204,10 @@ BEST_ATTEMPT_INPLACE = _BEST_ATTEMPT_INPLACE()
 
 CompatibleType: TypeAlias = Tensor | TensorCollection
 
-_STR_MIXED_INDEX_ERROR = "Received a mixed string-non string index. Only string-only or string-free indices are supported."
-
 _SELF_NESTING_ERROR = (
     "Cannot set a tensordict inside itself (key {!r}): tensordicts that "
     "contain themselves are not supported."
 )
-
-_HEURISTIC_EXCLUDED = (Tensor, tuple, list, set, dict, np.ndarray)
 
 # Context-manager ops whose inverse __exit__ runs also when the body raises
 _UNDO_ON_ERROR_OPS = frozenset({"to_module", "lock_", "unlock_"})
@@ -330,8 +324,8 @@ class _RecordDeviceTransfer:
         self._state.marked = False
         self._state.has_transfer = False
 
-    def record_transfer(self, device):
-        # Adds a device to all markers
+    def record_transfer(self):
+        # Records that a value was moved to another device
         self._state.has_transfer = True
 
     def has_transfer(self):
@@ -1783,7 +1777,6 @@ _READ_ONLY_CALL = local()
 # Set while empty() builds a result for the names it was given, so that the
 # empty() calls it makes do not warn of the names again.
 _EMPTY_NAMES_CALL = local()
-_PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__)) + os.sep
 
 
 def _normalize_from_dict_args(input_dict, *, batch_size, batch_dims):
@@ -1831,10 +1824,6 @@ def _warn_read_only(method: str) -> None:
     """Warns that the in-place ``method`` leaves a file opened read-only unchanged."""
     if getattr(_READ_ONLY_CALL, "running", False):
         return
-    # point to the first frame outside tensordict: the user's call
-    frame, stacklevel = sys._getframe(1), 2
-    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
-        frame, stacklevel = frame.f_back, stacklevel + 1
     warnings.warn(
         deprecation_message(
             f"Calling {method}() on a tensordict stored in a file opened "
@@ -1845,16 +1834,12 @@ def _warn_read_only(method: str) -> None:
         "write the result, or call to_tensordict() first to change a copy in "
         "memory.",
         FutureWarning,
-        stacklevel=stacklevel,
+        stacklevel=_user_stacklevel(),
     )
 
 
 def _warn_names_length(names: list, batch_dims: int) -> None:
     """Warns that ``names``, of the wrong length, is accepted because of its None entries, which raises from 0.17 (#2600)."""
-    # point to the first frame outside tensordict: the user's call
-    frame, stacklevel = sys._getframe(1), 2
-    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
-        frame, stacklevel = frame.f_back, stacklevel + 1
     warnings.warn(
         f"Got the dimension names {names} for {batch_dims} batch dims. The "
         "list has the wrong length, but is accepted today because of its None "
@@ -1862,16 +1847,12 @@ def _warn_names_length(names: list, batch_dims: int) -> None:
         "the default will change to raising a ValueError, as for any other "
         "list of the wrong length. Pass one name per batch dim.",
         FutureWarning,
-        stacklevel=stacklevel,
+        stacklevel=_user_stacklevel(),
     )
 
 
 def _warn_stack_dim_name_taken(name: str) -> None:
     """Warns that the stack dim ``name`` of a lazy stack is also a dim name of its members, which raises from 0.17 (#2690)."""
-    # point to the first frame outside tensordict: the user's call
-    frame, stacklevel = sys._getframe(1), 2
-    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
-        frame, stacklevel = frame.f_back, stacklevel + 1
     warnings.warn(
         f"The stack dim name {name!r} is also the name of a dim of the "
         "stacked tensordicts, so the lazy stack has non-unique dimension "
@@ -1879,7 +1860,7 @@ def _warn_stack_dim_name_taken(name: str) -> None:
         "default will change to raising a ValueError, as on a TensorDict. "
         "Give the stack dim a name the stacked tensordicts do not use.",
         FutureWarning,
-        stacklevel=stacklevel,
+        stacklevel=_user_stacklevel(),
     )
 
 
@@ -1891,10 +1872,6 @@ def _warn_scalar_over_non_tensor(
     key: str, value: bool | int | float | np.bool_ | np.integer | np.floating
 ) -> None:
     """Warns that ``value``, written over the non-tensor entry ``key``, becomes a tensor today."""
-    # point to the first frame outside tensordict: the user's call
-    frame, stacklevel = sys._getframe(1), 2
-    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
-        frame, stacklevel = frame.f_back, stacklevel + 1
     warnings.warn(
         f"The {type(value).__name__} written over the NonTensorData entry "
         f"{key!r} is stored as a 0-d tensor today. Starting with TensorDict "
@@ -1902,7 +1879,7 @@ def _warn_scalar_over_non_tensor(
         "the entry it replaces. Write torch.tensor(value) to keep the tensor, "
         "or NonTensorData(value) to keep the non-tensor entry now.",
         FutureWarning,
-        stacklevel=stacklevel,
+        stacklevel=_user_stacklevel(),
     )
 
 
@@ -1952,10 +1929,6 @@ def _warn_tuple_dtype(value: tuple, array: np.ndarray) -> None:
         new = {torch.float16: torch.complex32, torch.float32: torch.complex64}.get(new)
         if new is None:
             return
-    # point to the first frame outside tensordict: the user's call
-    frame, stacklevel = sys._getframe(1), 2
-    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
-        frame, stacklevel = frame.f_back, stacklevel + 1
     warnings.warn(
         f"A tuple of numbers is stored as a {old} tensor today. Starting with "
         "TensorDict 0.16, the default will change to the tensor that "
@@ -1963,7 +1936,7 @@ def _warn_tuple_dtype(value: tuple, array: np.ndarray) -> None:
         f"torch.tensor(value) to get {new} now, or "
         f"torch.tensor(value, dtype={old}) or a NumPy array to keep {old}.",
         FutureWarning,
-        stacklevel=stacklevel,
+        stacklevel=_user_stacklevel(),
     )
 
 
@@ -1983,10 +1956,6 @@ def _warn_set_at_cast(
     if is_compiling():
         # Dynamo can trace neither the frame walk nor warnings.warn
         return
-    # point to the first frame outside tensordict: the user's call
-    frame, stacklevel = sys._getframe(1), 2
-    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
-        frame, stacklevel = frame.f_back, stacklevel + 1
     if key is None:
         message = (
             f"The {type(value).__name__} written with [index] = value is cast "
@@ -2004,7 +1973,7 @@ def _warn_set_at_cast(
             "Write torch.tensor(value) to keep the tensor, or "
             "NonTensorData(value) to store it as non-tensor data now."
         )
-    warnings.warn(message, FutureWarning, stacklevel=stacklevel)
+    warnings.warn(message, FutureWarning, stacklevel=_user_stacklevel())
 
 
 def _set_at_each_key(
@@ -2157,10 +2126,6 @@ def _warn_empty_names(
         return
     else:
         future = "raises a ValueError for these names"
-    # point to the first frame outside tensordict: the user's call
-    frame, stacklevel = sys._getframe(1), 2
-    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
-        frame, stacklevel = frame.f_back, stacklevel + 1
     result = "the names that the names setter would not give"
     future_size = ""
     if resized:
@@ -2173,7 +2138,7 @@ def _warn_empty_names(
         f"does, which {future}. Pass one name per batch dim, "
         "with no name used twice.",
         FutureWarning,
-        stacklevel=stacklevel,
+        stacklevel=_user_stacklevel(),
     )
 
 
@@ -2587,6 +2552,136 @@ def _warn_update_invalid_key() -> None:
     )
 
 
+# Set while update() writes the members of a lazy stack one by one, so that
+# they warn once in all, and while the nn modules write their outputs, so that
+# they do not warn (#3360).
+_UPDATE_MEMBERS_CALL = local()
+
+
+@lru_cache(maxsize=128)
+def _update_selection_trie(
+    keys_to_update: tuple,
+) -> tuple[dict, dict[tuple[str], frozenset]] | bool:
+    """``_selection_trie(keys_to_update)`` and the entries it covers, cached, as ``update`` gets the same keys at each step (#3360).
+
+    ``False`` when no key is deeper than one level. Else the trie, and for each
+    first part of a key, the entries under it that a key lists with nothing
+    deeper: a tensordict holding only those is written as listed. The callers
+    must not change either.
+    """
+    if tuple not in map(type, keys_to_update):
+        return False
+    trie = _selection_trie(keys_to_update)
+    covered = {
+        (part,): frozenset(
+            entry
+            for entry, child in node.items()
+            if entry is not None and child == {None: True}
+        )
+        for part, node in trie.items()
+    }
+    return trie, covered
+
+
+def _warn_update_inserts_whole_entry(
+    key: tuple[str, ...],
+    value: Any,
+    selection: dict,
+    is_leaf: Callable[[Type], bool],
+) -> None:
+    """Warns that ``update`` writes every entry of ``value`` at ``key``, which the destination lacks, where its ``keys_to_update`` lists only some of them, until 0.17 (#3360).
+
+    ``selection`` is ``_selection_trie(keys_to_update)``, which ``update``
+    builds once per call. ``select`` and an update into an existing entry keep
+    only the listed keys. The 0.17 switch must keep the result of the
+    ``tensordict.nn`` calls, see ``_update_keeping_whole_entries``.
+    """
+    # the keys listed under key, pruned as update() prunes them at each level
+    for part in key:
+        selection = selection.get(part)
+        if selection is None or (len(selection) == 1 and None in selection):
+            # None: no key is listed under the entry; else a listed key names
+            # the entry, which is written whole
+            return
+    # whether every leaf of value is listed: None until known
+    listed = None
+    if type(value) is _TENSORDICT_TYPE:
+        # first the entries of value against the keys listed at this level,
+        # without a walk of the leaves: an entry listed with nothing under it
+        # is selected whole, and a tensor not listed is not selected
+        listed = True
+        for entry, item in value._tensordict.items():
+            node = selection.get(entry)
+            if node is None and type(item) is Tensor and is_leaf(Tensor):
+                listed = False
+                break
+            if node is None or len(node) > 1 or None not in node:
+                listed = None
+        if listed:
+            return
+    if not isinstance(value, dict) and (
+        not _is_tensor_collection(type(value)) or is_leaf(type(value))
+    ):
+        return
+    if listed is None:
+        try:
+            if isinstance(value, dict):
+                value = _TENSORDICT_TYPE(value, batch_size=[])
+            # a lazy stack lists only the keys that all its members hold
+            leaves = (
+                _all_leaf_keys(value)
+                if _has_lazy_stack(value)
+                else value.keys(True, True, is_leaf=is_leaf)
+            )
+            if all(
+                _is_key_selected(_unravel_key_to_tuple(leaf), selection)
+                for leaf in leaves
+            ):
+                return
+        except Exception:
+            # a value that the update rejects: it raises its own error
+            return
+    if is_dynamo_compiling():
+        return
+    state = getattr(_UPDATE_MEMBERS_CALL, "warned", None)
+    if state:
+        return
+    if state is False:
+        _UPDATE_MEMBERS_CALL.warned = True
+    # Fixed text: the keys would make Python warn again for each new value (#3232).
+    warnings.warn(
+        "update() got keys_to_update with deeper keys under an entry that the "
+        "tensordict lacks, and writes every entry of the input under it, while "
+        "select() and an update into an existing entry keep only the listed "
+        "keys. Starting with TensorDict 0.17, the default will change to "
+        "writing only the listed keys, as select does. List only the key of "
+        "that entry to keep the current result, or call "
+        "update(src.select(*keys)) to get the new one now.",
+        FutureWarning,
+        stacklevel=_user_stacklevel(),
+    )
+
+
+def _update_keeping_whole_entries(
+    dest: TensorCollection, source: Any, **kwargs: Any
+) -> TensorCollection:
+    """``dest.update(source, **kwargs)`` without the warning that update writes an entry whole (#3360).
+
+    The ``tensordict.nn`` modules write their outputs with it, so they keep
+    their current outputs without a warning. In 0.17, when ``update`` narrows,
+    these calls must keep the current whole-copy result unless #3367 decides
+    otherwise.
+    """
+    if is_dynamo_compiling():
+        return dest.update(source, **kwargs)
+    state = getattr(_UPDATE_MEMBERS_CALL, "warned", None)
+    _UPDATE_MEMBERS_CALL.warned = True
+    try:
+        return dest.update(source, **kwargs)
+    finally:
+        _UPDATE_MEMBERS_CALL.warned = state
+
+
 def _warn_unsupported_operand(op: str, other: Any, result: bool) -> None:
     """Warns that ``op`` (``"__xor__"``, ``"__lt__"``, ...) returns ``result`` for ``other``, which is not a tensor collection, a tensor or a number, until 0.17 (#2979)."""
     if is_compiling():
@@ -2627,11 +2722,7 @@ def _warn_get_kwargs(
         )
     else:
         return
-    # point to the first frame outside tensordict: the user's call
-    frame, stacklevel = sys._getframe(1), 2
-    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
-        frame, stacklevel = frame.f_back, stacklevel + 1
-    warnings.warn(message, FutureWarning, stacklevel=stacklevel)
+    warnings.warn(message, FutureWarning, stacklevel=_user_stacklevel())
 
 
 def _unwrap(td: TensorDictBase) -> TensorDictBase:
@@ -3122,15 +3213,11 @@ def _copy_leaves(
 
 def _warn_update_skipped(skipped: list) -> None:
     """Warns that ``update_`` skipped the non-tensor entries under the keys ``skipped``."""
-    # point to the first frame outside tensordict: the user's call
-    frame, stacklevel = sys._getframe(1), 2
-    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
-        frame, stacklevel = frame.f_back, stacklevel + 1
     warnings.warn(
         f"update_() skipped the non-tensor entries {skipped} of the source: "
         "the shared or memory-mapped destination cannot store their values.",
         UserWarning,
-        stacklevel=stacklevel,
+        stacklevel=_user_stacklevel(),
     )
 
 
@@ -3501,9 +3588,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         (True, True)
     """
 
-    _safe: bool = False
     _lazy: bool = False
-    _inplace_set: bool = False
     _is_locked: bool = False
     _is_shared: bool = False
     _is_memmap: bool = False
@@ -3846,11 +3931,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 return self._index_tensordict(index)
             # we only want tuple indices
             index = (index,)
-        # # convert range/np.ndarray to tensor: this is not cheap
-        # index = tuple(
-        #     torch.tensor(idx) if isinstance(idx, (np.ndarray, range)) else idx
-        #     for idx in index
-        # )
         if istuple and any(type(idx) is EllipsisType for idx in index):
             index = convert_ellipsis_to_idx(index, self.batch_size)
         # The bounds are tested one by one: the Dynamo of torch 2.11 and 2.12
@@ -4380,10 +4460,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             None
         """
         if set_to_none:
-            for val in self._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
+            for val in self._values_list(True, True):
                 val.grad = None
             return self
-        for val in self._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
+        for val in self._values_list(True, True):
             grad = val.grad
             if grad is not None:
                 grad.zero_()
@@ -5211,8 +5291,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                         f"refine_names: cannot coerce TensorDict names {self.names} with {names_copy}."
                     )
         self._set_names(names)
-        # we also need to rename the sub-tensordicts
-        # self._rename_subtds(self.names)
         return self
 
     def rename(self, *names, **rename_map):
@@ -6425,7 +6503,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             None
 
         """
-        # TODO: check that this works with masks, and add to docstring
         key_tuple = _unravel_key_to_tuple(key)
         if not key_tuple:
             raise KeyError(_GENERIC_NESTED_ERR.format(key))
@@ -6547,7 +6624,16 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             keys_to_update (sequence of NestedKey, optional): if passed, only
                 these keys are written, without the cost of
                 ``td.update(other.select(*keys_to_update))``. Defaults to
-                ``None``, which writes every entry.
+                ``None``, which writes every entry. A deeper key such as
+                ``("nested", "b")`` under an entry that the tensordict lacks
+                writes that entry whole, with all of ``other["nested"]``, and
+                warns with a :class:`FutureWarning` where it holds other
+                entries: starting with TensorDict 0.17, the default will change
+                to writing only the listed keys, as ``select`` does and as an
+                update into an existing ``"nested"`` does. List ``"nested"``
+                alone to keep the current result, or pass
+                ``other.select(*keys_to_update)`` to get the new one now
+                (`#3360 <https://github.com/pytorch/tensordict/issues/3360>`_).
             is_leaf (Callable[[type], bool], optional): tells which types of
                 values are written whole. The other values are merged key by
                 key. Defaults to ``None``, which is
@@ -6751,6 +6837,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             _warn_update_batch_size_prefix()
 
         selection = None
+        # whether keys_to_update has a deeper key, under which an entry that
+        # self lacks is written whole (#3360): set at the first such entry, to
+        # False or to _update_selection_trie(keys_to_update)
+        nested_keys = None
         for input_key, value in input_dict_or_td.items():
             key = _unravel_key_to_tuple(input_key)
             if not key:
@@ -6906,6 +6996,21 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                         target.update(value, update_batch_size=update_batch_size)
                         target.batch_size = value.batch_size
                     continue
+            elif keys_to_update is not None and type(value) is not Tensor:
+                # a tensor is written whole either way: skip the check
+                if nested_keys is None:
+                    nested_keys = not is_dynamo_compiling() and _update_selection_trie(
+                        tuple(keys_to_update)
+                    )
+                # skip a tensordict whose entries are all listed, nothing deeper
+                if nested_keys and not (
+                    type(value) is _TENSORDICT_TYPE
+                    and key in nested_keys[1]
+                    and value._tensordict.keys() <= nested_keys[1][key]
+                ):
+                    _warn_update_inserts_whole_entry(
+                        key, value, nested_keys[0], is_leaf
+                    )
 
             self._set_tuple(
                 key,
@@ -6917,7 +7022,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         if batch_size_changed:
             bd = self.batch_dims
             self.batch_size = ()
-            # self.batch_size = ()
             self.auto_batch_size_(bd, keep_compliant_size=True)
         return self
 
@@ -8314,8 +8418,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         include_nested: bool = False,
         leaves_only: bool = False,
         *,
-        collapse: bool = False,
-        is_leaf: Callable[[Type], bool] | None = None,
         sorting_keys: List[NestedKey] | None = None,
     ) -> List:
         if sorting_keys is None:
@@ -8323,15 +8425,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 self.values(
                     include_nested=include_nested,
                     leaves_only=leaves_only,
-                    is_leaf=_NESTED_TENSORS_AS_LISTS if not collapse else is_leaf,
+                    is_leaf=_NESTED_TENSORS_AS_LISTS,
                 )
             )
         else:
             keys, vals = self._items_list(
                 include_nested=include_nested,
                 leaves_only=leaves_only,
-                is_leaf=is_leaf,
-                collapse=collapse,
             )
             try:
                 if is_compiling():
@@ -8352,7 +8452,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         leaves_only: bool = False,
         *,
         collapse: bool = False,
-        is_leaf: Callable[[Type], bool] | None = None,
         sorting_keys: List[NestedKey] | None = None,
         default: str | CompatibleType | None = None,
     ) -> Tuple[List, List]:
@@ -8397,7 +8496,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     def _grad(self):
         # We can't cache this because zero_grad can be called outside (eg from optimizer) and we want the tensors
         # to clear out when that is done.
-        keys, vals = self._items_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
+        keys, vals = self._items_list(True, True)
         grads = [val.grad for val in vals]
         items = dict(zip(keys, grads))
 
@@ -8439,12 +8538,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             # a TypedTensorDict over a lazy stack lists the leaves of each
             # member (#2772): read them stacked, as self lists them
             value = value.to_tensordict()
-        nodes_self = dict(
-            zip(*self._items_list(True, False, is_leaf=_NESTED_TENSORS_AS_LISTS))
-        )
-        for key, node in zip(
-            *value._items_list(True, False, is_leaf=_NESTED_TENSORS_AS_LISTS)
-        ):
+        nodes_self = dict(zip(*self._items_list(True, False)))
+        for key, node in zip(*value._items_list(True, False)):
             node_self = nodes_self.get(key)
             if (
                 _is_tensor_collection(type(node))
@@ -8455,10 +8550,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     f"Cannot assign .data from a source with batch size {node.batch_size} "
                     f"to a destination with batch size {node_self.batch_size} at key {key!r}."
                 )
-        keys, vals = value._items_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
-        keys_self, vals_self = self._items_list(
-            True, True, is_leaf=_NESTED_TENSORS_AS_LISTS
-        )
+        keys, vals = value._items_list(True, True)
+        keys_self, vals_self = self._items_list(True, True)
         self_dict = dict(zip(keys_self, vals_self))
         missing = [key for key in keys if key not in self_dict]
         if missing:
@@ -9322,8 +9415,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         executor: ThreadPoolExecutor,
         futures: List[Future],
         local_futures: List,
-        subs_results: Dict[Future, Any] | None = None,
-        multithread_set: bool = False,  # Experimental
         **constructor_kwargs,
     ) -> None:
         from tensordict._td import _SubTensorDict, TensorDict
@@ -9414,9 +9505,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     non_blocking=False,
                 )
 
-        for i, (key, local_future) in enumerate(
-            _zip_strict(self.keys(), local_futures)
-        ):
+        for key, local_future in _zip_strict(self.keys(), local_futures):
             if isinstance(local_future, list):
                 # We can't make this a future as it could cause deadlocks:
                 #  If we put a future over the root and this triggers another
@@ -9435,36 +9524,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     executor=executor,
                     futures=futures,
                     local_futures=local_future,
-                    subs_results=subs_results,
-                    multithread_set=multithread_set,
                     **constructor_kwargs,
                 )
-                if multithread_set:
-                    local_future = executor.submit(setter, item_trsf=item_trsf, key=key)
-                    local_futures[i] = local_future
-                    futures.append(local_future)
-                else:
-                    setter(item_trsf=item_trsf, key=key)
+                setter(item_trsf=item_trsf, key=key)
             else:
-                if multithread_set:
-                    if subs_results is not None:
-                        local_result = subs_results[local_future]
-                    else:
-                        # TODO: check if add_done_callback can safely be used here
-                        #  The issue is that it does not raises an exception encountered during the
-                        #  execution, resulting in UBs.
-                        local_result = local_future.result()
-                    local_future = executor.submit(
-                        setter, item_trsf=local_result, key=key
-                    )
-                    futures.append(local_future)
-                    local_futures[i] = local_future
-                else:
-                    local_result = local_future.result()
-                    setter(item_trsf=local_result, key=key)
+                local_result = local_future.result()
+                setter(item_trsf=local_result, key=key)
 
-        if multithread_set:
-            wait(local_futures)
         any_set = True in any_set or is_non_tensor(self)
 
         if filter_empty and not any_set:
@@ -9491,16 +9557,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         is_leaf: Callable[[Type], bool] | None = None,
         out: TensorDictBase | None = None,
         num_threads: int,
-        call_when_done: Callable | None = None,
         **constructor_kwargs,
     ) -> Self | None:
         """A deadlock-safe multithread wrapper around TD.apply.
 
         First launches fn for all the leaves, then rebuilds the tensordicts out of them.
-
-        An optional ``call_when_done`` function can be passed to execute a method on the main thread
-        after a future is completed.
-
         """
         if call_on_nested:
             warnings.warn(
@@ -9528,23 +9589,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             futures=futures,
             local_futures=local_futures,
         )
-        if call_when_done is not None:
-            subs_results = {}
-
-            def cb(fut):
-                fut._result = call_when_done(fut.result())
-                return fut
-
-            for fut in futures:
-                fut.add_done_callback(cb)
-            # wait(futures)
-            # for fut in as_completed(futures):
-            #     subs_results[fut] = call_when_done(fut.result())
-            #     fut._result = None
-            #     # futures.remove(fut)
-            #     # del fut
-        else:
-            subs_results = None
         return self._multithread_rebuild(
             batch_size=batch_size,
             device=device,
@@ -9556,7 +9600,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             executor=executor,
             futures=futures,
             local_futures=local_futures,
-            subs_results=subs_results,
             **constructor_kwargs,
         )
 
@@ -10684,7 +10727,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             device = self.device
             if device is not None and value.device != device:
                 if _device_recorder.marked and device.type != "cuda":
-                    _device_recorder.record_transfer(device)
+                    _device_recorder.record_transfer()
                 value = value.to(device, non_blocking=non_blocking)
             if value.batch_size != self.batch_size:
                 value = _unbatched_with_batch_size(value, self.batch_size)
@@ -10706,7 +10749,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         device = self.device
         if device is not None and value.device != device:
             if _device_recorder.marked and device.type != "cuda":
-                _device_recorder.record_transfer(device)
+                _device_recorder.record_transfer()
             value = value.to(device, non_blocking=non_blocking)
         if check_shape:
             if not is_tc:
@@ -10717,7 +10760,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             if has_names:
                 if value.names[: self.batch_dims] != self.names:
                     # we clone not to corrupt the value
-                    value = value.clone(False).refine_names(*self.names)
+                    value = value.clone(False).refine_names(
+                        *(self.names + value.names[self.batch_dims :])
+                    )
             else:
                 if value._has_names():
                     names = value.names[: self.batch_dims]
@@ -10754,7 +10799,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         device = self.device
         if device is not None and value.device != device:
             if _device_recorder.marked and device.type != "cuda":
-                _device_recorder.record_transfer(device)
+                _device_recorder.record_transfer()
             value = value.to(device, non_blocking=non_blocking)
         if _is_unbatched(value):
             if value.batch_size != self.batch_size:
@@ -12524,7 +12569,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             >>> td.requires_grad
             True
         """
-        for val in self._values_list(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
+        for val in self._values_list(True, True):
             val.requires_grad_(requires_grad)
         return self
 

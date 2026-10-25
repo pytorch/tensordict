@@ -118,80 +118,9 @@ __all__ = [
 ]
 
 
-# Utility function to wrap C++ functorch functions for torch.compile support
-def _wrap_functorch_function(func):
-    """Wrap a functorch C++ function to make it compatible with torch.compile.
-
-    PyTorch's Dynamo compiler cannot trace C++ functions from torch._C._functorch.
-    This wrapper uses torch.compiler.allow_in_graph to allow compilation through
-    these functions.
-
-    Args:
-        func: The C++ function to wrap
-
-    Returns:
-        The wrapped function
-    """
-    return allow_in_graph(func)
-
-
-def _import_and_wrap_functorch(*names, wrap_names=None):
-    """Import functorch C++ functions and optionally wrap them for torch.compile.
-
-    This utility handles the common pattern of importing functions from
-    torch._C._functorch and wrapping those that need to be compatible with
-    torch.compile.
-
-    Args:
-        *names: Names of functions to import from torch._C._functorch
-        wrap_names: Optional list/set of function names to wrap with allow_in_graph.
-                   If None, wraps all functions that start with '_' (private functions).
-
-    Returns:
-        Tuple of imported (and optionally wrapped) functions in the same order as names
-
-    Example:
-        >>> _add_batch_dim, _remove_batch_dim, is_batchedtensor = _import_and_wrap_functorch(
-        ...     '_add_batch_dim', '_remove_batch_dim', 'is_batchedtensor'
-        ... )
-    """
-    from torch._C._functorch import (  # @manual=fbcode//caffe2:torch
-        _add_batch_dim as _functorch_add_batch_dim,
-        _remove_batch_dim as _functorch_remove_batch_dim,
-        get_unwrapped as _functorch_get_unwrapped,
-        is_batchedtensor as _functorch_is_batchedtensor,
-    )
-
-    # Map of available functions
-    available_funcs = {
-        "_add_batch_dim": _functorch_add_batch_dim,
-        "_remove_batch_dim": _functorch_remove_batch_dim,
-        "get_unwrapped": _functorch_get_unwrapped,
-        "is_batchedtensor": _functorch_is_batchedtensor,
-    }
-
-    # Determine which functions to wrap
-    if wrap_names is None:
-        # By default, wrap all private functions (starting with '_')
-        wrap_names = {name for name in names if name.startswith("_")}
-    else:
-        wrap_names = set(wrap_names)
-
-    # Get and optionally wrap the requested functions
-    result = []
-    for name in names:
-        if name not in available_funcs:
-            raise ValueError(f"Function '{name}' not available in torch._C._functorch")
-        func = available_funcs[name]
-        if name in wrap_names:
-            func = _wrap_functorch_function(func)
-        result.append(func)
-
-    return tuple(result) if len(result) > 1 else result[0]
-
-
-# Import and wrap _add_batch_dim for compilation support
-_add_batch_dim_c = _import_and_wrap_functorch("_add_batch_dim")
+# Dynamo cannot trace these C++ functions: allow_in_graph lets torch.compile call them
+_add_batch_dim = allow_in_graph(torch._C._functorch._add_batch_dim)
+_remove_batch_dim = allow_in_graph(torch._C._functorch._remove_batch_dim)
 
 
 if not _has_funcdim:
@@ -234,11 +163,9 @@ _TORCH_DTYPES = (
     torch.uint64,
 )
 _STR_DTYPE_TO_DTYPE = {str(dtype): dtype for dtype in _TORCH_DTYPES}
-_STRDTYPE2DTYPE = _STR_DTYPE_TO_DTYPE
 _DTYPE_TO_STR_DTYPE = {
     dtype: str_dtype for str_dtype, dtype in _STR_DTYPE_TO_DTYPE.items()
 }
-_DTYPE2STRDTYPE = _STR_DTYPE_TO_DTYPE
 
 #: The type of the indices that a tensordict accepts in ``td[index]``.
 #:
@@ -1528,34 +1455,6 @@ class _ErrorInteceptor:
             exc_value.args = (self._add_key_to_error_msg(str(exc_value)),)
 
 
-def _dict_to_nested_keys(
-    nested_keys: dict[NestedKey, NestedKey], prefix: tuple[str, ...] = ()
-) -> tuple[str, ...]:
-    for key, subkeys in nested_keys.items():
-        if subkeys:
-            yield from _dict_to_nested_keys(subkeys, prefix=(*prefix, key))
-        elif prefix:
-            yield (*prefix, key)
-        else:
-            yield key
-
-
-def _get_leaf_tensordict(
-    tensordict: T, key: tuple[str, ...], hook: Callable = None
-) -> tuple[TensorDictBase, str]:
-    # utility function for traversing nested tensordicts
-    # hook should return the default value for tensordict.get(key)
-    while len(key) > 1:
-        if hook is not None:
-            tensordict = hook(tensordict, key)
-        else:
-            tensordict = tensordict.get(key[0])
-            if tensordict is None:
-                raise KeyError(f"No sub-tensordict with key {key[0]}.")
-        key = key[1:]
-    return tensordict, key[0]
-
-
 class _TensorDictPropertyError(RuntimeError):
     """Raised when recursive TensorDict metadata validation fails."""
 
@@ -2218,8 +2117,12 @@ def _get_repr(tensor: Tensor) -> str:
     return f"{type(tensor).__name__}({s})"
 
 
-def _tensor_repr_fields_custom(shape, device, dtype, is_shared) -> list[str]:
-    """Build the list of ``key=value`` strings for a tensor descriptor with explicit values."""
+def _tensor_repr_fields_custom(shape, device, dtype, is_shared, **flags) -> list[str]:
+    """Build the list of ``key=value`` strings for a tensor descriptor with explicit values.
+
+    The keyword arguments ``requires_grad``, ``is_contiguous``, ``is_view`` and
+    ``storage_size`` are shown when given and their print option is set.
+    """
     opts = _REPR_OPTIONS
     parts: list[str] = []
     if opts["show_shape"]:
@@ -2230,11 +2133,19 @@ def _tensor_repr_fields_custom(shape, device, dtype, is_shared) -> list[str]:
         parts.append(f"dtype={dtype}")
     if opts["show_field_is_shared"]:
         parts.append(f"is_shared={is_shared}")
+    for name, option in (
+        ("requires_grad", "show_grad"),
+        ("is_contiguous", "show_is_contiguous"),
+        ("is_view", "show_is_view"),
+        ("storage_size", "show_storage_size"),
+    ):
+        if name in flags and opts[option]:
+            parts.append(f"{name}={flags[name]}")
     return parts
 
 
-def _get_repr_custom(cls, shape, device, dtype, is_shared) -> str:
-    s = ", ".join(_tensor_repr_fields_custom(shape, device, dtype, is_shared))
+def _get_repr_custom(cls, shape, device, dtype, is_shared, **flags) -> str:
+    s = ", ".join(_tensor_repr_fields_custom(shape, device, dtype, is_shared, **flags))
     return f"{cls.__name__}({s})"
 
 
@@ -2246,22 +2157,27 @@ def _make_repr(key: NestedKey, item, tensordict: T, sep) -> str:
     return sep.join([key, _get_repr(item)])
 
 
+# The dtype, device and requires_grad of a tensor that a file holds, which
+# reading it would give.
+_FileLeaf = collections.namedtuple("_FileLeaf", ["dtype", "device", "requires_grad"])
+
+
 def _stacked_repr(shape, tensors) -> str | None:
     """The repr of ``torch.stack(tensors)``, built without stacking them.
 
-    Returns ``None`` if the stack would fail, or if the print options show a
-    field that needs the stacked data.
+    ``tensors`` may hold :class:`_FileLeaf` descriptions, and a single one
+    gives the repr of the tensor that reading the file returns.
+
+    Returns ``None`` if the stack would fail, under ``plain=True`` (which
+    prints statistics of the values), or under ``show_is_contiguous=True``
+    when a member is not contiguous.
     """
-    opts = _REPR_OPTIONS
-    if -1 in shape or any(
-        opts[name]
-        for name in (
-            "show_grad",
-            "show_is_contiguous",
-            "show_is_view",
-            "show_storage_size",
-            "plain",
-        )
+    if -1 in shape or _REPR_OPTIONS["plain"]:
+        return None
+    # Stacking contiguous tensors gives a contiguous tensor, but stacking
+    # channels_last ones keeps their memory format.
+    if _REPR_OPTIONS["show_is_contiguous"] and not all(
+        isinstance(t, _FileLeaf) or t.is_contiguous() for t in tensors
     ):
         return None
     device = tensors[0].device
@@ -2273,7 +2189,100 @@ def _stacked_repr(shape, tensors) -> str | None:
         return None
     # torch.stack returns a new tensor, which is_shared() reports as shared
     # only on CUDA.
-    return _get_repr_custom(Tensor, shape, device, dtype, device.type == "cuda")
+    return _get_repr_custom(
+        Tensor,
+        shape,
+        device,
+        dtype,
+        device.type == "cuda",
+        requires_grad=torch.is_grad_enabled() and any(t.requires_grad for t in tensors),
+        is_contiguous=True,
+        is_view=False,
+        storage_size=shape.numel() * dtype.itemsize,
+    )
+
+
+def _file_leaf(td, key):
+    """The shape of tensor entry ``key`` of the h5 or zarr file ``td``, and its :class:`_FileLeaf`, read from the metadata.
+
+    Returns ``None`` if the entry is missing or is not a tensor.
+    """
+    try:
+        meta = td._get_metadata(key)
+    except KeyError:
+        return None
+    if not meta.get("array"):
+        return None
+    device = td.device if td.device is not None else torch.device("cpu")
+    return meta["shape"], [_FileLeaf(meta["dtype"], device, False)]
+
+
+def _stacked_leaf(td, key):
+    """``LazyStackedTensorDict._plain_leaf`` for printing, which reads no h5 or zarr member.
+
+    The members that are h5 or zarr files give a :class:`_FileLeaf`.
+    """
+    from tensordict._lazy import _is_plain_tensor, LazyStackedTensorDict
+    from tensordict.persistent import PersistentTensorDict
+
+    if (
+        not isinstance(key, str)
+        or not td.tensordicts
+        or td._hook_out is not None
+        or td._is_vmapped
+    ):
+        return None
+    shapes, tensors = [], []
+    for member in td.tensordicts:
+        if isinstance(member, LazyStackedTensorDict):
+            leaf = _stacked_leaf(member, key)
+        elif isinstance(member, PersistentTensorDict):
+            leaf = _file_leaf(member, key)
+        else:
+            tensor = member._get_str(key, None)
+            leaf = (tensor.shape, [tensor]) if _is_plain_tensor(tensor) else None
+        if leaf is None:
+            return None
+        shapes.append(leaf[0])
+        tensors.extend(leaf[1])
+    shape = list(shapes[0])
+    for other in shapes[1:]:
+        if len(shape) != len(other):
+            return torch.Size([-1]), tensors
+        shape = [s1 if s1 == s2 else -1 for (s1, s2) in zip(shape, other)]
+    shape.insert(td.stack_dim, len(td.tensordicts))
+    return torch.Size(shape), tensors
+
+
+def _unbatched_leaf(td, key):
+    """The ``UnbatchedTensor`` of entry ``key`` of the first member of lazy stack ``td``.
+
+    Stacking keeps only that one. Returns ``None`` unless every member holds
+    an ``UnbatchedTensor`` there.
+    """
+    from tensordict._lazy import LazyStackedTensorDict
+    from tensordict.persistent import PersistentTensorDict
+
+    if (
+        not isinstance(key, str)
+        or not td.tensordicts
+        or td._hook_out is not None
+        or td._is_vmapped
+    ):
+        return None
+    leaves = []
+    for member in td.tensordicts:
+        if isinstance(member, PersistentTensorDict):
+            # a file holds no UnbatchedTensor, and _get_str would read it
+            return None
+        if isinstance(member, LazyStackedTensorDict):
+            leaf = _unbatched_leaf(member, key)
+        else:
+            leaf = member._get_str(key, None)
+        if not _is_unbatched(leaf):
+            return None
+        leaves.append(leaf)
+    return leaves[0]
 
 
 def _mixed_repr(td, key) -> str | None:
@@ -2313,18 +2322,32 @@ def _mixed_repr(td, key) -> str | None:
 
 def _td_fields(td: T, keys=None, sep=": ") -> str:
     from tensordict._lazy import LazyStackedTensorDict
+    from tensordict.persistent import PersistentTensorDict
 
     # A TypedTensorDict reads its entries from the tensordict it wraps.
     source = td
     while type(source)._wrapped_attr is not None:
         source = getattr(source, type(source)._wrapped_attr)
     is_lazy = isinstance(source, LazyStackedTensorDict)
+    is_file = isinstance(source, PersistentTensorDict)
     strs = []
     if keys is None:
         keys = td.keys()
     for key in keys:
-        # A lazy stack's tensor entries are printed from the members.
-        leaf = source._plain_leaf(key) if is_lazy else None
+        # The tensor entries of a lazy stack, and of an h5 or zarr file, are
+        # printed from the members and from the metadata (#3257).
+        if is_lazy:
+            leaf = _stacked_leaf(source, key)
+            unbatched = _unbatched_leaf(source, key) if leaf is None else None
+            if unbatched is not None:
+                # stacking returns an alias of the first member's tensor
+                alias = torch.ops.aten.alias.default(unbatched)
+                strs.append(sep.join([key, _get_repr(alias)]))
+                continue
+        elif is_file:
+            leaf = _file_leaf(source, key)
+        else:
+            leaf = None
         if leaf is not None:
             shape = leaf[0]
             substr = _stacked_repr(*leaf)
@@ -2355,6 +2378,18 @@ def _td_fields(td: T, keys=None, sep=": ") -> str:
                 TensorDictBase,
             )
 
+            first = leaf[1][0] if leaf is not None else None
+            if isinstance(first, _FileLeaf):
+                # the first member is a file: print it from the metadata
+                substr = _get_repr_custom(
+                    Tensor,
+                    shape,
+                    first.device,
+                    first.dtype,
+                    first.device.type == "cuda",
+                )
+                strs.append(sep.join([key, substr]))
+                continue
             while isinstance(
                 temp_td, LazyStackedTensorDict
             ):  # we need to grab the heterogeneous tensor from the inner nesting level
@@ -2906,8 +2941,7 @@ class _BufferLegacy(torch.nn.Buffer):
         return t
 
 
-from tensordict._utils_options import (  # noqa: F401
-    _legacy_lazy,
+from tensordict._utils_options import (
     _REPR_OPTIONS,
     _strtobool,
     capture_non_tensor_stack,
@@ -3428,7 +3462,7 @@ class _add_batch_dim_pre_hook:
     def __call__(self, mod: torch.nn.Module, args, kwargs):
         for name, param in list(mod.named_parameters(recurse=False)):
             if hasattr(param, "in_dim") and hasattr(param, "vmap_level"):
-                param = _add_batch_dim_c(param, param.in_dim, param.vmap_level)
+                param = _add_batch_dim(param, param.in_dim, param.vmap_level)
                 delattr(mod, name)
                 setattr(mod, name, param)
         for key, val in list(mod._forward_pre_hooks.items()):
@@ -4043,7 +4077,6 @@ def unravel_key_list(keys):
 from tensordict._utils_key_json import (  # noqa: F401
     _decode_key_from_filesystem,
     _encode_key_for_filesystem,
-    _get_robust_key_setting,
     _get_robust_key_setting_with_warning,
     _is_safe_legacy_key,
 )
@@ -4064,8 +4097,6 @@ _NESTED_TENSOR_ERR = (
     "nested tensors. Please upgrade to a more recent "
     "version."
 )
-
-_DEVICE2STRDEVICE = _KeyDependentDefaultDict(str)
 
 
 def _lock_warn():

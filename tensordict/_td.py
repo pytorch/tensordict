@@ -69,6 +69,7 @@ from tensordict.base import (
     _warn_lazy_is_empty,
     _warn_scalar_over_non_tensor,
     _warn_set_at_cast,
+    _warn_update_inserts_whole_entry,
     _warn_update_keys_narrowed,
     _wrap_extra_state,
     _write_back_members,
@@ -81,6 +82,7 @@ from tensordict.base import (
 )
 from tensordict.memmap import _raise_if_jagged, MemoryMappedTensor
 from tensordict.utils import (
+    _add_batch_dim,
     _as_context_manager,
     _BatchedUninitializedBuffer,
     _BatchedUninitializedParameter,
@@ -93,7 +95,6 @@ from tensordict.utils import (
     _encode_key_for_filesystem,
     _GENERIC_NESTED_ERR,
     _get_robust_key_setting_with_warning,
-    _import_and_wrap_functorch,
     _infer_size_impl,
     _is_non_tensor,
     _is_safe_legacy_key,
@@ -107,6 +108,8 @@ from tensordict.utils import (
     _pass_through,
     _pass_through_cls,
     _prune_selected_keys,
+    _remove_batch_dim,
+    _selection_trie,
     _set_item,
     _set_max_batch_size,
     _shape,
@@ -119,6 +122,7 @@ from tensordict.utils import (
     _zip_strict,
     DeviceType,
     expand_as_right,
+    ftdim,
     IndexType,
     is_non_tensor,
     is_tensorclass,
@@ -127,18 +131,9 @@ from tensordict.utils import (
 )
 from torch import Tensor
 from torch._functorch.vmap import _maybe_remove_batch_dim
-from torch.compiler import is_compiling
+from torch.compiler import is_compiling, is_dynamo_compiling
 from torch.nn.modules.module import _EXTRA_STATE_KEY_SUFFIX
 from torch.utils._pytree import tree_map
-
-try:
-    from functorch import dim as ftdim
-
-    _has_funcdim = True
-except ImportError:
-    from tensordict.utils import _ftdim_mock as ftdim
-
-    _has_funcdim = False
 
 if TYPE_CHECKING:
     from typing_extensions import Self
@@ -147,10 +142,6 @@ else:
 
 _register_tensor_class(ftdim.Tensor)
 
-
-_add_batch_dim, _remove_batch_dim = _import_and_wrap_functorch(
-    "_add_batch_dim", "_remove_batch_dim"
-)
 
 # Device inputs of TensorDict(device=...) -> (indexed device, is_cuda). Only
 # inputs whose meaning does not depend on the current CUDA device are kept, and
@@ -547,7 +538,6 @@ class TensorDict(TensorDictBase):
         if device is not None:
             if non_blocking is None:
                 sub_non_blocking = True
-                non_blocking = False
             else:
                 sub_non_blocking = non_blocking
             if type(device) is not torch.device:
@@ -2577,23 +2567,7 @@ class TensorDict(TensorDictBase):
         dtype: torch.dtype | None = None,
         robust_key: bool | None = True,
     ) -> MemoryMappedTensor:
-        if not self.is_memmap():
-            raise RuntimeError(
-                "Can only make a memmap tensor within a memory-mapped tensordict."
-            )
-
-        key = unravel_key(key)
-        if isinstance(key, tuple):
-            last_node = self._make_memmap_subtd(key[:-1], robust_key=robust_key)
-            last_key = key[-1]
-        else:
-            last_node = self
-            last_key = key
-        if last_key in last_node.keys():
-            raise RuntimeError(
-                f"The key {last_key} already exists within the target tensordict. Delete that entry before "
-                f"overwriting it."
-            )
+        last_node, last_key = _memmap_entry_parent(self, key, robust_key)
         if dtype is None:
             dtype = torch.get_default_dtype()
         if last_node._memmap_prefix is not None:
@@ -2606,23 +2580,10 @@ class TensorDict(TensorDictBase):
                 dtype=dtype,
                 robust_key=robust_key,
             )
-            _update_metadata(
-                metadata=metadata,
-                key=last_key,
-                value=memmap_tensor,
-                is_collection=False,
-            )
-            _save_metadata(
-                last_node, prefix=last_node._memmap_prefix, metadata=metadata
-            )
         else:
+            metadata = None
             memmap_tensor = MemoryMappedTensor.empty(shape=shape, dtype=dtype)
-
-        last_node._set_str(
-            last_key, memmap_tensor, validated=False, inplace=False, ignore_lock=True
-        )
-
-        return memmap_tensor
+        return _set_memmap_entry(last_node, last_key, memmap_tensor, metadata)
 
     # Override: only dense storage can hold the new memory-mapped tensor.
     def make_memmap_from_storage(
@@ -2634,23 +2595,7 @@ class TensorDict(TensorDictBase):
         dtype: torch.dtype | None = None,
         robust_key: bool | None = True,
     ) -> MemoryMappedTensor:
-        if not self.is_memmap():
-            raise RuntimeError(
-                "Can only make a memmap tensor within a memory-mapped tensordict."
-            )
-
-        key = unravel_key(key)
-        if isinstance(key, tuple):
-            last_node = self._make_memmap_subtd(key[:-1], robust_key=robust_key)
-            last_key = key[-1]
-        else:
-            last_node = self
-            last_key = key
-        if last_key in last_node.keys():
-            raise RuntimeError(
-                f"The key {last_key} already exists within the target tensordict. Delete that entry before "
-                f"overwriting it."
-            )
+        last_node, last_key = _memmap_entry_parent(self, key, robust_key)
         if dtype is None:
             dtype = torch.get_default_dtype()
 
@@ -2660,6 +2605,7 @@ class TensorDict(TensorDictBase):
             ):
                 # load_memmap and memmap_refresh_ drop such an entry, or load a
                 # stale file left at its path (#2952).
+                key = unravel_key(key)
                 warn(
                     "make_memmap_from_storage got a storage without a file, so "
                     f"the entry {key!r} is not written to the directory of the "
@@ -2681,25 +2627,12 @@ class TensorDict(TensorDictBase):
                 dtype=dtype,
                 robust_key=robust_key,
             )
-            _update_metadata(
-                metadata=metadata,
-                key=last_key,
-                value=memmap_tensor,
-                is_collection=False,
-            )
-            _save_metadata(
-                last_node, prefix=last_node._memmap_prefix, metadata=metadata
-            )
         else:
+            metadata = None
             memmap_tensor = MemoryMappedTensor.from_storage(
                 storage=storage, shape=shape, dtype=dtype
             )
-
-        last_node._set_str(
-            last_key, memmap_tensor, validated=False, inplace=False, ignore_lock=True
-        )
-
-        return memmap_tensor
+        return _set_memmap_entry(last_node, last_key, memmap_tensor, metadata)
 
     # Override: only dense storage can hold the new memory-mapped tensor.
     def make_memmap_from_tensor(
@@ -2711,23 +2644,7 @@ class TensorDict(TensorDictBase):
         existsok: bool = True,
         robust_key: bool | None = True,
     ) -> MemoryMappedTensor:
-        if not self.is_memmap():
-            raise RuntimeError(
-                "Can only make a memmap tensor within a memory-mapped tensordict."
-            )
-
-        key = unravel_key(key)
-        if isinstance(key, tuple):
-            last_node = self._make_memmap_subtd(key[:-1], robust_key=robust_key)
-            last_key = key[-1]
-        else:
-            last_node = self
-            last_key = key
-        if last_key in last_node.keys():
-            raise RuntimeError(
-                f"The key {last_key} already exists within the target tensordict. Delete that entry before "
-                f"overwriting it."
-            )
+        last_node, last_key = _memmap_entry_parent(self, key, robust_key)
 
         if last_node._memmap_prefix is not None:
             metadata = _load_metadata(last_node._memmap_prefix)
@@ -2742,23 +2659,10 @@ class TensorDict(TensorDictBase):
                 robust_key=robust_key,
                 warn_existing_size=False,
             )
-            _update_metadata(
-                metadata=metadata,
-                key=last_key,
-                value=memmap_tensor,
-                is_collection=False,
-            )
-            _save_metadata(
-                last_node, prefix=last_node._memmap_prefix, metadata=metadata
-            )
         else:
+            metadata = None
             memmap_tensor = MemoryMappedTensor.from_tensor(tensor)
-
-        last_node._set_str(
-            last_key, memmap_tensor, validated=False, inplace=False, ignore_lock=True
-        )
-
-        return memmap_tensor
+        return _set_memmap_entry(last_node, last_key, memmap_tensor, metadata)
 
     def _build_lock_schema(self) -> None:
         # Snapshot the current top-level key set as a Python tuple so
@@ -3324,12 +3228,64 @@ class _StateFromSource:
         return self._source._has_non_tensor
 
 
+def _memmap_entry_parent(
+    td: TensorDict, key: NestedKey, robust_key: bool | None
+) -> tuple[TensorDict, str]:
+    """The tensordict and key at which ``make_memmap*`` writes the new entry ``key`` of the memory-mapped ``td``.
+
+    It makes the missing nested tensordicts, and raises if ``td`` is not
+    memory-mapped or if the entry exists.
+    """
+    if not td.is_memmap():
+        raise RuntimeError(
+            "Can only make a memmap tensor within a memory-mapped tensordict."
+        )
+
+    key = unravel_key(key)
+    if isinstance(key, tuple):
+        last_node = td._make_memmap_subtd(key[:-1], robust_key=robust_key)
+        last_key = key[-1]
+    else:
+        last_node = td
+        last_key = key
+    if last_key in last_node.keys():
+        raise RuntimeError(
+            f"The key {last_key} already exists within the target tensordict. Delete that entry before "
+            f"overwriting it."
+        )
+    return last_node, last_key
+
+
+def _set_memmap_entry(
+    td: TensorDict,
+    key: str,
+    memmap_tensor: MemoryMappedTensor,
+    metadata: dict | None,
+) -> MemoryMappedTensor:
+    """Sets the new entry ``key`` of ``make_memmap*`` in ``td`` and returns it.
+
+    ``metadata`` is the metadata of the directory of ``td``, loaded before the
+    entry was written, which gets the entry, or ``None`` if ``td`` has no
+    directory.
+    """
+    if metadata is not None:
+        _update_metadata(
+            metadata=metadata,
+            key=key,
+            value=memmap_tensor,
+            is_collection=False,
+        )
+        _save_metadata(td, prefix=td._memmap_prefix, metadata=metadata)
+
+    td._set_str(key, memmap_tensor, validated=False, inplace=False, ignore_lock=True)
+
+    return memmap_tensor
+
+
 class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
     """A TensorDict that only sees an index of the stored tensors."""
 
     _lazy = True
-    _inplace_set = True
-    _safe = False
     _masking_on_dense_copy = True
     _memmap_inplace_unsupported = True
     _pin_memory_unsupported = True
@@ -3423,9 +3379,6 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
         for key in self.keys():
             if _is_tensor_collection(self.entry_class(key)):
                 raise RuntimeError("Cannot rename nested sub-tensordict dimensions.")
-
-    def _preallocate(self, key: NestedKey, value: CompatibleType) -> Self:
-        return self._source.set(key, value)
 
     def _convert_inplace(self, inplace, key):
         has_key = key in self.keys()
@@ -3693,6 +3646,9 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
                 "Cannot use _SubTensorDict.update with a LazyStackedTensorDict that has exclusive keys."
             )
         keys = set(self.keys(False))
+        # whether keys_to_update has a deeper key, under which an entry that
+        # self lacks is written whole (#3360): set at the first such entry
+        nested_keys = selection = None
         for input_key, value in input_dict_or_td.items():
             key = _unravel_key_to_tuple(input_key)
             firstkey, subkey = key[0], key[1:]
@@ -3753,6 +3709,16 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
                         non_blocking=non_blocking,
                     )
             else:
+                if keys_to_update is not None and type(value) is not Tensor:
+                    # a tensor is written whole either way: skip the check
+                    if nested_keys is None:
+                        nested_keys = tuple in map(type, keys_to_update) and (
+                            not is_dynamo_compiling()
+                        )
+                    if nested_keys:
+                        if selection is None:
+                            selection = _selection_trie(keys_to_update)
+                        _warn_update_inserts_whole_entry(key, value, selection, is_leaf)
                 self._set_tuple(
                     key,
                     value,
@@ -4053,11 +4019,6 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
     def _propagate_unlock(self):
         return []
 
-    def _remove_lock(self, lock_id):
-        raise RuntimeError(
-            "Cannot unlock a _SubTensorDict. Unlock the parent tensordict instead."
-        )
-
     # Override: only the parent tensordict can be locked.
     def _propagate_lock(self, lock_ids=None, *, is_compiling):
         raise RuntimeError(
@@ -4303,7 +4264,7 @@ class _TensorDictKeysView:
         )
 
         if isinstance(tensordict, LazyStackedTensorDict):
-            return _iter_items_lazystack(tensordict, return_none_for_het_values=True)
+            return _iter_items_lazystack(tensordict)
         if isinstance(tensordict, _CustomOpTensorDict):
             # it's possible that a TensorDict contains a nested LazyStackedTensorDict,
             # or _CustomOpTensorDict, so as we iterate through the contents we need to

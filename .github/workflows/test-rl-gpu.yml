@@ -13,7 +13,6 @@ on:
   workflow_call:
 
 env:
-  CHANNEL: "nightly"
   # Keep reverse-dependency results reproducible. Bump this only after the
   # corresponding TorchRL revision has passed this integration suite.
   TORCHRL_REF: f0af32d31045f235b30210fa2ce01d581c08b986

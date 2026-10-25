@@ -17,31 +17,20 @@ from tensordict._pytree import _register_td_node
 from tensordict._td import _StateFromSource, TensorDict
 from tensordict.base import (
     _is_tensor_collection,
-    _PACKAGE_DIR,
     _register_tensor_class,
     NO_DEFAULT,
     TensorDictBase,
 )
+from tensordict.tensorclass import dataclass_transform
 from tensordict.utils import (
     _as_context_manager,
     _cache_while_locked,
     _is_non_tensor,
     _is_tensorclass,
     _unravel_key_to_tuple,
+    _user_stacklevel,
 )
 from torch.compiler import is_compiling
-
-try:
-    # Python 3.11+ (PEP 681)
-    from typing import dataclass_transform
-except ImportError:
-
-    def dataclass_transform(*args, **kwargs):
-        def _identity(cls):
-            return cls
-
-        return _identity
-
 
 try:
     # Python 3.11+ (PEP 655)
@@ -205,10 +194,6 @@ def _warn_missing_required(
     # Dynamo cannot trace warnings.warn: a compiled call stays silent.
     if not missing or is_compiling():
         return
-    # point to the first frame outside tensordict: the user's call
-    frame, stacklevel = sys._getframe(1), 2
-    while frame is not None and frame.f_code.co_filename.startswith(_PACKAGE_DIR):
-        frame, stacklevel = frame.f_back, stacklevel + 1
     warnings.warn(
         f"{call.format(cls.__name__)} returns an instance of {cls.__name__} that "
         f"misses the required field(s) {', '.join(sorted(missing))}. Starting "
@@ -216,7 +201,7 @@ def _warn_missing_required(
         f"that the constructor raises. Pass these fields, or {opt_out} to keep "
         "the instance without them.",
         FutureWarning,
-        stacklevel=stacklevel,
+        stacklevel=_user_stacklevel(),
     )
 
 
@@ -1506,7 +1491,6 @@ _DIRECT_DELEGATES = [
     "_stack_onto_",
     "keys",
     "entry_class",
-    "_check_is_shared",
     "_check_device",
     "is_contiguous",
     "popitem",

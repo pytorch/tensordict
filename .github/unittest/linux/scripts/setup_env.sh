@@ -145,8 +145,3 @@ else
     # zarr>=3 requires Python>=3.11; skip on older interpreters
     pip install "zarr>=3.1.1" || echo "zarr>=3.1.1 not available for Python ${PYTHON_VERSION}, skipping"
 fi
-
-#if [[ $OSTYPE == 'darwin'* ]]; then
-#  printf "* Installing C++ for OSX\n"
-#  conda install -c conda-forge cxx-compiler -y
-#fi

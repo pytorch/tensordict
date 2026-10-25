@@ -12,7 +12,6 @@ import json
 import math
 import os
 import pickle
-import sys
 import tempfile
 import warnings
 import weakref
@@ -41,7 +40,6 @@ from tensordict.base import (
     _default_is_leaf,
     _is_leaf_nontensor,
     _normalize_from_dict_args,
-    _PACKAGE_DIR,
     _register_tensor_class,
     BEST_ATTEMPT_INPLACE,
     is_tensor_collection,
@@ -55,7 +53,9 @@ from tensordict.utils import (
     _is_unbatched,
     _LOCK_ERROR,
     _NUMPY_TO_TORCH_DTYPE_DICT,
+    _TORCH_TO_NUMPY_DTYPE_DICT,
     _UNBATCHED_SAVE,
+    _user_stacklevel,
     _warn_unbatched_saved_as_plain,
     expand_right,
     IndexType,
@@ -345,12 +345,6 @@ class _H5Backend(_PersistentBackend):
     def read_non_tensor(self, node):
         value = node[()]
         if isinstance(value, bytes) and node.attrs.get(_H5_STR_ATTR, False):
-            # point to the first frame outside tensordict: the user's call
-            frame, stacklevel = sys._getframe(1), 2
-            while frame is not None and frame.f_code.co_filename.startswith(
-                _PACKAGE_DIR
-            ):
-                frame, stacklevel = frame.f_back, stacklevel + 1
             warnings.warn(
                 f"The h5 backend of PersistentTensorDict reads the string "
                 f"{node.name!r}, which tensordict wrote, as bytes. Starting with "
@@ -358,7 +352,7 @@ class _H5Backend(_PersistentBackend):
                 "as the other backends do. To support both, decode only bytes: "
                 "`value.decode() if isinstance(value, bytes) else value`.",
                 FutureWarning,
-                stacklevel=stacklevel,
+                stacklevel=_user_stacklevel(),
             )
         return value
 
@@ -724,12 +718,6 @@ class _ZarrBackend(_PersistentBackend):
                 "when the saved data is trusted."
             )
         if self.allow_pickle is None:
-            # point to the first frame outside tensordict: the user's call
-            frame, stacklevel = sys._getframe(1), 2
-            while frame is not None and frame.f_code.co_filename.startswith(
-                _PACKAGE_DIR
-            ):
-                frame, stacklevel = frame.f_back, stacklevel + 1
             warnings.warn(
                 "PersistentTensorDict is loading a pickled non-tensor zarr field. "
                 "This is only safe for trusted data. Starting with TensorDict "
@@ -737,7 +725,7 @@ class _ZarrBackend(_PersistentBackend):
                 "allow_pickle=True to acknowledge trusted data or "
                 "allow_pickle=False to reject pickle now.",
                 FutureWarning,
-                stacklevel=stacklevel,
+                stacklevel=_user_stacklevel(),
             )
         return pickle.loads(node[...].tobytes())
 
@@ -857,8 +845,8 @@ class _ZarrBackend(_PersistentBackend):
             value = np.asarray(value)
             dtype = value.dtype
             if attributes:
-                # the strings of a stack, in zarr's variable-length string
-                # type: an element can then be replaced by a longer string
+                # the strings of a stack, in zarr's variable-length
+                # string type: an element can then be replaced by a longer string
                 attributes = {**(kwargs.get("attributes") or {}), **attributes}
                 kwargs = {**kwargs, "attributes": attributes}
                 dtype = str
@@ -1218,7 +1206,6 @@ class PersistentTensorDict(
             raise TypeError("allow_pickle must be a bool or None.")
         if batch_size is None:
             batch_size = torch.Size(())
-        self._locked_tensordicts = []
         self._lock_id = set()
         backend_cls = _BACKENDS.get(backend)
         if backend_cls is None:
@@ -2394,14 +2381,38 @@ class PersistentTensorDict(
             kwargs,
         )
 
-    def _to_numpy(self, value):
+    def _to_numpy(self, value, key: NestedKey):
         if hasattr(value, "requires_grad") and value.requires_grad:
             raise RuntimeError("Cannot set a tensor that has requires_grad=True.")
         if isinstance(value, torch.Tensor):
             if _is_unbatched(value):
                 # the file has no place for the class (#3264)
                 _warn_unbatched_saved_as_plain()
-            out = value.cpu().detach().numpy()
+            try:
+                out = value.cpu().detach().numpy()
+            except (TypeError, RuntimeError) as err:
+                # name the entry instead of torch's bare error (#3265)
+                full_key = tuple(
+                    p for p in self.file.name.split("/") if p
+                ) + _unravel_key_to_tuple(key)
+                text = str(err)
+                if value.is_nested:
+                    text = (
+                        f"{text.rstrip('.')}. h5 and zarr can't store nested "
+                        "tensors: pad the entry first, for example with "
+                        "torch.nested.to_padded_tensor, or save with torch.save."
+                    )
+                elif value.dtype not in _TORCH_TO_NUMPY_DTYPE_DICT:
+                    text = (
+                        f"{text.rstrip('.')}. h5 and zarr hold numpy dtypes "
+                        "only: convert the entry first to a dtype numpy has "
+                        "(for example float32 or complex64), or save with "
+                        "memmap or torch.save."
+                    )
+                where = "h5 file" if self._backend.name == "h5" else "zarr store"
+                raise type(err)(
+                    f"Cannot write the entry {full_key} to the {where}: {text}"
+                ) from err
         elif isinstance(value, dict):
             out = TensorDict(value, [])
         elif is_non_tensor(value):
@@ -2438,7 +2449,7 @@ class PersistentTensorDict(
         if not validated:
             value = self._validate_value(value, check_shape=idx is None, key=key)
         non_tensor = is_non_tensor(value)
-        value = self._to_numpy(value)
+        value = self._to_numpy(value, key)
         if not inplace:
             if idx is not None:
                 raise RuntimeError("Cannot pass an index to _set when inplace=False.")

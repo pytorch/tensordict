@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Read base version from version.txt (explicit absolute path)
-# This script is located at: .github/scripts/version_script.sh
-# The version.txt file is at: .github/scripts/version.txt
+# The base version must match version.txt; the Release workflow checks that it
+# does. The script cannot read version.txt: pytorch/test-infra appends it to a
+# temporary env file and sources that file from several directories.
 BASE_VERSION=0.15.0
 echo "Base version: $BASE_VERSION"
 

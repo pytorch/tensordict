@@ -2,8 +2,6 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import os
-import sys
 import warnings
 
 # defaultdict stays importable from here for the deprecated
@@ -12,7 +10,6 @@ from collections import defaultdict  # noqa: F401
 from typing import Any, Dict, List, Tuple
 
 import torch
-import torch.utils._pytree
 from pyvers import implement_for  # noqa: F401
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import _SubTensorDict, TensorDict, TensorDictBase
@@ -25,6 +22,7 @@ from tensordict.persistent import PersistentTensorDict
 from tensordict.utils import (
     _is_tensorclass,
     _shape,
+    _user_stacklevel,
     is_compiling,
     is_non_tensor,
 )
@@ -37,12 +35,6 @@ PYTREE_REGISTERED_TDS = (
     PersistentTensorDict,
 )
 PYTREE_REGISTERED_LAZY_TDS = (LazyStackedTensorDict,)
-
-# The frames that _warn_non_tensor_stack_rebuilt skips to reach the user's call
-_SKIPPED_DIRS = (
-    os.path.dirname(os.path.abspath(__file__)) + os.sep,
-    os.path.dirname(os.path.abspath(torch.utils._pytree.__file__)) + os.sep,
-)
 
 
 class _PytreeBatchSize:
@@ -410,11 +402,6 @@ def _warn_non_tensor_stack_rebuilt(key: str, leaf: Any, rebuilt: Any) -> None:
 
         if leaf.data is rebuilt.data or _check_equal(leaf.data, rebuilt.data):
             return
-    # point to the first frame outside tensordict and torch.utils: the
-    # user's tree_map or tree_unflatten call
-    frame, stacklevel = sys._getframe(1), 2
-    while frame is not None and frame.f_code.co_filename.startswith(_SKIPPED_DIRS):
-        frame, stacklevel = frame.f_back, stacklevel + 1
     warnings.warn(
         f"The NonTensorStack at key {key!r} holds the same value in every "
         "element, so tree_unflatten (and tree_map) rebuilds it from the input "
@@ -423,7 +410,7 @@ def _warn_non_tensor_stack_rebuilt(key: str, leaf: Any, rebuilt: Any) -> None:
         "keeping that value, as when the values differ: the entry then stays "
         "a NonTensorStack.",
         FutureWarning,
-        stacklevel=stacklevel,
+        stacklevel=_user_stacklevel(),
     )
 
 
