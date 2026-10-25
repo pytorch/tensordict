@@ -8888,6 +8888,39 @@ class TestGeneric:
             sub.masked_select(torch.ones(2, dtype=torch.bool), inplace=True)
         assert sub.batch_size == (2,)
 
+    @pytest.mark.parametrize("op", ["flatten", "unflatten", "repeat", "gather"])
+    @pytest.mark.parametrize("container", ["sub_tensordict", "h5_slice", "lazy_stack"])
+    def test_inplace_shape_op_lazy_names_class(self, op, container, tmp_path):
+        # #3371: these ops named LazyStackedTensorDict in their error for any
+        # lazy container, such as the slice of a PersistentTensorDict.
+        source = TensorDict({"a": torch.zeros(4, 2, 3)}, [4, 2])
+        if container == "sub_tensordict":
+            td = source._get_sub_tensordict(slice(1, 3))
+        elif container == "h5_slice":
+            if not _has_h5py:
+                pytest.skip("h5py not found.")
+            source = PersistentTensorDict.from_dict(source, filename=tmp_path / "td.h5")
+            td = source[1:3]
+        else:
+            source = None
+            td = LazyStackedTensorDict(*TensorDict({"a": torch.zeros(2, 2, 3)}, [2, 2]))
+        args = {
+            "flatten": (0, 1),
+            "unflatten": (0, (1, 2)),
+            "repeat": (2, 1),
+            "gather": (0, torch.zeros(2, 2, dtype=torch.long)),
+        }[op]
+        with pytest.raises(
+            NotImplementedError,
+            match=f"{op}.inplace=True. is not supported on {type(td).__name__};",
+        ):
+            getattr(td, op)(*args, inplace=True)
+        assert td.batch_size == (2, 2)
+        assert td["a"].shape == (2, 2, 3)
+        if source is not None:
+            assert type(td).__name__ != "LazyStackedTensorDict"
+            assert source.batch_size == (4, 2)
+
     @pytest.mark.parametrize(
         "op",
         [

@@ -990,10 +990,11 @@ class _ShapeOps:
         Keyword Args:
             inplace (bool, optional): if ``True``, the tensordict keeps its
                 identity and keys, its leaves are replaced one by one, and the
-                call returns ``self``. A lazy stack, or a tensordict that
-                holds one, raises a ``NotImplementedError``: call
-                :meth:`to_tensordict` first. See :ref:`inplace-conventions`.
-                Defaults to ``False``.
+                call returns ``self``. A lazy stack or a lazy view (such as a
+                slice of a :class:`~tensordict.PersistentTensorDict`), or a
+                tensordict that holds one, raises a ``NotImplementedError``:
+                call :meth:`to_tensordict` first. See
+                :ref:`inplace-conventions`. Defaults to ``False``.
 
         Raises:
             ValueError: if the number of repeats differs from the number of
@@ -1033,7 +1034,7 @@ class _ShapeOps:
         if inplace:
             if self._lazy:
                 raise NotImplementedError(
-                    "repeat(inplace=True) is not supported on LazyStackedTensorDict; "
+                    f"repeat(inplace=True) is not supported on {type(self).__name__}; "
                     "call .to_tensordict() first or use inplace=False."
                 )
             new_batch_size = torch.Size(
@@ -1854,10 +1855,11 @@ class _ShapeOps:
             inplace (bool, optional): if ``True``, the tensordict keeps its
                 identity and keys, its leaves are replaced one by one, and the
                 call returns ``self``. It needs ``index.ndim == batch_dims``.
-                Exclusive with ``out``. A lazy stack, or a tensordict that
-                holds one, raises a ``NotImplementedError``: call
-                :meth:`to_tensordict` first. See :ref:`inplace-conventions`.
-                Defaults to ``False``.
+                Exclusive with ``out``. A lazy stack or a lazy view (such as
+                a slice of a :class:`~tensordict.PersistentTensorDict`), or a
+                tensordict that holds one, raises a ``NotImplementedError``:
+                call :meth:`to_tensordict` first. See
+                :ref:`inplace-conventions`. Defaults to ``False``.
 
         Examples:
             >>> import torch
@@ -1889,7 +1891,7 @@ class _ShapeOps:
                 )
             if self._lazy:
                 raise NotImplementedError(
-                    "gather(inplace=True) is not supported on LazyStackedTensorDict; "
+                    f"gather(inplace=True) is not supported on {type(self).__name__}; "
                     "call .to_tensordict() first or use inplace=False."
                 )
             if index.ndim != self.batch_dims:
@@ -2926,10 +2928,11 @@ class _ShapeOps:
             inplace (bool, optional): if ``True``, the tensordict keeps its
                 identity and keys, its leaves are replaced one by one, and the
                 call returns ``self``. A leaf keeps its storage when the
-                flatten can return a view of it. A lazy stack, or a tensordict
-                that holds one, raises a ``NotImplementedError``: call
-                :meth:`to_tensordict` first. See :ref:`inplace-conventions`.
-                Defaults to ``False``.
+                flatten can return a view of it. A lazy stack or a lazy view
+                (such as a slice of a :class:`~tensordict.PersistentTensorDict`),
+                or a tensordict that holds one, raises a
+                ``NotImplementedError``: call :meth:`to_tensordict` first. See
+                :ref:`inplace-conventions`. Defaults to ``False``.
 
         Examples:
             >>> import torch
@@ -2951,7 +2954,7 @@ class _ShapeOps:
         if inplace and self._lazy:
             raise NotImplementedError(
                 "flatten(inplace=True) is not supported on "
-                "LazyStackedTensorDict; call .to_tensordict() first or use "
+                f"{type(self).__name__}; call .to_tensordict() first or use "
                 "inplace=False."
             )
         if start_dim is None:
@@ -3061,9 +3064,10 @@ class _ShapeOps:
             inplace (bool, optional): if ``True``, the tensordict keeps its
                 identity and keys, its leaves are replaced one by one, and the
                 call returns ``self``. A leaf keeps its storage when the
-                unflatten can return a view of it. A lazy stack, or a
-                tensordict that holds one, raises a ``NotImplementedError``:
-                call :meth:`to_tensordict` first. See
+                unflatten can return a view of it. A lazy stack or a lazy view
+                (such as a slice of a :class:`~tensordict.PersistentTensorDict`),
+                or a tensordict that holds one, raises a
+                ``NotImplementedError``: call :meth:`to_tensordict` first. See
                 :ref:`inplace-conventions`. Defaults to ``False``.
 
         Examples:
@@ -3080,7 +3084,7 @@ class _ShapeOps:
         if inplace and self._lazy:
             raise NotImplementedError(
                 "unflatten(inplace=True) is not supported on "
-                "LazyStackedTensorDict; call .to_tensordict() first or use "
+                f"{type(self).__name__}; call .to_tensordict() first or use "
                 "inplace=False."
             )
         dim = _maybe_correct_neg_dim(dim, self.batch_size)
