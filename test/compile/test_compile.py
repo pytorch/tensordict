@@ -3388,7 +3388,7 @@ class TestFunctional:
             p_new is p_orig for p_new, p_orig in zip(module.parameters(), orig_params)
         )
 
-    # gh-3369: to_module(inplace=True) with a custom __setattr__
+    # gh-3369: to_module(inplace=True) under torch.compile
     def test_to_module_inplace(self, mode):
         # Under Dynamo, to_module takes the path used for a custom __setattr__
         module = torch.nn.Linear(3, 4)
