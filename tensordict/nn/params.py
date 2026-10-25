@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import (
     Any,
     Callable,
-    Dict,
     Iterator,
     List,
     OrderedDict,
@@ -286,20 +285,6 @@ def _fallback_property(func):
     return property(new_func, setter)
 
 
-def _replace(func):
-    name = func.__name__
-
-    @wraps(func)
-    def new_func(self, *args, **kwargs):  # type: ignore[misc]
-        out = getattr(self._param_td, name)(*args, **kwargs)
-        if out is self._param_td:
-            return self
-        self._param_td = out
-        return self
-
-    return new_func
-
-
 def _carry_over(func):
     name = func.__name__
 
@@ -551,7 +536,6 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             self._param_td.lock_()
         self._reset_params(params=params, buffers=buffers)
         self._is_locked = False
-        self._locked_tensordicts = []
         self._get_post_hook = []
 
     @classmethod
@@ -606,7 +590,6 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             self._param_td.lock_()
         self._reset_params(params=params, buffers=buffers)
         self._is_locked = False
-        self._locked_tensordicts = []
         self._get_post_hook = []
         return self
 
@@ -850,8 +833,6 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         executor: ThreadPoolExecutor,
         futures: List[Future],
         local_futures: List,
-        subs_results: Dict[Future, Any] | None = None,
-        multithread_set: bool = False,  # Experimental
         **constructor_kwargs,
     ) -> None: ...
 

@@ -384,7 +384,6 @@ class _OutKeysSelect:
     def __init__(self, out_keys):
         self.out_keys = list(out_keys)
         self._initialized = None
-        self._is_dispatched = None
 
     def _init(self, module):
         if self._initialized:
@@ -489,12 +488,6 @@ class _OutKeysSelect:
             if len(tensordict_in) or len(kwargs):
                 if len(tensordict_in) and isinstance(tensordict_in[0], TensorDictBase):
                     return self._detect_dispatch(tensordict_in[0], kwargs, in_keys)
-                elif (
-                    not len(tensordict_in)
-                    and len(kwargs)
-                    and isinstance(kwargs.get("tensordict"), TensorDictBase)
-                ):
-                    return self._detect_dispatch(kwargs["tensordict"], in_keys)
                 return True
             return not len(in_keys)
         # not a TDBase: must be True

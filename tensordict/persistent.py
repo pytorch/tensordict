@@ -1218,7 +1218,6 @@ class PersistentTensorDict(
             raise TypeError("allow_pickle must be a bool or None.")
         if batch_size is None:
             batch_size = torch.Size(())
-        self._locked_tensordicts = []
         self._lock_id = set()
         backend_cls = _BACKENDS.get(backend)
         if backend_cls is None:

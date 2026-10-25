@@ -37,7 +37,6 @@ from tensordict.utils import (
     _as_context_manager,
     _cache_while_locked,
     _cast_filtered,
-    _is_shared,
     _is_unbatched,
     _make_dtype_promotion,
     _parse_to,
@@ -616,19 +615,6 @@ class _DeviceOps:
         self._fast_apply(record, filter_empty=True)
         return self
 
-    def _check_is_shared(self) -> bool:
-        share_list = [_is_shared(value) for value in self.values()]
-        if any(share_list) and not all(share_list):
-            shared_str = ", ".join(
-                [f"{key}: {_is_shared(value)}" for key, value in self.items()]
-            )
-            raise RuntimeError(
-                f"tensors must be either all shared or not, but mixed "
-                f"features is not allowed. "
-                f"Found: {shared_str}"
-            )
-        return all(share_list) and len(share_list) > 0
-
     def _check_device(self, *, raise_exception: bool = True) -> None | bool:
         val = True
         for value in self.values():
@@ -679,9 +665,7 @@ class _DeviceOps:
     ):
         if self.is_empty():
             return self.to(device, inplace=inplace)
-        keys, vals = self._items_list(
-            leaves_only=True, include_nested=True, is_leaf=_NESTED_TENSORS_AS_LISTS
-        )
+        keys, vals = self._items_list(leaves_only=True, include_nested=True)
         if not num_threads:
             # Pin on the calling thread: the first pin_memory() on a new thread
             # starts that thread's own OpenMP team of torch.get_num_threads()
