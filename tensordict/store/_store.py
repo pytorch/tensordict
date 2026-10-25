@@ -836,70 +836,13 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
                 if data is not None:
                     result[kp] = self._deserialize_non_tensor(data, meta, idx=idx)
             key_paths = [kp for kp in key_paths if kp not in non_tensor_metas]
-        scattered = _is_scattered_index(idx)
 
         pipe = self._client.pipeline()
-        # (key_path, result_shape, dtype, local_idx, has_cmd)
-        plan: list[tuple[str, list[int], torch.dtype, object, bool]] = []
-        fallback_kps: list[str] = []
-
-        for kp in key_paths:
-            shape, dtype = meta_map[kp]
-            result_shape = _getitem_result_shape(shape, idx)
-            local_idx = _get_local_idx(idx, shape[0])
-
-            if scattered:
-                ranges = _compute_byte_ranges(shape, dtype, idx)
-                if ranges is None:
-                    fallback_kps.append(kp)
-                    continue
-                if not ranges:
-                    plan.append((kp, result_shape, dtype, None, False))
-                    continue
-                argv: list[int] = []
-                for byte_offset, byte_length in ranges:
-                    argv.append(byte_offset)
-                    argv.append(byte_length)
-                pipe.eval(_LUA_GETRANGES, 1, self._data_key(kp), *argv)
-            else:
-                cr = _compute_covering_range(shape, dtype, idx)
-                if cr is None:
-                    fallback_kps.append(kp)
-                    continue
-                byte_offset, byte_length = cr
-                if byte_length == 0:
-                    plan.append((kp, result_shape, dtype, None, False))
-                    continue
-                pipe.getrange(
-                    self._data_key(kp),
-                    byte_offset,
-                    byte_offset + byte_length - 1,
-                )
-            plan.append((kp, result_shape, dtype, local_idx, True))
+        plan, fallback_kps = self._queue_indexed_reads(pipe, key_paths, meta_map, idx)
 
         has_cmds = any(has_cmd for _, _, _, _, has_cmd in plan)
         raw_results = await pipe.execute() if has_cmds else []
-
-        ri = 0
-        for kp, result_shape, dtype, local_idx, has_cmd in plan:
-            if not has_cmd:
-                result[kp] = torch.empty(result_shape, dtype=dtype)
-                continue
-            data = raw_results[ri]
-            ri += 1
-            # For Lua path: data is already exactly the needed rows.
-            # For GETRANGE path: data may be a covering range needing post-index.
-            tensor = _bytes_to_tensor(
-                data,
-                result_shape if local_idx is None else [-1] + list(meta_map[kp][0][1:]),
-                dtype,
-            )
-            if local_idx is not None:
-                tensor = tensor[local_idx]
-                tensor = tensor.reshape(result_shape)
-            if self._device is not None:
-                tensor = tensor.to(self._device)
-            result[kp] = tensor
+        self._assemble_indexed_reads(plan, raw_results, meta_map, result)
 
         # Fallback: full GET + local index
         if fallback_kps:
@@ -966,45 +909,9 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
 
         # -- Stage 2: pipelined byte-range reads (hybrid) ---------------------
         pipe = self._client.pipeline()
-        scattered = _is_scattered_index(idx)
-
-        # (kp, result_shape, dtype, local_idx, has_cmd)
-        plan: list[tuple[str, list[int], torch.dtype, object, bool]] = []
-        fallback_tensor_kps: list[str] = []
-
-        for kp in tensor_kps:
-            shape, dtype = all_meta[kp]
-            result_shape = _getitem_result_shape(shape, idx)
-            local_idx = _get_local_idx(idx, shape[0])
-
-            if scattered:
-                ranges = _compute_byte_ranges(shape, dtype, idx)
-                if ranges is None:
-                    fallback_tensor_kps.append(kp)
-                    continue
-                if not ranges:
-                    plan.append((kp, result_shape, dtype, None, False))
-                    continue
-                argv: list[int] = []
-                for byte_offset, byte_length in ranges:
-                    argv.append(byte_offset)
-                    argv.append(byte_length)
-                pipe.eval(_LUA_GETRANGES, 1, self._data_key(kp), *argv)
-            else:
-                cr = _compute_covering_range(shape, dtype, idx)
-                if cr is None:
-                    fallback_tensor_kps.append(kp)
-                    continue
-                byte_offset, byte_length = cr
-                if byte_length == 0:
-                    plan.append((kp, result_shape, dtype, None, False))
-                    continue
-                pipe.getrange(
-                    self._data_key(kp),
-                    byte_offset,
-                    byte_offset + byte_length - 1,
-                )
-            plan.append((kp, result_shape, dtype, local_idx, True))
+        plan, fallback_tensor_kps = self._queue_indexed_reads(
+            pipe, tensor_kps, all_meta, idx
+        )
 
         # Full GET for fallback tensors
         for kp in fallback_tensor_kps:
@@ -1025,24 +932,7 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
         # -- Stage 3: reassemble results -----------------------------------
         result: dict[str, torch.Tensor | Any] = {}
 
-        flat_idx = 0
-        for kp, result_shape, dtype, local_idx, has_cmd in plan:
-            if not has_cmd:
-                result[kp] = torch.empty(result_shape, dtype=dtype)
-                continue
-            data = all_results[flat_idx]
-            flat_idx += 1
-            tensor = _bytes_to_tensor(
-                data,
-                result_shape if local_idx is None else [-1] + list(all_meta[kp][0][1:]),
-                dtype,
-            )
-            if local_idx is not None:
-                tensor = tensor[local_idx]
-                tensor = tensor.reshape(result_shape)
-            if self._device is not None:
-                tensor = tensor.to(self._device)
-            result[kp] = tensor
+        flat_idx = self._assemble_indexed_reads(plan, all_results, all_meta, result)
 
         # Fallback tensor results (full GET + index locally)
         for kp in fallback_tensor_kps:
@@ -1156,37 +1046,8 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
 
         # ---- Phase 2: single pipeline for direct + lua -------------------
         pipe = self._client.pipeline()
-        has_pipe_cmds = False
-
-        for kp in direct_kps:
-            value, idx = items[kp]
-            shape, dtype = meta_map[kp]
-            value = _prepare_indexed_value(value, shape, dtype, idx)
-            ranges = _compute_byte_ranges(shape, dtype, idx)
-            byte_offset, _ = ranges[0]
-            pipe.setrange(
-                self._data_key(kp),
-                byte_offset,
-                _tensor_to_bytes(value.contiguous()),
-            )
-            has_pipe_cmds = True
-
-        for kp in lua_kps:
-            value, idx = items[kp]
-            shape, dtype = meta_map[kp]
-            value = _prepare_indexed_value(value, shape, dtype, idx)
-            ranges = _compute_byte_ranges(shape, dtype, idx)
-            value_bytes = _tensor_to_bytes(value.contiguous())
-            argv: list = []
-            offset = 0
-            for byte_offset, byte_length in ranges:
-                argv.append(byte_offset)
-                argv.append(value_bytes[offset : offset + byte_length])
-                offset += byte_length
-            pipe.eval(_LUA_SETRANGES, 1, self._data_key(kp), *argv)
-            has_pipe_cmds = True
-
-        if has_pipe_cmds:
+        self._queue_range_writes(pipe, direct_kps, lua_kps, items, meta_map)
+        if direct_kps or lua_kps:
             await pipe.execute()
 
         # ---- Phase 3: covering-range RMW for step>1 slices ---------------
@@ -1209,25 +1070,7 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
 
             # Patch locally, then Pipeline 2: SETRANGE
             pipe = self._client.pipeline()
-            for (kp, byte_offset, byte_length, shape, dtype), data in zip(
-                cr_data, raw_covers
-            ):
-                rest = shape[1:]
-                elem_size = torch.tensor([], dtype=dtype).element_size()
-                row_bytes = elem_size * (
-                    int(torch.tensor(rest).prod().item()) if rest else 1
-                )
-                covering_rows = byte_length // row_bytes if row_bytes > 0 else 0
-                covering_shape = [covering_rows] + rest
-                covering_tensor = _bytes_to_tensor(data, covering_shape, dtype)
-                value, idx = items[kp]
-                local_idx = _get_local_idx(idx, shape[0])
-                covering_tensor[local_idx] = value
-                pipe.setrange(
-                    self._data_key(kp),
-                    byte_offset,
-                    _tensor_to_bytes(covering_tensor.contiguous()),
-                )
+            self._queue_covering_patches(pipe, cr_data, raw_covers, items)
             await pipe.execute()
 
         # ---- Phase 4: full RMW fallback ----------------------------------
