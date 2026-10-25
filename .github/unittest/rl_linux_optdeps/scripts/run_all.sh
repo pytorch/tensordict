@@ -107,9 +107,6 @@ else
     echo "Using CUDA $CUDA_VERSION as determined by CU_VERSION ($CU_VERSION)"
 fi
 
-# submodules
-git submodule sync && git submodule update --init --recursive
-
 printf "Installing PyTorch with %s\n" "${CU_VERSION}"
 if [ "${CU_VERSION:-}" == cpu ] ; then
     uv_pip_install --upgrade --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu

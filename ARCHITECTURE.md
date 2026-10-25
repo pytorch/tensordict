@@ -489,4 +489,4 @@ touches these places:
   tests with `.github/unittest/rl_linux_optdeps/scripts/run_all.sh`. Other
   CI helpers are in `.github/scripts/`.
 - Lint: `.pre-commit-config.yaml`, which runs `scripts/check_rst_titles.py`.
-- Packaging: `setup.py`, `pyproject.toml`, `version.txt` and `packaging/`.
+- Packaging: `setup.py`, `pyproject.toml` and `version.txt`.

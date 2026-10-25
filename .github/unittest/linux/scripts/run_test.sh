@@ -114,9 +114,8 @@ python -m pytest --runslow -n "${TD_TEST_WORKERS:-4}" --dist worksteal \
     --junitxml="$JUNIT_DIR/junit-tests.xml" || test_status=$?
 # test_distributed.py starts its process groups on fixed ports, and its
 # worker processes can hang at exit when the machine is busy. test_setup.py
-# reinstalls tensordict from this checkout, and its editable installs rewrite
-# tensordict/_C.so while other test processes may import it. So these two run
-# alone, one test at a time. The single-GPU jobs set TD_SKIP_DISTRIBUTED_TESTS:
+# reinstalls tensordict from this checkout. So these two run alone, one test
+# at a time. The single-GPU jobs set TD_SKIP_DISTRIBUTED_TESTS:
 # the CUDA tests of test_distributed.py need 2 GPUs, and the CPU jobs run the
 # rest on the same Python and torch.
 serial_files=(test/utils/test_setup.py)
