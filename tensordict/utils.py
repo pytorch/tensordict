@@ -3657,6 +3657,12 @@ def _is_namedtuple_class(cls):
 
 def _make_dtype_promotion(func):
     dtype = getattr(torch, func.__name__)
+    # name the alias, as in torch.float64 (torch.double)
+    alias = (
+        ""
+        if str(dtype) == f"torch.{func.__name__}"
+        else f" (``torch.{func.__name__}``)"
+    )
 
     @wraps(func)
     def new_func(self, *, cast_filter=None):
@@ -3667,7 +3673,7 @@ def _make_dtype_promotion(func):
             return self._fast_apply(todtype, propagate_lock=True)
         return _cast_filtered(self, todtype, cast_filter, propagate_lock=True)
 
-    new_func.__doc__ = rf"""Returns a tensordict whose tensor leaves are cast to ``{str(dtype)}``.
+    new_func.__doc__ = rf"""Returns a tensordict whose tensor leaves are cast to ``{str(dtype)}``{alias}.
 {func.__doc__ or ""}
         Keyword Args:
             cast_filter (Callable, optional): a predicate
