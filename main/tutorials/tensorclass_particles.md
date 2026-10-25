@@ -33,7 +33,7 @@ torch.manual_seed(0)
 ```
 
 ```
-<torch._C.Generator object at 0x7f0755164cb0>
+<torch._C.Generator object at 0x7fc7e0770cb0>
 ```
 
 ## The state of a system
