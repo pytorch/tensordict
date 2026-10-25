@@ -3388,6 +3388,25 @@ class TestFunctional:
             p_new is p_orig for p_new, p_orig in zip(module.parameters(), orig_params)
         )
 
+    # gh-3369: to_module(inplace=True) with a custom __setattr__
+    def test_to_module_inplace(self, mode):
+        # Under Dynamo, to_module takes the path used for a custom __setattr__
+        module = torch.nn.Linear(3, 4)
+        orig_params = list(module.parameters())
+        td_zero = TensorDict.from_module(module).data.clone().zero_()
+
+        def call(x, td):
+            td.to_module(module, inplace=True, return_swap=False)
+            return module(x)
+
+        call_compile = torch.compile(call, fullgraph=True, mode=mode)
+        x = torch.randn(2, 3)
+        assert (call_compile(x, td_zero) == 0).all()
+        assert all(
+            p_new is p_orig for p_new, p_orig in zip(module.parameters(), orig_params)
+        )
+        assert all((p == 0).all() for p in module.parameters())
+
     # in-place modif raises an error even if fullgraph=False
     @pytest.mark.parametrize("preserve_module_state", [False, True])
     def test_vmap_functional(self, mode, preserve_module_state):

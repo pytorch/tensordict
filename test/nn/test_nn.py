@@ -8363,6 +8363,52 @@ class TestToModule:
         assert (module.weight == 0).all()
         assert (module.bias == 0).all()
 
+    # gh-3369: to_module(inplace=True) with a custom __setattr__
+    @pytest.mark.parametrize("return_swap", [False, True])
+    def test_to_module_inplace_custom_setattr(self, as_module, return_swap):
+        class MyLinear(nn.Linear):
+            def __setattr__(self, key, value):
+                return super().__setattr__(key, value)
+
+        module = MyLinear(4, 2)
+        weight = module.weight
+        bias = module.bias
+        old_weight = weight.detach().clone()
+        old_bias = bias.detach().clone()
+        params = TensorDict.from_module(module, as_module=as_module)
+        params = params.data.clone().zero_()
+
+        swap = params.to_module(module, inplace=True, return_swap=return_swap)
+
+        assert module.weight is weight
+        assert module.bias is bias
+        assert (module.weight == 0).all()
+        assert (module.bias == 0).all()
+        if return_swap:
+            torch.testing.assert_close(swap["weight"].detach(), old_weight)
+            torch.testing.assert_close(swap["bias"].detach(), old_bias)
+        else:
+            assert swap is None
+
+    # gh-3369: to_module(inplace=True) with a custom __setattr__
+    def test_to_module_inplace_custom_setattr_context_manager(self, as_module):
+        class MyLinear(nn.Linear):
+            def __setattr__(self, key, value):
+                return super().__setattr__(key, value)
+
+        module = MyLinear(4, 2)
+        weight = module.weight
+        old_weight = weight.detach().clone()
+        params = TensorDict.from_module(module, as_module=as_module)
+        params = params.data.clone().zero_()
+
+        with params.to_module(module, inplace=True):
+            assert module.weight is weight
+            assert (module.weight == 0).all()
+
+        assert module.weight is weight
+        torch.testing.assert_close(module.weight.detach(), old_weight)
+
     def test_preserve_module_state_with_custom_setattr(self, as_module):
         class MyLinear(nn.Linear):
             def __setattr__(self, key, value):
