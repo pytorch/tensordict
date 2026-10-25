@@ -10717,7 +10717,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             if has_names:
                 if value.names[: self.batch_dims] != self.names:
                     # we clone not to corrupt the value
-                    value = value.clone(False).refine_names(*self.names)
+                    value = value.clone(False).refine_names(
+                        *(self.names + value.names[self.batch_dims :])
+                    )
             else:
                 if value._has_names():
                     names = value.names[: self.batch_dims]

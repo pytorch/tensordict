@@ -752,6 +752,27 @@ class TestNamedDims(TestTensorDictsBase):
         assert td.names == ["a"]
         assert td["a"].names == ["a", "b"]
 
+    # gh-3370: names of a nested value when the parent has a device
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    @pytest.mark.parametrize(
+        "sub_names,expected", [(None, ["a", None]), (["a", "w"], ["a", "w"])]
+    )
+    def test_set_item_nested_more_dims(self, device, sub_names, expected):
+        td = TensorDict(batch_size=[3], names=["a"], device=device)
+        sub = TensorDict(x=torch.zeros(3, 4), batch_size=[3, 4], names=sub_names)
+        td["sub"] = sub
+        assert td.names == ["a"]
+        assert td["sub"].names == expected
+
+    # gh-3370: names of a nested value when the parent has a device
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    def test_set_item_nested_more_dims_names_clash(self, device):
+        td = TensorDict(batch_size=[3], names=["a"], device=device)
+        sub = TensorDict(x=torch.zeros(3, 4), batch_size=[3, 4], names=["z", "w"])
+        with pytest.raises(RuntimeError, match=r"\['z', 'w'\] with \['a', 'w'\]"):
+            td["sub"] = sub
+        assert sub.names == ["z", "w"]
+
     def test_init_keeps_nested_trailing_name(self):
         sub = TensorDict({"obs": torch.zeros(2, 3, 4)}, [2, 3], names=[None, "agent"])
         td = TensorDict({"agents": sub}, [2])
