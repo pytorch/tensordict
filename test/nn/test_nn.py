@@ -1727,6 +1727,148 @@ class TestTDSequence:
         assert (output["nested", "y"] == 1).all()
         assert (output["z"] == 2).all()
 
+    def test_tdseq_nested_out_keys_keep_outputs(self):
+        # #3360: the sequences write their nested out_keys into a tensordict
+        # that lacks the sub-tensordict with update(keys_to_update=...), which
+        # warns there since its result changes in TensorDict 0.17. They keep
+        # today's outputs, unlisted nested entries included (#3367), without
+        # a warning.
+        def modules():
+            return [
+                TensorDictModule(lambda x: x + 1, ["x"], [("nested", "y")]),
+                TensorDictModule(lambda y: y * 2, [("nested", "y")], [("next", "h")]),
+                TensorDictModule(
+                    lambda h: (h * 3, h * 4), [("next", "h")], ["loc", ("next", "z")]
+                ),
+            ]
+
+        def sample():
+            return ProbabilisticTensorDictModule(
+                in_keys=["loc"],
+                out_keys=[("next", "s")],
+                distribution_class=torch.distributions.Normal,
+                distribution_kwargs={"scale": 1.0},
+            )
+
+        def run(model, tensordict_out=None):
+            input = TensorDict(
+                x=torch.zeros(2), nested={"a": torch.zeros(2)}, batch_size=[2]
+            )
+            with warnings.catch_warnings(record=True) as record:
+                warnings.simplefilter("always")
+                if tensordict_out is None:
+                    output = model(input)
+                else:
+                    output = model(input, tensordict_out=tensordict_out)
+            assert not [w for w in record if issubclass(w.category, FutureWarning)]
+            return set(output.keys(True, True))
+
+        everything = {"loc", ("nested", "a"), ("nested", "y")}
+        everything |= {("next", "h"), ("next", "z")}
+        for inplace in (False, "empty"):
+            assert run(TensorDictSequential(*modules(), inplace=inplace)) == everything
+        has_next = TensorDict(next={"q": torch.zeros(2)}, batch_size=[2])
+        assert run(TensorDictSequential(*modules()), has_next) == {
+            *everything,
+            ("next", "q"),
+        }
+        selected = TensorDictSequential(*modules(), selected_out_keys=[("next", "z")])
+        assert run(selected) == {"x", ("nested", "a"), ("next", "h"), ("next", "z")}
+        assert run(selected, TensorDict(batch_size=[2])) == {
+            ("next", "h"),
+            ("next", "z"),
+        }
+        model = ProbabilisticTensorDictSequential(*modules(), sample(), inplace=False)
+        assert run(model) == {*everything, ("next", "s")}
+        model = ProbabilisticTensorDictSequential(
+            *modules(), sample(), selected_out_keys=[("next", "s")]
+        )
+        assert run(model) == {
+            "x",
+            ("nested", "a"),
+            ("next", "h"),
+            ("next", "s"),
+            ("next", "z"),
+        }
+
+        # Lazy stacks whose members differ in holding "next": as on main, a
+        # member that holds it gets only the listed keys there, the other one
+        # all of it.
+        def dump(tensordict):
+            return [
+                {k: v.tolist() for k, v in member.items(True, True)}
+                for member in tensordict.unbind(0)
+            ]
+
+        def lazy_input():
+            return lazy_stack(
+                [
+                    TensorDict(x=torch.zeros(()), next={"q": torch.ones(())}),
+                    TensorDict(x=torch.zeros(())),
+                ]
+            )
+
+        def lazy_out():
+            return lazy_stack(
+                [TensorDict(next={"q": torch.full((), 5.0)}), TensorDict()]
+            )
+
+        everything = {("nested", "y"): 1.0, "loc": 6.0, ("next", "h"): 2.0}
+        everything["next", "z"] = 8.0
+        into_out = [{**everything, ("next", "q"): 5.0}, everything]
+        selected_keys = {"selected_out_keys": [("next", "z")]}
+        cases = [
+            (
+                {},
+                None,
+                [
+                    {"x": 0.0, ("next", "q"): 1.0, **everything},
+                    {"x": 0.0, **everything},
+                ],
+            ),
+            ({}, lazy_out, into_out),
+            ({"inplace": False}, lazy_out, into_out),
+            (
+                {"inplace": "empty"},
+                None,
+                [{("next", "q"): 1.0, **everything}, everything],
+            ),
+            ({"inplace": "empty"}, lazy_out, into_out),
+            (
+                selected_keys,
+                None,
+                [
+                    {"x": 0.0, ("next", "q"): 1.0, ("next", "z"): 8.0},
+                    {"x": 0.0, ("next", "h"): 2.0, ("next", "z"): 8.0},
+                ],
+            ),
+            (
+                selected_keys,
+                lazy_out,
+                [
+                    {("next", "q"): 5.0, ("next", "z"): 8.0},
+                    {("next", "h"): 2.0, ("next", "z"): 8.0},
+                ],
+            ),
+        ]
+        for kwargs, tensordict_out, expected in cases:
+            model = TensorDictSequential(*modules(), **kwargs)
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", FutureWarning)
+                if tensordict_out is None:
+                    output = model(lazy_input())
+                else:
+                    output = model(lazy_input(), tensordict_out=tensordict_out())
+            assert dump(output) == expected, kwargs
+        input = TensorDict(x=torch.zeros(2), next={"q": torch.ones(2)}, batch_size=[2])
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            output = TensorDictSequential(*modules())(input, tensordict_out=lazy_out())
+        assert dump(output) == [
+            {**everything, ("next", "q"): 5.0},
+            {**everything, ("next", "q"): 1.0},
+        ]
+
     @pytest.mark.parametrize("stack_dim", [0, 1])
     @pytest.mark.parametrize("module_inplace", [True, False, "empty"])
     def test_partial_tolerant_lazy_stack_keeps_outputs(self, module_inplace, stack_dim):

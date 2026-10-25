@@ -5476,10 +5476,11 @@ class TestTensorDicts(TestTensorDictsBase):
             },
             batch_size=(4, 3, 2, 1),
         )
-        td.update(
-            other_td,
-            keys_to_update=(("My", ("father",), "was"), ("My", "relentlessly")),
-        )
+        with pytest.warns(FutureWarning, match="deeper keys under an entry"):
+            td.update(
+                other_td,
+                keys_to_update=(("My", ("father",), "was"), ("My", "relentlessly")),
+            )
         assert ("My", "father", "was") in td.keys(True)
         assert ("My", ("father",), "was") in td.keys(True)
         assert ("My", "relentlessly") in td.keys(True)
@@ -6070,6 +6071,148 @@ def test_update_select_flat_dict_source():
             )
             for key in expected.keys(True, True):
                 assert (dest[key] == expected[key]).all(), (keys_to_update, key)
+
+
+_MISSING_PARENT_WARNING = "deeper keys under an entry that the tensordict lacks"
+
+
+def _update_missing_parent_warnings(dest, source, keys_to_update, **kwargs):
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter("always")
+        dest.update(source, keys_to_update=keys_to_update, **kwargs)
+    return [w for w in record if _MISSING_PARENT_WARNING in str(w.message)]
+
+
+def test_update_select_missing_parent_warns():
+    # #3360: a deeper key of keys_to_update under an entry that the destination
+    # lacks writes that entry whole, where select() and an update into an
+    # existing entry keep only the listed keys. It warns once, for every kind
+    # of source and destination, and keeps main's result until 0.17.
+    class Inner(TensorClass):
+        x: torch.Tensor
+        y: torch.Tensor
+
+    class Source(TensorClass):
+        nested: TensorDict
+
+    class Dest(TensorClass):
+        a: torch.Tensor
+        nested: TensorDict | None = None
+
+    ones = lambda: torch.ones(2)
+    source = TensorDict(
+        nested={"b": ones(), "c": ones(), "sb": {"x": ones(), "y": ones()}},
+        batch_size=[2],
+    )
+    whole = {("nested", "b"), ("nested", "c"), ("nested", "sb", "x")}
+    whole |= {("nested", "sb", "y")}
+    # (source, keys_to_update, the keys that main writes)
+    cases = [
+        (source.to_dict(), [("nested", "b")], whole),
+        (
+            {("nested", "b"): ones(), ("nested", "sb"): {"x": ones(), "y": ones()}},
+            [("nested", "b"), ("nested", "sb", "x")],
+            {("nested", "b"), ("nested", "sb", "x"), ("nested", "sb", "y")},
+        ),
+        (source, [("nested", "b")], whole),
+        (source, ["nested", ("nested", "b")], whole),
+        (source, [("nested", "sb"), ("nested", "sb", "x")], whole),
+        (source, [("nested", "z")], whole),
+        (lazy_stack(list(source.unbind(0))), [("nested", "b")], whole),
+        (Source(nested=source["nested"], batch_size=[2]), [("nested", "b")], whole),
+        (
+            TensorDict(
+                nested=Inner(x=ones(), y=ones(), batch_size=[2]), batch_size=[2]
+            ),
+            [("nested", "x")],
+            {("nested", "x"), ("nested", "y")},
+        ),
+    ]
+    dests = {
+        "TensorDict": lambda: TensorDict(a=torch.zeros(2), batch_size=[2]),
+        "lazy stack": lambda: lazy_stack(
+            [TensorDict(a=torch.zeros(()), batch_size=[]) for _ in range(2)]
+        ),
+        "tensorclass": lambda: Dest(a=torch.zeros(2), batch_size=[2]),
+        "_SubTensorDict": lambda: TensorDict(
+            a=torch.zeros(3, 2), batch_size=[3, 2]
+        )._get_sub_tensordict(0),
+    }
+    for src, keys_to_update, written in cases:
+        for dest_name, make_dest in dests.items():
+            dest = make_dest()
+            warned = _update_missing_parent_warnings(dest, src, keys_to_update)
+            assert len(warned) == 1, (dest_name, keys_to_update, warned)
+            assert warned[0].filename == __file__
+            assert issubclass(warned[0].category, FutureWarning)
+            assert set(dest.keys(True, True)) == {"a", *written}, (
+                dest_name,
+                keys_to_update,
+            )
+            for key in written:
+                assert (dest.get(key) == 1).all(), (dest_name, key)
+            if type(src) is TensorDict and isinstance(src["nested"], Inner):
+                # a nested tensorclass stays a tensorclass
+                assert isinstance(dest.get("nested"), Inner), dest_name
+
+
+def test_update_select_missing_parent_no_warning():
+    # #3360: update() warns only where the result changes in 0.17.
+    ones = lambda: torch.ones(2)
+    source = TensorDict(
+        nested={"b": ones(), "c": ones(), "sb": {"x": ones(), "y": ones()}},
+        batch_size=[2],
+    )
+    dest = lambda: TensorDict(a=torch.zeros(2), batch_size=[2])
+    flat = dict(source.items(True, True))
+    cases = [
+        # the destination has the entry: only the listed keys are written
+        (
+            TensorDict(nested={"b": torch.zeros(2)}, batch_size=[2]),
+            source,
+            [("nested", "b")],
+            {},
+        ),
+        # the key of the entry itself, alone
+        (dest(), source, ["nested"], {}),
+        (dest(), source.to_dict(), ["nested"], {}),
+        # a flat dict with tuple keys writes only the listed keys already
+        (dest(), flat, [("nested", "b")], {}),
+        (dest(), flat, [("nested", "sb", "x"), ("nested", "c")], {}),
+        # leaf values are written whole either way
+        (dest(), {"nested": ones()}, [("nested", "b")], {}),
+        (dest(), {"nested": "hello"}, [("nested", "b")], {}),
+        (dest(), source, [("nested", "b")], {"is_leaf": lambda cls: True}),
+        # the deeper keys cover every entry
+        (dest(), source, [("nested", "b"), ("nested", "c"), ("nested", "sb")], {}),
+        (
+            dest(),
+            source.to_dict(),
+            [("nested", "b"), ("nested", "c"), ("nested", "sb", "x")]
+            + [("nested", "sb", "y")],
+            {},
+        ),
+        # string keys only
+        (dest(), source, ["a", "nested"], {}),
+    ]
+    for dest_td, src, keys_to_update, kwargs in cases:
+        assert not _update_missing_parent_warnings(
+            dest_td, src, keys_to_update, **kwargs
+        ), (keys_to_update, kwargs)
+
+
+def test_update_select_missing_parent_compile():
+    # #3360: the check adds no graph break to update with keys_to_update.
+    @torch.compile(fullgraph=True, backend="eager")
+    def update(td, b, c):
+        return td.update({"nested": {"b": b, "c": c}}, keys_to_update=[("nested", "b")])
+
+    td = update(TensorDict(a=torch.zeros(3)), torch.ones(3), torch.ones(3))
+    assert set(td.keys(True, True)) == {"a", ("nested", "b"), ("nested", "c")}
+    td = TensorDict(a=torch.zeros(3), nested={"b": torch.zeros(3)})
+    td = update(td, torch.ones(3), torch.ones(3))
+    assert set(td.keys(True, True)) == {"a", ("nested", "b")}
+    assert (td["nested", "b"] == 1).all()
 
 
 def test_update__keys_to_update_invalid_key_lazy_stack_warns():

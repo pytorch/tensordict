@@ -2583,6 +2583,136 @@ def _warn_update_invalid_key() -> None:
     )
 
 
+# Set while update() writes the members of a lazy stack one by one, so that
+# they warn once in all, and while the nn modules write their outputs, so that
+# they do not warn (#3360).
+_UPDATE_MEMBERS_CALL = local()
+
+
+@lru_cache(maxsize=128)
+def _update_selection_trie(
+    keys_to_update: tuple,
+) -> tuple[dict, dict[tuple[str], frozenset]] | bool:
+    """``_selection_trie(keys_to_update)`` and the entries it covers, cached, as ``update`` gets the same keys at each step (#3360).
+
+    ``False`` when no key is deeper than one level. Else the trie, and for each
+    first part of a key, the entries under it that a key lists with nothing
+    deeper: a tensordict holding only those is written as listed. The callers
+    must not change either.
+    """
+    if tuple not in map(type, keys_to_update):
+        return False
+    trie = _selection_trie(keys_to_update)
+    covered = {
+        (part,): frozenset(
+            entry
+            for entry, child in node.items()
+            if entry is not None and child == {None: True}
+        )
+        for part, node in trie.items()
+    }
+    return trie, covered
+
+
+def _warn_update_inserts_whole_entry(
+    key: tuple[str, ...],
+    value: Any,
+    selection: dict,
+    is_leaf: Callable[[Type], bool],
+) -> None:
+    """Warns that ``update`` writes every entry of ``value`` at ``key``, which the destination lacks, where its ``keys_to_update`` lists only some of them, until 0.17 (#3360).
+
+    ``selection`` is ``_selection_trie(keys_to_update)``, which ``update``
+    builds once per call. ``select`` and an update into an existing entry keep
+    only the listed keys. The 0.17 switch must keep the result of the
+    ``tensordict.nn`` calls, see ``_update_keeping_whole_entries``.
+    """
+    # the keys listed under key, pruned as update() prunes them at each level
+    for part in key:
+        selection = selection.get(part)
+        if selection is None or (len(selection) == 1 and None in selection):
+            # None: no key is listed under the entry; else a listed key names
+            # the entry, which is written whole
+            return
+    # whether every leaf of value is listed: None until known
+    listed = None
+    if type(value) is _TENSORDICT_TYPE:
+        # first the entries of value against the keys listed at this level,
+        # without a walk of the leaves: an entry listed with nothing under it
+        # is selected whole, and a tensor not listed is not selected
+        listed = True
+        for entry, item in value._tensordict.items():
+            node = selection.get(entry)
+            if node is None and type(item) is Tensor and is_leaf(Tensor):
+                listed = False
+                break
+            if node is None or len(node) > 1 or None not in node:
+                listed = None
+        if listed:
+            return
+    if not isinstance(value, dict) and (
+        not _is_tensor_collection(type(value)) or is_leaf(type(value))
+    ):
+        return
+    if listed is None:
+        try:
+            if isinstance(value, dict):
+                value = _TENSORDICT_TYPE(value, batch_size=[])
+            # a lazy stack lists only the keys that all its members hold
+            leaves = (
+                _all_leaf_keys(value)
+                if _has_lazy_stack(value)
+                else value.keys(True, True, is_leaf=is_leaf)
+            )
+            if all(
+                _is_key_selected(_unravel_key_to_tuple(leaf), selection)
+                for leaf in leaves
+            ):
+                return
+        except Exception:
+            # a value that the update rejects: it raises its own error
+            return
+    if is_dynamo_compiling():
+        return
+    state = getattr(_UPDATE_MEMBERS_CALL, "warned", None)
+    if state:
+        return
+    if state is False:
+        _UPDATE_MEMBERS_CALL.warned = True
+    # Fixed text: the keys would make Python warn again for each new value (#3232).
+    warnings.warn(
+        "update() got keys_to_update with deeper keys under an entry that the "
+        "tensordict lacks, and writes every entry of the input under it, while "
+        "select() and an update into an existing entry keep only the listed "
+        "keys. Starting with TensorDict 0.17, the default will change to "
+        "writing only the listed keys, as select does. List only the key of "
+        "that entry to keep the current result, or call "
+        "update(src.select(*keys)) to get the new one now.",
+        FutureWarning,
+        stacklevel=_user_stacklevel(),
+    )
+
+
+def _update_keeping_whole_entries(
+    dest: TensorCollection, source: Any, **kwargs: Any
+) -> TensorCollection:
+    """``dest.update(source, **kwargs)`` without the warning that update writes an entry whole (#3360).
+
+    The ``tensordict.nn`` modules write their outputs with it, so they keep
+    their current outputs without a warning. In 0.17, when ``update`` narrows,
+    these calls must keep the current whole-copy result unless #3367 decides
+    otherwise.
+    """
+    if is_dynamo_compiling():
+        return dest.update(source, **kwargs)
+    state = getattr(_UPDATE_MEMBERS_CALL, "warned", None)
+    _UPDATE_MEMBERS_CALL.warned = True
+    try:
+        return dest.update(source, **kwargs)
+    finally:
+        _UPDATE_MEMBERS_CALL.warned = state
+
+
 def _warn_unsupported_operand(op: str, other: Any, result: bool) -> None:
     """Warns that ``op`` (``"__xor__"``, ``"__lt__"``, ...) returns ``result`` for ``other``, which is not a tensor collection, a tensor or a number, until 0.17 (#2979)."""
     if is_compiling():
@@ -6541,7 +6671,16 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             keys_to_update (sequence of NestedKey, optional): if passed, only
                 these keys are written, without the cost of
                 ``td.update(other.select(*keys_to_update))``. Defaults to
-                ``None``, which writes every entry.
+                ``None``, which writes every entry. A deeper key such as
+                ``("nested", "b")`` under an entry that the tensordict lacks
+                writes that entry whole, with all of ``other["nested"]``, and
+                warns with a :class:`FutureWarning` where it holds other
+                entries: starting with TensorDict 0.17, the default will change
+                to writing only the listed keys, as ``select`` does and as an
+                update into an existing ``"nested"`` does. List ``"nested"``
+                alone to keep the current result, or pass
+                ``other.select(*keys_to_update)`` to get the new one now
+                (`#3360 <https://github.com/pytorch/tensordict/issues/3360>`_).
             is_leaf (Callable[[type], bool], optional): tells which types of
                 values are written whole. The other values are merged key by
                 key. Defaults to ``None``, which is
@@ -6745,6 +6884,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             _warn_update_batch_size_prefix()
 
         selection = None
+        # whether keys_to_update has a deeper key, under which an entry that
+        # self lacks is written whole (#3360): set at the first such entry, to
+        # False or to _update_selection_trie(keys_to_update)
+        nested_keys = None
         for input_key, value in input_dict_or_td.items():
             key = _unravel_key_to_tuple(input_key)
             if not key:
@@ -6900,6 +7043,21 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                         target.update(value, update_batch_size=update_batch_size)
                         target.batch_size = value.batch_size
                     continue
+            elif keys_to_update is not None and type(value) is not Tensor:
+                # a tensor is written whole either way: skip the check
+                if nested_keys is None:
+                    nested_keys = not is_dynamo_compiling() and _update_selection_trie(
+                        tuple(keys_to_update)
+                    )
+                # skip a tensordict whose entries are all listed, nothing deeper
+                if nested_keys and not (
+                    type(value) is _TENSORDICT_TYPE
+                    and key in nested_keys[1]
+                    and value._tensordict.keys() <= nested_keys[1][key]
+                ):
+                    _warn_update_inserts_whole_entry(
+                        key, value, nested_keys[0], is_leaf
+                    )
 
             self._set_tuple(
                 key,

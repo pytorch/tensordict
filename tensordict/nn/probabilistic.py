@@ -18,7 +18,11 @@ import torch
 from tensordict._deprecation import deprecated, deprecated_attributes, warn_deprecated
 from tensordict._nestedkey import NestedKey
 from tensordict._td import TensorDict
-from tensordict.base import _is_inside, is_tensor_collection
+from tensordict.base import (
+    _is_inside,
+    _update_keeping_whole_entries,
+    is_tensor_collection,
+)
 from tensordict.nn.common import dispatch, TensorDictModuleBase
 from tensordict.nn.distributions.composite import (
     _add_suffix,
@@ -1812,7 +1816,9 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                 tensordict_exec = tds._run_module(m, tensordict_exec, **module_kwargs)
             if tensordict_out is None:
                 return tensordict_exec
-            return tensordict_out.update(tensordict_exec, keys_to_update=tds.out_keys)
+            return _update_keeping_whole_entries(
+                tensordict_out, tensordict_exec, keys_to_update=tds.out_keys
+            )
 
     @property
     def log_prob_keys(self):
@@ -2251,7 +2257,9 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
 
         if tensordict_out is not None:
             result = tensordict_out
-            result.update(tensordict_exec, keys_to_update=self.out_keys)
+            _update_keeping_whole_entries(
+                result, tensordict_exec, keys_to_update=self.out_keys
+            )
         else:
             result = tensordict_exec
             if self._select_before_return:
@@ -2266,7 +2274,9 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                     ]
                 else:
                     keys = list(set(self.out_keys).union(tensordict.keys(True, True)))
-                return tensordict.update(result, keys_to_update=keys)
+                return _update_keeping_whole_entries(
+                    tensordict, result, keys_to_update=keys
+                )
         return result
 
 
