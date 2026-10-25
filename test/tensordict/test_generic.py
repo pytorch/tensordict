@@ -11798,17 +11798,25 @@ class TestGeneric:
             assert loaded.get(key).shape == expected.get(key).shape
         assert (loaded == expected).all()
 
-    def test_append_memmap_killed_rollback(self, tmpdir, monkeypatch):
-        # #3249: a process killed while it rolls back a failed append deletes
-        # the top .meta.json.append.tmp last, so that the next append rolls
-        # back the rest.
+    @pytest.mark.parametrize("failed_replace", [0, 1])
+    def test_append_memmap_killed_rollback(self, tmpdir, monkeypatch, failed_replace):
+        # #3249: a process killed while it rolls back a failed append has put
+        # back the old meta.json files and deleted the top temporary file, but
+        # not the others. The next append rolls back the rest instead of
+        # renaming them over the old meta.json files.
         self._append_memmap_rows(3, 0).memmap(tmpdir)
 
         class Killed(BaseException):
             pass
 
+        replace = os.replace
+        num_calls = []
+
         def failing_replace(src, dst):
-            raise OSError("disk full")
+            num_calls.append(None)
+            if len(num_calls) > failed_replace:
+                raise OSError("disk full")
+            replace(src, dst)
 
         remove = os.remove
 
@@ -11821,8 +11829,55 @@ class TestGeneric:
         with pytest.raises(Killed):
             tensordict.append_memmap(tmpdir, self._append_memmap_rows(2, 1))
         monkeypatch.undo()
-        assert (Path(tmpdir) / ".meta.json.append.tmp").exists()
+        assert not (Path(tmpdir) / ".meta.json.append.tmp").exists()
+        assert list(Path(tmpdir).rglob(".meta.json.append.tmp"))
         tensordict.append_memmap(tmpdir, self._append_memmap_rows(4, 2))
+        assert not list(Path(tmpdir).rglob(".meta.json.append.tmp"))
+        expected = torch.cat(
+            [self._append_memmap_rows(3, 0), self._append_memmap_rows(4, 2)]
+        )
+        loaded = tensordict.load_memmap(tmpdir)
+        assert loaded.batch_size == expected.batch_size
+        assert (loaded == expected).all()
+
+    def test_append_memmap_killed_during_repair(self, tmpdir, monkeypatch):
+        # #3249: an append killed before its first replacement leaves every
+        # temporary file. If the next append is killed while it deletes them,
+        # the one after that still rolls back the rest.
+        self._append_memmap_rows(3, 0).memmap(tmpdir)
+
+        class Killed(BaseException):
+            pass
+
+        def replace_and_die(src, dst):
+            raise Killed
+
+        def die(path):
+            raise Killed
+
+        # Killed at the first os.replace, and again at the first os.remove of
+        # the rollback, so that every temporary file stays.
+        monkeypatch.setattr(os, "replace", replace_and_die)
+        monkeypatch.setattr(os, "remove", die)
+        with pytest.raises(Killed):
+            tensordict.append_memmap(tmpdir, self._append_memmap_rows(2, 1))
+        monkeypatch.undo()
+        num_leftovers = len(list(Path(tmpdir).rglob(".meta.json.append.tmp")))
+        assert num_leftovers > 2
+        remove = os.remove
+
+        def remove_and_die(path):
+            remove(path)
+            raise Killed
+
+        monkeypatch.setattr(os, "remove", remove_and_die)
+        with pytest.raises(Killed):
+            tensordict.append_memmap(tmpdir, self._append_memmap_rows(2, 1))
+        monkeypatch.undo()
+        leftovers = list(Path(tmpdir).rglob(".meta.json.append.tmp"))
+        assert len(leftovers) == num_leftovers - 1
+        tensordict.append_memmap(tmpdir, self._append_memmap_rows(4, 2))
+        assert not list(Path(tmpdir).rglob(".meta.json.append.tmp"))
         expected = torch.cat(
             [self._append_memmap_rows(3, 0), self._append_memmap_rows(4, 2)]
         )

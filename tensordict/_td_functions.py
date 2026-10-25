@@ -655,14 +655,16 @@ def append_memmap(
     before the first ``meta.json`` is replaced, and the top ``meta.json``,
     in the ``_tensordict`` subdirectory for a tensorclass, is replaced
     first. The next ``append_memmap`` to the directory finds these files
-    first and decides by the top one. If ``.meta.json.append.tmp`` is still
-    in the top directory, no ``meta.json`` was replaced: it deletes every
+    first. If ``.meta.json.append.tmp`` is gone from the top directory and
+    the top ``meta.json`` already has the number of rows of every temporary
+    file, it renames each one over the ``meta.json`` next to it, which
+    completes the killed append. Otherwise no ``meta.json`` was replaced, or
+    the rollback of a failed append put the old ones back: it deletes every
     temporary file, which may be incomplete, and the directory holds the old
-    rows. Otherwise, it renames each temporary file over the ``meta.json``
-    next to it, which completes the killed append. To read the directory
-    without appending, apply the same rule yourself (see :ref:`saving`), and
-    decide by this file, not by whether :func:`~tensordict.load_memmap`
-    raises, which it doesn't for every tree. Each append maps the whole saved tree, as :func:`~tensordict.load_memmap`
+    rows. To read the directory without appending, apply the same rule
+    yourself (see :ref:`saving`), and decide by these files, not by whether
+    :func:`~tensordict.load_memmap` raises, which it doesn't for every tree.
+    Each append maps the whole saved tree, as :func:`~tensordict.load_memmap`
     does, to read its structure, so many small appends to a save with many
     leaves are slow. See :ref:`saving`.
 
@@ -767,16 +769,13 @@ def append_memmap(
             os.replace(tmp_file, metadata_file)
             num_replaced += 1
     except BaseException:
-        # Delete the temporary files, the top one last, so that a process
-        # killed here leaves nothing that _finish_killed_append would rename
-        # over an old meta.json. Then put back the meta.json files already
-        # replaced, then the leaves.
-        for tmp_file, _, _ in reversed(replacements):
-            if tmp_file.exists():
-                os.remove(tmp_file)
+        # Put back the meta.json files already replaced, then the leaves.
         for _, metadata_file, old_metadata in replacements[:num_replaced]:
             with open(metadata_file, "wb") as f:
                 f.write(old_metadata)
+        for tmp_file, _, _ in replacements:
+            if tmp_file.exists():
+                os.remove(tmp_file)
         for filename, size in old_sizes.items():
             if size is None:
                 os.remove(filename)
@@ -790,8 +789,9 @@ def _finish_killed_append(prefix: Path) -> None:
 
     A killed append leaves ``.meta.json.append.tmp`` files. They were all
     complete before the top ``meta.json`` was replaced, which was replaced
-    first. If the top temporary file is still there, delete every one;
-    otherwise rename each one over the ``meta.json`` next to it.
+    first. If the top temporary file is gone and the top ``meta.json`` has
+    the number of rows of every temporary file, rename each one over the
+    ``meta.json`` next to it; otherwise delete every one.
     """
     import tensordict.base
 
@@ -815,11 +815,26 @@ def _finish_killed_append(prefix: Path) -> None:
         # load_memmap cannot load it either, and raises.
         return
     top = prefix / "_tensordict" if is_tensorclass(saved_cls) else prefix
-    replaced = not (top / tmp_name).exists()
-    for tmp_file in leftovers:
-        if replaced:
+    replaced = False
+    if not (top / tmp_name).exists():
+        # A rollback cut short can also delete the top temporary file and
+        # leave others over old meta.json files. Rename them only if the top
+        # meta.json already has their number of rows.
+        try:
+            num_rows = json.loads((top / "meta.json").read_bytes())["shape"][0]
+            replaced = all(
+                json.loads(tmp_file.read_bytes())["shape"][0] == num_rows
+                for tmp_file in leftovers
+            )
+        except ValueError:
+            # An incomplete temporary file: nothing was replaced.
+            pass
+    if replaced:
+        for tmp_file in leftovers:
             os.replace(tmp_file, tmp_file.with_name("meta.json"))
-        else:
+    else:
+        # The top one last, so that a kill here leaves it for the next call.
+        for tmp_file in reversed(leftovers):
             os.remove(tmp_file)
 
 
