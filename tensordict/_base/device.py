@@ -1210,20 +1210,95 @@ class _DeviceOps:
             device_module = _get_device_module(device_type)
             device_module.synchronize()
 
-    @_make_dtype_promotion
-    def double(self, *, cast_filter: Callable | None = None) -> Self: ...
+    def double(self, *, cast_filter: Callable | None = None) -> Self:
+        """Returns a tensordict whose tensor leaves are cast to ``torch.float64`` (``torch.double``).
 
-    @_make_dtype_promotion
-    def float(self, *, cast_filter: Callable | None = None) -> Self: ...
+        Keyword Args:
+            cast_filter (Callable, optional): a predicate
+                ``fn(key, value) -> bool`` that selects the tensor leaves to
+                cast, as in :meth:`to`. Defaults to ``None``, which casts every
+                tensor leaf (a tensorclass uses its own ``cast_filter``, if it
+                declares one).
+        """
 
-    @_make_dtype_promotion
-    def int(self, *, cast_filter: Callable | None = None) -> Self: ...
+        def dble(x):
+            return x.double()
 
-    @_make_dtype_promotion
-    def bool(self, *, cast_filter: Callable | None = None) -> Self: ...
+        if cast_filter is None:
+            return self._fast_apply(dble, propagate_lock=True)
+        return _cast_filtered(self, dble, cast_filter, propagate_lock=True)
 
-    @_make_dtype_promotion
-    def half(self, *, cast_filter: Callable | None = None) -> Self: ...
+    def float(self, *, cast_filter: Callable | None = None) -> Self:
+        """Returns a tensordict whose tensor leaves are cast to ``torch.float32`` (``torch.float``).
+
+        Keyword Args:
+            cast_filter (Callable, optional): a predicate
+                ``fn(key, value) -> bool`` that selects the tensor leaves to
+                cast, as in :meth:`to`. Defaults to ``None``, which casts every
+                tensor leaf (a tensorclass uses its own ``cast_filter``, if it
+                declares one).
+        """
+
+        def tofloat(x):
+            return x.float()
+
+        if cast_filter is None:
+            return self._fast_apply(tofloat, propagate_lock=True)
+        return _cast_filtered(self, tofloat, cast_filter, propagate_lock=True)
+
+    def int(self, *, cast_filter: Callable | None = None) -> Self:
+        """Returns a tensordict whose tensor leaves are cast to ``torch.int32`` (``torch.int``).
+
+        Keyword Args:
+            cast_filter (Callable, optional): a predicate
+                ``fn(key, value) -> bool`` that selects the tensor leaves to
+                cast, as in :meth:`to`. Defaults to ``None``, which casts every
+                tensor leaf (a tensorclass uses its own ``cast_filter``, if it
+                declares one).
+        """
+
+        def toint(x):
+            return x.int()
+
+        if cast_filter is None:
+            return self._fast_apply(toint, propagate_lock=True)
+        return _cast_filtered(self, toint, cast_filter, propagate_lock=True)
+
+    def bool(self, *, cast_filter: Callable | None = None) -> Self:
+        """Returns a tensordict whose tensor leaves are cast to ``torch.bool``.
+
+        Keyword Args:
+            cast_filter (Callable, optional): a predicate
+                ``fn(key, value) -> bool`` that selects the tensor leaves to
+                cast, as in :meth:`to`. Defaults to ``None``, which casts every
+                tensor leaf (a tensorclass uses its own ``cast_filter``, if it
+                declares one).
+        """
+
+        def tobool(x):
+            return x.bool()
+
+        if cast_filter is None:
+            return self._fast_apply(tobool, propagate_lock=True)
+        return _cast_filtered(self, tobool, cast_filter, propagate_lock=True)
+
+    def half(self, *, cast_filter: Callable | None = None) -> Self:
+        """Returns a tensordict whose tensor leaves are cast to ``torch.float16`` (``torch.half``).
+
+        Keyword Args:
+            cast_filter (Callable, optional): a predicate
+                ``fn(key, value) -> bool`` that selects the tensor leaves to
+                cast, as in :meth:`to`. Defaults to ``None``, which casts every
+                tensor leaf (a tensorclass uses its own ``cast_filter``, if it
+                declares one).
+        """
+
+        def tohalf(x):
+            return x.half()
+
+        if cast_filter is None:
+            return self._fast_apply(tohalf, propagate_lock=True)
+        return _cast_filtered(self, tohalf, cast_filter, propagate_lock=True)
 
     def type(
         self, dst_type: torch.dtype, *, cast_filter: Callable | None = None
