@@ -45,15 +45,6 @@ on:
         required: false
         type: boolean
         default: false
-      wheel_variants:
-        description: 'Which wheel variants to collect (cpu recommended for tensordict)'
-        required: false
-        type: choice
-        options:
-          - cpu
-          - gpu
-          - all
-        default: 'cpu'
 
 # One release run per branch at a time. A new run waits for the current one
 # instead of cancelling it, so that a second dispatch cannot interrupt a
@@ -163,34 +154,28 @@ jobs:
 
           echo "Building $GITHUB_SHA from $GITHUB_REF for $TAG"
 
-      - name: Check all version files match tag
+      - name: Check both version files match tag
         run: |
           VERSION="${{ steps.parse-version.outputs.version }}"
 
           echo "=============================================="
-          echo "Checking all 3 version files match tag: $VERSION"
+          echo "Checking both version files match tag: $VERSION"
           echo "=============================================="
 
-          # Read all 3 version files
+          # version_script.sh cannot read version.txt (see its header), so it
+          # holds a copy of the version
           ROOT_VERSION=$(cat version.txt | tr -d '[:space:]')
-          SCRIPTS_VERSION=$(cat .github/scripts/version.txt | tr -d '[:space:]')
           SCRIPT_SH_VERSION=$(grep "^BASE_VERSION=" .github/scripts/version_script.sh | cut -d'=' -f2)
 
           echo ""
           echo "Version file contents:"
           echo "  Tag version:                              $VERSION"
           echo "  version.txt:                              $ROOT_VERSION"
-          echo "  .github/scripts/version.txt:              $SCRIPTS_VERSION"
           echo "  .github/scripts/version_script.sh:        $SCRIPT_SH_VERSION"
           echo ""
 
-          # Check all files match each other first
+          # Check the files match each other first
           MISMATCH=0
-
-          if [[ "$ROOT_VERSION" != "$SCRIPTS_VERSION" ]]; then
-            echo "::error::version.txt ($ROOT_VERSION) != .github/scripts/version.txt ($SCRIPTS_VERSION)"
-            MISMATCH=1
-          fi
 
           if [[ "$ROOT_VERSION" != "$SCRIPT_SH_VERSION" ]]; then
             echo "::error::version.txt ($ROOT_VERSION) != version_script.sh ($SCRIPT_SH_VERSION)"
@@ -199,7 +184,7 @@ jobs:
 
           if [[ "$MISMATCH" == "1" ]]; then
             echo ""
-            echo "::error::Version files are inconsistent! All 3 files must have the same version."
+            echo "::error::Version files are inconsistent! Both files must have the same version."
             echo "::error::Please update all files listed under 'Bump the version' in RELEASE_AGENT_PROMPT.md"
             exit 1
           fi
@@ -217,29 +202,6 @@ jobs:
           echo "✓ All version files match the tag version ($VERSION)"
           echo ""
           echo "Version check passed!"
-
-      - name: Check library version
-        run: |
-          VERSION="${{ steps.parse-version.outputs.version }}"
-
-          # Install minimal dependencies
-          pip install setuptools setuptools_scm
-
-          # Set the version via setuptools_scm pretend
-          export SETUPTOOLS_SCM_PRETEND_VERSION="$VERSION"
-
-          # Try to get the version from the package
-          python -c "
-          import sys
-          sys.path.insert(0, '.')
-          try:
-              from tensordict._version import __version__
-              print(f'Library version: {__version__}')
-              # Note: _version.py is auto-generated, so we just check it's readable
-          except ImportError:
-              # _version.py may not exist until build
-              print('_version.py not found (will be generated at build time)')
-          "
 
       - name: Check stable docs version
         run: |
@@ -297,41 +259,17 @@ jobs:
           echo "Build result: ${{ needs.build.result }}"
           echo "The build succeeded - proceeding with wheel collection"
 
-      - name: Download wheel artifacts
+      - name: Download the wheel artifact
         uses: actions/download-artifact@v4
         with:
-          path: wheels-raw
-          # Pattern based on wheel_variants input:
-          # - cpu: Only CPU builds (recommended - avoids duplicate wheel conflicts)
-          # - gpu: Only CUDA builds
-          # - all: All variants (requires deduplication)
-          # pytorch/test-infra uploads artifacts named like: pytorch_tensordict__3.11_cpu_x86_64
-          pattern: ${{ inputs.wheel_variants == 'gpu' && 'pytorch_tensordict__*_cu*' || inputs.wheel_variants == 'all' && 'pytorch_tensordict*' || 'pytorch_tensordict__*_cpu_*' }}
+          path: wheels
+          # test-infra names the artifact like pytorch_tensordict__3.10_cpu_x86_64
+          pattern: pytorch_tensordict__*
           merge-multiple: true
 
-      - name: Deduplicate and verify wheels
+      - name: Verify wheels
         run: |
-          # When downloading gpu/all variants, multiple artifacts may contain
-          # wheels with the same filename (e.g., CUDA 12.6 and CUDA 12.8 both
-          # produce tensordict-X.Y.Z-cpXX-cpXX-manylinux_x86_64.whl).
-          # merge-multiple can cause corruption when this happens.
-          # We deduplicate by keeping only unique wheel filenames.
-          mkdir -p wheels
-          echo "Processing wheels..."
-
-          # Find all wheels and copy unique ones (first occurrence wins)
-          for wheel in $(find wheels-raw -name "*.whl" -type f | sort); do
-            basename=$(basename "$wheel")
-            if [[ ! -f "wheels/$basename" ]]; then
-              cp "$wheel" "wheels/$basename"
-              echo "  Kept: $basename"
-            else
-              echo "  Skip duplicate: $basename"
-            fi
-          done
-
           # Verify all wheels are valid zip files
-          echo ""
           echo "Verifying wheel integrity..."
           CORRUPTED=0
           for wheel in wheels/*.whl; do
