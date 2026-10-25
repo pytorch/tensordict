@@ -41,7 +41,16 @@ can run asynchronously with respect to the host. Defaults to
 - **keys_to_update** (*sequence**of*[*NestedKey*](tensordict.NestedKey.html#tensordict.NestedKey)*,**optional*) - if passed, only
 these keys are written, without the cost of
 `td.update(other.select(*keys_to_update))`. Defaults to
-`None`, which writes every entry.
+`None`, which writes every entry. A deeper key such as
+`("nested", "b")` under an entry that the tensordict lacks
+writes that entry whole, with all of `other["nested"]`, and
+warns with a [`FutureWarning`](https://docs.python.org/3/builtins/exceptions.html#FutureWarning) where it holds other
+entries: starting with TensorDict 0.17, the default will change
+to writing only the listed keys, as `select` does and as an
+update into an existing `"nested"` does. List `"nested"`
+alone to keep the current result, or pass
+`other.select(*keys_to_update)` to get the new one now
+([#3360](https://github.com/pytorch/tensordict/issues/3360)).
 - **is_leaf** (*Callable**[**[*[*type*](https://docs.python.org/3/builtins/functions.html#type)*]**,*[*bool*](https://docs.python.org/3/builtins/functions.html#bool)*]**,**optional*) - tells which types of
 values are written whole. The other values are merged key by
 key. Defaults to `None`, which is
