@@ -89,6 +89,7 @@ from tensordict.base import (
 from tensordict.memmap import MemoryMappedTensor
 from tensordict.persistent import PersistentTensorDict
 from tensordict.utils import (
+    _add_batch_dim,
     _as_context_manager,
     _cache_while_locked,
     _canonicalize_tensor,
@@ -98,7 +99,6 @@ from tensordict.utils import (
     _convert_list_to_stack,
     _erase_cache_first,
     _GENERIC_NESTED_ERR,
-    _import_and_wrap_functorch,
     _infer_size_impl,
     _is_non_tensor,
     _is_unbatched,
@@ -109,6 +109,7 @@ from tensordict.utils import (
     _pass_through,
     _positional_non_blocking,
     _recursive_unbind_list,
+    _remove_batch_dim,
     _REPR_OPTIONS,
     _shape,
     _td_fields,
@@ -120,6 +121,7 @@ from tensordict.utils import (
     _zip_strict,
     DeviceType,
     expand_right,
+    ftdim,
     IndexType,
     is_non_tensor,
     is_tensorclass,
@@ -129,21 +131,6 @@ from tensordict.utils import (
 from torch import Tensor
 from torch.compiler import is_compiling
 from torch.nn.utils.rnn import pad_sequence
-
-try:
-    from functorch import dim as ftdim
-
-    _has_funcdim = True
-except ImportError:
-    from tensordict.utils import _ftdim_mock as ftdim
-
-    _has_funcdim = False
-
-_add_batch_dim, _remove_batch_dim = _import_and_wrap_functorch(
-    "_add_batch_dim",
-    "_remove_batch_dim",
-)
-
 
 if TYPE_CHECKING:
     from typing_extensions import Self

@@ -81,6 +81,7 @@ from tensordict.base import (
 )
 from tensordict.memmap import _raise_if_jagged, MemoryMappedTensor
 from tensordict.utils import (
+    _add_batch_dim,
     _as_context_manager,
     _BatchedUninitializedBuffer,
     _BatchedUninitializedParameter,
@@ -93,7 +94,6 @@ from tensordict.utils import (
     _encode_key_for_filesystem,
     _GENERIC_NESTED_ERR,
     _get_robust_key_setting_with_warning,
-    _import_and_wrap_functorch,
     _infer_size_impl,
     _is_non_tensor,
     _is_safe_legacy_key,
@@ -107,6 +107,7 @@ from tensordict.utils import (
     _pass_through,
     _pass_through_cls,
     _prune_selected_keys,
+    _remove_batch_dim,
     _set_item,
     _set_max_batch_size,
     _shape,
@@ -119,6 +120,7 @@ from tensordict.utils import (
     _zip_strict,
     DeviceType,
     expand_as_right,
+    ftdim,
     IndexType,
     is_non_tensor,
     is_tensorclass,
@@ -131,15 +133,6 @@ from torch.compiler import is_compiling
 from torch.nn.modules.module import _EXTRA_STATE_KEY_SUFFIX
 from torch.utils._pytree import tree_map
 
-try:
-    from functorch import dim as ftdim
-
-    _has_funcdim = True
-except ImportError:
-    from tensordict.utils import _ftdim_mock as ftdim
-
-    _has_funcdim = False
-
 if TYPE_CHECKING:
     from typing_extensions import Self
 else:
@@ -147,10 +140,6 @@ else:
 
 _register_tensor_class(ftdim.Tensor)
 
-
-_add_batch_dim, _remove_batch_dim = _import_and_wrap_functorch(
-    "_add_batch_dim", "_remove_batch_dim"
-)
 
 # Device inputs of TensorDict(device=...) -> (indexed device, is_cuda). Only
 # inputs whose meaning does not depend on the current CUDA device are kept, and

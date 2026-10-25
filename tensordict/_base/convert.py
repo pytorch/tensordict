@@ -67,6 +67,7 @@ from tensordict.utils import (
     _set_max_batch_size,
     _user_stacklevel,
     _warn_batch_dims_ignored,
+    ftdim,
     is_non_tensor,
     LinkedList,
     set_lazy_legacy,
@@ -79,11 +80,6 @@ from torch.utils._pytree import is_structseq_instance, tree_map
 
 if TYPE_CHECKING:
     from tensordict.base import TensorDictBase
-
-try:
-    from functorch import dim as ftdim
-except ImportError:
-    from tensordict.utils import _ftdim_mock as ftdim
 
 
 def _int_batch_dims(batch_dims):
