@@ -2593,50 +2593,77 @@ def _warn_update_invalid_key() -> None:
 _UPDATE_MEMBERS_CALL = local()
 
 
+@lru_cache(maxsize=128)
+def _update_selection_trie(keys_to_update: tuple) -> dict:
+    """``_selection_trie(keys_to_update)``, cached, as ``update`` gets the same keys at each step (#3360).
+
+    The callers must not change the trie.
+    """
+    return _selection_trie(keys_to_update)
+
+
 def _warn_update_inserts_whole_entry(
     key: tuple[str, ...],
     value: Any,
-    keys_to_update: list[NestedKey],
+    selection: dict,
     is_leaf: Callable[[Type], bool],
 ) -> None:
-    """Warns that ``update`` writes every entry of ``value`` at ``key``, which the destination lacks, where ``keys_to_update`` lists only some of them, until 0.17 (#3360).
+    """Warns that ``update`` writes every entry of ``value`` at ``key``, which the destination lacks, where its ``keys_to_update`` lists only some of them, until 0.17 (#3360).
 
-    ``select`` and an update into an existing entry keep only the listed keys.
-    The 0.17 switch must keep the result of the ``tensordict.nn`` calls, see
-    ``_update_keeping_whole_entries``.
+    ``selection`` is ``_selection_trie(keys_to_update)``, which ``update``
+    builds once per call. ``select`` and an update into an existing entry keep
+    only the listed keys. The 0.17 switch must keep the result of the
+    ``tensordict.nn`` calls, see ``_update_keeping_whole_entries``.
     """
-    if is_dynamo_compiling():
-        return
-    state = getattr(_UPDATE_MEMBERS_CALL, "warned", None)
-    if state:
-        return
+    # the keys listed under key, pruned as update() prunes them at each level
+    for part in key:
+        selection = selection.get(part)
+        if selection is None or (len(selection) == 1 and None in selection):
+            # None: no key is listed under the entry; else a listed key names
+            # the entry, which is written whole
+            return
+    # whether every leaf of value is listed: None until known
+    listed = None
+    if type(value) is _TENSORDICT_TYPE:
+        # first the entries of value against the keys listed at this level,
+        # without a walk of the leaves: an entry listed with nothing under it
+        # is selected whole, and a tensor not listed is not selected
+        listed = True
+        for entry, item in value._tensordict.items():
+            node = selection.get(entry)
+            if node is None and type(item) is Tensor and is_leaf(Tensor):
+                listed = False
+                break
+            if node is None or len(node) > 1 or None not in node:
+                listed = None
+        if listed:
+            return
     if not isinstance(value, dict) and (
         not _is_tensor_collection(type(value)) or is_leaf(type(value))
     ):
         return
-    # the keys listed under key, unravelled as update() does at each level
-    for part in key:
-        keys_to_update = _prune_selected_keys(keys_to_update, part)
-        if not keys_to_update:
-            # None: a listed key names the entry, which is written whole
+    if listed is None:
+        try:
+            if isinstance(value, dict):
+                value = _TENSORDICT_TYPE(value, batch_size=[])
+            # a lazy stack lists only the keys that all its members hold
+            leaves = (
+                _all_leaf_keys(value)
+                if _has_lazy_stack(value)
+                else value.keys(True, True, is_leaf=is_leaf)
+            )
+            if all(
+                _is_key_selected(_unravel_key_to_tuple(leaf), selection)
+                for leaf in leaves
+            ):
+                return
+        except Exception:
+            # a value that the update rejects: it raises its own error
             return
-        keys_to_update = [k[0] if len(k) == 1 else k for k in keys_to_update]
-    try:
-        if isinstance(value, dict):
-            value = _TENSORDICT_TYPE(value, batch_size=[])
-        # a lazy stack lists only the keys that all its members hold
-        leaves = (
-            _all_leaf_keys(value)
-            if _has_lazy_stack(value)
-            else value.keys(True, True, is_leaf=is_leaf)
-        )
-        selection = _selection_trie(keys_to_update)
-        if all(
-            _is_key_selected(_unravel_key_to_tuple(leaf), selection) for leaf in leaves
-        ):
-            return
-    except Exception:
-        # a value that the update rejects: it raises its own error
+    if is_dynamo_compiling():
+        return
+    state = getattr(_UPDATE_MEMBERS_CALL, "warned", None)
+    if state:
         return
     if state is False:
         _UPDATE_MEMBERS_CALL.warned = True
@@ -7008,13 +7035,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             elif keys_to_update is not None and type(value) is not Tensor:
                 # a tensor is written whole either way: skip the check
                 if nested_keys is None:
-                    nested_keys = not is_dynamo_compiling() and any(
-                        type(ktu) is tuple for ktu in keys_to_update
+                    nested_keys = tuple in map(type, keys_to_update) and (
+                        not is_dynamo_compiling()
                     )
                 if nested_keys:
-                    _warn_update_inserts_whole_entry(
-                        key, value, keys_to_update, is_leaf
-                    )
+                    if selection is None:
+                        selection = _update_selection_trie(tuple(keys_to_update))
+                    _warn_update_inserts_whole_entry(key, value, selection, is_leaf)
 
             self._set_tuple(
                 key,
