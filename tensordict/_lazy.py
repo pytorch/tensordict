@@ -77,6 +77,7 @@ from tensordict.base import (
     _SET_AT_CAST_TYPES,
     _set_at_each_key,
     _unwrap,
+    _UPDATE_MEMBERS_CALL,
     _warn_names_length,
     _warn_read_only,
     _warn_set_at_cast,
@@ -129,7 +130,7 @@ from tensordict.utils import (
     NestedKey,
 )
 from torch import Tensor
-from torch.compiler import is_compiling
+from torch.compiler import is_compiling, is_dynamo_compiling
 from torch.nn.utils.rnn import pad_sequence
 
 try:
@@ -462,6 +463,27 @@ def _copy_fails(dest: Tensor, source: Tensor) -> bool:
 def _raise_if_missing(name, source, dest) -> None:
     if source is not None and dest is None:
         raise KeyError(f"The key {name} was not found in the dest tensordict.")
+
+
+def _update_members(pairs, kwargs: dict) -> None:
+    """Updates each member ``dest`` of a lazy stack with its ``source``, for each ``(dest, source)`` of ``pairs``.
+
+    The members warn once in all that update writes an entry whole (#3360).
+    """
+    if kwargs["keys_to_update"] is None or is_dynamo_compiling():
+        for dest, source in pairs:
+            dest.update(source, **kwargs)
+        return
+    # a nested stack keeps the state of the outer one
+    warned = getattr(_UPDATE_MEMBERS_CALL, "warned", None)
+    if warned is None:
+        _UPDATE_MEMBERS_CALL.warned = False
+    try:
+        for dest, source in pairs:
+            dest.update(source, **kwargs)
+    finally:
+        if warned is None:
+            _UPDATE_MEMBERS_CALL.warned = None
 
 
 def _raise_if_update_fails(
@@ -4785,8 +4807,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 raise ValueError(
                     "cannot update stacked tensordicts with different shapes when update_batch_size=False."
                 )
-            for td_dest, td_source in zip(self.tensordicts, sources):
-                td_dest.update(td_source, **kwargs)
+            _update_members(zip(self.tensordicts, sources), kwargs)
             if update_batch_size:
                 self._reset_member_batch_size()
             if len(sources) > n and update_batch_size:
@@ -4827,10 +4848,12 @@ class LazyStackedTensorDict(TensorDictBase):
                 raise ValueError(
                     "cannot update stacked tensordicts with different shapes."
                 ) from err
-        for td_dest, td_source in _zip_strict(
-            self_upd.tensordicts, input_dict_or_td.unbind(self_upd.stack_dim)
-        ):
-            td_dest.update(td_source, **kwargs)
+        _update_members(
+            _zip_strict(
+                self_upd.tensordicts, input_dict_or_td.unbind(self_upd.stack_dim)
+            ),
+            kwargs,
+        )
         if update_batch_size:
             self_upd._reset_member_batch_size()
         if self._hook_out is not None:
