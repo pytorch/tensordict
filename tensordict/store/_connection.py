@@ -18,7 +18,21 @@ import threading
 from typing import Any
 
 import torch
-from tensordict.store._utils import _decode_meta, _str_to_dtype
+from tensordict.store._utils import (
+    _bytes_to_tensor,
+    _compute_byte_ranges,
+    _compute_covering_range,
+    _decode_meta,
+    _get_local_idx,
+    _getitem_result_shape,
+    _is_scattered_index,
+    _LUA_GETRANGES,
+    _LUA_SETRANGES,
+    _prepare_indexed_value,
+    _row_size,
+    _str_to_dtype,
+    _tensor_to_bytes,
+)
 
 _has_redis = importlib.util.find_spec("redis") is not None
 
@@ -394,6 +408,156 @@ class _StoreConnection:
             self._meta_cache.pop(key_path, None)
         if self._keys_cache[0] is not None:
             self._keys_cache[0].discard(key_path)
+
+    # ---- byte-range reads and writes ----
+
+    def _queue_indexed_reads(
+        self, pipe, key_paths: list[str], meta_map: dict, idx
+    ) -> tuple[list[tuple[str, list[int], torch.dtype, object, bool]], list[str]]:
+        """Queue on *pipe* the byte-range reads of ``tensor[idx]`` for each key of *key_paths*.
+
+        A scattered index (integer index or mask) is read with one
+        ``GETRANGES`` ``EVAL``, any other with a ``GETRANGE`` of the covering
+        range. Returns ``(plan, fallback_kps)``: *plan* holds a
+        ``(key_path, result_shape, dtype, local_idx, has_cmd)`` entry per read
+        key, for :meth:`_assemble_indexed_reads`, and *fallback_kps* the keys
+        whose index cannot be read by byte ranges.
+        """
+        scattered = _is_scattered_index(idx)
+        plan: list[tuple[str, list[int], torch.dtype, object, bool]] = []
+        fallback_kps: list[str] = []
+
+        for kp in key_paths:
+            shape, dtype = meta_map[kp]
+            result_shape = _getitem_result_shape(shape, idx)
+            local_idx = _get_local_idx(idx, shape[0])
+
+            if scattered:
+                ranges = _compute_byte_ranges(shape, dtype, idx)
+                if ranges is None:
+                    fallback_kps.append(kp)
+                    continue
+                if not ranges:
+                    plan.append((kp, result_shape, dtype, None, False))
+                    continue
+                argv: list[int] = []
+                for byte_offset, byte_length in ranges:
+                    argv.append(byte_offset)
+                    argv.append(byte_length)
+                pipe.eval(_LUA_GETRANGES, 1, self._data_key(kp), *argv)
+            else:
+                cr = _compute_covering_range(shape, dtype, idx)
+                if cr is None:
+                    fallback_kps.append(kp)
+                    continue
+                byte_offset, byte_length = cr
+                if byte_length == 0:
+                    plan.append((kp, result_shape, dtype, None, False))
+                    continue
+                pipe.getrange(
+                    self._data_key(kp),
+                    byte_offset,
+                    byte_offset + byte_length - 1,
+                )
+            plan.append((kp, result_shape, dtype, local_idx, True))
+        return plan, fallback_kps
+
+    def _assemble_indexed_reads(
+        self, plan: list, raw_results: list, meta_map: dict, result: dict
+    ) -> int:
+        """Store in *result* the tensors that the reads of *plan* returned in *raw_results*.
+
+        Returns the number of entries of *raw_results* that *plan* used.
+        """
+        ri = 0
+        for kp, result_shape, dtype, local_idx, has_cmd in plan:
+            if not has_cmd:
+                result[kp] = torch.empty(result_shape, dtype=dtype)
+                continue
+            data = raw_results[ri]
+            ri += 1
+            # For Lua path: data is already exactly the needed rows.
+            # For GETRANGE path: data may be a covering range needing post-index.
+            tensor = _bytes_to_tensor(
+                data,
+                result_shape if local_idx is None else [-1] + list(meta_map[kp][0][1:]),
+                dtype,
+            )
+            if local_idx is not None:
+                tensor = tensor[local_idx]
+                tensor = tensor.reshape(result_shape)
+            if self._device is not None:
+                tensor = tensor.to(self._device)
+            result[kp] = tensor
+        return ri
+
+    def _queue_range_writes(
+        self,
+        pipe,
+        direct_kps: list[str],
+        lua_kps: list[str],
+        items: dict[str, tuple[torch.Tensor, object]],
+        meta_map: dict,
+    ) -> None:
+        """Queue on *pipe* the writes of *items* for the keys that one ``SETRANGE`` or one ``SETRANGES`` ``EVAL`` writes.
+
+        *direct_kps* are the keys whose index selects one byte range,
+        *lua_kps* those whose scattered index selects several.
+        """
+        for kp in direct_kps:
+            value, idx = items[kp]
+            shape, dtype = meta_map[kp]
+            value = _prepare_indexed_value(value, shape, dtype, idx)
+            ranges = _compute_byte_ranges(shape, dtype, idx)
+            byte_offset, _ = ranges[0]
+            pipe.setrange(
+                self._data_key(kp),
+                byte_offset,
+                _tensor_to_bytes(value.contiguous()),
+            )
+
+        for kp in lua_kps:
+            value, idx = items[kp]
+            shape, dtype = meta_map[kp]
+            value = _prepare_indexed_value(value, shape, dtype, idx)
+            ranges = _compute_byte_ranges(shape, dtype, idx)
+            value_bytes = _tensor_to_bytes(value.contiguous())
+            argv: list = []
+            offset = 0
+            for byte_offset, byte_length in ranges:
+                argv.append(byte_offset)
+                argv.append(value_bytes[offset : offset + byte_length])
+                offset += byte_length
+            pipe.eval(_LUA_SETRANGES, 1, self._data_key(kp), *argv)
+
+    def _queue_covering_patches(
+        self,
+        pipe,
+        cr_data: list[tuple[str, int, int, list[int], torch.dtype]],
+        raw_covers: list,
+        items: dict[str, tuple[torch.Tensor, object]],
+    ) -> None:
+        """Patch with *items* the covering ranges read in *raw_covers* and queue their ``SETRANGE`` on *pipe*.
+
+        *cr_data* holds a ``(key_path, byte_offset, byte_length, shape, dtype)``
+        entry per covering range.
+        """
+        for (kp, byte_offset, byte_length, shape, dtype), data in zip(
+            cr_data, raw_covers
+        ):
+            rest = shape[1:]
+            row_bytes = _row_size(shape, dtype)
+            covering_rows = byte_length // row_bytes if row_bytes > 0 else 0
+            covering_shape = [covering_rows] + rest
+            covering_tensor = _bytes_to_tensor(data, covering_shape, dtype)
+            value, idx = items[kp]
+            local_idx = _get_local_idx(idx, shape[0])
+            covering_tensor[local_idx] = value
+            pipe.setrange(
+                self._data_key(kp),
+                byte_offset,
+                _tensor_to_bytes(covering_tensor.contiguous()),
+            )
 
     # ---- lifecycle ----
 
