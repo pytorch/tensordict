@@ -21,6 +21,7 @@ from tensordict.base import (
     NO_DEFAULT,
     TensorDictBase,
 )
+from tensordict.tensorclass import dataclass_transform
 from tensordict.utils import (
     _as_context_manager,
     _cache_while_locked,
@@ -30,18 +31,6 @@ from tensordict.utils import (
     _user_stacklevel,
 )
 from torch.compiler import is_compiling
-
-try:
-    # Python 3.11+ (PEP 681)
-    from typing import dataclass_transform
-except ImportError:
-
-    def dataclass_transform(*args, **kwargs):  # noqa: D103
-        def _identity(cls):
-            return cls
-
-        return _identity
-
 
 try:
     # Python 3.11+ (PEP 655)

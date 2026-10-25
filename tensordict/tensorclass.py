@@ -174,13 +174,13 @@ except ImportError:
 
 
 T = TypeVar("T", bound=TensorCollection)
-# We use an abstract AnyType instead of Any because Any isn't recognised as a type for python < 3.10
+# The type hint of a field that is not a class. typing.Any is a class from
+# Python 3.11 only: before, a class of our own stands in for it.
 major, minor = sys.version_info[:2]
 if (major, minor) < (3, 11):
 
     class _AnyType:
-        def __subclasscheck__(self, subclass):
-            return False
+        pass
 
 else:
     _AnyType = Any
