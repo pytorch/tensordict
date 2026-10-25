@@ -1791,34 +1791,82 @@ class TestTDSequence:
             ("next", "z"),
         }
 
-        # Lazy stacks whose members differ in holding "next": a member that
-        # holds it gets only the listed keys there, the other one all of it.
+        # Lazy stacks whose members differ in holding "next": as on main, a
+        # member that holds it gets only the listed keys there, the other one
+        # all of it.
         def dump(tensordict):
-            return {k: v.tolist() for k, v in tensordict.items(True, True)}
+            return [
+                {k: v.tolist() for k, v in member.items(True, True)}
+                for member in tensordict.unbind(0)
+            ]
 
-        input = TensorDict(x=torch.zeros(2), next={"q": torch.ones(2)}, batch_size=[2])
-        out = lazy_stack([TensorDict(next={"q": torch.full((), 5.0)}), TensorDict()])
-        with warnings.catch_warnings():
-            warnings.simplefilter("error", FutureWarning)
-            TensorDictSequential(*modules())(input, tensordict_out=out)
+        def lazy_input():
+            return lazy_stack(
+                [
+                    TensorDict(x=torch.zeros(()), next={"q": torch.ones(())}),
+                    TensorDict(x=torch.zeros(())),
+                ]
+            )
+
+        def lazy_out():
+            return lazy_stack(
+                [TensorDict(next={"q": torch.full((), 5.0)}), TensorDict()]
+            )
+
         everything = {("nested", "y"): 1.0, "loc": 6.0, ("next", "h"): 2.0}
         everything["next", "z"] = 8.0
-        assert [dump(member) for member in out.tensordicts] == [
-            {**everything, ("next", "q"): 5.0},
-            {**everything, ("next", "q"): 1.0},
+        into_out = [{**everything, ("next", "q"): 5.0}, everything]
+        selected_keys = {"selected_out_keys": [("next", "z")]}
+        cases = [
+            (
+                {},
+                None,
+                [
+                    {"x": 0.0, ("next", "q"): 1.0, **everything},
+                    {"x": 0.0, **everything},
+                ],
+            ),
+            ({}, lazy_out, into_out),
+            ({"inplace": False}, lazy_out, into_out),
+            (
+                {"inplace": "empty"},
+                None,
+                [{("next", "q"): 1.0, **everything}, everything],
+            ),
+            ({"inplace": "empty"}, lazy_out, into_out),
+            (
+                selected_keys,
+                None,
+                [
+                    {"x": 0.0, ("next", "q"): 1.0, ("next", "z"): 8.0},
+                    {"x": 0.0, ("next", "h"): 2.0, ("next", "z"): 8.0},
+                ],
+            ),
+            (
+                selected_keys,
+                lazy_out,
+                [
+                    {("next", "q"): 5.0, ("next", "z"): 8.0},
+                    {("next", "h"): 2.0, ("next", "z"): 8.0},
+                ],
+            ),
         ]
-        input = lazy_stack(
-            [
-                TensorDict(x=torch.zeros(()), next={"q": torch.ones(())}),
-                TensorDict(x=torch.zeros(())),
-            ]
-        )
+        for kwargs, tensordict_out, expected in cases:
+            model = TensorDictSequential(*modules(), **kwargs)
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", FutureWarning)
+                if tensordict_out is None:
+                    output = model(lazy_input())
+                else:
+                    output = model(lazy_input(), tensordict_out=tensordict_out())
+            assert dump(output) == expected, kwargs
+        input = TensorDict(x=torch.zeros(2), next={"q": torch.ones(2)}, batch_size=[2])
         with warnings.catch_warnings():
             warnings.simplefilter("error", FutureWarning)
-            output = selected(input)
-        assert [dump(member) for member in output.tensordicts] == [
-            {"x": 0.0, ("next", "q"): 1.0, ("next", "z"): 8.0},
-            {"x": 0.0, ("next", "h"): 2.0, ("next", "z"): 8.0},
+            output = TensorDictSequential(*modules())(input, tensordict_out=lazy_out())
+        assert dump(output) == [
+            {**everything, ("next", "q"): 5.0},
+            {**everything, ("next", "q"): 1.0},
         ]
 
     @pytest.mark.parametrize("stack_dim", [0, 1])

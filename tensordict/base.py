@@ -2602,6 +2602,8 @@ def _warn_update_inserts_whole_entry(
     """Warns that ``update`` writes every entry of ``value`` at ``key``, which the destination lacks, where ``keys_to_update`` lists only some of them, until 0.17 (#3360).
 
     ``select`` and an update into an existing entry keep only the listed keys.
+    The 0.17 switch must keep the result of the ``tensordict.nn`` calls, see
+    ``_update_keeping_whole_entries``.
     """
     if is_dynamo_compiling():
         return
@@ -2657,9 +2659,10 @@ def _update_keeping_whole_entries(
 ) -> TensorCollection:
     """``dest.update(source, **kwargs)`` without the warning that update writes an entry whole (#3360).
 
-    The ``tensordict.nn`` modules write their outputs with it: they keep
-    their outputs as they are until 0.17. Whether these narrow in 0.17 with
-    ``update`` is #3367.
+    The ``tensordict.nn`` modules write their outputs with it, so they keep
+    their current outputs without a warning. In 0.17, when ``update`` narrows,
+    these calls must keep the current whole-copy result unless #3367 decides
+    otherwise.
     """
     if is_dynamo_compiling():
         return dest.update(source, **kwargs)
