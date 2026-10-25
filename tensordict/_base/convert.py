@@ -1669,9 +1669,8 @@ class _Conversion:
                         )
                         local_out = swap_tensor(module, key, value)
                     else:
-                        new_val = local_out
-                        if return_swap:
-                            local_out = local_out.clone()
+                        new_val = getattr(module, key)
+                        local_out = new_val.clone() if return_swap else new_val
                         new_val.data.copy_(value.data, non_blocking=non_blocking)
             else:
                 if __dict__ is not None:
