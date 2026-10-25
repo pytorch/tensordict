@@ -1256,6 +1256,8 @@ class TestPointwiseOps:
             inner_source.tensordicts,
         ):
             assert all((member["x"] == 1).all() for member in members)
+            # typed_twice used to add the entries "0", "1" and "2" to each member
+            assert all(list(member.keys()) == ["x"] for member in members)
         assert (nested["a"] == 1).all()
 
 

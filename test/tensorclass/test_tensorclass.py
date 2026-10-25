@@ -6383,6 +6383,35 @@ class TestTensorClass:
         assert type(td_sel) is TensorDict
         assert set(td_sel.keys()) == {"a"}
 
+    def test_set__unexisting_nested(self):
+        # #3391: set_ creates the missing entry of a nested key and warns until
+        # TensorDict 0.18 raises, as it does on a TensorDict. A locked
+        # tensorclass raises now, and a missing leaf always did.
+        class Foo(TensorClass):
+            a: torch.Tensor
+            n: TensorDict
+
+        def make():
+            return Foo(
+                a=torch.zeros(3),
+                n=TensorDict(b=torch.zeros(3), batch_size=[3]),
+                batch_size=[3],
+            )
+
+        foo = make()
+        with pytest.warns(FutureWarning, match="missing entry 'x'") as record:
+            foo.set_(("x", "y"), torch.ones(3))
+        assert len(record) == 1
+        assert record[0].filename == __file__
+        assert (foo.to_tensordict()["x", "y"] == 1).all()
+        with pytest.raises(KeyError, match='key "x" not found'):
+            foo.set_(("n", "x"), torch.ones(3))
+        foo = make().lock_()
+        keys = set(foo.keys(True))
+        with pytest.raises(KeyError, match='key "x" not found'):
+            foo.set_(("x", "y"), torch.ones(3))
+        assert set(foo.keys(True)) == keys
+
     @set_list_to_stack(True)
     def test_set_list_in_constructor(self):
         obj = MyTensorClass(

@@ -74,6 +74,7 @@ from tensordict.base import (
     _SELF_NESTING_ERROR,
     _SET_AT_CAST_TYPES,
     _set_at_each_key,
+    _SET_MEMBERS_CALL,
     _unwrap,
     _UPDATE_MEMBERS_CALL,
     _warn_names_length,
@@ -1930,14 +1931,27 @@ class LazyStackedTensorDict(TensorDictBase):
             values = self._unbatched_member_values(value)
         else:
             values = value.unbind(self.stack_dim)
-        for tensordict, item in _zip_strict(self.tensordicts, values):
-            tensordict._set_tuple(
-                key,
-                item,
-                inplace=inplace,
-                validated=validated,
-                non_blocking=non_blocking,
-            )
+        # set_ warns once, not once per member, if the members lack the first
+        # entry of the key and create it
+        outermost = (
+            inplace is True
+            and not is_dynamo_compiling()
+            and getattr(_SET_MEMBERS_CALL, "warned", None) is None
+        )
+        if outermost:
+            _SET_MEMBERS_CALL.warned = False
+        try:
+            for tensordict, item in _zip_strict(self.tensordicts, values):
+                tensordict._set_tuple(
+                    key,
+                    item,
+                    inplace=inplace,
+                    validated=validated,
+                    non_blocking=non_blocking,
+                )
+        finally:
+            if outermost:
+                _SET_MEMBERS_CALL.warned = None
         return self
 
     # Override: each member keeps or replaces its own entry on the path.
@@ -6030,6 +6044,10 @@ class _CustomOpTensorDict(TensorDictBase):
             )
         source = self._source._get_str(key[0], None)
         if source is None:
+            if inplace is True:
+                raise KeyError(
+                    _KEY_ERROR.format(key[0], type(self).__name__, sorted(self.keys()))
+                )
             source = self._source._create_nested_str(key[0])
         nested = type(self)(
             source,

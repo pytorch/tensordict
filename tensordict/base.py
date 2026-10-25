@@ -2552,6 +2552,30 @@ def _warn_update_invalid_key() -> None:
     )
 
 
+# Set to False while a lazy stack writes the members of a nested key with
+# set_, and to True once a member has warned, so that they warn once in all.
+_SET_MEMBERS_CALL = local()
+
+
+def _warn_set_creates_entry(key: str) -> None:
+    """Warns that ``set_`` creates the entry ``key``, the first of a nested key, which the tensordict lacks, until 0.18 (#3391)."""
+    if is_dynamo_compiling():
+        return
+    state = getattr(_SET_MEMBERS_CALL, "warned", None)
+    if state:
+        return
+    if state is False:
+        _SET_MEMBERS_CALL.warned = True
+    warnings.warn(
+        f"set_() got a nested key with the missing entry {key!r}, and creates "
+        "it, while set_() raises a KeyError for any other missing key. "
+        "Starting with TensorDict 0.18, the default will change to raising a "
+        "KeyError. Use set() or td[key] = value to add an entry, or fix the key.",
+        FutureWarning,
+        stacklevel=_user_stacklevel(),
+    )
+
+
 # Set while update() writes the members of a lazy stack one by one, so that
 # they warn once in all, and while the nn modules write their outputs, so that
 # they do not warn (#3360).
@@ -6229,7 +6253,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             ``self``.
 
         Raises:
-            KeyError: if the key is missing.
+            KeyError: if the key is missing. If an entry on the path of a
+                nested key is missing, a tensordict, a lazy stack and a
+                tensorclass create it and emit a :class:`FutureWarning`:
+                starting with TensorDict 0.18, the default will change to
+                raising the ``KeyError``. A locked tensordict, a
+                :class:`~tensordict.nn.TensorDictParams` and a view of a
+                tensordict, such as a sub-tensordict, raise it now.
             RuntimeError: if the leading dimensions of the value do not match
                 the batch size.
             ValueError: if the value does not fit the shape of the entry.

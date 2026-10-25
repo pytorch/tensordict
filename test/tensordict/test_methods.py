@@ -3721,6 +3721,45 @@ class TestTensorDicts(TestTensorDictsBase):
             td.set("z", torch.ones_like(td.get("a")), non_blocking=False)
             assert (td.get("z") == 1).all()
 
+    def test_set__unexisting_nested(self, td_name, device):
+        # set_ raises a KeyError for a missing key. For a nested key whose
+        # first entry is missing, a tensordict, a lazy stack and a typed
+        # tensordict create the entry, as they always did, and warn until
+        # TensorDict 0.18 raises (#3391). A locked tensordict (memmap_td), a
+        # TensorDictParams, a file and the views raise now, and create
+        # nothing: a TensorDictParams wrote the value into a copy that it
+        # dropped, and a sub-tensordict left an empty entry in its source.
+        td = getattr(self, td_name)(device)
+        keys = set(td.keys(True))
+        value = torch.ones_like(td.get("a"))
+        if td_name in (
+            "td",
+            "nested_td",
+            "nested_tensorclass",
+            "nested_stacked_td",
+            "stacked_td",
+            "idx_td",
+            "td_reset_bs",
+            "td_with_non_tensor",
+            "td_with_non_tensor_and_metadata",
+            "td_with_unbatched",
+            "typed_td",
+            "nested_typed_td",
+        ):
+            with pytest.warns(
+                FutureWarning,
+                match=r"set_\(\) got a nested key with the missing entry 'z'",
+            ) as record:
+                td.set_(("z", "a"), value)
+            # one warning, even from the members of a lazy stack
+            assert len(record) == 1
+            assert record[0].filename == __file__
+            assert (td.get(("z", "a")) == 1).all()
+        else:
+            with pytest.raises(KeyError, match='key "z'):
+                td.set_(("z", "a"), value)
+            assert set(td.keys(True)) == keys
+
     def test_setdefault_existing_key(self, td_name, device):
         td = getattr(self, td_name)(device)
         td.unlock_()
@@ -6293,6 +6332,135 @@ def test_update__keys_to_update_invalid_key_compile():
     assert (td["a"] == 1).all()
     assert (td["n", "x"] == 1).all()
     assert (td["b"] == 0).all()
+
+
+def _set_nested_td():
+    return TensorDict(
+        a=torch.zeros(3),
+        n=TensorDict(b=torch.zeros(3), batch_size=[3]),
+        batch_size=[3],
+    )
+
+
+def test_set__unexisting_nested_warns():
+    # #3391: set_ creates the missing entry of a nested key and warns, with
+    # the name of the entry, at any depth, until TensorDict 0.18 raises.
+    for key, entry in (
+        (("x", "y"), "x"),
+        (("x", "y", "z"), "x"),
+        (("n", "x", "y"), "x"),
+    ):
+        td = _set_nested_td()
+        with pytest.warns(
+            FutureWarning,
+            match=rf"set_\(\) got a nested key with the missing entry '{entry}'",
+        ) as record:
+            td.set_(key, torch.ones(3))
+        assert len(record) == 1
+        assert record[0].filename == __file__
+        assert (td.get(key) == 1).all()
+    # the message is fixed text but for the name: it announces the switch
+    assert "Starting with TensorDict 0.18, the default will change" in str(
+        record[0].message
+    )
+
+
+def test_set__unexisting_nested_silent_calls():
+    # #3391: set_ on an existing key, a missing leaf, set(inplace=True) and
+    # td[key] = value do not warn, as before (the module turns warnings into
+    # errors).
+    td = _set_nested_td()
+    td.set_(("n", "b"), torch.ones(3))
+    assert (td["n", "b"] == 1).all()
+    with pytest.raises(KeyError, match='key "x" not found'):
+        td.set_(("n", "x"), torch.ones(3))
+    td.set(("x", "y"), torch.ones(3), inplace=True)
+    td["p", "q"] = torch.ones(3)
+    assert (td["x", "y"] == 1).all()
+    assert (td["p", "q"] == 1).all()
+
+
+@pytest.mark.parametrize("lock", ["lock_", "memmap"])
+def test_set__unexisting_nested_locked_raises(lock, tmp_path):
+    # #3391: a locked tensordict raised the lock RuntimeError: it raises the
+    # KeyError that set_ gives for a missing key, and creates nothing.
+    td = _set_nested_td()
+    td = td.lock_() if lock == "lock_" else td.memmap_(tmp_path / "td")
+    keys = set(td.keys(True))
+    for key in (("x", "y"), ("n", "x", "y")):
+        with pytest.raises(KeyError, match='key "x" not found in TensorDict'):
+            td.set_(key, torch.ones(3))
+    assert set(td.keys(True)) == keys
+    # set_ into an existing entry works on a locked tensordict
+    td.set_(("n", "b"), torch.ones(3))
+    assert (td["n", "b"] == 1).all()
+
+
+def test_set__unexisting_nested_lazy_stack_warns_once():
+    # #3391: the members of a lazy stack, at any depth of lazy stacks, warn
+    # once in all, for each call, also after a call that raised the warning.
+    stacks = (
+        lazy_stack([_set_nested_td() for _ in range(3)]),
+        lazy_stack(
+            [lazy_stack([_set_nested_td() for _ in range(2)]) for _ in range(2)],
+            dim=1,
+        ),
+    )
+    for stack in stacks:
+        value = torch.ones(stack.batch_size)
+        # the warning raised as an error creates nothing, and leaves no state
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            with pytest.raises(FutureWarning, match="missing entry 'x'"):
+                stack.set_(("x", "y"), value)
+        assert "x" not in stack.keys(True)
+        for key in (("x", "y"), ("n", "x", "y")):
+            with warnings.catch_warnings(record=True) as record:
+                warnings.simplefilter("always")
+                stack.set_(key, value)
+            assert len(record) == 1, (key, [str(w.message) for w in record])
+            assert (stack.get(key) == 1).all()
+
+
+def test_set__unexisting_nested_lazy_stack_some_members():
+    # #3391: members that hold the entry are written, the others create it.
+    members = [_set_nested_td(), _set_nested_td()]
+    members[0].set(("x", "y"), torch.zeros(3))
+    stack = lazy_stack(members)
+    with pytest.warns(FutureWarning, match="missing entry 'x'") as record:
+        stack.set_(("x", "y"), torch.ones(2, 3))
+    assert len(record) == 1
+    assert all((member["x", "y"] == 1).all() for member in members)
+
+
+@legacy_lazy_mode()
+def test_set__unexisting_nested_view_raises():
+    # #3391: a view raised the KeyError for the leaf, after it created the
+    # empty entry in its source: it raises for the entry, and creates nothing.
+    views = (
+        _SubTensorDict(_set_nested_td(), slice(0, 2)),
+        _set_nested_td().unsqueeze(0),
+    )
+    for view in views:
+        source = view._source
+        keys = set(source.keys(True))
+        for key in (("x", "y"), ("n", "x", "y")):
+            with pytest.raises(KeyError, match='key "x" not found in _'):
+                view.set_(key, torch.ones(view.batch_size))
+        assert set(source.keys(True)) == keys
+
+
+def test_set__unexisting_nested_compile():
+    # #3391: the check adds no graph break to set_ on an existing nested key,
+    # on a tensordict and on a lazy stack.
+    @torch.compile(fullgraph=True, backend="eager")
+    def set_(td, x):
+        return td.set_(("n", "b"), x)
+
+    for td in (_set_nested_td(), lazy_stack([_set_nested_td() for _ in range(2)])):
+        set_(td, torch.ones(td.batch_size))
+        assert (td["n", "b"] == 1).all()
+        assert (td["a"] == 0).all()
 
 
 # The unary pointwise methods of tensordict/_base/pointwise.py, each with an

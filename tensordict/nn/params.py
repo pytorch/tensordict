@@ -328,6 +328,7 @@ def _apply_on_data_and_non_tensor(func):
     # As _apply_on_data, on a .data that holds the non-tensor leaves of the
     # wrapped tensordict, which .data rebuilds: the writes reach them (#2263).
     replaces_leaves = func.__name__ in ("set_at_", "update_at_")
+    writes_existing = func.__name__ == "set_"
 
     @wraps(func)
     def new_func(self, *args, **kwargs):  # type: ignore[misc]
@@ -338,6 +339,11 @@ def _apply_on_data_and_non_tensor(func):
             )
         else:
             data = self.data
+        if writes_existing:
+            # data is a temporary copy: a locked copy makes set_ raise a
+            # KeyError for the missing parent of a nested key, instead of
+            # creating it in the copy, where the value is lost
+            data.lock_()
         getattr(data, func.__name__)(*args, **kwargs)
         if has_non_tensor and replaces_leaves:
             _set_replaced_non_tensor(self._param_td, data)
