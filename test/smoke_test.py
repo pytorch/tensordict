@@ -7,19 +7,19 @@ from pathlib import Path
 
 def test_imports_deps():
     print("Importing numpy")  # noqa
-    import numpy  # noqa
+    import numpy
 
     print("Importing torch")  # noqa
-    import torch  # noqa
+    import torch
 
 
 def test_imports():
     print("Importing tensordict")  # noqa
-    from tensordict import TensorDict  # noqa: F401
+    from tensordict import TensorDict
 
     print("Importing tensordict nn")  # noqa
-    import tensordict  # noqa
-    from tensordict.nn import TensorDictModule  # noqa: F401
+    import tensordict
+    from tensordict.nn import TensorDictModule
 
     print("version", tensordict.__version__)  # noqa
 

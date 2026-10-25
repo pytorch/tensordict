@@ -1596,7 +1596,7 @@ class PersistentTensorDict(
             return owner.batch_size
         return None
 
-    @_cache_while_locked  # noqa: B019
+    @_cache_while_locked
     def _get_str(self, key: NestedKey, default, **kwargs):
         key = _unravel_key_to_tuple(key)
         array = self._get_array(key, default)
@@ -1821,7 +1821,7 @@ class PersistentTensorDict(
                 ) from err
         sub_td.update(value, inplace=True)
 
-    # @_cache_while_locked  # noqa: B019
+    # @_cache_while_locked
     def keys(
         self,
         include_nested: bool = False,

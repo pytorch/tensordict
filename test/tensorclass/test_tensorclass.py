@@ -7954,7 +7954,7 @@ class TestTensorClass:
         else:
 
             @tensorclass
-            class MyClass:  # noqa: F811
+            class MyClass:
                 x: torch.Tensor
                 y: torch.Tensor
 
@@ -9259,7 +9259,7 @@ class TestShadow:
         with pytest.raises(AttributeError):
 
             @tensorclass
-            class MyClass:  # noqa: F811
+            class MyClass:
                 x: str
                 y: int
                 names: Any
@@ -9267,13 +9267,13 @@ class TestShadow:
         with pytest.raises(AttributeError):
 
             @tensorclass
-            class MyClass:  # noqa: F811
+            class MyClass:
                 x: str
                 y: int
                 device: Any
 
         @tensorclass(shadow=True)
-        class MyClass:  # noqa: F811
+        class MyClass:
             x: str
             y: int
             batch_size: Any
@@ -9453,7 +9453,7 @@ class TestShadow:
             else:
 
                 @tensorclass
-                class MyClass:  # noqa: F811
+                class MyClass:
                     sum: torch.Tensor
                     other: torch.Tensor
 
@@ -11270,9 +11270,9 @@ class TestTensorOnly:
             a: torch.IntTensor
             b: torch.LongTensor
             c: torch.Tensor | None = None
-            d: torch.Tensor | Union[torch.IntTensor, torch.LongTensor] | None = None  # noqa
-            e: Optional[torch.IntTensor] = None  # noqa
-            f: Optional[torch.IntTensor | None] = None  # noqa
+            d: torch.Tensor | Union[torch.IntTensor, torch.LongTensor] | None = None
+            e: Optional[torch.IntTensor] = None
+            f: Optional[torch.IntTensor | None] = None
             g: TensorDict | None = None
             h: MyTensorClass | None = None
 
@@ -11304,7 +11304,7 @@ class TestTensorOnly:
             class TensorOnlyStrUnion(TensorClass["tensor_only"]):
                 a: torch.Tensor
                 b: torch.Tensor
-                c: torch.Tensor | Union[torch.IntTensor, str] | None = None  # noqa
+                c: torch.Tensor | Union[torch.IntTensor, str] | None = None
 
     def test_tensor_only_shape_annotations(self):
         # A shape annotation counts as the array type that it wraps, and its

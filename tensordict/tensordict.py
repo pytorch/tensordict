@@ -6,22 +6,22 @@
 import pyvers
 from tensordict import _indexing
 from tensordict._deprecation import deprecated_attributes
-from tensordict._lazy import LazyStackedTensorDict  # noqa: F401
-from tensordict._td import TensorDict  # noqa: F401
-from tensordict.base import (  # noqa: F401
+from tensordict._lazy import LazyStackedTensorDict
+from tensordict._td import TensorDict
+from tensordict.base import (
     is_tensor_collection,
     NO_DEFAULT,
     TensorDictBase,
 )
-from tensordict.functional import (  # noqa: F401
+from tensordict.functional import (
     dense_stack_tds,
     make_tensordict,
     merge_tensordicts,
     pad,
     pad_sequence,
 )
-from tensordict.memmap import MemoryMappedTensor  # noqa: F401
-from tensordict.utils import (  # noqa: F401
+from tensordict.memmap import MemoryMappedTensor
+from tensordict.utils import (
     _cache_while_locked,
     _erase_cache_first,
     _infer_size_impl,

@@ -279,7 +279,7 @@ class _DeviceOps:
                 value._set_device(device=device)
         return self
 
-    @_cache_while_locked  # noqa: B019
+    @_cache_while_locked
     def param_count(self, *, count_duplicates: bool = True) -> int:
         """Returns the total number of elements of the tensor leaves.
 
@@ -311,7 +311,7 @@ class _DeviceOps:
             total += v.numel()
         return total
 
-    @_cache_while_locked  # noqa: B019
+    @_cache_while_locked
     def bytes(self, *, count_duplicates: bool = True) -> int:
         """Returns the number of bytes of the tensor leaves.
 

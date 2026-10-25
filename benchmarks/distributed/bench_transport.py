@@ -374,7 +374,7 @@ def _discover_peers():
 def main():
     rank, world_size, master_ip, peer_ip, my_ip = _discover_peers()
 
-    print(  # noqa: T201
+    print(
         f"[rank {rank}] ip={my_ip} master={master_ip} peer={peer_ip}",
         flush=True,
     )
@@ -386,29 +386,29 @@ def main():
     os.environ["WORLD_SIZE"] = str(world_size)
 
     backend = "cpu:gloo,cuda:nccl" if torch.cuda.is_available() else "gloo"
-    print(f"[rank {rank}] Initializing process group ({backend})...", flush=True)  # noqa: T201
+    print(f"[rank {rank}] Initializing process group ({backend})...", flush=True)
     dist.init_process_group(
         backend=backend,
         rank=rank,
         world_size=world_size,
         init_method=f"tcp://{master_ip}:29502",
     )
-    print(f"[rank {rank}] Process group initialized.", flush=True)  # noqa: T201
+    print(f"[rank {rank}] Process group initialized.", flush=True)
 
     if rank == 0:
-        print(flush=True)  # noqa: T201
-        print("=" * 100, flush=True)  # noqa: T201
-        print(  # noqa: T201
+        print(flush=True)
+        print("=" * 100, flush=True)
+        print(
             f"  TensorDict Distributed Transport Benchmark  "
             f"(warmup={WARMUP}, rounds={ROUNDS})",
             flush=True,
         )
-        print(  # noqa: T201
+        print(
             f"  Nodes: {my_ip} <-> {peer_ip}  |  Backend: {backend}",
             flush=True,
         )
-        print("=" * 100, flush=True)  # noqa: T201
-        print(flush=True)  # noqa: T201
+        print("=" * 100, flush=True)
+        print(flush=True)
 
     # Check if UCXX is available
     try:
@@ -427,12 +427,12 @@ def main():
 
     for device in DEVICES:
         if rank == 0:
-            print(f"\n--- Device: {device.upper()} ---\n", flush=True)  # noqa: T201
-            print(  # noqa: T201
+            print(f"\n--- Device: {device.upper()} ---\n", flush=True)
+            print(
                 f"{'Method':<35s} | {'Size':>6s} | {'Latency':>18s} | {'Throughput':>12s}",
                 flush=True,
             )
-            print("-" * 80, flush=True)  # noqa: T201
+            print("-" * 80, flush=True)
 
         for size_name, n_floats in SIZES.items():
             if device == "cpu" and n_floats > 100_000_000:
@@ -447,7 +447,7 @@ def main():
                     mean, std, nbytes = bench_fn(rank, n_floats, device, group=None)
                 except Exception as e:
                     if rank == 0:
-                        print(  # noqa: T201
+                        print(
                             f"{bench_name:<35s} | {size_name:>6s} | {'ERROR: ' + str(e)[:30]:>18s} |",
                             flush=True,
                         )
@@ -455,7 +455,7 @@ def main():
                     continue
 
                 if rank == 0:
-                    print(  # noqa: T201
+                    print(
                         f"{bench_name:<35s} | {size_name:>6s} | "
                         f"{_fmt_time(mean)} +/- {_fmt_time(std)} | "
                         f"{_fmt_throughput(nbytes, mean)}",
@@ -463,21 +463,21 @@ def main():
                     )
 
             if rank == 0:
-                print("", flush=True)  # noqa: T201
+                print("", flush=True)
 
     # UCXX benchmarks — single connection per device, all sizes
     if has_ucxx:
         for ucxx_device in DEVICES:
             if rank == 0:
-                print(  # noqa: T201
+                print(
                     f"\n--- UCXX TensorDictPipe ({ucxx_device.upper()}, all sizes) ---\n",
                     flush=True,
                 )
-                print(  # noqa: T201
+                print(
                     f"{'Method':<35s} | {'Size':>6s} | {'Latency':>18s} | {'Throughput':>12s}",
                     flush=True,
                 )
-                print("-" * 80, flush=True)  # noqa: T201
+                print("-" * 80, flush=True)
 
             gc.collect()
             torch.cuda.empty_cache() if ucxx_device == "cuda" else None
@@ -487,7 +487,7 @@ def main():
                 ucxx_results = bench_ucxx_all_sizes(rank, SIZES, ucxx_device, peer_ip)
             except Exception as e:
                 if rank == 0:
-                    print(  # noqa: T201
+                    print(
                         f"{'UCXX pipe':<35s} | {'ALL':>6s} | "
                         f"{'ERROR: ' + str(e)[:50]:>18s} |",
                         flush=True,
@@ -500,13 +500,13 @@ def main():
                     nbytes,
                 ) in ucxx_results.items():
                     if rank == 0:
-                        print(  # noqa: T201
+                        print(
                             f"{'UCXX pipe (first send)':<35s} | {size_name:>6s} | "
                             f"{_fmt_time(first_time):>18s} | "
                             f"{_fmt_throughput(nbytes, first_time)}",
                             flush=True,
                         )
-                        print(  # noqa: T201
+                        print(
                             f"{'UCXX pipe (steady-state)':<35s} | {size_name:>6s} | "
                             f"{_fmt_time(steady_mean)} +/- {_fmt_time(steady_std)} | "
                             f"{_fmt_throughput(nbytes, steady_mean)}",
@@ -516,13 +516,13 @@ def main():
             _barrier()
 
     if rank == 0:
-        print("\n" + "=" * 80, flush=True)  # noqa: T201
+        print("\n" + "=" * 80, flush=True)
         if not has_ucxx:
-            print(  # noqa: T201
+            print(
                 "NOTE: ucxx not installed — UCXX benchmarks skipped.",
                 flush=True,
             )
-        print("Done.", flush=True)  # noqa: T201
+        print("Done.", flush=True)
 
     dist.destroy_process_group()
 

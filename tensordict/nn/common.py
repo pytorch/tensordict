@@ -413,7 +413,7 @@ class _OutKeysSelect:
         self._initialized = True
         self.module = module
 
-    def __call__(  # noqa: F811
+    def __call__(
         self,
         module: TensorDictModuleBase,
         tensordict_in: TensorDictBase,
@@ -479,7 +479,7 @@ class _OutKeysSelect:
                 del tensordict_out[parent]
         return tensordict_out
 
-    def _detect_dispatch(self, tensordict_in, kwargs, in_keys):  # noqa: F811
+    def _detect_dispatch(self, tensordict_in, kwargs, in_keys):
         if isinstance(tensordict_in, TensorDictBase):
             return False
         elif isinstance(tensordict_in, tuple):
@@ -606,7 +606,7 @@ class TensorDictModuleBase(nn.Module):
         """All the keys that the module writes, before :meth:`select_out_keys`."""
         return self._out_keys
 
-    def select_out_keys(self, *out_keys) -> TensorDictModuleBase:  # noqa: F811
+    def select_out_keys(self, *out_keys) -> TensorDictModuleBase:
         """Keeps only some of the ``out_keys`` in the output of the module, and returns the module.
 
         Use it to drop intermediate outputs, for example those of a

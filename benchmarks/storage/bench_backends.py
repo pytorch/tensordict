@@ -232,28 +232,26 @@ def main():
     for name, port in BACKENDS:
         if _server_available("localhost", port):
             available.append((name, port))
-            print(f"  {name:12s} (port {port}): available")  # noqa: T201
+            print(f"  {name:12s} (port {port}): available")
         else:
-            print(f"  {name:12s} (port {port}): NOT available, skipping")  # noqa: T201
+            print(f"  {name:12s} (port {port}): NOT available, skipping")
 
     if not available:
-        print("ERROR: No store backends available.")  # noqa: T201
+        print("ERROR: No store backends available.")
         return
 
-    print()  # noqa: T201
-    print("=" * (30 + 30 * (1 + len(available))))  # noqa: T201
-    print(  # noqa: T201
-        f"  TensorDictStore benchmark  (N={N}, keys={N_KEYS}, feat={FEAT})"
-    )
-    print(f"  warmup={WARMUP}, rounds={ROUNDS}")  # noqa: T201
-    print("=" * (30 + 30 * (1 + len(available))))  # noqa: T201
-    print()  # noqa: T201
+    print()
+    print("=" * (30 + 30 * (1 + len(available))))
+    print(f"  TensorDictStore benchmark  (N={N}, keys={N_KEYS}, feat={FEAT})")
+    print(f"  warmup={WARMUP}, rounds={ROUNDS}")
+    print("=" * (30 + 30 * (1 + len(available))))
+    print()
 
     # Build TDs
     local_td = _make_local_td()
     store_tds = {}
     for name, port in available:
-        print(f"  Populating {name} store...", flush=True)  # noqa: T201
+        print(f"  Populating {name} store...", flush=True)
         store_tds[name] = _make_store_td(name, port)
 
     # Header
@@ -263,8 +261,8 @@ def main():
     header = f"{'Operation':<25s}"
     for c in cols:
         header += f" | {c:>28s}"
-    print(header)  # noqa: T201
-    print("-" * len(header))  # noqa: T201
+    print(header)
+    print("-" * len(header))
 
     # Run benchmarks
     for bname, bench_fn in BENCHMARKS:
@@ -283,10 +281,10 @@ def main():
             ratio_stores = means[n0] / means[n1] if means[n1] > 0 else float("inf")
             row += f" | {ratio_stores:>7.2f}x"
 
-        print(row)  # noqa: T201
+        print(row)
 
-    print("-" * len(header))  # noqa: T201
-    print()  # noqa: T201
+    print("-" * len(header))
+    print()
 
     # Cleanup
     for td in store_tds.values():

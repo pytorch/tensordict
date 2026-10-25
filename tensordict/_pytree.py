@@ -19,7 +19,7 @@ from tensordict.persistent import PersistentTensorDict
 # implement_for (imported from pyvers above) and is_compiling stay importable
 # from here for the deprecated tensordict.implement_for and
 # tensordict.is_compiling aliases of tensordict/__init__.py, until 0.17.
-from tensordict.utils import (  # noqa: F401
+from tensordict.utils import (
     _is_tensorclass,
     _shape,
     _user_stacklevel,

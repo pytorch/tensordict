@@ -135,7 +135,7 @@ if not _has_funcdim:
         def dims(self, *args, **kwargs):
             raise ImportError("functorch.dim not found")
 
-    ftdim = _ftdim_mock  # noqa: F811
+    ftdim = _ftdim_mock
 
 T = TypeVar("T", bound="TensorDictBase")
 
@@ -2941,7 +2941,7 @@ class _BufferLegacy(torch.nn.Buffer):
         return t
 
 
-from tensordict._utils_options import (  # noqa: F401
+from tensordict._utils_options import (
     _REPR_OPTIONS,
     _strtobool,
     capture_non_tensor_stack,
@@ -2959,7 +2959,7 @@ def _convert_list_to_stack(
     a_list: list[Any],
     *,
     wrap_ragged: bool = True,
-) -> tuple[torch.Tensor | TensorDictBase | NonTensorStack | list[Any], bool]:  # noqa
+) -> tuple[torch.Tensor | TensorDictBase | NonTensorStack | list[Any], bool]:
     if not a_list:
         return torch.tensor(a_list), False
     # First, check elements and determine if there are lists within

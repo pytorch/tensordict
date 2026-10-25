@@ -1254,7 +1254,7 @@ class _ShapeOps:
         *,
         sorted: bool | List[NestedKey] | None = None,
         out: torch.Tensor | None = None,
-    ) -> torch.Tensor:  # noqa: D417
+    ) -> torch.Tensor:
         """Concatenates all the leaves of the tensordict into one tensor, with :func:`torch.cat`.
 
         Args:
@@ -1461,7 +1461,7 @@ class _ShapeOps:
         *,
         sorted: bool | List[NestedKey] | None = None,
         out: torch.Tensor | None = None,
-    ) -> torch.Tensor:  # noqa: D417
+    ) -> torch.Tensor:
         """Stacks all the leaves of the tensordict into one tensor, with :func:`torch.stack`.
 
         The leaves must have the same shape.

@@ -352,7 +352,7 @@ class MemoryMappedTensor(torch.Tensor):
         copy_existing: bool = False,
         copy_data: bool = True,
         shape: torch.Size | None = None,
-    ):  # noqa: D417
+    ):
         """Returns a MemoryMappedTensor with a copy of the content of ``input``.
 
         If ``input`` is a MemoryMappedTensor, it is returned unchanged in two
@@ -625,7 +625,6 @@ class MemoryMappedTensor(torch.Tensor):
 
     @classmethod
     def empty_like(cls, input, *, filename=None):
-        # noqa: D417
         """Returns an uninitialized MemoryMappedTensor with the shape and dtype of ``input``.
 
         Args:
@@ -652,7 +651,6 @@ class MemoryMappedTensor(torch.Tensor):
 
     @classmethod
     def full_like(cls, input, fill_value, *, filename=None):
-        # noqa: D417
         """Returns a MemoryMappedTensor filled with ``fill_value``, with the shape and dtype of ``input``.
 
         Args:
@@ -679,7 +677,6 @@ class MemoryMappedTensor(torch.Tensor):
 
     @classmethod
     def zeros_like(cls, input, *, filename=None):
-        # noqa: D417
         """Returns a MemoryMappedTensor filled with zeros, with the shape and dtype of ``input``.
 
         Args:
@@ -705,7 +702,6 @@ class MemoryMappedTensor(torch.Tensor):
 
     @classmethod
     def ones_like(cls, input, *, filename=None):
-        # noqa: D417
         """Returns a MemoryMappedTensor filled with ones, with the shape and dtype of ``input``.
 
         Args:
@@ -743,7 +739,6 @@ class MemoryMappedTensor(torch.Tensor):
 
     @classmethod
     def ones(cls, *args, **kwargs):
-        # noqa: D417
         """Returns a MemoryMappedTensor of the given shape filled with ones.
 
         Args:
@@ -813,7 +808,6 @@ class MemoryMappedTensor(torch.Tensor):
 
     @classmethod
     def zeros(cls, *args, **kwargs):
-        # noqa: D417
         """Returns a MemoryMappedTensor of the given shape filled with zeros.
 
         Args:
@@ -884,7 +878,6 @@ class MemoryMappedTensor(torch.Tensor):
 
     @classmethod
     def empty(cls, *args, **kwargs):
-        # noqa: D417
         """Returns an uninitialized MemoryMappedTensor of the given shape.
 
         Args:
@@ -1011,7 +1004,6 @@ class MemoryMappedTensor(torch.Tensor):
 
     @classmethod
     def full(cls, *args, **kwargs):
-        # noqa: D417
         """Returns a MemoryMappedTensor of the given shape filled with ``fill_value``.
 
         Args:
@@ -1058,7 +1050,6 @@ class MemoryMappedTensor(torch.Tensor):
 
     @classmethod
     def from_filename(cls, filename, dtype, shape, index=None, mode: str | None = None):
-        # noqa: D417
         """Returns a MemoryMappedTensor that maps an existing file.
 
         The file holds raw data with no header, so the dtype and the shape
@@ -1148,7 +1139,6 @@ class MemoryMappedTensor(torch.Tensor):
     @classmethod
     @deprecated("MemoryMappedTensor.from_handler()", removal="0.17")
     def from_handler(cls, handler, dtype, shape, index=None):
-        # noqa: D417
         """Rebuilds a MemoryMappedTensor from a shared-memory handler.
 
         .. deprecated:: 0.15

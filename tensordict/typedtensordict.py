@@ -36,7 +36,7 @@ try:
     # Python 3.11+ (PEP 655)
     from typing import NotRequired
 except ImportError:
-    from typing_extensions import NotRequired  # noqa: F401
+    from typing_extensions import NotRequired
 
 __all__ = ["TypedTensorDict"]
 
@@ -125,7 +125,7 @@ def _resolve_own_hints(cls: type) -> dict[str, Any]:
     for name, ann in own_raw.items():
         if isinstance(ann, str):
             try:
-                resolved[name] = eval(ann, globalns, localns)  # noqa: S307
+                resolved[name] = eval(ann, globalns, localns)
             except Exception:
                 resolved[name] = ann
         else:
@@ -1378,17 +1378,17 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
     # ------------------------------------------------------------------
     # Vmap cached methods
     # ------------------------------------------------------------------
-    @_cache_while_locked  # noqa: B019
+    @_cache_while_locked
     def _add_batch_dim(self, *, in_dim: int, vmap_level: int):
         result = self._source._add_batch_dim(in_dim=in_dim, vmap_level=vmap_level)
         return type(self)._wrap_td(result)
 
-    @_cache_while_locked  # noqa: B019
+    @_cache_while_locked
     def _remove_batch_dim(self, vmap_level: int, batch_size: int, out_dim: int):
         result = self._source._remove_batch_dim(vmap_level, batch_size, out_dim)
         return type(self)._wrap_td(result)
 
-    @_cache_while_locked  # noqa: B019
+    @_cache_while_locked
     def _maybe_remove_batch_dim(
         self, funcname: str, vmap_level: int, batch_size: int, out_dim: int
     ):

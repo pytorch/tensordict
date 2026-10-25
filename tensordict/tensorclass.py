@@ -3112,7 +3112,7 @@ def _from_tensordict(
     safe: bool = True,
     *,
     rebuild: bool = True,
-) -> Self:  # noqa: D417
+) -> Self:
     """Tensor class wrapper to instantiate a new tensor class object.
 
     Args:
@@ -3601,7 +3601,7 @@ def _getstate(self) -> dict[str, Any]:
     return {"tensordict": self._tensordict, "non_tensordict": non_tensordict}
 
 
-def _setstate(self, state: dict[str, Any]) -> None:  # noqa: D417
+def _setstate(self, state: dict[str, Any]) -> None:
     """Used to set the state of an object using state parameter.
 
     Args:
@@ -3923,7 +3923,7 @@ SET_ATTRIBUTES = (
 )
 
 
-def _setattr(self, key: str, value: Any) -> None:  # noqa: D417
+def _setattr(self, key: str, value: Any) -> None:
     __dict__ = self.__dict__
     if (
         "_tensordict" not in __dict__
@@ -3977,7 +3977,7 @@ def _set_none_field(self, key: str) -> None:
             del non_tensordict[key]
 
 
-def _setattr_tensor_only(self, key: str, value: Any) -> None:  # noqa: D417
+def _setattr_tensor_only(self, key: str, value: Any) -> None:
     # ``is_compiling()`` stays true in every thread while any thread compiles,
     # so code that runs eagerly (such as unpickling in a DataLoader's
     # pin-memory thread) must not take the branch meant for Dynamo tracing.
@@ -4840,7 +4840,7 @@ def _getitem(self, item: NestedKey) -> Tensor | TensorCollection | Any:
     return _from_tensordict_with_copy(self, tensor_res)  # device=res.device)
 
 
-def _setitem(self, item: NestedKey, value: Any) -> None:  # noqa: D417
+def _setitem(self, item: NestedKey, value: Any) -> None:
     """Set the value of the Tensor class object at the given index. Note that there is no strict validation on non-tensor values.
 
     Args:

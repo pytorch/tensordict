@@ -218,7 +218,7 @@ class _Distributed:
         init_tag: int = 0,
         pseudo_rand: bool = False,
         consolidated: bool = False,
-    ) -> None:  # noqa: D417
+    ) -> None:
         """Sends the leaves of the tensordict to another rank, with :mod:`torch.distributed`.
 
         The receiver calls :meth:`~.recv` on a tensordict with the same keys,
@@ -352,7 +352,7 @@ class _Distributed:
         init_tag: int = 0,
         pseudo_rand: bool = False,
         consolidated: bool = False,
-    ) -> int:  # noqa: D417
+    ) -> int:
         """Receives the leaves that :meth:`~.send` sends, and writes them into the tensordict in place.
 
         The tensordict must have the keys, shapes and dtypes of the tensordict
@@ -665,13 +665,13 @@ class _Distributed:
         self,
         dst: int | None = None,
         *,
-        group: "torch.distributed.ProcessGroup" | None = None,  # noqa: F821
+        group: "torch.distributed.ProcessGroup" | None = None,
         group_dst: int | None = None,
         init_tag: int = 0,
         pseudo_rand: bool = False,
         return_early: bool = False,
         consolidated: bool = False,
-    ) -> int | List["Work"] | None:  # noqa: D417, F821
+    ) -> int | List["Work"] | None:  # noqa: F821
         """Sends the leaves of the tensordict to another rank, one asynchronous transfer per leaf.
 
         As :meth:`~.send`, but the transfers of all the leaves run at the same

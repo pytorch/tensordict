@@ -493,7 +493,7 @@ class CompositeDistribution(d.Distribution, Mapping):
             slp = slp + lp
         return sample, slp
 
-    def log_prob(self, sample: TensorDictBase) -> torch.Tensor | TensorDictBase:  # noqa: D417
+    def log_prob(self, sample: TensorDictBase) -> torch.Tensor | TensorDictBase:
         """Computes the log-probability of a sample.
 
         Args:
@@ -622,7 +622,7 @@ class CompositeDistribution(d.Distribution, Mapping):
         *,
         aggregate_probabilities: bool | None = None,
         include_sum: bool | None = None,
-    ) -> torch.Tensor | TensorDictBase:  # noqa: D417
+    ) -> torch.Tensor | TensorDictBase:
         """Computes the entropy of each component, or their sum.
 
         A component whose ``entropy()`` raises ``NotImplementedError`` gets a

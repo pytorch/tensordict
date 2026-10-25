@@ -3443,13 +3443,13 @@ def _batch_mismatch_error(
 #   tensordict.base.<name>: a mixin that imports one keeps its first value.
 # - Abstract methods, properties, implement_for overloads and methods that
 #   read a rebound global stay in the class below.
-from tensordict._base.convert import _Conversion  # noqa: E402
-from tensordict._base.device import _DeviceOps  # noqa: E402
-from tensordict._base.distributed import _Distributed  # noqa: E402
-from tensordict._base.pointwise import _PointwiseOps  # noqa: E402
-from tensordict._base.reductions import _Reductions  # noqa: E402
-from tensordict._base.serialization import _Serialization  # noqa: E402
-from tensordict._base.shape import _ShapeOps  # noqa: E402
+from tensordict._base.convert import _Conversion
+from tensordict._base.device import _DeviceOps
+from tensordict._base.distributed import _Distributed
+from tensordict._base.pointwise import _PointwiseOps
+from tensordict._base.reductions import _Reductions
+from tensordict._base.serialization import _Serialization
+from tensordict._base.shape import _ShapeOps
 
 _TENSORDICTBASE_MIXINS = (
     _PointwiseOps,
@@ -4469,7 +4469,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 grad.zero_()
         return self
 
-    @_cache_while_locked  # noqa
+    @_cache_while_locked
     def _dtype(self):
         dtype = None
         for val in self.values(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS):
@@ -4616,7 +4616,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """
         return self._depth()
 
-    @_cache_while_locked  # noqa: B019
+    @_cache_while_locked
     def _depth(self):
         depth = 0
         for key in self.keys(True, True, is_leaf=_is_leaf_nontensor):
@@ -4633,7 +4633,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         layout: torch.layout = torch.strided,
         pin_memory: bool | None = None,
         empty_lazy: bool = False,
-    ):  # noqa: D417
+    ):
         """Returns a tensordict of batch size ``size`` with every leaf filled with 0.
 
         Each leaf keeps its feature dimensions: a leaf of shape
@@ -4695,7 +4695,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         layout: torch.layout = torch.strided,
         pin_memory: bool | None = None,
         empty_lazy: bool = False,
-    ):  # noqa: D417
+    ):
         """Returns a tensordict of batch size ``size`` with every leaf filled with 1.
 
         Each leaf keeps its feature dimensions: a leaf of shape
@@ -4757,7 +4757,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         layout: torch.layout = torch.strided,
         pin_memory: bool | None = None,
         empty_lazy: bool = False,
-    ):  # noqa: D417
+    ):
         """Returns a tensordict of batch size ``size`` with uninitialized leaves.
 
         The values of the leaves are not set, as with :func:`torch.empty`.
@@ -4823,7 +4823,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         layout: torch.layout = torch.strided,
         pin_memory: bool | None = None,
         empty_lazy: bool = False,
-    ):  # noqa: D417
+    ):
         """Returns a tensordict of batch size ``size`` with every leaf filled with ``fill_value``.
 
         Each leaf keeps its feature dimensions: a leaf of shape
@@ -4936,7 +4936,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         device: DeviceType = NO_DEFAULT,
         requires_grad: bool = False,
         pin_memory: bool | None = None,
-    ) -> Self:  # noqa: D417
+    ) -> Self:
         """Returns a tensordict whose leaves are copies of ``data``, each with the dtype of its leaf.
 
         Each leaf of the tensordict gives a leaf of the result, built as
@@ -8049,7 +8049,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         is_leaf=None,
         *,
         sort: bool = False,
-    ) -> Iterator[tuple[str, CompatibleType]]:  # noqa: D417
+    ) -> Iterator[tuple[str, CompatibleType]]:
         """Returns a generator of the ``(key, value)`` pairs of the tensordict.
 
         By default, only the top-level entries are returned, and a nested
@@ -8225,7 +8225,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         is_leaf=None,
         *,
         sort: bool = False,
-    ) -> Iterator[CompatibleType]:  # noqa: D417
+    ) -> Iterator[CompatibleType]:
         """Returns a generator of the values of the tensordict.
 
         By default, only the top-level values are returned, and a nested
@@ -8412,7 +8412,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """Whether the storage of a tensordict that reads copies cannot be written."""
         return False
 
-    @_cache_while_locked  # noqa: B019
+    @_cache_while_locked
     def _values_list(
         self,
         include_nested: bool = False,
@@ -8445,7 +8445,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             # name the keys missing on each side, not only the first one
             _mismatch_keys(sorting_keys, keys)
 
-    @_cache_while_locked  # noqa: B019
+    @_cache_while_locked
     def _items_list(
         self,
         include_nested: bool = False,
@@ -8710,7 +8710,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """
         return list(self._sorted_keys())
 
-    @_cache_while_locked  # noqa: B019
+    @_cache_while_locked
     def _sorted_keys(self) -> tuple[NestedKey, ...]:
         # The lock cache stores a tuple so that sorted_keys can return a new
         # list: a caller that changes that list cannot change the cache.
@@ -10527,7 +10527,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             result = result._transform_keys(key_transform)
         return result
 
-    def _clone_recurse(self) -> Self:  # noqa: D417
+    def _clone_recurse(self) -> Self:
         keys, vals = self._items_list(True, True)
         foreach_vals = {}
         iter_vals = {}
@@ -10579,17 +10579,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     # Functorch compatibility
     @abc.abstractmethod
-    @_cache_while_locked  # noqa: B019
+    @_cache_while_locked
     def _add_batch_dim(self, *, in_dim: int, vmap_level: int) -> Self:
         raise NotImplementedError
 
     @abc.abstractmethod
-    @_cache_while_locked  # noqa: B019
+    @_cache_while_locked
     def _remove_batch_dim(self, vmap_level: int, batch_size: int, out_dim: int) -> Self:
         raise NotImplementedError
 
     @abc.abstractmethod
-    @_cache_while_locked  # noqa: B019
+    @_cache_while_locked
     def _maybe_remove_batch_dim(
         self, funcname: str, vmap_level: int, batch_size: int, out_dim: int
     ) -> Self:
@@ -11219,7 +11219,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     def empty(
         self, recurse=False, *, batch_size=None, device=NO_DEFAULT, names=None
-    ) -> Self:  # noqa: D417
+    ) -> Self:
         """Returns a new tensordict of the same type, with no tensor leaves.
 
         The result has the batch size, device and dimension names of the
@@ -11542,7 +11542,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     @_as_context_manager()
     @_copy_cached_result
-    @_cache_while_locked  # noqa: B019
+    @_cache_while_locked
     def flatten_keys(
         self,
         separator: str = KEY_SEPARATOR,
@@ -11706,7 +11706,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
     @_as_context_manager()
     @_copy_cached_result
-    @_cache_while_locked  # noqa: B019
+    @_cache_while_locked
     def unflatten_keys(
         self, separator: str = KEY_SEPARATOR, inplace: bool = False
     ) -> Self:
@@ -12743,7 +12743,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             else:
                 value.detach_()
 
-    @_cache_while_locked  # noqa: B019
+    @_cache_while_locked
     def detach(self) -> Self:
         """Returns a new tensordict with every tensor leaf detached from the autograd graph.
 
@@ -12790,7 +12790,7 @@ _UPDATE_INPLACE_CODE = TensorDictBase._update_.__code__
 _UPDATE_PLAN_CODE = TensorDictBase._update_plan.__code__
 
 
-from tensordict._base.factories import (  # noqa: F401
+from tensordict._base.factories import (
     from_any,
     from_csv,
     from_dict,

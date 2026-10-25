@@ -2364,7 +2364,7 @@ _register_tensor_class(TensorDictStore)
 # from this module, so it is imported at the end. TensorDictStore uses
 # LazyStackedTensorDictStore to store a lazy stack, and imports and
 # pickles that name this module must keep working.
-from tensordict.store._lazy import (  # noqa: E402, F401
+from tensordict.store._lazy import (  # noqa: F401
     _LazyStackedStoreKeysView,
     _StoreStackElementView,
     _UPLOAD_CHUNK,
