@@ -98,7 +98,8 @@ def _int_batch_dims(batch_dims):
 
 def _dict_holds_sequence(value: dict) -> bool:
     # from_pytree turns a list or tuple inside a dict into a nested TensorDict,
-    # where from_any (used for namedtuple fields on main) keeps a tensor
+    # where from_any (which earlier releases used for namedtuple fields) keeps
+    # a tensor
     return any(
         _dict_holds_sequence(val)
         if isinstance(val, dict)
@@ -109,7 +110,8 @@ def _dict_holds_sequence(value: dict) -> bool:
 
 def _holds_empty(value) -> bool:
     # from_pytree gives an empty dict or namedtuple a _pytree_type entry, so
-    # auto_batch_size finds no batch dims; from_any leaves it empty, as on main
+    # auto_batch_size finds no batch dims; from_any leaves it empty, as earlier
+    # releases did
     if _is_namedtuple(value):
         value = value._asdict()
     elif not isinstance(value, dict):
@@ -728,7 +730,7 @@ class _Conversion:
             # a list or tuple, the tuples that hold a list, tuple or str, the
             # fields that hold an empty dict, namedtuple or tuple, and the
             # fields that from_pytree does not take (such as a dict holding a
-            # str) go through from_any, as on main.
+            # str) go through from_any, as in earlier releases.
             nested = {}
             for key, value in pytree._asdict().items():
                 if _pytree_field(value) or (
@@ -815,7 +817,8 @@ class _Conversion:
                     val = val.to_dict()
                 elif is_tensor_collection(val):
                     # from_any built it (e.g. for a dict holding a str), not
-                    # from_pytree: convert it as to_namedtuple did on main
+                    # from_pytree: convert it as to_namedtuple did in earlier
+                    # releases
                     val = _dict_to_namedtuple(
                         val.to_dict(retain_none=False), _pytree_type
                     )
@@ -1631,7 +1634,6 @@ class _Conversion:
 
         # we use __dict__ directly to avoid the getattr/setattr overhead whenever we can
         if not is_dynamo and type(module).__setattr__ is __base__setattr__:
-            # if type(module).__setattr__ is __base__setattr__:
             __dict__ = module.__dict__
             _parameters = __dict__["_parameters"]
             _buffers = __dict__["_buffers"]
@@ -2232,12 +2234,6 @@ class _Conversion:
 
         """
         if type(obj) is Tensor or is_tensor_collection(obj):
-            # Conversions from non-tensor data must be done manually
-            # if is_non_tensor(obj):
-            #     from tensordict.tensorclass import LazyStackedTensorDict
-            #     if isinstance(obj, LazyStackedTensorDict):
-            #         return obj
-            #     return cls.from_any(obj.data, auto_batch_size=auto_batch_size)
             return obj
         if isinstance(obj, (dict, UserDict)):
             result = cls.from_dict(

@@ -302,9 +302,7 @@ class MemoryMappedTensor(torch.Tensor):
             result = cls.from_tensor(
                 torch.as_tensor(source),
                 filename=filename,
-                # dtype=dtype,
                 shape=shape,
-                # index=index,
             )
             if index is not None:
                 return result[index]
@@ -1482,9 +1480,6 @@ if sys.platform == "win32":
             self.size, self.name = self._state = state
             # Reopen existing mmap
             self.buffer = mmap.mmap(-1, self.size, tagname=self.name)
-            # XXX Temporarily preventing buildbot failures while determining
-            # XXX the correct long-term fix. See issue 23060
-            # assert _winapi.GetLastError() == _winapi.ERROR_ALREADY_EXISTS
 
 else:
 

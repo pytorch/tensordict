@@ -1166,12 +1166,6 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             else:
                 log_prob = dist.log_prob(*out_tensors)
                 tensordict_out.set(self.log_prob_key, log_prob)
-            # raise RuntimeError(
-            #     "ProbabilisticTensorDictModule.return_log_prob = True is incompatible with settings in which "
-            #     "the submodule is responsible for sampling. To manually gather the log-probability, call first "
-            #     "\n>>> dist, tensordict = tensordict_module.get_dist(tensordict)"
-            #     "\n>>> tensordict.set('sample_log_prob', dist.log_prob(tensordict.get(sample_key))"
-            # )
         return tensordict_out
 
     def _resolve_generator(
@@ -1995,8 +1989,6 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                 td_copy = tdm(td_copy)
         if len(dists) == 0:
             raise RuntimeError(f"No distribution module found in {self}.")
-        # elif len(dists) == 1:
-        #     return dist
         return CompositeDistribution.from_distributions(
             td_copy,
             dists,

@@ -436,7 +436,9 @@ touches these places:
    undone at the end of a `with` block.
 6. Stubs: the signature in `tensorclass.pyi` and `_tensorcollection.pyi`.
    `test_tensorclass_stub_methods` fails if a public `TensorDict` method is
-   missing from `tensorclass.pyi`. No test checks `_tensorcollection.pyi`.
+   missing from `tensorclass.pyi`, and `test_tensorcollection_stub_methods`
+   fails if `_tensorcollection.pyi` and `TensorDictBase` disagree on a
+   public attribute.
 7. Docs: a new public class or function goes in
    `docs/source/reference/{td,tc,nn,ttd}.rst`. Methods appear on their
    class's page, and a notable one can get a section, as `backward` did.

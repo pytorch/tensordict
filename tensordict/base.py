@@ -13,8 +13,6 @@ import gc
 import importlib
 import importlib.util
 import inspect
-
-# JSON backend is now handled by _utils_key_json.json_dumps
 import json
 import operator
 import os.path
@@ -3970,11 +3968,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 return self._index_tensordict(index)
             # we only want tuple indices
             index = (index,)
-        # # convert range/np.ndarray to tensor: this is not cheap
-        # index = tuple(
-        #     torch.tensor(idx) if isinstance(idx, (np.ndarray, range)) else idx
-        #     for idx in index
-        # )
         if istuple and any(type(idx) is EllipsisType for idx in index):
             index = convert_ellipsis_to_idx(index, self.batch_size)
         # The bounds are tested one by one: the Dynamo of torch 2.11 and 2.12
@@ -5335,8 +5328,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                         f"refine_names: cannot coerce TensorDict names {self.names} with {names_copy}."
                     )
         self._set_names(names)
-        # we also need to rename the sub-tensordicts
-        # self._rename_subtds(self.names)
         return self
 
     def rename(self, *names, **rename_map):
@@ -6549,7 +6540,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             None
 
         """
-        # TODO: check that this works with masks, and add to docstring
         key_tuple = _unravel_key_to_tuple(key)
         if not key_tuple:
             raise KeyError(_GENERIC_NESTED_ERR.format(key))
@@ -7069,7 +7059,6 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         if batch_size_changed:
             bd = self.batch_dims
             self.batch_size = ()
-            # self.batch_size = ()
             self.auto_batch_size_(bd, keep_compliant_size=True)
         return self
 
