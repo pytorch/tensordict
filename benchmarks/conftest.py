@@ -92,3 +92,8 @@ def pytest_addoption(parser):
     parser.addoption(
         "--runslow", action="store_true", default=False, help="run slow tests"
     )
+    # Options of distributed/test_dataloading.py
+    parser.addoption("--world_size", type=int, default=2)
+    parser.addoption("--single_gpu", action="store_true", default=False)
+    parser.addoption("--trainer_transform", action="store_true", default=False)
+    parser.addoption("--fraction", type=int, default=1)

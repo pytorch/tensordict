@@ -27,9 +27,6 @@ else
     echo "Using CUDA $CUDA_VERSION as determined by CU_VERSION ($CU_VERSION)"
 fi
 
-# submodules
-git submodule sync && git submodule update --init --recursive
-
 # setup_env.sh installed PyTorch before the test dependencies, so that
 # none of them pulls torch from PyPI.
 python -c "import torch; print('Installed torch', torch.__version__)"

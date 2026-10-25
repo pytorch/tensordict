@@ -11,7 +11,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from setuptools import find_packages, setup
+from setuptools import setup
 
 ROOT_DIR = Path(__file__).parent.resolve()
 _RELEASE_BRANCH_RE = re.compile(r"^release/v(?P<release_id>.+)$")
@@ -81,20 +81,9 @@ with set_version():
     pretend_version = os.environ.get("SETUPTOOLS_SCM_PRETEND_VERSION")
     _has_setuptools_scm = importlib.util.find_spec("setuptools_scm") is not None
 
-    # If users pass --no-build-isolation, pip will not install build requirements.
-    # In that case, setuptools_scm may be absent and setuptools can fall back to
-    # a bogus 0.0.0 version. Use version.txt explicitly when scm isn't available.
-    if not _has_setuptools_scm and not pretend_version:
-        raise RuntimeError(
-            "tensordict requires setuptools_scm to build from a git checkout, "
-            "unless SETUPTOOLS_SCM_PRETEND_VERSION is set. "
-            "Install setuptools_scm or avoid --no-build-isolation."
-        )
-
     setup(
-        packages=find_packages(exclude=("test", "tutorials", "packaging", "docs")),
         **(
-            {"setup_requires": ["setuptools_scm"], "use_scm_version": True}
+            {"use_scm_version": True}
             if _has_setuptools_scm
             # pretend_version already includes +g<sha> (computed in set_version)
             else {"version": pretend_version}
