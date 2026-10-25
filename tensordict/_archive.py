@@ -725,15 +725,6 @@ class _ArchiveReader:
                     f"memory when loading from an archive, so in-place "
                     f"writes cannot propagate to the file."
                 )
-            func_offset_stride = getattr(
-                torch, "_nested_compute_contiguous_strides_offsets", None
-            )
-            if func_offset_stride is None:
-                raise RuntimeError(
-                    "The PyTorch version isn't compatible with memmap "
-                    "nested tensors. Please upgrade to a more recent "
-                    "version."
-                )
             numel = shape.prod(-1).sum().int()
             # _nested_view_from_buffer addresses the *storage* of the buffer
             # from its base, ignoring the view offset, so the buffer must own
@@ -741,7 +732,7 @@ class _ArchiveReader:
             return torch._nested_view_from_buffer(
                 flat[:numel].clone(),
                 shape,
-                *func_offset_stride(shape),
+                *torch._nested_compute_contiguous_strides_offsets(shape),
             )
         return flat.view(torch.Size(shape))
 
