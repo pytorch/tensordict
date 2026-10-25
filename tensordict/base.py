@@ -6796,6 +6796,20 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 # with keys_to_update, a merge of self into a sub-tensordict
                 # can leave out the entry that holds the sub-tensordict
                 raise ValueError(_SELF_NESTING_ERROR.format(input_key))
+            if target is None and keys_to_update and not subkey:
+                sub_keys_to_update = _prune_selected_keys(keys_to_update, firstkey)
+                if sub_keys_to_update:
+                    if isinstance(value, dict):
+                        value = self.from_dict_instance(
+                            value, batch_size=self.batch_size
+                        )
+                    value = _select_entry(
+                        (firstkey,),
+                        value,
+                        [(firstkey, *subkey) for subkey in sub_keys_to_update],
+                    )
+                    if value is None:
+                        continue
             # the key must be a string by now. Let's check if it is present
             if target is not None:
                 if not is_leaf(type(target)) and not is_leaf(type(value)):

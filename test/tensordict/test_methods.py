@@ -6093,6 +6093,24 @@ def test_update_select_flat_dict_source():
                 assert (dest[key] == expected[key]).all(), (keys_to_update, key)
 
 
+@pytest.mark.parametrize("source_type", ["tensordict", "dict", "lazy_stack"])
+def test_update_selects_nested_keys_when_destination_lacks_parent(source_type):
+    source = TensorDict(
+        {"nested": {"b": torch.ones(2), "c": torch.ones(2)}}, batch_size=[2]
+    )
+    if source_type == "dict":
+        source = source.to_dict()
+    elif source_type == "lazy_stack":
+        source = lazy_stack([source, source.clone()], dim=0)
+
+    batch_size = [2, 2] if source_type == "lazy_stack" else [2]
+    dest = TensorDict({"a": torch.zeros(batch_size)}, batch_size=batch_size)
+    dest.update(source, keys_to_update=[("nested", "b")])
+
+    assert set(dest.keys(True, True)) == {"a", ("nested", "b")}
+    assert (dest["nested", "b"] == 1).all()
+
+
 def test_update__keys_to_update_invalid_key_lazy_stack_warns():
     # #3354: a lazy stack writes its members with the same keys, and warns
     # once, with a dict or a tensordict source, keeping main's result.
