@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6614+gb2958e41e.d20261025)">
+<meta name="llm:version" content="main (0.15.0.dev6616+g4b6ae825f.d20261025)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6614+gb2958e41e.d20261025)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6616+g4b6ae825f.d20261025)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1787,10 +1787,11 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">None</s
 <dd class="field-even"><p><strong>inplace</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the tensordict keeps its
 identity and keys, its leaves are replaced one by one, and the
 call returns <code class="docutils literal notranslate"><span class="pre">self</span></code>. A leaf keeps its storage when the
-flatten can return a view of it. A lazy stack, or a tensordict
-that holds one, raises a <code class="docutils literal notranslate"><span class="pre">NotImplementedError</span></code>: call
-<a class="reference internal" href="tensordict.TensorDictBase.to_tensordict.html#tensordict.TensorDictBase.to_tensordict" title="tensordict.TensorDictBase.to_tensordict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_tensordict()</span></code></a> first. See <a class="reference internal" href="../../concepts/operations.html#inplace-conventions"><span class="std std-ref">In-place operations</span></a>.
-Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
+flatten can return a view of it. A lazy stack or a lazy view
+(such as a slice of a <a class="reference internal" href="tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict" title="tensordict.PersistentTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">PersistentTensorDict</span></code></a>),
+or a tensordict that holds one, raises a
+<code class="docutils literal notranslate"><span class="pre">NotImplementedError</span></code>: call <a class="reference internal" href="tensordict.TensorDictBase.to_tensordict.html#tensordict.TensorDictBase.to_tensordict" title="tensordict.TensorDictBase.to_tensordict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_tensordict()</span></code></a> first. See
+<a class="reference internal" href="../../concepts/operations.html#inplace-conventions"><span class="std std-ref">In-place operations</span></a>. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p>
 </dd>
 </dl>
 <p class="rubric">Examples</p>
@@ -2168,7 +2169,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.flatten",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.flatten",
        "url": "/reference/generated/tensordict.TensorDictBase.flatten.html",
-       "articleBody": "TensorDictBase.flatten# TensorDictBase.flatten(start_dim: int | None = None, end_dim: int | None = None, *, inplace: bool = False)# Returns a tensordict whose batch dimensions start_dim to end_dim are flattened into one. The leaves keep their feature dimensions. As for torch.flatten(), a leaf of the result is a view of the original leaf when the memory layout allows it, and a copy otherwise. The flattened dimension has no name. A tensordict without batch dimensions gets one batch dimension of size 1. A start_dim or end_dim outside the batch dimensions warns, and is used on the dimensions of the leaves. Starting with TensorDict 0.17, the default will change to raising an IndexError, as for a tensor. It can be used as a context manager, as unsqueeze() can: when the with block exits, the entries of the block are written back to the tensordict with the inverse operation. Parameters: start_dim (int, optional) \u2013 the first batch dimension to flatten. Defaults to None, which is 0. end_dim (int, optional) \u2013 the last batch dimension to flatten. Defaults to None, which is -1. Keyword Arguments: inplace (bool, optional) \u2013 if True, the tensordict keeps its identity and keys, its leaves are replaced one by one, and the call returns self. A leaf keeps its storage when the flatten can return a view of it. A lazy stack, or a tensordict that holds one, raises a NotImplementedError: call to_tensordict() first. See In-place operations. Defaults to False. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({ ... \"a\": torch.arange(60).view(3, 4, 5), ... \"b\": torch.arange(12).view(3, 4)}, batch_size=[3, 4]) \u003e\u003e\u003e td_flat = td.flatten(0, 1) \u003e\u003e\u003e td_flat.batch_size torch.Size([12]) \u003e\u003e\u003e td_flat[\"a\"].shape torch.Size([12, 5]) \u003e\u003e\u003e td_flat[\"b\"] tensor([ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.flatten# TensorDictBase.flatten(start_dim: int | None = None, end_dim: int | None = None, *, inplace: bool = False)# Returns a tensordict whose batch dimensions start_dim to end_dim are flattened into one. The leaves keep their feature dimensions. As for torch.flatten(), a leaf of the result is a view of the original leaf when the memory layout allows it, and a copy otherwise. The flattened dimension has no name. A tensordict without batch dimensions gets one batch dimension of size 1. A start_dim or end_dim outside the batch dimensions warns, and is used on the dimensions of the leaves. Starting with TensorDict 0.17, the default will change to raising an IndexError, as for a tensor. It can be used as a context manager, as unsqueeze() can: when the with block exits, the entries of the block are written back to the tensordict with the inverse operation. Parameters: start_dim (int, optional) \u2013 the first batch dimension to flatten. Defaults to None, which is 0. end_dim (int, optional) \u2013 the last batch dimension to flatten. Defaults to None, which is -1. Keyword Arguments: inplace (bool, optional) \u2013 if True, the tensordict keeps its identity and keys, its leaves are replaced one by one, and the call returns self. A leaf keeps its storage when the flatten can return a view of it. A lazy stack or a lazy view (such as a slice of a PersistentTensorDict), or a tensordict that holds one, raises a NotImplementedError: call to_tensordict() first. See In-place operations. Defaults to False. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict({ ... \"a\": torch.arange(60).view(3, 4, 5), ... \"b\": torch.arange(12).view(3, 4)}, batch_size=[3, 4]) \u003e\u003e\u003e td_flat = td.flatten(0, 1) \u003e\u003e\u003e td_flat.batch_size torch.Size([12]) \u003e\u003e\u003e td_flat[\"a\"].shape torch.Size([12, 5]) \u003e\u003e\u003e td_flat[\"b\"] tensor([ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

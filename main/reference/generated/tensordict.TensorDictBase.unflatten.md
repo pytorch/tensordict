@@ -25,9 +25,10 @@ Keyword Arguments:
 **inplace** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the tensordict keeps its
 identity and keys, its leaves are replaced one by one, and the
 call returns `self`. A leaf keeps its storage when the
-unflatten can return a view of it. A lazy stack, or a
-tensordict that holds one, raises a `NotImplementedError`:
-call [`to_tensordict()`](tensordict.TensorDictBase.to_tensordict.html#tensordict.TensorDictBase.to_tensordict) first. See
+unflatten can return a view of it. A lazy stack or a lazy view
+(such as a slice of a [`PersistentTensorDict`](tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict)),
+or a tensordict that holds one, raises a
+`NotImplementedError`: call [`to_tensordict()`](tensordict.TensorDictBase.to_tensordict.html#tensordict.TensorDictBase.to_tensordict) first. See
 [In-place operations](../../concepts/operations.html#inplace-conventions). Defaults to `False`.
 
 Examples
