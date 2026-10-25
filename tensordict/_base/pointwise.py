@@ -65,6 +65,26 @@ def _values_by_key(other: TensorCollection, keys: list) -> list:
     return other._values_list(True, True, sorting_keys=keys)
 
 
+def _pair_with_default(
+    keys: list, vals: list, other: TensorCollection, default: Any
+) -> tuple[list, list, list]:
+    """Pairs the leaves ``vals`` of a tensordict, under ``keys``, with those of ``other`` for a binary op with ``default``.
+
+    Returns the keys of the result, the leaves of the tensordict under them
+    and the leaves of ``other`` under them. When ``default`` is not ``None``,
+    the keys are those that ``other._items_list`` returns for it, and
+    ``default`` stands in for the leaves that the tensordict lacks.
+    """
+    new_keys, other_val = other._items_list(
+        True, True, sorting_keys=keys, default=default
+    )
+    if default is not None:
+        as_dict = dict(zip(keys, vals))
+        vals = [as_dict.get(key, default) for key in new_keys]
+        keys = new_keys
+    return keys, vals, other_val
+
+
 def _apply_keyword_tensor(
     td: TensorCollection, name: str, leaf_fn: Callable, other: Tensor
 ) -> TensorCollection:
@@ -137,6 +157,52 @@ def _clamp_into_out(clamp: Callable) -> Callable:
 
 class _PointwiseOps:
     """Elementwise arithmetic, comparison and logical operations."""
+
+    def _rebuild_from_items(self, keys: list, vals: list) -> Self:
+        """Returns a copy of ``self`` whose leaves under ``keys`` are ``vals``.
+
+        ``keys`` and ``vals`` come from ``self._items_list(True, True)``, with
+        an op applied to the leaves. The copy keeps the structure, batch size,
+        dim names and lock of ``self``.
+        """
+        items = dict(zip(keys, vals))
+
+        def get(name, val):
+            return items.get(name, val)
+
+        return self._fast_apply(
+            get,
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+        )
+
+    def _rebuild_from_items_pop(self, keys: list, vals: list) -> Self:
+        """Returns a tensordict with the structure of ``self`` and the leaves ``vals`` under ``keys``.
+
+        Unlike :meth:`_rebuild_from_items`, the leaves of ``self`` that are
+        not under ``keys`` are dropped, and the ``keys`` that ``self`` lacks
+        are added: the binary ops call it after pairing the keys with
+        ``default``.
+        """
+        items = dict(zip(keys, vals))
+
+        def pop(name, val):
+            return items.pop(name, None)
+
+        result = self._fast_apply(
+            pop,
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+            propagate_lock=True,
+            filter_empty=True,
+            default=None,
+        )
+        if items:
+            result.update(items)
+        return result
 
     def __abs__(self) -> Self:
         """Returns ``abs(td)``, a new tensordict with the absolute value of every leaf.
@@ -229,18 +295,7 @@ class _PointwiseOps:
         """
         keys, vals = self._items_list(True, True)
         vals = [~v for v in vals]
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     def __and__(self, other: TensorCollection | torch.Tensor | float) -> Self:
         """Computes ``self & other`` leaf by leaf and returns a new tensordict.
@@ -278,23 +333,7 @@ class _PointwiseOps:
             vals = [(v1 & v2) for v1, v2 in zip(vals, other_val)]
         else:
             vals = [(v & other) for v in vals]
-        items = dict(zip(keys, vals))
-
-        def pop(name, val):
-            return items.pop(name, None)
-
-        result = self._fast_apply(
-            pop,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-            filter_empty=True,
-            default=None,
-        )
-        if items:
-            result.update(items)
-        return result
+        return self._rebuild_from_items_pop(keys, vals)
 
     __rand__ = __and__
 
@@ -485,18 +524,7 @@ class _PointwiseOps:
         """
         keys, vals = self._items_list(True, True)
         vals = [val.isfinite() for val in vals]
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     def isnan(self) -> Self:
         """Returns a new tensordict with :func:`torch.isnan` applied to every leaf.
@@ -505,69 +533,25 @@ class _PointwiseOps:
         """
         keys, vals = self._items_list(True, True)
         vals = [val.isnan() for val in vals]
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     def isneginf(self) -> Self:
         """Returns a new tensordict with :func:`torch.isneginf` applied to every leaf."""
         keys, vals = self._items_list(True, True)
         vals = [val.isneginf() for val in vals]
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     def isposinf(self) -> Self:
         """Returns a new tensordict with :func:`torch.isposinf` applied to every leaf."""
         keys, vals = self._items_list(True, True)
         vals = [val.isposinf() for val in vals]
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     def isreal(self) -> Self:
         """Returns a new tensordict with :func:`torch.isreal` applied to every leaf."""
         keys, vals = self._items_list(True, True)
         vals = [val.isreal() for val in vals]
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     # point-wise arithmetic ops
     def __add__(self, other: TensorCollection | torch.Tensor | float) -> Self:
@@ -651,18 +635,7 @@ class _PointwiseOps:
         if not vals:
             return self.copy()
         vals = _foreach("abs", vals)
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     @_write_back_inplace
     def abs_(self) -> Self:
@@ -678,18 +651,7 @@ class _PointwiseOps:
         if not vals:
             return self.copy()
         vals = _foreach("acos", vals)
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     @_write_back_inplace
     def acos_(self) -> Self:
@@ -705,18 +667,7 @@ class _PointwiseOps:
         if not vals:
             return self.copy()
         vals = _foreach("exp", vals)
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     @_write_back_inplace
     def exp_(self) -> Self:
@@ -735,18 +686,7 @@ class _PointwiseOps:
         if any(_is_unbatched(v) for v in vals):
             return self.apply(lambda x: -x)
         vals = _foreach("neg", vals)
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     @_write_back_inplace
     def neg_(self) -> Self:
@@ -767,18 +707,7 @@ class _PointwiseOps:
         if not vals:
             return self.copy()
         vals = _foreach("reciprocal", vals)
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     @_write_back_inplace
     def reciprocal_(self) -> Self:
@@ -794,18 +723,7 @@ class _PointwiseOps:
         if not vals:
             return self.copy()
         vals = _foreach("sigmoid", vals)
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     @_write_back_inplace
     def sigmoid_(self) -> Self:
@@ -821,18 +739,7 @@ class _PointwiseOps:
         if not vals:
             return self.copy()
         vals = _foreach("sign", vals)
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     @_write_back_inplace
     def sign_(self) -> Self:
@@ -848,18 +755,7 @@ class _PointwiseOps:
         if not vals:
             return self.copy()
         vals = _foreach("sin", vals)
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     @_write_back_inplace
     def sin_(self) -> Self:
@@ -875,18 +771,7 @@ class _PointwiseOps:
         if not vals:
             return self.copy()
         vals = _foreach("sinh", vals)
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     @_write_back_inplace
     def sinh_(self) -> Self:
@@ -902,18 +787,7 @@ class _PointwiseOps:
         if not vals:
             return self.copy()
         vals = _foreach("tan", vals)
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     @_write_back_inplace
     def tan_(self) -> Self:
@@ -929,18 +803,7 @@ class _PointwiseOps:
         if not vals:
             return self.copy()
         vals = _foreach("tanh", vals)
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     @_write_back_inplace
     def tanh_(self) -> Self:
@@ -956,18 +819,7 @@ class _PointwiseOps:
         if not vals:
             return self.copy()
         vals = _foreach("trunc", vals)
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     @_write_back_inplace
     def trunc_(self) -> Self:
@@ -983,18 +835,7 @@ class _PointwiseOps:
         if not vals:
             return self.copy()
         vals = _foreach("lgamma", vals)
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     @_write_back_inplace
     def lgamma_(self) -> Self:
@@ -1010,18 +851,7 @@ class _PointwiseOps:
         if not vals:
             return self.copy()
         vals = _foreach("frac", vals)
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     @_write_back_inplace
     def frac_(self) -> Self:
@@ -1037,18 +867,7 @@ class _PointwiseOps:
         if not vals:
             return self.copy()
         vals = _foreach("expm1", vals)
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     @_write_back_inplace
     def expm1_(self) -> Self:
@@ -1064,18 +883,7 @@ class _PointwiseOps:
         if not vals:
             return self.copy()
         vals = _foreach("log", vals)
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     @_write_back_inplace
     def log_(self) -> Self:
@@ -1142,18 +950,7 @@ class _PointwiseOps:
         if not vals:
             return self.copy()
         vals = _foreach("log10", vals)
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     @_write_back_inplace
     def log10_(self) -> Self:
@@ -1169,18 +966,7 @@ class _PointwiseOps:
         if not vals:
             return self.copy()
         vals = _foreach("log1p", vals)
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     @_write_back_inplace
     def log1p_(self) -> Self:
@@ -1196,18 +982,7 @@ class _PointwiseOps:
         if not vals:
             return self.copy()
         vals = _foreach("log2", vals)
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     @_write_back_inplace
     def log2_(self) -> Self:
@@ -1223,18 +998,7 @@ class _PointwiseOps:
         if not vals:
             return self.copy()
         vals = _foreach("ceil", vals)
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     @_write_back_inplace
     def ceil_(self) -> Self:
@@ -1250,18 +1014,7 @@ class _PointwiseOps:
         if not vals:
             return self.copy()
         vals = _foreach("floor", vals)
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     @_write_back_inplace
     def floor_(self) -> Self:
@@ -1277,18 +1030,7 @@ class _PointwiseOps:
         if not vals:
             return self.copy()
         vals = _foreach("round", vals)
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     @_write_back_inplace
     def round_(self) -> Self:
@@ -1304,18 +1046,7 @@ class _PointwiseOps:
         if not vals:
             return self.copy()
         vals = _foreach("erf", vals)
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     @_write_back_inplace
     def erf_(self) -> Self:
@@ -1331,18 +1062,7 @@ class _PointwiseOps:
         if not vals:
             return self.copy()
         vals = _foreach("erfc", vals)
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     @_write_back_inplace
     def erfc_(self) -> Self:
@@ -1358,18 +1078,7 @@ class _PointwiseOps:
         if not vals:
             return self.copy()
         vals = _foreach("asin", vals)
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     @_write_back_inplace
     def asin_(self) -> Self:
@@ -1385,18 +1094,7 @@ class _PointwiseOps:
         if not vals:
             return self.copy()
         vals = _foreach("atan", vals)
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     @_write_back_inplace
     def atan_(self) -> Self:
@@ -1412,18 +1110,7 @@ class _PointwiseOps:
         if not vals:
             return self.copy()
         vals = _foreach("cos", vals)
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     @_write_back_inplace
     def cos_(self) -> Self:
@@ -1439,18 +1126,7 @@ class _PointwiseOps:
         if not vals:
             return self.copy()
         vals = _foreach("cosh", vals)
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     @_write_back_inplace
     def cosh_(self) -> Self:
@@ -1493,33 +1169,11 @@ class _PointwiseOps:
             )
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
-            new_keys, other_val = other._items_list(
-                True, True, sorting_keys=keys, default=default
-            )
-            if default is not None:
-                as_dict = dict(zip(keys, vals))
-                vals = [as_dict.get(key, default) for key in new_keys]
-                keys = new_keys
+            keys, vals, other_val = _pair_with_default(keys, vals, other, default)
             vals = [(v1.bitwise_and(v2)) for v1, v2 in zip(vals, other_val)]
         else:
             vals = [v.bitwise_and(other) for v in vals]
-        items = dict(zip(keys, vals))
-
-        def pop(name, val):
-            return items.pop(name, None)
-
-        result = self._fast_apply(
-            pop,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-            filter_empty=True,
-            default=None,
-        )
-        if items:
-            result.update(items)
-        return result
+        return self._rebuild_from_items_pop(keys, vals)
 
     @_maybe_broadcast_other("logical_and", keywords=("other",))
     def logical_and(
@@ -1557,33 +1211,11 @@ class _PointwiseOps:
             )
         keys, vals = self._items_list(True, True)
         if _is_tensor_collection(type(other)):
-            new_keys, other_val = other._items_list(
-                True, True, sorting_keys=keys, default=default
-            )
-            if default is not None:
-                as_dict = dict(zip(keys, vals))
-                vals = [as_dict.get(key, default) for key in new_keys]
-                keys = new_keys
+            keys, vals, other_val = _pair_with_default(keys, vals, other, default)
             vals = [(v1.logical_and(v2)) for v1, v2 in zip(vals, other_val)]
         else:
             vals = [v.logical_and(other) for v in vals]
-        items = dict(zip(keys, vals))
-
-        def pop(name, val):
-            return items.pop(name, None)
-
-        result = self._fast_apply(
-            pop,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-            filter_empty=True,
-            default=None,
-        )
-        if items:
-            result.update(items)
-        return result
+        return self._rebuild_from_items_pop(keys, vals)
 
     @_maybe_broadcast_other("add")
     def add(
@@ -1646,13 +1278,7 @@ class _PointwiseOps:
                     return self.apply(lambda x: x.add(other, alpha=alpha))
                 return self.apply(lambda x: x + other)
         if _is_tensor_collection(type(other)):
-            new_keys, other_val = other._items_list(
-                True, True, sorting_keys=keys, default=default
-            )
-            if default is not None:
-                as_dict = dict(zip(keys, vals))
-                vals = [as_dict.get(key, default) for key in new_keys]
-                keys = new_keys
+            keys, vals, other_val = _pair_with_default(keys, vals, other, default)
         else:
             other_val = other
         if alpha is not None and isinstance(other_val, numbers.Number):
@@ -1662,23 +1288,7 @@ class _PointwiseOps:
             vals = _foreach("add", vals, other_val, alpha=alpha)
         else:
             vals = _foreach("add", vals, other_val)
-        items = dict(zip(keys, vals))
-
-        def pop(name, val):
-            return items.pop(name, None)
-
-        result = self._fast_apply(
-            pop,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-            filter_empty=True,
-            default=None,
-        )
-        if items:
-            result.update(items)
-        return result
+        return self._rebuild_from_items_pop(keys, vals)
 
     @_write_back_inplace
     @_maybe_broadcast_other("add_")
@@ -1787,18 +1397,7 @@ class _PointwiseOps:
         else:
             weight_val = weight
         vals = _foreach("lerp", vals, end_val, weight_val)
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     @_write_back_inplace
     def lerp_(
@@ -1894,18 +1493,7 @@ class _PointwiseOps:
         else:
             other2_val = other2
         vals = _foreach("addcdiv", vals, other1_val, other2_val, value=value)
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     @_write_back_inplace
     @_maybe_broadcast_other("addcdiv_", 2)
@@ -1990,18 +1578,7 @@ class _PointwiseOps:
         else:
             other2_val = other2
         vals = _foreach("addcmul", vals, other1_val, other2_val, value=value)
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     @_write_back_inplace
     @_maybe_broadcast_other("addcmul_", 2)
@@ -2078,13 +1655,7 @@ class _PointwiseOps:
         keys, vals = self._items_list(True, True)
         no_tensors = not vals
         if _is_tensor_collection(type(other)):
-            new_keys, other_val = other._items_list(
-                True, True, sorting_keys=keys, default=default
-            )
-            if default is not None:
-                as_dict = dict(zip(keys, vals))
-                vals = [as_dict.get(key, default) for key in new_keys]
-                keys = new_keys
+            keys, vals, other_val = _pair_with_default(keys, vals, other, default)
         else:
             other_val = other
         if no_tensors and not vals:
@@ -2097,23 +1668,7 @@ class _PointwiseOps:
             vals = _foreach("sub", vals, other_val, alpha=alpha)
         else:
             vals = _foreach("sub", vals, other_val)
-        items = dict(zip(keys, vals))
-
-        def pop(name, val):
-            return items.pop(name, None)
-
-        result = self._fast_apply(
-            pop,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-            filter_empty=True,
-            default=None,
-        )
-        if items:
-            result.update(items)
-        return result
+        return self._rebuild_from_items_pop(keys, vals)
 
     @_write_back_inplace
     @_maybe_broadcast_other("sub_")
@@ -2197,13 +1752,7 @@ class _PointwiseOps:
         keys, vals = self._items_list(True, True)
         no_tensors = not vals
         if _is_tensor_collection(type(other)):
-            new_keys, other_val = other._items_list(
-                True, True, sorting_keys=keys, default=default
-            )
-            if default is not None:
-                as_dict = dict(zip(keys, vals))
-                vals = [as_dict.get(key, default) for key in new_keys]
-                keys = new_keys
+            keys, vals, other_val = _pair_with_default(keys, vals, other, default)
         else:
             other_val = other
         if no_tensors and not vals:
@@ -2218,23 +1767,7 @@ class _PointwiseOps:
                 vals = _foreach("add", _foreach("mul", vals, -alpha), other_val)
         else:
             vals = _foreach("neg", _foreach("sub", vals, other_val))
-        items = dict(zip(keys, vals))
-
-        def pop(name, val):
-            return items.pop(name, None)
-
-        result = self._fast_apply(
-            pop,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-            filter_empty=True,
-            default=None,
-        )
-        if items:
-            result.update(items)
-        return result
+        return self._rebuild_from_items_pop(keys, vals)
 
     @_maybe_broadcast_other("__mod__", keywords=("other",))
     def mod(self, other: TensorCollection | torch.Tensor) -> Self:
@@ -2261,23 +1794,7 @@ class _PointwiseOps:
             vals = [val % other_val for val, other_val in zip(vals, other_val)]
         else:
             vals = [val % other_val for val in vals]
-        items = dict(zip(keys, vals))
-
-        def pop(name, val):
-            return items.pop(name, None)
-
-        result = self._fast_apply(
-            pop,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-            filter_empty=True,
-            default=None,
-        )
-        if items:
-            result.update(items)
-        return result
+        return self._rebuild_from_items_pop(keys, vals)
 
     @_write_back_inplace
     @_maybe_broadcast_other("mul_")
@@ -2350,33 +1867,11 @@ class _PointwiseOps:
             else:
                 return self.apply(lambda x: x * other)
         if _is_tensor_collection(type(other)):
-            new_keys, other_val = other._items_list(
-                True, True, sorting_keys=keys, default=default
-            )
-            if default is not None:
-                as_dict = dict(zip(keys, vals))
-                vals = [as_dict.get(key, default) for key in new_keys]
-                keys = new_keys
+            keys, vals, other_val = _pair_with_default(keys, vals, other, default)
         else:
             other_val = other
         vals = _foreach("mul", vals, other_val)
-        items = dict(zip(keys, vals))
-
-        def pop(name, val):
-            return items.pop(name, None)
-
-        result = self._fast_apply(
-            pop,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-            filter_empty=True,
-            default=None,
-        )
-        if items:
-            result.update(items)
-        return result
+        return self._rebuild_from_items_pop(keys, vals)
 
     @_write_back_inplace
     def maximum_(self, other: TensorCollection | torch.Tensor) -> Self:
@@ -2468,33 +1963,11 @@ class _PointwiseOps:
             else:
                 return self.apply(lambda x: torch.clamp_min(x, other))
         if _is_tensor_collection(type(other)):
-            new_keys, other_val = other._items_list(
-                True, True, sorting_keys=keys, default=default
-            )
-            if default is not None:
-                as_dict = dict(zip(keys, vals))
-                vals = [as_dict.get(key, default) for key in new_keys]
-                keys = new_keys
+            keys, vals, other_val = _pair_with_default(keys, vals, other, default)
         else:
             other_val = other
         vals = _foreach("maximum", vals, other_val)
-        items = dict(zip(keys, vals))
-
-        def pop(name, val):
-            return items.pop(name, None)
-
-        result = self._fast_apply(
-            pop,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-            filter_empty=True,
-            default=None,
-        )
-        if items:
-            result.update(items)
-        return result
+        return self._rebuild_from_items_pop(keys, vals)
 
     @_write_back_inplace
     def minimum_(self, other: TensorCollection | torch.Tensor) -> Self:
@@ -2586,33 +2059,11 @@ class _PointwiseOps:
             else:
                 return self.apply(lambda x: torch.clamp_max(x, other))
         if _is_tensor_collection(type(other)):
-            new_keys, other_val = other._items_list(
-                True, True, sorting_keys=keys, default=default
-            )
-            if default is not None:
-                as_dict = dict(zip(keys, vals))
-                vals = [as_dict.get(key, default) for key in new_keys]
-                keys = new_keys
+            keys, vals, other_val = _pair_with_default(keys, vals, other, default)
         else:
             other_val = other
         vals = _foreach("minimum", vals, other_val)
-        items = dict(zip(keys, vals))
-
-        def pop(name, val):
-            return items.pop(name, None)
-
-        result = self._fast_apply(
-            pop,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-            filter_empty=True,
-            default=None,
-        )
-        if items:
-            result.update(items)
-        return result
+        return self._rebuild_from_items_pop(keys, vals)
 
     @_write_back_inplace
     def clamp_max_(self, other: TensorCollection | torch.Tensor) -> Self:
@@ -2708,13 +2159,7 @@ class _PointwiseOps:
             else:
                 return self.apply(lambda x: x.clamp_max(other))
         if _is_tensor_collection(type(other)):
-            new_keys, other_val = other._items_list(
-                True, True, sorting_keys=keys, default=default
-            )
-            if default is not None:
-                as_dict = dict(zip(keys, vals))
-                vals = [as_dict.get(key, default) for key in new_keys]
-                keys = new_keys
+            keys, vals, other_val = _pair_with_default(keys, vals, other, default)
         else:
             other_val = other
         try:
@@ -2726,23 +2171,7 @@ class _PointwiseOps:
                     "Use `td.apply(lambda x: x.clamp_max(val)` instead."
                 )
             raise
-        items = dict(zip(keys, vals))
-
-        def pop(name, val):
-            return items.pop(name, None)
-
-        result = self._fast_apply(
-            pop,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-            filter_empty=True,
-            default=None,
-        )
-        if items:
-            result.update(items)
-        return result
+        return self._rebuild_from_items_pop(keys, vals)
 
     @_write_back_inplace
     def clamp_min_(self, other: TensorDictBase | torch.Tensor) -> Self:
@@ -2836,13 +2265,7 @@ class _PointwiseOps:
             else:
                 return self.apply(lambda x: x.clamp_min(other))
         if _is_tensor_collection(type(other)):
-            new_keys, other_val = other._items_list(
-                True, True, sorting_keys=keys, default=default
-            )
-            if default is not None:
-                as_dict = dict(zip(keys, vals))
-                vals = [as_dict.get(key, default) for key in new_keys]
-                keys = new_keys
+            keys, vals, other_val = _pair_with_default(keys, vals, other, default)
         else:
             other_val = other
         try:
@@ -2855,23 +2278,7 @@ class _PointwiseOps:
                 )
             raise
 
-        items = dict(zip(keys, vals))
-
-        def pop(name, val):
-            return items.pop(name, None)
-
-        result = self._fast_apply(
-            pop,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-            filter_empty=True,
-            default=None,
-        )
-        if items:
-            result.update(items)
-        return result
+        return self._rebuild_from_items_pop(keys, vals)
 
     @_clamp_into_out
     @_maybe_broadcast_other("clamp", 2, keywords=("min", "max"))
@@ -3010,36 +2417,14 @@ class _PointwiseOps:
         keys, vals = self._items_list(True, True)
         no_tensors = not vals
         if _is_tensor_collection(type(other)):
-            new_keys, other_val = other._items_list(
-                True, True, sorting_keys=keys, default=default
-            )
-            if default is not None:
-                as_dict = dict(zip(keys, vals))
-                vals = [as_dict.get(key, default) for key in new_keys]
-                keys = new_keys
+            keys, vals, other_val = _pair_with_default(keys, vals, other, default)
         else:
             other_val = other
         if no_tensors and not vals:
             # No tensor in self, and default fills none in from other.
             return self.copy()
         vals = _foreach("pow", vals, other_val)
-        items = dict(zip(keys, vals))
-
-        def pop(name, val):
-            return items.pop(name, None)
-
-        result = self._fast_apply(
-            pop,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-            filter_empty=True,
-            default=None,
-        )
-        if items:
-            result.update(items)
-        return result
+        return self._rebuild_from_items_pop(keys, vals)
 
     @_write_back_inplace
     @_maybe_broadcast_other("div_")
@@ -3099,36 +2484,14 @@ class _PointwiseOps:
         keys, vals = self._items_list(True, True)
         no_tensors = not vals
         if _is_tensor_collection(type(other)):
-            new_keys, other_val = other._items_list(
-                True, True, sorting_keys=keys, default=default
-            )
-            if default is not None:
-                as_dict = dict(zip(keys, vals))
-                vals = [as_dict.get(key, default) for key in new_keys]
-                keys = new_keys
+            keys, vals, other_val = _pair_with_default(keys, vals, other, default)
         else:
             other_val = other
         if no_tensors and not vals:
             # No tensor in self, and default fills none in from other.
             return self.copy()
         vals = _foreach("div", vals, other_val)
-        items = dict(zip(keys, vals))
-
-        def pop(name, val):
-            return items.pop(name, None)
-
-        result = self._fast_apply(
-            pop,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-            filter_empty=True,
-            default=None,
-        )
-        if items:
-            result.update(items)
-        return result
+        return self._rebuild_from_items_pop(keys, vals)
 
     @_write_back_inplace
     def sqrt_(self) -> Self:
@@ -3144,18 +2507,7 @@ class _PointwiseOps:
         if not vals:
             return self.copy()
         vals = _foreach("sqrt", vals)
-        items = dict(zip(keys, vals))
-
-        def get(name, val):
-            return items.get(name, val)
-
-        return self._fast_apply(
-            get,
-            named=True,
-            nested_keys=True,
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-            propagate_lock=True,
-        )
+        return self._rebuild_from_items(keys, vals)
 
     # Filling
     def zero_(self) -> Self:
