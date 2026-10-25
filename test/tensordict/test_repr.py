@@ -2145,6 +2145,8 @@ class TestPrintEveryContainer:
             "memmap_lazy",
             "unbatched_lazy",
             "grad_lazy",
+            "channels_last_lazy",
+            "h5_het_lazy",
         ],
     )
     def test_print_from_metadata(self, case, mode, grad, tmp_path, _backend_reads):
@@ -2158,10 +2160,28 @@ class TestPrintEveryContainer:
                 members.append(_make_print_case(backend, tmp_path / name))
             return LazyStackedTensorDict(*members)
 
-        if case == "td_h5" and not _has_h5py:
+        if case in ("td_h5", "h5_het_lazy") and not _has_h5py:
             pytest.skip("h5py is not installed")
-        if case.endswith("_lazy") and case.split("_")[0] in ("h5", "zarr"):
+        # the same data in memory, for a lazy stack that cannot be stacked
+        expected_obj = None
+        if case == "h5_het_lazy":
+            # the members' leaves differ in shape, and the first is a file
+            members = [
+                TensorDict(a=torch.zeros(3, 2), b=torch.arange(3), batch_size=[3]),
+                TensorDict(a=torch.zeros(3, 5), b=torch.arange(3), batch_size=[3]),
+            ]
+            expected_obj = LazyStackedTensorDict(*members)
+            obj = LazyStackedTensorDict(
+                members[0].to_h5(tmp_path / "a.h5"), members[1].clone()
+            )
+        elif case.endswith("_lazy") and case.split("_")[0] in ("h5", "zarr"):
             obj = lazy_of_files(case.split("_")[0])
+        elif case == "channels_last_lazy":
+            # stacking channels_last tensors keeps their memory format
+            t = torch.zeros(2, 3, 4, 5).to(memory_format=torch.channels_last)
+            obj = LazyStackedTensorDict(TensorDict(a=t), TensorDict(a=t.clone()))
+            # contiguous() would make the stacked leaf contiguous
+            expected_obj = TensorDict(a=obj.get("a"), batch_size=[2])
         elif case == "grad_lazy":
             obj = LazyStackedTensorDict(
                 TensorDict(a=torch.zeros(3, requires_grad=True), b=torch.zeros(3)),
@@ -2183,10 +2203,18 @@ class TestPrintEveryContainer:
             # the same data in memory, with the leaves of lazy stacks stacked
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                expected = repr(obj.contiguous())
+                if expected_obj is None:
+                    expected_obj = obj.contiguous()
+                expected = repr(expected_obj)
         assert not caught, [str(w.message) for w in caught]
         if mode != "plain":
             assert not reads, reads
+        # the contiguity of a stack of non-contiguous members needs the stack
+        stacks = mode == "plain" or (
+            case == "channels_last_lazy"
+            and _PRINT_MODES[mode].get("show_is_contiguous", False)
+        )
+        if not stacks:
             assert "stack" not in leaf_reads.calls, leaf_reads.calls
 
         def leaves(text):

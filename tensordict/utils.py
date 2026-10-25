@@ -2269,10 +2269,17 @@ def _stacked_repr(shape, tensors) -> str | None:
     ``tensors`` may hold :class:`_FileLeaf` descriptions, and a single one
     gives the repr of the tensor that reading the file returns.
 
-    Returns ``None`` if the stack would fail, or if the print options show a
-    field that needs the stacked data.
+    Returns ``None`` if the stack would fail, under ``plain=True`` (which
+    prints statistics of the values), or under ``show_is_contiguous=True``
+    when a member is not contiguous.
     """
     if -1 in shape or _REPR_OPTIONS["plain"]:
+        return None
+    # Stacking contiguous tensors gives a contiguous tensor, but stacking
+    # channels_last ones keeps their memory format.
+    if _REPR_OPTIONS["show_is_contiguous"] and not all(
+        isinstance(t, _FileLeaf) or t.is_contiguous() for t in tensors
+    ):
         return None
     device = tensors[0].device
     if any(tensor.device != device for tensor in tensors):
@@ -2281,8 +2288,8 @@ def _stacked_repr(shape, tensors) -> str | None:
         dtype = functools.reduce(torch.promote_types, [t.dtype for t in tensors])
     except RuntimeError:
         return None
-    # torch.stack returns a new contiguous tensor, which is_shared() reports
-    # as shared only on CUDA.
+    # torch.stack returns a new tensor, which is_shared() reports as shared
+    # only on CUDA.
     return _get_repr_custom(
         Tensor,
         shape,
@@ -2472,6 +2479,18 @@ def _td_fields(td: T, keys=None, sep=": ") -> str:
                 TensorDictBase,
             )
 
+            first = leaf[1][0] if leaf is not None else None
+            if isinstance(first, _FileLeaf):
+                # the first member is a file: print it from the metadata
+                substr = _get_repr_custom(
+                    Tensor,
+                    shape,
+                    first.device,
+                    first.dtype,
+                    first.device.type == "cuda",
+                )
+                strs.append(sep.join([key, substr]))
+                continue
             while isinstance(
                 temp_td, LazyStackedTensorDict
             ):  # we need to grab the heterogeneous tensor from the inner nesting level

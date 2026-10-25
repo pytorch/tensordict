@@ -95,7 +95,10 @@ leaves of an h5 or zarr file (:class:`~tensordict.PersistentTensorDict`) from
 their shape and dtype, and the tensor leaves of a lazy stack from its
 members, without reading the file or stacking the leaves. The text is the
 same as for the same data in memory. ``plain=True`` is the exception: it
-prints statistics of the values, so it reads them.
+prints statistics of the values, so it reads them. ``show_is_contiguous=True``
+also stacks a lazy leaf when one of its members is not contiguous (a
+``channels_last`` tensor, for example), since the contiguity of the result
+depends on their strides.
 
 Choose what the display shows
 -----------------------------
