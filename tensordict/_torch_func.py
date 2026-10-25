@@ -317,104 +317,37 @@ def _full_like(td: T, fill_value: float, *args, **kwargs: Any) -> T:
     return td_clone
 
 
-@implements_for_td(torch.zeros_like)
-def _zeros_like(td: T, *args, **kwargs: Any) -> T:
-    dtype = kwargs.pop("dtype", None)
-    device_nd = kwargs.pop("device", NO_DEFAULT)
-    if device_nd is NO_DEFAULT:
-        device = None
-    else:
-        device = device_nd
+def _like(torch_function: Callable) -> Callable:
+    def _like_td(td: T, *args: Any, **kwargs: Any) -> T:
+        dtype = kwargs.pop("dtype", None)
+        device_nd = kwargs.pop("device", NO_DEFAULT)
+        if device_nd is NO_DEFAULT:
+            device = None
+        else:
+            device = device_nd
 
-    def zeros_like(x):
-        return torch.zeros_like(x, device=device, dtype=dtype, *args, **kwargs)
+        def like(x):
+            return torch_function(x, device=device, dtype=dtype, *args, **kwargs)
 
-    td_clone = td._fast_apply(
-        zeros_like,
-        propagate_lock=True,
-        device=device_nd,
-    )
-    return td_clone
+        td_clone = td._fast_apply(
+            like,
+            propagate_lock=True,
+            device=device_nd,
+        )
+        return td_clone
 
-
-@implements_for_td(torch.ones_like)
-def _ones_like(td: T, *args, **kwargs: Any) -> T:
-    dtype = kwargs.pop("dtype", None)
-    device_nd = kwargs.pop("device", NO_DEFAULT)
-    if device_nd is NO_DEFAULT:
-        device = None
-    else:
-        device = device_nd
-
-    def ones_like(x):
-        return torch.ones_like(x, device=device, dtype=dtype, *args, **kwargs)
-
-    td_clone = td._fast_apply(
-        ones_like,
-        propagate_lock=True,
-        device=device_nd,
-    )
-    return td_clone
+    _like_td.__name__ = f"_{torch_function.__name__}"
+    return _like_td
 
 
-@implements_for_td(torch.rand_like)
-def _rand_like(td: T, *args, **kwargs: Any) -> T:
-    dtype = kwargs.pop("dtype", None)
-    device_nd = kwargs.pop("device", NO_DEFAULT)
-    if device_nd is NO_DEFAULT:
-        device = None
-    else:
-        device = device_nd
-
-    def rand_like(x):
-        return torch.rand_like(x, device=device, dtype=dtype, *args, **kwargs)
-
-    td_clone = td._fast_apply(
-        rand_like,
-        propagate_lock=True,
-        device=device_nd,
-    )
-    return td_clone
-
-
-@implements_for_td(torch.randn_like)
-def _randn_like(td: T, *args, **kwargs: Any) -> T:
-    dtype = kwargs.pop("dtype", None)
-    device_nd = kwargs.pop("device", NO_DEFAULT)
-    if device_nd is NO_DEFAULT:
-        device = None
-    else:
-        device = device_nd
-
-    def randn_like(x):
-        return torch.randn_like(x, device=device, dtype=dtype, *args, **kwargs)
-
-    td_clone = td._fast_apply(
-        randn_like,
-        propagate_lock=True,
-        device=device_nd,
-    )
-    return td_clone
-
-
-@implements_for_td(torch.empty_like)
-def _empty_like(td: T, *args, **kwargs) -> T:
-    dtype = kwargs.pop("dtype", None)
-    device_nd = kwargs.pop("device", NO_DEFAULT)
-    if device_nd is NO_DEFAULT:
-        device = None
-    else:
-        device = device_nd
-
-    def empty_like(x):
-        return torch.empty_like(x, device=device, dtype=dtype, *args, **kwargs)
-
-    td_clone = td._fast_apply(
-        empty_like,
-        propagate_lock=True,
-        device=device_nd,
-    )
-    return td_clone
+for _like_function in (
+    torch.zeros_like,
+    torch.ones_like,
+    torch.rand_like,
+    torch.randn_like,
+    torch.empty_like,
+):
+    implements_for_td(_like_function)(_like(_like_function))
 
 
 @implements_for_td(torch.clone)
@@ -1225,73 +1158,38 @@ for _name in _POINTWISE_FUNCTIONS:
     implements_for_td(getattr(torch, _name))(_call_method(_name))
 
 
-@implements_for_td(torch.nn.functional.l1_loss)
-def _l1_loss(input: T, target: T, *args: Any, **kwargs: Any) -> T:
-    reduction = kwargs.pop("reduction", "mean")
-    if reduction == "none":
-        batch_size = None
-    elif reduction == "mean":
-        batch_size = ()
-    elif reduction == "sum":
-        batch_size = ()
-    else:
-        raise ValueError(
-            f"Invalid reduction mode: {reduction}. Expected one of 'none', 'mean', 'sum'."
+def _loss(loss_function: Callable) -> Callable:
+    def _loss_td(input: T, target: T, *args: Any, **kwargs: Any) -> T:
+        reduction = kwargs.pop("reduction", "mean")
+        if reduction == "none":
+            batch_size = None
+        elif reduction == "mean":
+            batch_size = ()
+        elif reduction == "sum":
+            batch_size = ()
+        else:
+            raise ValueError(
+                f"Invalid reduction mode: {reduction}. Expected one of 'none', 'mean', 'sum'."
+            )
+        # torch also passes size_average, reduce (and beta), which apply ignored:
+        # keep ignoring them, without apply's warning about unknown keywords
+        return input.apply(
+            partial(loss_function, reduction=reduction),
+            target,
+            *args,
+            batch_size=batch_size,
         )
-    # torch also passes size_average, reduce (and beta), which apply ignored:
-    # keep ignoring them, without apply's warning about unknown keywords
-    return input.apply(
-        partial(torch.nn.functional.l1_loss, reduction=reduction),
-        target,
-        *args,
-        batch_size=batch_size,
-    )
+
+    _loss_td.__name__ = f"_{loss_function.__name__}"
+    return _loss_td
 
 
-@implements_for_td(torch.nn.functional.mse_loss)
-def _mse_loss(input: T, target: T, *args: Any, **kwargs: Any) -> T:
-    reduction = kwargs.pop("reduction", "mean")
-    if reduction == "none":
-        batch_size = None
-    elif reduction == "mean":
-        batch_size = ()
-    elif reduction == "sum":
-        batch_size = ()
-    else:
-        raise ValueError(
-            f"Invalid reduction mode: {reduction}. Expected one of 'none', 'mean', 'sum'."
-        )
-    # torch also passes size_average, reduce (and beta), which apply ignored:
-    # keep ignoring them, without apply's warning about unknown keywords
-    return input.apply(
-        partial(torch.nn.functional.mse_loss, reduction=reduction),
-        target,
-        *args,
-        batch_size=batch_size,
-    )
-
-
-@implements_for_td(torch.nn.functional.smooth_l1_loss)
-def _smooth_l1_loss(input: T, target: T, *args: Any, **kwargs: Any) -> T:
-    reduction = kwargs.pop("reduction", "mean")
-    if reduction == "none":
-        batch_size = None
-    elif reduction == "mean":
-        batch_size = ()
-    elif reduction == "sum":
-        batch_size = ()
-    else:
-        raise ValueError(
-            f"Invalid reduction mode: {reduction}. Expected one of 'none', 'mean', 'sum'."
-        )
-    # torch also passes size_average, reduce (and beta), which apply ignored:
-    # keep ignoring them, without apply's warning about unknown keywords
-    return input.apply(
-        partial(torch.nn.functional.smooth_l1_loss, reduction=reduction),
-        target,
-        *args,
-        batch_size=batch_size,
-    )
+for _loss_function in (
+    torch.nn.functional.l1_loss,
+    torch.nn.functional.mse_loss,
+    torch.nn.functional.smooth_l1_loss,
+):
+    implements_for_td(_loss_function)(_loss(_loss_function))
 
 
 @implements_for_td(torch.autograd.grad)
