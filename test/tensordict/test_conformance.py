@@ -52,7 +52,7 @@ import pickle
 import pytest
 import tensordict
 import torch
-from _utils_internal import TestTensorDictsBase
+from _utils_internal import _describe, check_known_failures, TestTensorDictsBase
 from tensordict import (
     is_tensor_collection,
     LazyStackedTensorDict,
@@ -74,7 +74,6 @@ _KNOWN_FAILURES = {
     path: json.loads(path.read_text())
     for path in (_KNOWN_FAILURES_FILE, _COMPILE_KNOWN_FAILURES_FILE)
 }
-_UPDATE_KNOWN_FAILURES = bool(os.environ.get("TENSORDICT_UPDATE_KNOWN_FAILURES"))
 _COMPILE_CONFORMANCE = bool(os.environ.get("TENSORDICT_COMPILE_CONFORMANCE"))
 
 pytestmark = pytest.mark.filterwarnings(
@@ -470,10 +469,6 @@ def _difference(result, expected):
     return None if result == expected else f"{result!r}, dense {expected!r}"
 
 
-def _describe(err):
-    return f"raises {type(err).__name__}: {str(err).splitlines()[0][:80] if str(err) else ''}"
-
-
 def _run(op, td):
     """Return ``(normalized result, None)``, or ``(None, error)`` if ``op`` raises."""
     try:
@@ -504,31 +499,7 @@ def _compare(make, op):
 
 
 def _check_known_failures(key, failures, path=_KNOWN_FAILURES_FILE, hint=None):
-    """Compare ``failures`` ({case: reason}) with the known failures of ``key`` in ``path``.
-
-    ``hint`` ends the message of a failure.
-    """
-    if _UPDATE_KNOWN_FAILURES:
-        known = json.loads(path.read_text())
-        known[key] = sorted(failures)
-        path.write_text(json.dumps(dict(sorted(known.items())), indent=1) + "\n")
-        return
-    known = set(_KNOWN_FAILURES[path].get(key, ()))
-    new = {case: reason for case, reason in failures.items() if case not in known}
-    fixed = sorted(known.difference(failures))
-    message = []
-    if new:
-        message.append(
-            f"{len(new)} cases fail and are not known failures:\n"
-            + "\n".join(f"  {case}: {reason}" for case, reason in sorted(new.items()))
-        )
-    if fixed:
-        message.append(
-            f"{len(fixed)} known failures pass now; remove them from "
-            f"{path.name} under {key!r}:\n" + "\n".join(f"  {case}" for case in fixed)
-        )
-    if message and hint:
-        message.append(hint)
+    message = check_known_failures(key, failures, path, _KNOWN_FAILURES[path], hint)
     assert not message, "\n".join(message)
 
 

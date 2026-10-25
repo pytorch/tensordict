@@ -6,11 +6,9 @@ from __future__ import annotations
 
 import argparse
 import gc
-import importlib.util
 import os
 import pathlib
 import platform
-import sys
 import warnings
 from pathlib import Path
 
@@ -25,14 +23,9 @@ from tensordict.tensorclass import NonTensorData, NonTensorStack
 from torch import multiprocessing as mp, nn
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
-    IS_FB = True
-    from pytorch.tensordict.test._utils_internal import (
-        is_npu_available,
-        TestTensorDictsBase,
-    )
+    from pytorch.tensordict.test._utils_internal import TestTensorDictsBase
 else:
-    IS_FB = False
-    from _utils_internal import is_npu_available, TestTensorDictsBase
+    from _utils_internal import TestTensorDictsBase
 
 try:
     from functorch import dim as ftdim
@@ -43,8 +36,6 @@ except ImportError:
 
     _has_funcdim = False
 
-_has_streaming = importlib.util.find_spec("streaming", None) is not None
-
 try:
     import h5py  # noqa
 
@@ -52,14 +43,7 @@ try:
 except ImportError:
     _has_h5py = False
 
-_has_onnx = importlib.util.find_spec("onnxruntime", None) is not None
-
-PYTORCH_TEST_FBCODE = os.getenv("PYTORCH_TEST_FBCODE")
-
 _IS_OSX = platform.system() == "Darwin"
-_IS_WINDOWS = sys.platform == "win32"
-
-TD_BATCH_SIZE = 4
 
 # Capture all warnings
 pytestmark = [
@@ -83,9 +67,6 @@ pytestmark = [
         "ignore:Lazy modules are a new feature under heavy development so changes to the API or functionality"
     ),
     pytest.mark.filterwarnings(
-        "ignore:The content of the stacked NonTensorData objects matched in value but not identity"
-    ),
-    pytest.mark.filterwarnings(
         "ignore:No PYTORCH_KERNEL_CACHE_PATH or HOME environment variable set"
     ),
     pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning"),
@@ -96,13 +77,6 @@ pytestmark = [
 ]
 
 mp_ctx = "spawn"
-cur_device = "cpu"
-npu_device_count = 0
-if torch.cuda.is_available():
-    cur_device = "cuda"
-elif is_npu_available():
-    cur_device = "npu"
-    npu_device_count = torch.npu.device_count()
 
 
 @pytest.mark.slow
