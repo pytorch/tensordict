@@ -237,6 +237,22 @@ def _has_exclusive_keys(data) -> bool:
     return isinstance(data, LazyStackedTensorDict) and data._has_exclusive_keys
 
 
+def _leaves_in_order(
+    td: TensorCollection, sorted: bool | list[NestedKey] | None
+) -> list:
+    """The leaves of ``td`` in the order that the ``sorted`` argument of ``cat_from_tensordict`` and ``stack_from_tensordict`` gives."""
+    if sorted in (None, False):
+        return list(td.values(True, True))
+    if sorted in (True,):
+        return list(td.values(True, True, sort=True))
+    keys = unravel_key_list(sorted)
+    if set(keys) != set(td.keys(True, True)):
+        raise RuntimeError(
+            "The provided set of keys differs from the tensordict list of keys."
+        )
+    return [td.get(key) for key in keys]
+
+
 class _ShapeOps:
     """Operations on the batch shape: views, reshaping, stacking, splitting and padding."""
 
@@ -1271,17 +1287,7 @@ class _ShapeOps:
                     [1., 1., 0.]])
 
         """
-        if sorted in (None, False):
-            tensors = list(self.values(True, True))
-        elif sorted in (True,):
-            tensors = list(self.values(True, True, sort=True))
-        else:
-            keys = unravel_key_list(sorted)
-            if set(keys) != set(self.keys(True, True)):
-                raise RuntimeError(
-                    "The provided set of keys differs from the tensordict list of keys."
-                )
-            tensors = [self.get(key) for key in keys]
+        tensors = _leaves_in_order(self, sorted)
         return torch.cat(tensors, dim, out=out)
 
     def pack(
@@ -1484,17 +1490,7 @@ class _ShapeOps:
                     [0., 1.]])
 
         """
-        if sorted in (None, False):
-            tensors = list(self.values(True, True))
-        elif sorted in (True,):
-            tensors = list(self.values(True, True, sort=True))
-        else:
-            keys = unravel_key_list(sorted)
-            if set(keys) != set(self.keys(True, True)):
-                raise RuntimeError(
-                    "The provided set of keys differs from the tensordict list of keys."
-                )
-            tensors = [self.get(key) for key in keys]
+        tensors = _leaves_in_order(self, sorted)
         return torch.stack(tensors, dim, out=out)
 
     @classmethod
