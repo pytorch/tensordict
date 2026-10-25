@@ -3238,13 +3238,23 @@ class LazyStackedTensorDict(TensorDictBase):
                         none_shape = a_shape[:-1] + (0,)
                     for tensor in list_of_entries:
                         if tensor is not None:
-                            a_tensor = tensor.new_zeros(none_shape)
+                            a_tensor = tensor
                             break
+                    # each empty entry has the batch size of the member it
+                    # stands in for (#3219), unless that member is a lazy
+                    # stack with a ragged batch dim
+                    kept = min(rows, len(a_shape) - 1)
                     list_of_entries = [
-                        tensor if tensor is not None else a_tensor
-                        for tensor in list_of_entries
+                        tensor
+                        if tensor is not None
+                        else a_tensor.new_zeros(
+                            none_shape
+                            if -1 in td.batch_size[:kept]
+                            else td.batch_size[:kept] + none_shape[kept:]
+                        )
+                        for td, tensor in zip(self.tensordicts, list_of_entries)
                     ]
-                    shapes.update({a_shape, none_shape})
+                    shapes.update(tensor.shape for tensor in list_of_entries)
                 if len(shapes) == 1:
                     tensor = torch.stack(list_of_entries, self.stack_dim)
                 else:

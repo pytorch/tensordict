@@ -2843,8 +2843,9 @@ class _ShapeOps:
         The entries of a lazy stack are stacked into one tensor when their
         shapes match, and into a nested tensor (:mod:`torch.nested`) along the
         stack dimension otherwise. A key that only some members of a lazy
-        stack have is filled with an empty entry for the members that lack it
-        (zero rows when the members that have it agree on its feature dims),
+        stack have is filled with an empty entry for the members that lack it,
+        with the batch size of the member it stands in for (zero rows when
+        the members that have it agree on its feature dims),
         so it appears in the result although ``keys()`` of the lazy stack
         leaves it out. A tensordict that holds no lazy stack is
         returned as it is.
