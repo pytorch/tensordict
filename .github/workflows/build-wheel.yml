@@ -29,7 +29,6 @@ on:
   workflow_dispatch:
 
 permissions:
-  id-token: write
   contents: read
 
 jobs:
@@ -47,6 +46,10 @@ jobs:
       test-infra-repository: pytorch/test-infra
       test-infra-ref: ${{ inputs.test-infra-ref || 'main' }}
   build:
+    # test-infra uploads nightly/RC wheels to S3 using AWS OIDC.
+    permissions:
+      contents: read
+      id-token: write
     needs: generate-matrix
     strategy:
       fail-fast: false
@@ -81,6 +84,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}

@@ -21,6 +21,9 @@ concurrency:
   group: test-macos-${{ github.event_name }}-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   tests-silicon:
     strategy:

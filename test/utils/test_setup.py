@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -56,6 +57,163 @@ def _ensure_pip(python: Path) -> None:
         pass
     _run([str(python), "-m", "ensurepip", "--upgrade"], cwd=_ROOT, timeout=5 * 60)
     _run([str(python), "-m", "pip", "install", "-U", "pip"], cwd=_ROOT, timeout=10 * 60)
+
+
+def _credential_workflow(name):
+    yaml = pytest.importorskip("yaml")
+    return yaml.safe_load((_ROOT / ".github/workflows" / name).read_text())
+
+
+@pytest.mark.parametrize(
+    "filename, overrides",
+    [
+        ("benchmarks.yml", {"benchmark-upload": {"contents": "write"}}),
+        ("benchmarks_pr.yml", {}),
+        ("build-wheel.yml", {"build": {"contents": "read", "id-token": "write"}}),
+        ("nightly_build.yml", {"upload-wheel": {}}),
+        (
+            "release.yml",
+            {
+                "build": {"contents": "read", "id-token": "write"},
+                "collect-wheels": {},
+                "update-docs": {"contents": "write"},
+                "create-release": {"contents": "write"},
+                "publish-pypi": {"id-token": "write"},
+                "release-summary": {},
+            },
+        ),
+        (
+            "nightly_orchestrator.yml",
+            {
+                "docs": {"contents": "write"},
+                "benchmarks": {"contents": "write"},
+                "update-status-dashboard": {"contents": "write"},
+            },
+        ),
+        ("test-macos.yml", {}),
+    ],
+)
+def test_ci_credential_permissions(filename, overrides):
+    workflow = _credential_workflow(filename)
+    assert workflow["permissions"] == {"contents": "read"}
+    for name, job in workflow["jobs"].items():
+        assert job.get("permissions", workflow["permissions"]) == overrides.get(
+            name, {"contents": "read"}
+        ), name
+
+
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "benchmarks.yml",
+        "benchmarks_pr.yml",
+        "build-wheel.yml",
+        "nightly_build.yml",
+        "release.yml",
+        "test-linux.yml",
+        "test-rl-gpu.yml",
+        "docs.yml",
+    ],
+)
+def test_ci_credential_checkout(filename):
+    for name, job in _credential_workflow(filename)["jobs"].items():
+        for step in job.get("steps", []):
+            if not step.get("uses", "").startswith("actions/checkout@"):
+                continue
+            settings = step.get("with", {})
+            if (filename, name) == ("release.yml", "update-docs"):
+                # This job still uses plain git pull/push, not an action token.
+                assert settings.get("persist-credentials", True) is True
+            else:
+                assert settings.get("persist-credentials") is False, (name, step)
+
+
+@pytest.mark.parametrize("filename", ["release.yml", "nightly_orchestrator.yml"])
+def test_ci_credential_reusable_permission_ceiling(filename):
+    workflow = _credential_workflow(filename)
+    levels = {"none": 0, "read": 1, "write": 2}
+    for name, job in workflow["jobs"].items():
+        called = job.get("uses", "")
+        if not called.startswith("./.github/workflows/"):
+            continue
+        ceiling = job.get("permissions", workflow.get("permissions", {}))
+        callee = _credential_workflow(called.rsplit("/", 1)[1])
+        for child_name, child in callee["jobs"].items():
+            requested = child.get("permissions", callee.get("permissions", ceiling))
+            for permission, level in requested.items():
+                assert levels[level] <= levels[ceiling.get(permission, "none")], (
+                    name,
+                    child_name,
+                    permission,
+                )
+
+
+def test_ci_credential_nightly_publisher():
+    workflow = _credential_workflow("nightly_build.yml")
+    assert "secrets." not in json.dumps(workflow.get("env", {}))
+    for name, job in workflow["jobs"].items():
+        assert "secrets." not in json.dumps(job.get("env", {}))
+        for step in job.get("steps", []):
+            if step.get("name") != "Push tensordict Binary to PYPI":
+                assert "secrets." not in json.dumps(step), (name, step)
+    upload = workflow["jobs"]["upload-wheel"]
+    assert upload["needs"] == "test-wheel"
+    assert "workflow_dispatch" in upload["if"] and "schedule" in upload["if"]
+    assert "github.repository_owner == 'pytorch'" in upload["if"]
+    steps = upload["steps"]
+    install = next(s for s in steps if s.get("name") == "Install publishing tools")
+    publish = next(
+        s for s in steps if s.get("name") == "Push tensordict Binary to PYPI"
+    )
+    assert steps.index(install) < steps.index(publish)
+    assert "--require-hashes" in install["run"]
+    assert "--only-binary=:all:" in install["run"]
+    assert "pip==26.2.2" in install["run"]
+    assert "certifi==2026.10.23" in install["run"]
+    assert "twine==" in install["run"]
+    assert '"$RUNNER_TEMP/publisher/bin/python" -m twine upload' in publish["run"]
+    for block in install["run"].split("<<'REQUIREMENTS'\n")[1:]:
+        requirements = block.split("\nREQUIREMENTS")[0]
+        for line in requirements.splitlines():
+            assert re.fullmatch(r"[\w.-]+==[\w.]+ --hash=sha256:[0-9a-f]{64}", line), (
+                line
+            )
+    assert publish["env"] == {"PYPI_TOKEN": "${{ secrets.PYPI_TOKEN }}"}
+    assert "pip install" not in publish["run"]
+    assert '--password "$PYPI_TOKEN"' in publish["run"]
+    assert "--skip-existing" in publish["run"]
+    assert "wheels/tensordict_nightly-*.whl" in publish["run"]
+    assert workflow["jobs"]["test-wheel"]["continue-on-error"] is True
+    assert workflow["jobs"]["test-subset"]["continue-on-error"] is True
+    for name in ("build-wheel", "test-wheel", "test-subset"):
+        runs = [s["run"] for s in workflow["jobs"][name]["steps"] if "run" in s]
+        upgrade = next(run for run in runs if "pip install --upgrade" in run)
+        assert '"pip>=26.2.2"' in upgrade
+        assert '"certifi>=2026.10.23"' in upgrade
+    for job in workflow["jobs"].values():
+        for step in job["steps"]:
+            if "-artifact@" in step.get("uses", ""):
+                assert step["with"]["name"] == "tensordict-nightly-wheel"
+
+
+def test_ci_credential_stable_publisher():
+    workflow = _credential_workflow("release.yml")
+    publish = workflow["jobs"]["publish-pypi"]
+    assert publish["permissions"] == {"id-token": "write"}
+    assert publish["environment"] == {
+        "name": "pypi",
+        "url": "https://pypi.org/project/tensordict/",
+    }
+    assert publish["needs"] == ["sanity-checks", "collect-wheels", "create-release"]
+    assert workflow["jobs"]["collect-wheels"]["needs"] == ["sanity-checks", "build"]
+    assert "needs.build.result == 'success'" in workflow["jobs"]["collect-wheels"]["if"]
+    step = next(s for s in publish["steps"] if "pypi-publish@" in s.get("uses", ""))
+    assert step["uses"] == "pypa/gh-action-pypi-publish@release/v1"
+    assert step["if"] == "${{ env.DRY_RUN != 'true' }}"
+    assert step["with"] == {"verbose": True, "print-hash": True, "skip-existing": True}
+    assert "secrets." not in json.dumps(publish)
+    preview = _credential_workflow("upload-docs-preview.yml")
+    assert preview["permissions"]["id-token"] == "write"
 
 
 @pytest.fixture

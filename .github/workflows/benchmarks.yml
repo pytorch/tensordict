@@ -15,9 +15,7 @@ on:
         default: false
 
 permissions:
-  deployments: write
-  contents: write
-  pull-requests: write
+  contents: read
 
 concurrency:
   # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
@@ -73,6 +71,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          persist-credentials: false
           fetch-depth: 50 # this is to make sure we obtain the target base commit
       - name: Python Setup
         uses: actions/setup-python@v5
@@ -141,6 +140,8 @@ jobs:
 
   # Upload benchmark results to gh-pages branch (only for main, manual dispatch, or PRs with 'benchmarks/upload' label)
   benchmark-upload:
+    permissions:
+      contents: write
     name: Upload benchmark results
     runs-on: ubuntu-latest
     needs: benchmark
@@ -167,6 +168,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       # The full history of gh-pages is about 850 MiB: fetch its last commit
       # only. github-action-benchmark then runs its own `git fetch` and
