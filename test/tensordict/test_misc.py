@@ -1258,6 +1258,45 @@ class TestPointwiseOps:
             assert all((member["x"] == 1).all() for member in members)
         assert (nested["a"] == 1).all()
 
+    @pytest.mark.parametrize(
+        "op,args,expected",
+        [
+            ("add_", ("other",), 5.0),
+            ("sub_", ("other",), -1.0),
+            ("mul_", ("other",), 6.0),
+            ("pow_", (2,), 4.0),
+            ("lerp_", ("other", 0.5), 2.5),
+            ("zero_", (), 0.0),
+        ],
+    )
+    @pytest.mark.parametrize("wrappers", [1, 2, 3])
+    def test_inplace_typed_lazy_hetero_keys(self, op, args, expected, wrappers):
+        # #3392: a TypedTensorDict that wraps another one over a lazy stack
+        # whose members differ in shape wrote entries such as ("0", "x")
+        # into every member. Each member keeps only its own key, with any
+        # number of wrappers and for the in-place methods that read copies
+        # of the leaves: unary, binary with a tensor operand, and ternary.
+        class TypedX(TypedTensorDict):
+            x: torch.Tensor
+
+        stack = LazyStackedTensorDict(
+            *[
+                TensorDict(x=torch.full((2, 3, i), 2.0), batch_size=[2])
+                for i in (1, 2, 3)
+            ],
+            stack_dim=1,
+        )
+        td = stack
+        for _ in range(wrappers):
+            td = TypedX.from_tensordict(td)
+        other = torch.full((2, 3), 3.0)
+        args = [other if arg == "other" else arg for arg in args]
+        assert getattr(td, op)(*args) is td
+        for i, member in enumerate(stack.tensordicts, 1):
+            assert list(member.keys(True, True)) == ["x"]
+            assert member["x"].shape == (2, 3, i)
+            assert (member["x"] == expected).all()
+
 
 @pytest.mark.parametrize(
     "batch_size,feature_size",
