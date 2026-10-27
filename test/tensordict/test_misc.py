@@ -1258,6 +1258,72 @@ class TestPointwiseOps:
             assert all((member["x"] == 1).all() for member in members)
         assert (nested["a"] == 1).all()
 
+    @staticmethod
+    def _typed_lazy_stack(kind, sizes, wrappers, tmp_path):
+        # #3392: a lazy stack of the given kind of members, whose leaves x
+        # (and y) have the last dimension in sizes and hold 2.0, under
+        # wrappers TypedTensorDicts. Returns the wrapper, the members that
+        # hold the leaves with their keys and shapes, and the keys that only
+        # one member holds.
+        class TypedX(TypedTensorDict):
+            x: torch.Tensor
+
+        class TypedXY(TypedTensorDict):
+            x: torch.Tensor
+            y: torch.Tensor
+
+        cls, fields = (TypedXY, ["x", "y"]) if kind == "two_fields" else (TypedX, ["x"])
+        leaves = []
+        exclusive = set()
+
+        def member(i):
+            td = TensorDict(
+                {field: torch.full((2, 3, i), 2.0) for field in fields},
+                batch_size=[2],
+            )
+            if kind == "extra_keys":
+                key = f"e{len(leaves)}"
+                td[key] = torch.full((2, 3), 2.0)
+                exclusive.add(key)
+            elif kind == "nested":
+                td["n"] = TensorDict(z=torch.full((2, 3, i), 2.0), batch_size=[2, 3])
+            elif kind == "memmap":
+                td = td.memmap(tmp_path / str(len(leaves)))
+            elif kind == "h5":
+                td = PersistentTensorDict.from_dict(
+                    td, filename=str(tmp_path / f"{len(leaves)}.h5")
+                )
+            leaves.append((td, {key: td[key].shape for key in td.keys(True, True)}))
+            return td
+
+        if kind == "stack_of_stacks":
+            members = [
+                LazyStackedTensorDict(member(i), member(i), stack_dim=1) for i in sizes
+            ]
+        else:
+            members = [member(i) for i in sizes]
+        stack = LazyStackedTensorDict(*members, stack_dim=1)
+        if kind == "locked":
+            stack.lock_()
+        td = stack
+        for _ in range(wrappers):
+            td = cls.from_tensordict(td)
+        return td, leaves, exclusive
+
+    _typed_lazy_kinds = [
+        "dense",
+        "locked",
+        "memmap",
+        pytest.param(
+            "h5",
+            marks=pytest.mark.skipif(not _has_h5py, reason="h5py not available"),
+        ),
+        "two_fields",
+        "extra_keys",
+        "nested",
+        "stack_of_stacks",
+    ]
+
     @pytest.mark.parametrize(
         "op,args,expected",
         [
@@ -1270,141 +1336,56 @@ class TestPointwiseOps:
         ],
     )
     @pytest.mark.parametrize("wrappers", [1, 2, 3])
-    @pytest.mark.parametrize(
-        "kind",
-        [
-            "dense",
-            "locked",
-            "memmap",
-            pytest.param(
-                "h5",
-                marks=pytest.mark.skipif(not _has_h5py, reason="h5py not available"),
-            ),
-            "two_fields",
-            "stack_of_stacks",
-        ],
-    )
-    def test_inplace_typed_lazy_hetero_keys(
-        self, op, args, expected, wrappers, kind, tmp_path
+    @pytest.mark.parametrize("sizes", [(1, 2, 3), (2, 2, 2)], ids=["hetero", "same"])
+    @pytest.mark.parametrize("kind", _typed_lazy_kinds)
+    def test_inplace_typed_lazy_keys(
+        self, op, args, expected, wrappers, sizes, kind, tmp_path
     ):
         # #3392: a TypedTensorDict that wraps another one over a lazy stack
-        # whose members differ in shape wrote entries such as ("0", "x")
-        # into every member, or raised partway through the write. Each
-        # member keeps only its own keys, with any number of wrappers, for
-        # every kind of member and for the in-place methods that read copies
-        # of the leaves: unary, binary with a tensor operand, and ternary.
-        class TypedX(TypedTensorDict):
-            x: torch.Tensor
-
-        class TypedXY(TypedTensorDict):
-            x: torch.Tensor
-            y: torch.Tensor
-
-        cls, fields = (TypedXY, ["x", "y"]) if kind == "two_fields" else (TypedX, ["x"])
-        leaves = []
-
-        def member(i):
-            td = TensorDict(
-                {field: torch.full((2, 3, i), 2.0) for field in fields},
-                batch_size=[2],
-            )
-            if kind == "memmap":
-                td = td.memmap(tmp_path / str(len(leaves)))
-            elif kind == "h5":
-                td = PersistentTensorDict.from_dict(
-                    td, filename=str(tmp_path / f"{len(leaves)}.h5")
-                )
-            leaves.append((td, i))
-            return td
-
-        if kind == "stack_of_stacks":
-            members = [
-                LazyStackedTensorDict(member(i), member(i), stack_dim=1)
-                for i in (1, 2, 3)
-            ]
-        else:
-            members = [member(i) for i in (1, 2, 3)]
-        stack = LazyStackedTensorDict(*members, stack_dim=1)
-        if kind == "locked":
-            stack.lock_()
-        td = stack
-        for _ in range(wrappers):
-            td = cls.from_tensordict(td)
+        # wrote entries such as ("0", "x") into every member, or raised
+        # partway through the write, whether or not the members differ in
+        # shape. Each member keeps only its own keys, with any number of
+        # wrappers, for every kind of member and for the in-place methods
+        # that read copies of the leaves: unary, binary with a tensor
+        # operand, and ternary. The keys that only one member holds are left
+        # unchanged, as with one wrapper (#2739).
+        td, leaves, exclusive = self._typed_lazy_stack(kind, sizes, wrappers, tmp_path)
         other = torch.full(td.batch_size, 3.0)
         args = [other if arg == "other" else arg for arg in args]
         assert getattr(td, op)(*args) is td
-        for leaf, i in leaves:
-            assert sorted(leaf.keys(True, True)) == fields
-            for field in fields:
-                assert leaf[field].shape == (2, 3, i)
-                assert (leaf[field] == expected).all()
+        for leaf, shapes in leaves:
+            assert sorted(leaf.keys(True, True), key=str) == sorted(shapes, key=str)
+            for key, shape in shapes.items():
+                assert leaf[key].shape == shape
+                assert (leaf[key] == (2.0 if key in exclusive else expected)).all()
 
-    @pytest.mark.parametrize("op", ["update_", "copy_"])
+    @pytest.mark.parametrize("op", ["update_", "update_keys", "copy_"])
     @pytest.mark.parametrize("wrappers", [0, 1, 2, 3])
-    @pytest.mark.parametrize(
-        "kind",
-        [
-            "dense",
-            "locked",
-            "memmap",
-            pytest.param(
-                "h5",
-                marks=pytest.mark.skipif(not _has_h5py, reason="h5py not available"),
-            ),
-            "two_fields",
-            "stack_of_stacks",
-        ],
-    )
-    def test_update_typed_lazy_hetero_keys(self, op, wrappers, kind, tmp_path):
+    @pytest.mark.parametrize("sizes", [(1, 2, 3), (2, 2, 2)], ids=["hetero", "same"])
+    @pytest.mark.parametrize("kind", _typed_lazy_kinds)
+    def test_update_typed_lazy_keys(self, op, wrappers, sizes, kind, tmp_path):
         # #3392: update_ and copy_ on a TypedTensorDict that wraps another
-        # one over a lazy stack whose members differ in shape wrote entries
-        # such as ("0", "x") into every member, or raised partway through the
-        # write. Each member keeps only its own keys and takes the new
-        # values, with no wrapper, one, or more.
-        class TypedX(TypedTensorDict):
-            x: torch.Tensor
-
-        class TypedXY(TypedTensorDict):
-            x: torch.Tensor
-            y: torch.Tensor
-
-        cls, fields = (TypedXY, ["x", "y"]) if kind == "two_fields" else (TypedX, ["x"])
-        leaves = []
-
-        def member(i):
-            td = TensorDict(
-                {field: torch.full((2, 3, i), 2.0) for field in fields},
-                batch_size=[2],
-            )
-            if kind == "memmap":
-                td = td.memmap(tmp_path / str(len(leaves)))
-            elif kind == "h5":
-                td = PersistentTensorDict.from_dict(
-                    td, filename=str(tmp_path / f"{len(leaves)}.h5")
-                )
-            leaves.append((td, i))
-            return td
-
-        if kind == "stack_of_stacks":
-            members = [
-                LazyStackedTensorDict(member(i), member(i), stack_dim=1)
-                for i in (1, 2, 3)
-            ]
-        else:
-            members = [member(i) for i in (1, 2, 3)]
-        stack = LazyStackedTensorDict(*members, stack_dim=1)
-        if kind == "locked":
-            stack.lock_()
-        td = stack
-        for _ in range(wrappers):
-            td = cls.from_tensordict(td)
+        # one over a lazy stack wrote entries such as ("0", "x") into every
+        # member, raised partway through the write, or, with keys_to_update,
+        # left the values unchanged. Each member keeps only its own keys and
+        # takes the new values, with no wrapper, one, or more. Through a
+        # wrapper, the keys that only one member holds are left unchanged
+        # (#2739).
+        td, leaves, exclusive = self._typed_lazy_stack(kind, sizes, wrappers, tmp_path)
         other = td.clone().apply(lambda x: torch.full_like(x, 3.0))
-        assert getattr(td, op)(other) is td
-        for leaf, i in leaves:
-            assert sorted(leaf.keys(True, True)) == fields
-            for field in fields:
-                assert leaf[field].shape == (2, 3, i)
-                assert (leaf[field] == 3.0).all()
+        if op == "update_keys":
+            updated = {"x"}
+            assert td.update_(other, keys_to_update=["x"]) is td
+        else:
+            updated = {key for _, shapes in leaves for key in shapes}
+            if wrappers:
+                updated -= exclusive
+            assert getattr(td, op)(other) is td
+        for leaf, shapes in leaves:
+            assert sorted(leaf.keys(True, True), key=str) == sorted(shapes, key=str)
+            for key, shape in shapes.items():
+                assert leaf[key].shape == shape
+                assert (leaf[key] == (3.0 if key in updated else 2.0)).all()
 
 
 @pytest.mark.parametrize(
