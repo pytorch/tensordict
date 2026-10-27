@@ -440,7 +440,8 @@ class TestParquet:
         tensor_type = pa.fixed_shape_tensor(pa.float32(), [2, 3])
 
         def write(values, mask=None):
-            storage = pa.FixedSizeListArray.from_arrays(values, 6, mask=mask)
+            kwargs = {"mask": mask} if mask is not None else {}
+            storage = pa.FixedSizeListArray.from_arrays(values, 6, **kwargs)
             column = pa.ExtensionArray.from_storage(tensor_type, storage)
             path = tmp_path / "nulls.parquet"
             pq.write_table(pa.table({"t": column}), str(path), row_group_size=2)
