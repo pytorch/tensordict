@@ -1339,6 +1339,73 @@ class TestPointwiseOps:
                 assert leaf[field].shape == (2, 3, i)
                 assert (leaf[field] == expected).all()
 
+    @pytest.mark.parametrize("op", ["update_", "copy_"])
+    @pytest.mark.parametrize("wrappers", [0, 1, 2, 3])
+    @pytest.mark.parametrize(
+        "kind",
+        [
+            "dense",
+            "locked",
+            "memmap",
+            pytest.param(
+                "h5",
+                marks=pytest.mark.skipif(not _has_h5py, reason="h5py not available"),
+            ),
+            "two_fields",
+            "stack_of_stacks",
+        ],
+    )
+    def test_update_typed_lazy_hetero_keys(self, op, wrappers, kind, tmp_path):
+        # #3392: update_ and copy_ on a TypedTensorDict that wraps another
+        # one over a lazy stack whose members differ in shape wrote entries
+        # such as ("0", "x") into every member, or raised partway through the
+        # write. Each member keeps only its own keys and takes the new
+        # values, with no wrapper, one, or more.
+        class TypedX(TypedTensorDict):
+            x: torch.Tensor
+
+        class TypedXY(TypedTensorDict):
+            x: torch.Tensor
+            y: torch.Tensor
+
+        cls, fields = (TypedXY, ["x", "y"]) if kind == "two_fields" else (TypedX, ["x"])
+        leaves = []
+
+        def member(i):
+            td = TensorDict(
+                {field: torch.full((2, 3, i), 2.0) for field in fields},
+                batch_size=[2],
+            )
+            if kind == "memmap":
+                td = td.memmap(tmp_path / str(len(leaves)))
+            elif kind == "h5":
+                td = PersistentTensorDict.from_dict(
+                    td, filename=str(tmp_path / f"{len(leaves)}.h5")
+                )
+            leaves.append((td, i))
+            return td
+
+        if kind == "stack_of_stacks":
+            members = [
+                LazyStackedTensorDict(member(i), member(i), stack_dim=1)
+                for i in (1, 2, 3)
+            ]
+        else:
+            members = [member(i) for i in (1, 2, 3)]
+        stack = LazyStackedTensorDict(*members, stack_dim=1)
+        if kind == "locked":
+            stack.lock_()
+        td = stack
+        for _ in range(wrappers):
+            td = cls.from_tensordict(td)
+        other = td.clone().apply(lambda x: torch.full_like(x, 3.0))
+        assert getattr(td, op)(other) is td
+        for leaf, i in leaves:
+            assert sorted(leaf.keys(True, True)) == fields
+            for field in fields:
+                assert leaf[field].shape == (2, 3, i)
+                assert (leaf[field] == 3.0).all()
+
 
 @pytest.mark.parametrize(
     "batch_size,feature_size",

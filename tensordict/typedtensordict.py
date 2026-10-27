@@ -990,6 +990,10 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
     # unchanged, as in the other in-place methods (#2739).
     def _update_(self, input_dict_or_td, *, clone, non_blocking, keys_to_update):
         source = self._source
+        # a typed source over a lazy stack: update that stack, as with one
+        # wrapper (#3392)
+        while isinstance(source, TypedTensorDict):
+            source = source._source
         if not isinstance(source, LazyStackedTensorDict):
             return super()._update_(
                 input_dict_or_td,
