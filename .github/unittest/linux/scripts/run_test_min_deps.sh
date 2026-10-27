@@ -13,13 +13,13 @@ eval "$(./conda/bin/conda shell.bash hook)"
 conda activate ./env
 
 # The minimum of each extra in pyproject.toml, in its oldest minor series
-# (zarr at its exact floor): update them together. numpy is the oldest series
+# (pyarrow and zarr at their exact floors): update them together. numpy is the oldest series
 # that all of these accept: zarr 3.1.1 needs numpy>=1.26. safetensors 0.7.0 is
 # the oldest release that handles complex tensors, and zarr 3.1.1 the oldest
 # that saves strings without warning that its vlen-utf8 codec is not part of
-# the Zarr 3 specification.
+# the Zarr 3 specification. PyArrow 14.0.1 fixes CVE-2023-47248.
 min_deps=(
-    "pyarrow==10.0.*"
+    "pyarrow==14.0.1"
     "pandas==1.5.*"
     "h5py==3.11.*"
     "zarr==3.1.1"
@@ -52,7 +52,7 @@ mkdir -p "$JUNIT_DIR"
 # safetensors, such as the h5 cases of the shared tensordict tests.
 # from_arrow and to_arrow need pyarrow 15 or later, and raise a clear
 # ImportError below that, which the old_pyarrow and MinimumVersion tests check.
-# The parquet and tabular extras admit pyarrow 10, which this job tests through
+# The parquet and tabular extras admit pyarrow 14.0.1, which this job tests through
 # from_parquet, to_parquet and pandas, so the -k deselects the other tests of
 # from_arrow and to_arrow.
 test_status=0

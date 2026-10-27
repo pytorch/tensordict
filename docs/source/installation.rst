@@ -63,14 +63,14 @@ Some features need other packages. Install them with an extra, for example
        :meth:`~tensordict.TensorDict.to_csv`, and
        :meth:`~tensordict.TensorDict.from_csv`.
    * - ``parquet``
-     - ``pyarrow>=10.0``
+     - ``pyarrow>=14.0.1``
      - Parquet files: :meth:`~tensordict.TensorDict.to_parquet` and
        :meth:`~tensordict.TensorDict.from_parquet`. These methods use
        pyarrow, or pandas if pyarrow is not installed.
        Arrow tables: :func:`~tensordict.from_arrow` and
        :func:`~tensordict.to_arrow`, which need pyarrow 15 or later.
    * - ``tabular``
-     - ``pandas>=1.5`` and ``pyarrow>=10.0``
+     - ``pandas>=1.5`` and ``pyarrow>=14.0.1``
      - The ``pandas`` and ``parquet`` extras together.
    * - ``safetensors``
      - ``safetensors>=0.7.0``
@@ -80,6 +80,22 @@ Some features need other packages. Install them with an extra, for example
      - ``onnx``, ``onnxscript``, and ``onnxruntime``
      - Export of a :class:`~tensordict.nn.TensorDictModule` to ONNX with
        :func:`torch.onnx.export`, and running the result.
+
+The ``parquet`` and ``tabular`` extras require PyArrow 14.0.1 or later to
+exclude versions affected by `CVE-2023-47248
+<https://github.com/advisories/GHSA-5wvp-7f3h-6wmm>`__, a deserialization
+code-execution vulnerability. PyArrow 10 through 14.0.0 no longer satisfies
+these extras. Existing installations and manually installed optional
+packages are not upgraded automatically. To upgrade PyArrow explicitly:
+
+.. code-block:: bash
+
+   pip install --upgrade "pyarrow>=14.0.1"
+
+This minimum does not fix vulnerabilities in Arrow's bundled native Brotli
+library. It does not make untrusted Parquet files safe to load.
+:func:`~tensordict.from_arrow` and :func:`~tensordict.to_arrow` still require
+PyArrow 15 or later.
 
 :ref:`storage` explains the HDF5, Zarr, and tabular formats.
 
