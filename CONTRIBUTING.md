@@ -91,9 +91,9 @@ Complete your CLA here: <https://code.facebook.com/cla>
 We use GitHub issues to track public bugs. Please ensure your description is
 clear and has sufficient instructions to be able to reproduce the issue.
 
-Facebook has a [bounty program](https://www.facebook.com/whitehat/) for the safe
-disclosure of security bugs. In those cases, please go through the process
-outlined on that page and do not file a public issue.
+For suspected security vulnerabilities, follow [SECURITY.md](SECURITY.md) and
+use the private reporting channel. Do not file a public issue with vulnerability
+details.
 
 ## License
 By contributing to tensordict, you agree that your contributions will be licensed
