@@ -1270,32 +1270,74 @@ class TestPointwiseOps:
         ],
     )
     @pytest.mark.parametrize("wrappers", [1, 2, 3])
-    def test_inplace_typed_lazy_hetero_keys(self, op, args, expected, wrappers):
+    @pytest.mark.parametrize(
+        "kind",
+        [
+            "dense",
+            "locked",
+            "memmap",
+            pytest.param(
+                "h5",
+                marks=pytest.mark.skipif(not _has_h5py, reason="h5py not available"),
+            ),
+            "two_fields",
+            "stack_of_stacks",
+        ],
+    )
+    def test_inplace_typed_lazy_hetero_keys(
+        self, op, args, expected, wrappers, kind, tmp_path
+    ):
         # #3392: a TypedTensorDict that wraps another one over a lazy stack
         # whose members differ in shape wrote entries such as ("0", "x")
-        # into every member. Each member keeps only its own key, with any
-        # number of wrappers and for the in-place methods that read copies
+        # into every member, or raised partway through the write. Each
+        # member keeps only its own keys, with any number of wrappers, for
+        # every kind of member and for the in-place methods that read copies
         # of the leaves: unary, binary with a tensor operand, and ternary.
         class TypedX(TypedTensorDict):
             x: torch.Tensor
 
-        stack = LazyStackedTensorDict(
-            *[
-                TensorDict(x=torch.full((2, 3, i), 2.0), batch_size=[2])
+        class TypedXY(TypedTensorDict):
+            x: torch.Tensor
+            y: torch.Tensor
+
+        cls, fields = (TypedXY, ["x", "y"]) if kind == "two_fields" else (TypedX, ["x"])
+        leaves = []
+
+        def member(i):
+            td = TensorDict(
+                {field: torch.full((2, 3, i), 2.0) for field in fields},
+                batch_size=[2],
+            )
+            if kind == "memmap":
+                td = td.memmap(tmp_path / str(len(leaves)))
+            elif kind == "h5":
+                td = PersistentTensorDict.from_dict(
+                    td, filename=str(tmp_path / f"{len(leaves)}.h5")
+                )
+            leaves.append((td, i))
+            return td
+
+        if kind == "stack_of_stacks":
+            members = [
+                LazyStackedTensorDict(member(i), member(i), stack_dim=1)
                 for i in (1, 2, 3)
-            ],
-            stack_dim=1,
-        )
+            ]
+        else:
+            members = [member(i) for i in (1, 2, 3)]
+        stack = LazyStackedTensorDict(*members, stack_dim=1)
+        if kind == "locked":
+            stack.lock_()
         td = stack
         for _ in range(wrappers):
-            td = TypedX.from_tensordict(td)
-        other = torch.full((2, 3), 3.0)
+            td = cls.from_tensordict(td)
+        other = torch.full(td.batch_size, 3.0)
         args = [other if arg == "other" else arg for arg in args]
         assert getattr(td, op)(*args) is td
-        for i, member in enumerate(stack.tensordicts, 1):
-            assert list(member.keys(True, True)) == ["x"]
-            assert member["x"].shape == (2, 3, i)
-            assert (member["x"] == expected).all()
+        for leaf, i in leaves:
+            assert sorted(leaf.keys(True, True)) == fields
+            for field in fields:
+                assert leaf[field].shape == (2, 3, i)
+                assert (leaf[field] == expected).all()
 
 
 @pytest.mark.parametrize(
