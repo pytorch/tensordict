@@ -38,7 +38,9 @@ jobs:
           path: ~/.cache/pre-commit
           key: pre-commit-${{ runner.os }}-${{ env.pythonLocation }}-${{ hashFiles('.pre-commit-config.yaml') }}
       - name: Install lint tools
-        run: pip install --progress-bar=off pre-commit
+        run: |
+          python -m pip install --upgrade -c .github/ci-constraints.txt pip certifi
+          pip install --progress-bar=off pre-commit
       - name: Lint Python source and configs
         run: |
           if ! pre-commit run --all-files; then

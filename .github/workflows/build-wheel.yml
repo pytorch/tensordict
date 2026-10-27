@@ -94,7 +94,7 @@ jobs:
       - name: Install PyTorch and the wheel
         shell: bash
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade -c .github/ci-constraints.txt pip certifi
           python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
           python -m pip install wheels/tensordict-*-py3-none-any.whl pytest
       - name: Run the smoke test

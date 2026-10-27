@@ -40,7 +40,9 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install ghstack pre-commit
+        run: |
+          python -m pip install --upgrade -c .github/ci-constraints.txt pip certifi
+          pip install ghstack pre-commit
 
       - name: Configure git
         run: |

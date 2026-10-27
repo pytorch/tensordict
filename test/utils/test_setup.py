@@ -10,6 +10,7 @@ import zipfile
 from pathlib import Path
 
 import pytest
+from packaging.requirements import Requirement
 
 _ROOT = Path(__file__).resolve().parents[2]
 
@@ -217,6 +218,109 @@ print(json.dumps(out))
         # If torch isn't available in the environment, importing tensordict can fail.
         # The packaging version should still be correct.
         assert "dist_version" in info
+
+
+def test_ci_bootstrap_uses_verified_installers():
+    paths = [
+        ".github/unittest/linux/scripts/setup_env.sh",
+        ".github/unittest/rl_linux_optdeps/scripts/run_all.sh",
+        ".github/workflows/benchmarks.yml",
+        ".github/workflows/benchmarks_pr.yml",
+    ]
+    for path in paths:
+        source = (_ROOT / path).read_text()
+        assert "install_ci_tool.sh" in source, path
+        assert "ci-constraints.txt" in source, path
+        assert "http://repo.continuum.io" not in source, path
+        assert "https://pyenv.run" not in source, path
+        assert "https://astral.sh/uv/install.sh" not in source, path
+
+
+@pytest.mark.skipif(
+    sys.platform != "linux", reason="Linux CI installers use GNU coreutils"
+)
+@pytest.mark.parametrize("arch", ["x86_64", "aarch64"])
+@pytest.mark.parametrize("tool", ["miniconda", "uv", "pyenv"])
+@pytest.mark.parametrize("valid_checksum", [False, True])
+def test_ci_installer_checks_before_execution(tmp_path, tool, arch, valid_checksum):
+    """A local harmless download must pass SHA-256 before execution/extraction."""
+    script = _ROOT / ".github/scripts/install_ci_tool.sh"
+    source = script.read_text()
+    package = tmp_path / "package"
+    package.mkdir()
+    payload = package / "payload"
+    payload.write_text(
+        '#!/bin/sh\ncase "$0" in *.sh) ;; *) exit 1 ;; esac\necho installer-executed\n'
+    )
+    if tool != "miniconda":
+        archive = tmp_path / "archive.tar.gz"
+        _run(["tar", "-czf", str(archive), "-C", str(tmp_path), "package"], cwd=_ROOT)
+        payload = archive
+    digest = _run(["sha256sum", str(payload)], cwd=_ROOT).split()[0]
+    # Replace only this tool's architecture pin in a private copy, never the real file.
+    pins = {
+        "miniconda": "4ecd6f5ced565b02ef2fd5992fca4244b5e695ef5bff2beffbf03c7da5686e35",
+        "uv": "f29c3e94ffabd7e6f3ba521dba169a9b7ec12100bf3257087f0f24f6123f3645",
+        "pyenv": "0db903040bd06f4adc333bff60aefbdfc4af522f8e2b13f9cce3fbf721b3e468",
+    }
+    if arch == "aarch64":
+        pins.update(
+            miniconda="772e0bbaa3639b34b203e0c5322de403cc4cc478c3f6cd8696c58dbb4b902344",
+            uv="229e194255c7958d86d56e8790d969a6f74736592133f0dfd0076f754c642c1d",
+        )
+    assert source.count(pins[tool]) == 1
+    if valid_checksum:
+        source = source.replace(pins[tool], digest)
+    local_script = tmp_path / "install.sh"
+    local_script.write_text(source)
+    # Download stub accepts only HTTPS with HTTPS-only redirects.
+    curl = tmp_path / "curl"
+    curl.write_text(
+        "#!/bin/bash\n"
+        '[[ "$*" == *"--proto =https --proto-redir =https"* ]] || exit 2\n'
+        'while [[ "$1" != "--output" ]]; do shift; done\n'
+        f'cp "{payload}" "$2"\n'
+    )
+    curl.chmod(0o755)
+    destination = tmp_path / "installed"
+    result = subprocess.run(
+        ["bash", str(local_script), tool, str(destination), arch],
+        env={**os.environ, "PATH": f"{tmp_path}:{os.environ['PATH']}"},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if valid_checksum:
+        assert result.returncode == 0, result.stderr
+        if tool == "miniconda":
+            assert "installer-executed" in result.stdout
+        else:
+            assert (destination / "payload").read_text().startswith("#!/bin/sh")
+    else:
+        assert result.returncode != 0
+        assert "installer-executed" not in result.stdout
+        assert not destination.exists()
+
+
+@pytest.mark.parametrize(
+    "package,vulnerable,patched",
+    [
+        ("uv", "0.13.3", "0.13.6"),
+        ("pip", "26.2.1", "26.2.2"),
+        ("certifi", "2026.10.17", "2026.10.23"),
+        ("Brotli", "1.2.0", "1.2.1"),
+        ("brotlicffi", "1.2.0.0", "1.2.1.0"),
+    ],
+)
+def test_ci_security_constraints(package, vulnerable, patched):
+    constraints = {
+        requirement.name: requirement.specifier
+        for line in (_ROOT / ".github/ci-constraints.txt").read_text().splitlines()
+        if line and not line.startswith("#")
+        for requirement in [Requirement(line)]
+    }
+    assert vulnerable not in constraints[package]
+    assert patched in constraints[package]
 
 
 @pytest.mark.slow
