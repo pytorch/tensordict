@@ -877,11 +877,10 @@ class _Conversion:
                 gives each nested tensordict the largest batch size that its
                 entries share. A file written by :meth:`~.to_h5` stores the
                 batch sizes and the dim names, and ``from_h5`` warns when they
-                differ from the ones it returns (with ``batch_size``, the
-                nested tensordicts get it too). Starting with TensorDict 0.17,
+                differ from the ones it infers. Starting with TensorDict 0.17,
                 the default will change to restoring the stored ones, as
-                ``from_zarr`` does. With ``auto_batch_size=True``, it does
-                not warn.
+                ``from_zarr`` does. With ``batch_size`` or
+                ``auto_batch_size=True``, it does not warn.
             non_tensor_as_stack (bool, optional): if ``True``, a non-tensor
                 dataset that tensordict did not write, such as a string column
                 with one string per row, reads as a
@@ -929,8 +928,8 @@ class _Conversion:
             result.auto_batch_size_(batch_dims=batch_dims)
         elif batch_dims is not None:
             _warn_batch_dims_ignored("from_h5", result, batch_dims, batch_size)
-        if not auto_batch_size:
-            _warn_h5_metadata_differs(result, batch_size)
+        if batch_size is None and not auto_batch_size:
+            _warn_h5_metadata_differs(result)
         return result
 
     @classmethod

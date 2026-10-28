@@ -2686,7 +2686,11 @@ class PersistentTensorDict(
             clone.names = names
             clone._nested_tensordicts = {}
             clone._set_metadata(self)
-            self._write_attrs_metadata_into(f_dest)
+            if self.backend == "h5":
+                # zarr writes the clone's cache, as before #3263
+                self._write_attrs_metadata_into(f_dest)
+            else:
+                clone._write_attrs_metadata()
             clone._backend.finalize(clone.file)
             return clone
         else:
@@ -2752,11 +2756,10 @@ class PersistentTensorDict(
 _register_tensor_class(PersistentTensorDict)
 
 
-def _warn_h5_metadata_differs(td: PersistentTensorDict, batch_size) -> None:
-    """Warns when the batch sizes or names that an h5 file stores differ from the ones ``from_h5`` returns (#3263).
+def _warn_h5_metadata_differs(td: PersistentTensorDict) -> None:
+    """Warns when the batch sizes or names that an h5 file stores differ from the ones ``from_h5`` infers (#3263).
 
-    Reads the group attributes only. With ``batch_size``, the root keeps it
-    and every nested group gets it, as ``_make_nested`` does.
+    Reads the group attributes only.
     """
     stored = td._backend.stored_attrs_metadata
     metadata = stored(td.file)
@@ -2764,39 +2767,22 @@ def _warn_h5_metadata_differs(td: PersistentTensorDict, batch_size) -> None:
         # every writer stores the root: a file written before 0.16, or by
         # another program, loads as it did, without a warning
         return
-    if batch_size is None:
-        differs = any(name is not None for name in metadata.get("names") or ())
-        # from_h5 has opened every nested group to infer its batch size; the
-        # cache also holds entries under nested keys, which are not walked
-        pending = [td]
-        while pending and not differs:
-            td = pending.pop()
-            metadata = stored(td.file)
-            differs = metadata is not None and metadata.get("batch_size") not in (
-                None,
-                list(td.batch_size),
-            )
-            pending.extend(
-                nested
-                for key, nested in td._nested_tensordicts.items()
-                if isinstance(key, str) or len(key) == 1
-            )
-    else:
-        import h5py
-
-        batch_size = list(td.batch_size)
-
-        def visit(name, node):
-            if isinstance(node, h5py.Group):
-                metadata = stored(node)
-                if metadata is not None and metadata.get("batch_size") not in (
-                    None,
-                    batch_size,
-                ):
-                    return True
-            return None
-
-        differs = td.file.visititems(visit)
+    differs = any(name is not None for name in metadata.get("names") or ())
+    # from_h5 has opened every nested group to infer its batch size; the
+    # cache also holds entries under nested keys, which are not walked
+    pending = [td]
+    while pending and not differs:
+        td = pending.pop()
+        metadata = stored(td.file)
+        differs = metadata is not None and metadata.get("batch_size") not in (
+            None,
+            list(td.batch_size),
+        )
+        pending.extend(
+            nested
+            for key, nested in td._nested_tensordicts.items()
+            if isinstance(key, str) or len(key) == 1
+        )
     if differs:
         warnings.warn(
             "This h5 file stores the batch sizes or the dim names of the "

@@ -709,19 +709,8 @@ class TestH5Serialization:
             ),
             # an empty tensordict
             (TensorDict(batch_size=[3]), {}, [], None),
-            # batch_size= is kept, and given to the nested groups too
-            (
-                TensorDict(
-                    a=torch.zeros(3),
-                    nested=TensorDict(c=torch.zeros(3, 1), batch_size=[3, 1]),
-                    batch_size=[3],
-                ),
-                {"batch_size": [3]},
-                [3],
-                [3],
-            ),
         ],
-        ids=["root_batch_size", "names", "nested_batch_size", "empty", "batch_size"],
+        ids=["root_batch_size", "names", "nested_batch_size", "empty"],
     )
     def test_from_h5_warns_stored_metadata_differs(
         self, tmp_path, td, kwargs, batch_size, nested_batch_size
@@ -754,6 +743,12 @@ class TestH5Serialization:
         h5td, record = self._from_h5_warnings(path, auto_batch_size=True)
         assert not record
         assert h5td["nested"].batch_size == torch.Size([3, 1, 2])
+        h5td.close()
+        # batch_size= asks for that batch size
+        h5td, record = self._from_h5_warnings(path, batch_size=[3])
+        assert not record
+        assert h5td.batch_size == torch.Size([3])
+        assert h5td["nested"].batch_size == torch.Size([3])
         h5td.close()
         # the stored batch sizes are the inferred ones
         TensorDict(
