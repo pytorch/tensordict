@@ -3725,7 +3725,7 @@ class TestTensorDicts(TestTensorDictsBase):
         # set_ raises a KeyError for a missing key. For a nested key whose
         # first entry is missing, a tensordict, a lazy stack and a typed
         # tensordict create the entry, as they always did, and warn until
-        # TensorDict 0.18 raises (#3391). A locked tensordict (memmap_td), a
+        # TensorDict 0.17 raises (#3391). A locked tensordict (memmap_td), a
         # TensorDictParams, a file and the views raise now, and create
         # nothing: a TensorDictParams wrote the value into a copy that it
         # dropped, and a sub-tensordict left an empty entry in its source.
@@ -6344,7 +6344,7 @@ def _set_nested_td():
 
 def test_set__unexisting_nested_warns():
     # #3391: set_ creates the missing entry of a nested key and warns, at any
-    # depth, until TensorDict 0.18 raises.
+    # depth, until TensorDict 0.17 raises.
     for key in (("x", "y"), ("x", "y", "z"), ("n", "x", "y")):
         td = _set_nested_td()
         with pytest.warns(
@@ -6356,7 +6356,7 @@ def test_set__unexisting_nested_warns():
         assert record[0].filename == __file__
         assert (td.get(key) == 1).all()
     # the message is fixed text (#3232): it announces the switch
-    assert "Starting with TensorDict 0.18, the default will change" in str(
+    assert "Starting with TensorDict 0.17, the default will change" in str(
         record[0].message
     )
 

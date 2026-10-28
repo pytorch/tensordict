@@ -2567,7 +2567,7 @@ _SET_MEMBERS_CALL = local()
 
 
 def _warn_set_creates_entry() -> None:
-    """Warns that ``set_`` creates the missing entry on the path of a nested key, until 0.18 (#3391)."""
+    """Warns that ``set_`` creates the missing entry on the path of a nested key, until 0.17 (#3391)."""
     if is_dynamo_compiling():
         return
     state = getattr(_SET_MEMBERS_CALL, "warned", None)
@@ -2579,7 +2579,7 @@ def _warn_set_creates_entry() -> None:
     warnings.warn(
         "set_() got a nested key whose parent entry is missing, and creates "
         "it, while set_() raises a KeyError for any other missing key. "
-        "Starting with TensorDict 0.18, the default will change to raising a "
+        "Starting with TensorDict 0.17, the default will change to raising a "
         "KeyError. Use set() or td[key] = value to add an entry, or fix the key.",
         FutureWarning,
         stacklevel=_user_stacklevel(),
@@ -6266,7 +6266,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             KeyError: if the key is missing. If an entry on the path of a
                 nested key is missing, a tensordict, a lazy stack and a
                 tensorclass create it and emit a :class:`FutureWarning`:
-                starting with TensorDict 0.18, the default will change to
+                starting with TensorDict 0.17, the default will change to
                 raising the ``KeyError``. A locked tensordict, a
                 :class:`~tensordict.nn.TensorDictParams` and a view of a
                 tensordict, such as a sub-tensordict, raise it now.

@@ -6385,7 +6385,7 @@ class TestTensorClass:
 
     def test_set__unexisting_nested(self):
         # #3391: set_ creates the missing entry of a nested key and warns until
-        # TensorDict 0.18 raises, as it does on a TensorDict. A locked
+        # TensorDict 0.17 raises, as it does on a TensorDict. A locked
         # tensorclass raises now, and a missing leaf always did.
         class Foo(TensorClass):
             a: torch.Tensor
