@@ -27,7 +27,13 @@ Returns:
 
 Raises:
 
-- [**KeyError**](https://docs.python.org/3/builtins/exceptions.html#KeyError) - if the key is missing.
+- [**KeyError**](https://docs.python.org/3/builtins/exceptions.html#KeyError) - if the key is missing. If an entry on the path of a
+ nested key is missing, a tensordict, a lazy stack and a
+ tensorclass create it and emit a [`FutureWarning`](https://docs.python.org/3/builtins/exceptions.html#FutureWarning):
+ starting with TensorDict 0.17, the default will change to
+ raising the `KeyError`. A locked tensordict, a
+ `TensorDictParams` and a view of a
+ tensordict, such as a sub-tensordict, raise it now.
 - [**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if the leading dimensions of the value do not match
  the batch size.
 - [**ValueError**](https://docs.python.org/3/builtins/exceptions.html#ValueError) - if the value does not fit the shape of the entry.
