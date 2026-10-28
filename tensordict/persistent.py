@@ -1482,14 +1482,23 @@ class PersistentTensorDict(
         """Persists batch size and names in the storage attributes (best effort)."""
         metadata = _attrs_metadata(self.batch_size, self._td_dim_names)
         self._backend.write_attrs_metadata(self.file, metadata)
-        # the entries cached under a nested key first, so that a direct child,
-        # which has the batch size of its group, writes last: an h5 entry
-        # under a nested key has the batch size of its parent (#3263)
-        for _, td in sorted(
-            self._nested_tensordicts.items(),
-            key=lambda item: isinstance(item[0], str) or len(item[0]) == 1,
-        ):
+        for td in self._nested_tensordicts.values():
             td._write_attrs_metadata()
+
+    def _write_attrs_metadata_into(self, group):
+        """Writes the batch size and names of each group of ``self`` on the same group of ``group``, a copy of the file.
+
+        Walks the direct children, which have the batch sizes that
+        ``self[key]`` returns. The cache can also hold entries under a nested
+        key, which on h5 have the batch size of their parent (#3263).
+        """
+        metadata = _attrs_metadata(self.batch_size, self._td_dim_names)
+        self._backend.write_attrs_metadata(group, metadata)
+        for name in self._backend.keys(self.file):
+            array = self._get_array((name,))
+            if not self._backend.is_array(array):
+                nested = self._process_array((name,), array)
+                nested._write_attrs_metadata_into(group[name])
 
     def _nested_batch_size_from_attrs(self, group):
         """Batch size persisted in a nested group's metadata, or ``None``."""
@@ -2677,7 +2686,7 @@ class PersistentTensorDict(
             clone.names = names
             clone._nested_tensordicts = {}
             clone._set_metadata(self)
-            clone._write_attrs_metadata()
+            self._write_attrs_metadata_into(f_dest)
             clone._backend.finalize(clone.file)
             return clone
         else:
@@ -2793,8 +2802,7 @@ def _warn_h5_metadata_differs(td: PersistentTensorDict, batch_size) -> None:
             "This h5 file stores the batch sizes or the dim names of the "
             "tensordict it was written from, and from_h5 returns other ones. "
             "Starting with TensorDict 0.17, the default will change to "
-            "restoring the stored ones, as from_zarr does. Pass "
-            "auto_batch_size=True to keep the inferred batch sizes.",
+            "restoring the stored ones, as from_zarr does.",
             FutureWarning,
             stacklevel=_user_stacklevel(),
         )

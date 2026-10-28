@@ -880,8 +880,8 @@ class _Conversion:
                 differ from the ones it returns (with ``batch_size``, the
                 nested tensordicts get it too). Starting with TensorDict 0.17,
                 the default will change to restoring the stored ones, as
-                ``from_zarr`` does. ``auto_batch_size=True`` keeps the
-                inferred batch sizes.
+                ``from_zarr`` does. With ``auto_batch_size=True``, it does
+                not warn.
             non_tensor_as_stack (bool, optional): if ``True``, a non-tensor
                 dataset that tensordict did not write, such as a string column
                 with one string per row, reads as a

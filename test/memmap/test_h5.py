@@ -665,11 +665,16 @@ class TestH5Serialization:
         assert self._stored_metadata(tmp_path / "to_h5.h5") == expected
         h5td = PersistentTensorDict.from_dict(td, tmp_path / "from_dict.h5")
         clone = h5td.clone(newfile=tmp_path / "clone.h5")
+        # an entry read under a nested key has the batch size of its parent
+        h5td.get(("nested", "deep"))
+        clone_nested_key = h5td.clone(newfile=tmp_path / "clone_nested_key.h5")
         h5td.close()
         clone.close()
+        clone_nested_key.close()
         from_dict = self._stored_metadata(tmp_path / "from_dict.h5")
         assert from_dict["nested/deep"] == expected["nested/deep"]
         assert self._stored_metadata(tmp_path / "clone.h5") == from_dict
+        assert self._stored_metadata(tmp_path / "clone_nested_key.h5") == from_dict
         PersistentTensorDict.from_dict(
             {"a": torch.zeros(3, 4), "b": {"c": torch.zeros(3, 4, 2)}},
             tmp_path / "dict.h5",
