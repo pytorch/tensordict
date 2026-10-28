@@ -23,6 +23,7 @@ shuffled = batch[torch.randperm(len(batch))]  # one permutation for all of them
 pairs = torch.stack([batch, batch])           # batch_size [2, 32]
 batch["text", "mask"]                         # nested keys are tuples
 flat = batch.flatten_keys(".")                # keys: image, label, text.tokens, text.mask
+batch["score"] = torch.ones(31)               # RuntimeError: batch dimension mismatch
 ```
 
 The tensors share their leading dimensions, the batch size, so indexing,
@@ -89,30 +90,6 @@ pip install tensordict
 
 Pure Python, for Python 3.10+ and PyTorch 2.11+. Nightly builds and extras:
 [Installation](https://docs.pytorch.org/tensordict/stable/installation.html).
-
-## TensorDict: keys at run time, like a dict
-
-```python
-import torch
-from tensordict import TensorDict
-
-batch = TensorDict(
-    {"images": torch.randn(32, 3, 64, 64), "labels": torch.randint(10, (32,))},
-    batch_size=[32],  # the leading dimension that all tensors share
-)
-
-print(batch[:8].batch_size)                 # torch.Size([8])
-print(batch.reshape(4, 8)["images"].shape)  # torch.Size([4, 8, 3, 64, 64])
-```
-
-Every tensor you add must have the batch dimensions:
-
-```python
-batch["scores"] = torch.ones(31)
-# RuntimeError: batch dimension mismatch, got self.batch_size=torch.Size([32]) and
-# value.shape=torch.Size([31]) for key 'scores'. The leading dimensions of a value
-# must match the batch size.
-```
 
 ## More examples
 
@@ -228,7 +205,7 @@ See [torch.compile, torch.func, torch.export, and CUDA graphs](https://docs.pyto
 |---|---|
 | Does it work with `torch.compile`? | Yes, and with `torch.func` (`vmap`, `grad`) and `torch.export`, because TensorDicts are pytrees. See the [compile guide](https://docs.pytorch.org/tensordict/stable/compile.html). |
 | What does the container cost? | Python work per operation and per tensor, not per element. Arithmetic uses PyTorch's foreach kernels, `.to(device)` copies without blocking, and a compiled graph holds only the tensor operations. |
-| Can I get plain tensors back? | Yes. `batch["images"]` is a `torch.Tensor`, `to_dict()` returns a nested `dict`, and `numpy()`, `to_pandas()`, `to_h5()`, and `to_zarr()` export. |
+| Can I get plain tensors back? | Yes. `batch["image"]` is a `torch.Tensor`, `to_dict()` returns a nested `dict`, and `numpy()`, `to_pandas()`, `to_h5()`, and `to_zarr()` export. |
 | What does it depend on? | PyTorch, NumPy, cloudpickle, and pyvers, plus typing_extensions on Python 3.10. |
 | What is tested? | Python 3.10 to 3.15 (with free-threaded 3.14t and 3.15t) and PyTorch 2.11 to nightly, on Linux (CPU and GPU) and macOS. Each pull request also runs the TorchRL test suite. |
 | Is the API stable? | It is pre-1.0. A breaking change comes after two minor releases of warnings that name the version of the change. APIs that the docs mark as experimental (TypedTensorDict, UnbatchedTensor, the UCXX pipes, and LazyStackedTensorDictStore) can change in a minor release. |

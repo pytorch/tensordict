@@ -4,6 +4,9 @@ channels:
 dependencies:
   - pip
   - pip:
+    # Keep pip patched even if conda replaces it during env update.
+    - pip>=26.2.2
+    - certifi>=2026.10.23
     - cloudpickle
     - pytest
     - pytest-benchmark
@@ -15,6 +18,7 @@ dependencies:
     - orjson
     - numpy
     - mosaicml-streaming
+    - Brotli>=1.2.1
     - mypy
     - pandas
     - pyarrow

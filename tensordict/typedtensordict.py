@@ -889,12 +889,10 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
     # in shape change their shared leaves through a selection of them.
     def _inplace_on_copies(self, method, *args, **kwargs):
         source = self._source
-        if isinstance(source, TypedTensorDict):
-            # the leaves that self lists name the members of a lazy stack by
-            # their index, as ("0", "x"), which no entry has: the TypedTensorDict
-            # that self wraps writes them
-            result = source._inplace_on_copies(method, *args, **kwargs)
-            return self if result is source else result
+        # a typed source over a lazy stack: work on that stack, as with one
+        # wrapper, which writes back the keys that the stack lists (#3392)
+        while isinstance(source, TypedTensorDict):
+            source = source._source
         if not isinstance(source, LazyStackedTensorDict):
             return super()._inplace_on_copies(method, *args, **kwargs)
         # the public name of a hook such as _zero_. inspect.unwrap: under
@@ -992,6 +990,10 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
     # unchanged, as in the other in-place methods (#2739).
     def _update_(self, input_dict_or_td, *, clone, non_blocking, keys_to_update):
         source = self._source
+        # a typed source over a lazy stack: update that stack, as with one
+        # wrapper (#3392)
+        while isinstance(source, TypedTensorDict):
+            source = source._source
         if not isinstance(source, LazyStackedTensorDict):
             return super()._update_(
                 input_dict_or_td,

@@ -59,6 +59,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          persist-credentials: false
           fetch-depth: 50 # this is to make sure we obtain the target base commit
       - name: Python Setup
         uses: actions/setup-python@v5
@@ -74,16 +75,17 @@ jobs:
         run: |
           set -e
           set -x
-          curl -LsSf https://astral.sh/uv/install.sh | sh
+          bash .github/scripts/install_ci_tool.sh uv "$HOME/.local/bin"
           echo "$HOME/.local/bin" >> $GITHUB_PATH
-          source $HOME/.local/bin/env
+          export PATH="$HOME/.local/bin:$PATH"
+          export UV_CONSTRAINT="$PWD/.github/ci-constraints.txt"
           # Create a local venv for the benchmark run
           uv venv .venv/local --python ${{ matrix.python-version }}
           source .venv/local/bin/activate
           echo "=== uv version ==="
           uv --version
           uv pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu130
-          uv pip install "setuptools" "wheel"
+          uv pip install pip certifi "setuptools" "wheel"
           uv pip install pytest pytest-benchmark "zarr>=3.1.1" h5py
           # Do not resolve runtime dependencies here: we want to keep the PyTorch build (nightly)
           # that was explicitly installed above, and avoid any solver replacing it.

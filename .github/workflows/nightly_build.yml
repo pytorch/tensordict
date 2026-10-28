@@ -42,6 +42,8 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
 
 jobs:
   build-wheel:
@@ -51,13 +53,16 @@ jobs:
     steps:
       - name: Checkout tensordict
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
       - name: Build tensordict Nightly
         run: |
-          python -m pip install --upgrade pip build
+          python -m pip install --upgrade "pip>=26.2.2" "certifi>=2026.10.23"
+          python -m pip install build
           sed -i 's/name = "tensordict"/name = "tensordict-nightly"/' pyproject.toml
           DATE_VERSION=$(date +%Y.%m.%d)
           export SETUPTOOLS_SCM_PRETEND_VERSION=$DATE_VERSION
@@ -87,10 +92,12 @@ jobs:
           python-version: ${{ matrix.python_version }}
       - name: Checkout tensordict
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Install PyTorch nightly
         shell: bash
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade "pip>=26.2.2" "certifi>=2026.10.23"
           python -m pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu
       - name: Download the wheel
         uses: actions/download-artifact@v4
@@ -137,10 +144,12 @@ jobs:
           python-version: "3.12"
       - name: Checkout tensordict
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Install PyTorch
         shell: bash
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade "pip>=26.2.2" "certifi>=2026.10.23"
           python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
       - name: Download the wheel
         uses: actions/download-artifact@v4
@@ -170,6 +179,7 @@ jobs:
               -n auto --dist worksteal --timeout 120 --instafail --durations 20
 
   upload-wheel:
+    permissions: {}
     # Don't run on forked repos.
     if: ${{ github.repository_owner == 'pytorch' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') }}
     needs: test-wheel
@@ -180,12 +190,59 @@ jobs:
         with:
           name: tensordict-nightly-wheel
           path: wheels
+      - name: Setup publishing Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install publishing tools
+        shell: bash
+        run: |
+          python3 -m venv "$RUNNER_TEMP/publisher"
+          "$RUNNER_TEMP/publisher/bin/python" -m pip install --require-hashes --only-binary=:all: -r /dev/stdin <<'REQUIREMENTS'
+          certifi==2026.10.23 --hash=sha256:e9b54de76e530bb6cf0ccd036787103acb58fd42ba930ea8bf948ddbaa2f61d1
+          pip==26.2.2 --hash=sha256:fd7f4dfa8190e014013b9f08f3e973f4e4c26ffd179a204895533a7254813a70
+          REQUIREMENTS
+          # Linux x86_64 / Python 3.10 wheels, including all transitive dependencies.
+          # Refresh pins together; verify wheel SHA-256 digests against PyPI metadata.
+          "$RUNNER_TEMP/publisher/bin/python" -m pip install --require-hashes --only-binary=:all: -r /dev/stdin <<'REQUIREMENTS'
+          backports.tarfile==1.2.0 --hash=sha256:77e284d754527b01fb1e6fa8a1afe577858ebe4e9dad8919e34c862cb399bc34
+          certifi==2026.10.23 --hash=sha256:e9b54de76e530bb6cf0ccd036787103acb58fd42ba930ea8bf948ddbaa2f61d1
+          cffi==2.1.1 --hash=sha256:194cffa889098ced9976c3fc6340305e43f6303657d298da55366907c05c22d6
+          charset-normalizer==3.5.2 --hash=sha256:8a893cc101149f80a653f82062ebc95b34525a2614382e1da5458fe7c6997249
+          cryptography==50.0.2 --hash=sha256:1981f1db4630889b9ef7803fadef12b056f428cb6b85c27ba57b774793b6093c
+          docutils==0.23 --hash=sha256:25d013af9bf23bc1c7b2b093dff4208166c53a94786c9e447808335ef1185fea
+          id==1.6.1 --hash=sha256:f5ec41ed2629a508f5d0988eda142e190c9c6da971100612c4de9ad9f9b237ca
+          idna==3.20 --hash=sha256:ab7ae7122974553370f0bdb919e1a960b2cd1bc1ef0276416d896db81c14582c
+          importlib-metadata==9.0.1 --hash=sha256:bba5600596a7e21f3eef53281cf28d6a5195634d2f2b78ff9501a3272c6eaab0
+          jaraco.classes==3.4.0 --hash=sha256:f662826b6bed8cace05e7ff873ce0f9283b5c924470fe664fff1c2f00f581790
+          jaraco-context==6.1.2 --hash=sha256:bf8150b79a2d5d91ae48629d8b427a8f7ba0e1097dd6202a9059f29a36379535
+          jaraco-functools==4.6.0 --hash=sha256:99e3dc0060c5cbe8fcd1cdb36258e2a65ca40f1566b2033b12abb1bb44dd3c30
+          jeepney==0.9.0 --hash=sha256:97e5714520c16fc0a45695e5365a2e11b81ea79bba796e26f9f1d178cb182683
+          keyring==25.7.0 --hash=sha256:be4a0b195f149690c166e850609a477c532ddbfbaed96a404d4e43f8d5e2689f
+          markdown-it-py==4.2.0 --hash=sha256:9f7ebbcd14fe59494226453aed97c1070d83f8d24b6fc3a3bcf9a38092641c4a
+          mdurl==0.1.2 --hash=sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8
+          more-itertools==11.1.0 --hash=sha256:4b65538ae22f6fed0ce4874efd317463a7489796a0939fa66824dd542125a192
+          nh3==0.3.7 --hash=sha256:70f5ac8626e899a4bab0ef74ca2f5bd602f49c7b739e6e5026b4afc6d63dac42
+          packaging==26.3 --hash=sha256:d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c
+          pip==26.2.2 --hash=sha256:fd7f4dfa8190e014013b9f08f3e973f4e4c26ffd179a204895533a7254813a70
+          pycparser==3.11 --hash=sha256:51d5a8ba2be0bbe440b99d2112604c95bbbc3c2748a64260186c541e1729cd80
+          pygments==2.21.0 --hash=sha256:2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9
+          readme-renderer==46.0 --hash=sha256:d0dae1f74bb273b534770cb4cccb6bb78735540afdb03c2146f4e19dcd412560
+          requests==2.34.2 --hash=sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0
+          requests-toolbelt==1.0.0 --hash=sha256:cccfdd665f0a24fcf4726e690f65639d272bb0637b9b92dfd91a5568ccf6bd06
+          rfc3986==2.0.0 --hash=sha256:50b1502b60e289cb37883f3dfd34532b8873c7de9f49bb546641ce9cbd256ebd
+          rich==15.0.0 --hash=sha256:33bd4ef74232fb73fe9279a257718407f169c09b78a87ad3d296f548e27de0bb
+          secretstorage==3.5.0 --hash=sha256:0ce65888c0725fcb2c5bc0fdb8e5438eece02c523557ea40ce0703c266248137
+          twine==7.0.0 --hash=sha256:b854164df26db268af05f49aa5c0344b10e27a494343ff05b1e0bad3b135f5a7
+          typing-extensions==4.16.0 --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8
+          urllib3==2.8.0 --hash=sha256:0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3
+          zipp==4.1.2 --hash=sha256:b30cb6cd253122169c47de245ca24a86bac2a5d3802ba15bf7ba6414eb9e144d
+          REQUIREMENTS
       - name: Push tensordict Binary to PYPI
         env:
           PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: |
-          python3 -m pip install twine
-          python3 -m twine upload \
+          "$RUNNER_TEMP/publisher/bin/python" -m twine upload \
               --username __token__ \
               --password "$PYPI_TOKEN" \
               --skip-existing \
