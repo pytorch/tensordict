@@ -19,9 +19,7 @@
  "memmap_td filling": [],
  "memmap_td key_edits": [],
  "memmap_td keys": [],
- "memmap_td masking": [
-  "masked_select(mask)"
- ],
+ "memmap_td masking": [],
  "memmap_td pointwise": [],
  "memmap_td reductions": [],
  "memmap_td select": [],
