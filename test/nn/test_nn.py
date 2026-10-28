@@ -5436,6 +5436,54 @@ class TestTensorDictParams:
             params.masked_select(mask, inplace=True)
         assert params.batch_size == torch.Size([3])
 
+    @pytest.mark.parametrize("variant", ["plain", "lock", "non_tensor"])
+    def test_set__unexisting_nested(self, variant):
+        # #3391: set_ wrote a nested key whose first entry is missing into a
+        # temporary copy of the parameters, and lost the value without an
+        # error: it raises the KeyError of any missing key, and creates nothing.
+        td = TensorDict(
+            a=torch.zeros(3),
+            n=TensorDict(b=torch.zeros(3), batch_size=[3]),
+            batch_size=[3],
+        )
+        if variant == "non_tensor":
+            td["n", "s"] = NonTensorData("x", batch_size=[3])
+        params = TensorDictParams(td, lock=variant == "lock")
+        keys = set(params.keys(True))
+        for key, entry in ((("module", "a"), "module"), (("n", "x", "y"), "x")):
+            with pytest.raises(KeyError, match=f'key "{entry}" not found') as info:
+                params.set_(key, torch.ones(3))
+            # a locked TensorDictParams raised the lock RuntimeError
+            assert isinstance(info.value, RuntimeError)
+        assert set(params.keys(True)) == keys
+        # an existing nested entry is written in place
+        param = params["n", "b"]
+        params.set_(("n", "b"), torch.ones(3))
+        assert (param == 1).all()
+        assert params["n", "b"] is param
+        # set(inplace=True) still adds the entry, on an unlocked copy
+        if variant != "lock":
+            params.set(("module", "a"), torch.ones(3), inplace=True)
+            assert (params["module", "a"] == 1).all()
+
+    def test_set__leaves_non_tensor_unlocked(self):
+        # #3391: set_ checks that the entries of a nested key exist, without
+        # locking the temporary .data, whose non-tensor leaves are those of
+        # the parameters: a non-tensor leaf stays writable after set_.
+        td = TensorDict(
+            a=torch.zeros(3),
+            n=TensorDict(b=torch.zeros(3), batch_size=[3]),
+            batch_size=[3],
+        )
+        td["n", "s"] = NonTensorData("x", batch_size=[3])
+        params = TensorDictParams(td)
+        params.set_("a", torch.ones(3))
+        params.set_(("n", "b"), torch.ones(3))
+        leaf = params["n"].get("s")
+        assert not leaf.is_locked
+        leaf.data = "y"
+        assert params["n", "s"] == "y"
+
     @pytest.mark.parametrize("name", ["save", "dumps", "memmap", "memmap_like"])
     def test_save_family_signature(self, name):
         # #3320: memmap_like forwards every argument to the wrapped
