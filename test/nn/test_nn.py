@@ -1721,7 +1721,8 @@ class TestTDSequence:
             nested=TensorDict(a=torch.zeros(2), batch_size=[2]),
             batch_size=[2],
         )
-        output = model(input)
+        with pytest.warns(FutureWarning, match="Starting with TensorDict 0.17"):
+            output = model(input)
         assert output is not input
         assert set(input.keys(True, True)) == {"x", ("nested", "a")}
         assert (output["nested", "y"] == 1).all()
@@ -1731,8 +1732,8 @@ class TestTDSequence:
         # #3360: the sequences write their nested out_keys into a tensordict
         # that lacks the sub-tensordict with update(keys_to_update=...), which
         # warns there since its result changes in TensorDict 0.17. They keep
-        # today's outputs, unlisted nested entries included (#3367), without
-        # a warning.
+        # today's outputs, unlisted nested entries included, and warn with
+        # their own message instead, as these outputs change in 0.17 (#3367).
         def modules():
             return [
                 TensorDictModule(lambda x: x + 1, ["x"], [("nested", "y")]),
@@ -1760,7 +1761,9 @@ class TestTDSequence:
                     output = model(input)
                 else:
                     output = model(input, tensordict_out=tensordict_out)
-            assert not [w for w in record if issubclass(w.category, FutureWarning)]
+            # each of these outputs holds entries that are not out keys
+            future = [w for w in record if issubclass(w.category, FutureWarning)]
+            assert [str(w.message)[:24] for w in future] == ["A tensordict.nn module w"]
             return set(output.keys(True, True))
 
         everything = {"loc", ("nested", "a"), ("nested", "y")}
@@ -1853,17 +1856,23 @@ class TestTDSequence:
         ]
         for kwargs, tensordict_out, expected in cases:
             model = TensorDictSequential(*modules(), **kwargs)
-            with warnings.catch_warnings():
-                warnings.simplefilter("error", FutureWarning)
+            with warnings.catch_warnings(record=True) as record:
+                warnings.simplefilter("always")
                 if tensordict_out is None:
                     output = model(lazy_input())
                 else:
                     output = model(lazy_input(), tensordict_out=tensordict_out())
+            # warns where a member gets ("next", "q") or ("next", "h"), which
+            # are not out keys, into a "next" it lacked
+            warns = kwargs == selected_keys or bool(kwargs and tensordict_out is None)
+            future = [w for w in record if issubclass(w.category, FutureWarning)]
+            assert len(future) == warns, kwargs
+            assert all("tensordict.nn module" in str(w.message) for w in future)
             assert dump(output) == expected, kwargs
         input = TensorDict(x=torch.zeros(2), next={"q": torch.ones(2)}, batch_size=[2])
-        with warnings.catch_warnings():
-            warnings.simplefilter("error", FutureWarning)
+        with pytest.warns(FutureWarning, match="tensordict.nn module") as record:
             output = TensorDictSequential(*modules())(input, tensordict_out=lazy_out())
+        assert len([w for w in record if issubclass(w.category, FutureWarning)]) == 1
         assert dump(output) == [
             {**everything, ("next", "q"): 5.0},
             {**everything, ("next", "q"): 1.0},
