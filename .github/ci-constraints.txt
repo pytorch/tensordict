@@ -1,0 +1,8 @@
+# CI security floors, reviewed 2026-10-27. Constraints do not install packages.
+# uv's standalone installer is pinned separately in scripts/install_ci_tool.sh.
+uv>=0.13.6
+pip>=26.2.2
+certifi>=2026.10.23
+# Streaming uses Brotli. Do not add either implementation to core dependencies.
+Brotli>=1.2.1
+brotlicffi>=1.2.1.0

@@ -8,7 +8,7 @@ set -v
 export DEBIAN_FRONTEND=noninteractive
 export TZ=Etc/UTC
 
-apt update -y && apt install git wget gcc -y
+apt update -y && apt install git wget curl gcc -y
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # Avoid error: "fatal: unsafe repository"
@@ -16,6 +16,7 @@ git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
 conda_dir="${root_dir}/conda"
 env_dir="${root_dir}/env"
+export PIP_CONSTRAINT="${root_dir}/.github/ci-constraints.txt"
 
 cd "${root_dir}"
 
@@ -35,8 +36,7 @@ if [ "${os}" == "MacOSX" ]; then
 fi
 if [ ! -d "${conda_dir}" ]; then
     printf "* Installing conda\n"
-    wget -O miniconda.sh "http://repo.continuum.io/miniconda/Miniconda3-latest-${os}-${ARCH}.sh"
-    bash ./miniconda.sh -b -f -p "${conda_dir}"
+    bash "${root_dir}/.github/scripts/install_ci_tool.sh" miniconda "${conda_dir}" "${ARCH}"
 fi
 eval "$(${conda_dir}/bin/conda shell.bash hook)"
 
@@ -66,7 +66,7 @@ if [ ! -d "${env_dir}" ]; then
 
         # Install pyenv
         export PYENV_ROOT="${root_dir}/.pyenv"
-        curl https://pyenv.run | bash
+        bash "${root_dir}/.github/scripts/install_ci_tool.sh" pyenv "${PYENV_ROOT}"
         export PATH="${PYENV_ROOT}/bin:${PATH}"
         eval "$(pyenv init -)"
 
@@ -97,7 +97,7 @@ else
 fi
 
 # 3. Install dependencies
-pip install pip --upgrade
+python -m pip install --upgrade pip certifi
 
 # PyTorch first: mosaicml-streaming depends on torch, and without a torch
 # installed pip would download torch from PyPI with its CUDA libraries and

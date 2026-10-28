@@ -42,7 +42,7 @@ fi
 # Set CONDA_RUN if not set
 if [[ -z "${CONDA_RUN:-}" ]]; then
 
-    pip install --upgrade pip
+    pip install --upgrade "pip>=26.2.2" "certifi>=2026.10.23"
 
     # for orjson
     export UNSAFE_PYO3_BUILD_FREE_THREADED=1
@@ -53,7 +53,7 @@ if [[ -z "${CONDA_RUN:-}" ]]; then
 
 else
 
-    ${CONDA_RUN} pip install --upgrade pip
+    ${CONDA_RUN} pip install --upgrade "pip>=26.2.2" "certifi>=2026.10.23"
 
     # for orjson
     export UNSAFE_PYO3_BUILD_FREE_THREADED=1
