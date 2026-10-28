@@ -1816,7 +1816,8 @@ class TestSubclassing:
 
 class TestLikeConstructors:
     @pytest.fixture(scope="module")
-    def td(self):
+    @classmethod
+    def td(cls):
         yield TensorDict(
             a=torch.randn(3, 4),
             b=TensorDict(c=torch.randint(10, (3, 4, 5)), batch_size=(3, 4)),

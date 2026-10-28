@@ -3833,7 +3833,8 @@ class TestONNXExport:
 @pytest.mark.parametrize("compiled", [False, True])
 class TestCudaGraphs:
     @pytest.fixture(scope="class", autouse=True)
-    def _set_cuda_device(self):
+    @classmethod
+    def _set_cuda_device(cls):
         device = torch.get_default_device()
         if torch.cuda.is_available():
             torch.set_default_device("cuda:0")
@@ -4356,7 +4357,8 @@ class TestCudaGraphs:
 class TestCompileNontensor:
     # Same issue with the decorator @tensorclass version
     @pytest.fixture(scope="class")
-    def data(self):
+    @classmethod
+    def data(cls):
         return torch.zeros((4, 3), device=cur_device)
 
     class TensorClassWithNonTensorData(TensorClass["nocast"]):
