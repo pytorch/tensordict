@@ -2627,8 +2627,8 @@ def _warn_update_inserts_whole_entry(
 
     ``selection`` is ``_selection_trie(keys_to_update)``, which ``update``
     builds once per call. ``select`` and an update into an existing entry keep
-    only the listed keys. The 0.17 switch must keep the result of the
-    ``tensordict.nn`` calls, see ``_update_keeping_whole_entries``.
+    only the listed keys. The ``tensordict.nn`` calls get their own
+    warning and the same 0.17 switch, see ``_update_keeping_whole_entries``.
     """
     # the keys listed under key, pruned as update() prunes them at each level
     for part in key:
