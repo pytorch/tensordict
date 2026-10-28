@@ -140,6 +140,10 @@ fi
 
 # The benchmark workflows time the benchmarks. Here, run each one once, to
 # check that it still works.
+# pytest-benchmark 5.3.0 reads pytest's private node._nodeid, which pytest 9.2
+# removed (ionelmc/pytest-benchmark#321): the tests above run on the latest
+# pytest, the benchmarks below on pytest<9.2. Drop this once a fixed release is out.
+python -m pip install --quiet "pytest<9.2"
 python -m pytest ./benchmarks --benchmark-disable --instafail -v --durations 20 --junitxml="$JUNIT_DIR/junit-benchmarks.xml"
 
 if [ -n "$RUNNER_TEST_RESULTS_DIR" ]; then
