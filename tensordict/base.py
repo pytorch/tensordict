@@ -2566,8 +2566,8 @@ def _warn_update_invalid_key() -> None:
 _SET_MEMBERS_CALL = local()
 
 
-def _warn_set_creates_entry(key: str) -> None:
-    """Warns that ``set_`` creates the entry ``key``, the first of a nested key, which the tensordict lacks, until 0.18 (#3391)."""
+def _warn_set_creates_entry() -> None:
+    """Warns that ``set_`` creates the missing entry on the path of a nested key, until 0.18 (#3391)."""
     if is_dynamo_compiling():
         return
     state = getattr(_SET_MEMBERS_CALL, "warned", None)
@@ -2575,8 +2575,9 @@ def _warn_set_creates_entry(key: str) -> None:
         return
     if state is False:
         _SET_MEMBERS_CALL.warned = True
+    # Fixed text: the key would make Python warn again for each new value (#3232).
     warnings.warn(
-        f"set_() got a nested key with the missing entry {key!r}, and creates "
+        "set_() got a nested key whose parent entry is missing, and creates "
         "it, while set_() raises a KeyError for any other missing key. "
         "Starting with TensorDict 0.18, the default will change to raising a "
         "KeyError. Use set() or td[key] = value to add an entry, or fix the key.",

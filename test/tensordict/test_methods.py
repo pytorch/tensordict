@@ -3748,7 +3748,7 @@ class TestTensorDicts(TestTensorDictsBase):
         ):
             with pytest.warns(
                 FutureWarning,
-                match=r"set_\(\) got a nested key with the missing entry 'z'",
+                match=r"set_\(\) got a nested key whose parent entry is missing",
             ) as record:
                 td.set_(("z", "a"), value)
             # one warning, even from the members of a lazy stack
@@ -6343,23 +6343,19 @@ def _set_nested_td():
 
 
 def test_set__unexisting_nested_warns():
-    # #3391: set_ creates the missing entry of a nested key and warns, with
-    # the name of the entry, at any depth, until TensorDict 0.18 raises.
-    for key, entry in (
-        (("x", "y"), "x"),
-        (("x", "y", "z"), "x"),
-        (("n", "x", "y"), "x"),
-    ):
+    # #3391: set_ creates the missing entry of a nested key and warns, at any
+    # depth, until TensorDict 0.18 raises.
+    for key in (("x", "y"), ("x", "y", "z"), ("n", "x", "y")):
         td = _set_nested_td()
         with pytest.warns(
             FutureWarning,
-            match=rf"set_\(\) got a nested key with the missing entry '{entry}'",
+            match=r"set_\(\) got a nested key whose parent entry is missing",
         ) as record:
             td.set_(key, torch.ones(3))
         assert len(record) == 1
         assert record[0].filename == __file__
         assert (td.get(key) == 1).all()
-    # the message is fixed text but for the name: it announces the switch
+    # the message is fixed text (#3232): it announces the switch
     assert "Starting with TensorDict 0.18, the default will change" in str(
         record[0].message
     )
@@ -6420,7 +6416,7 @@ def test_set__unexisting_nested_lazy_stack_warns_once():
         # the warning raised as an error creates nothing, and leaves no state
         with warnings.catch_warnings():
             warnings.simplefilter("error")
-            with pytest.raises(FutureWarning, match="missing entry 'x'"):
+            with pytest.raises(FutureWarning, match="parent entry is missing"):
                 stack.set_(("x", "y"), value)
         assert "x" not in stack.keys(True)
         for key in (("x", "y"), ("n", "x", "y")):
@@ -6436,7 +6432,7 @@ def test_set__unexisting_nested_lazy_stack_some_members():
     members = [_set_nested_td(), _set_nested_td()]
     members[0].set(("x", "y"), torch.zeros(3))
     stack = lazy_stack(members)
-    with pytest.warns(FutureWarning, match="missing entry 'x'") as record:
+    with pytest.warns(FutureWarning, match="parent entry is missing") as record:
         stack.set_(("x", "y"), torch.ones(2, 3))
     assert len(record) == 1
     assert all((member["x", "y"] == 1).all() for member in members)

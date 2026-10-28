@@ -6399,7 +6399,7 @@ class TestTensorClass:
             )
 
         foo = make()
-        with pytest.warns(FutureWarning, match="missing entry 'x'") as record:
+        with pytest.warns(FutureWarning, match="parent entry is missing") as record:
             foo.set_(("x", "y"), torch.ones(3))
         assert len(record) == 1
         assert record[0].filename == __file__

@@ -1739,7 +1739,7 @@ class TensorDict(TensorDictBase):
                             key[0], type(self).__name__, sorted(self.keys())
                         )
                     )
-                _warn_set_creates_entry(key[0])
+                _warn_set_creates_entry()
             td = self._create_nested_str(key[0])
             inplace = False
         elif not _is_tensor_collection(type(td)):
