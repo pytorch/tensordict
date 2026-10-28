@@ -61,6 +61,8 @@ jobs:
 
       - name: Check out code
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       # torchrl's distributed transport does
       # socket.gethostbyname(socket.gethostname()) to pick the TCPStore

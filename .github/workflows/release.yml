@@ -55,8 +55,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write
-  id-token: write
+  contents: read
 
 env:
   # Release tag from manual input
@@ -81,6 +80,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       - name: Parse version from tag
@@ -229,6 +229,10 @@ jobs:
   # and Python version.
 
   build:
+    # The reusable build needs AWS OIDC for test-infra uploads.
+    permissions:
+      contents: read
+      id-token: write
     name: Build Wheel
     needs: [sanity-checks]
     if: ${{ !cancelled() && (needs.sanity-checks.result == 'success' || needs.sanity-checks.result == 'skipped') }}
@@ -242,6 +246,7 @@ jobs:
   # COLLECT WHEELS
   # =============================================================================
   collect-wheels:
+    permissions: {}
     name: Collect Wheels
     needs: [sanity-checks, build]
     # Only run when the build succeeds. This ensures:
@@ -314,6 +319,8 @@ jobs:
   # Runs after the PyPI upload, so that stable only moves to a published
   # version, and so that the upload does not wait for the docs.
   update-docs:
+    permissions:
+      contents: write
     name: Update Stable Docs
     needs: [sanity-checks, collect-wheels, publish-pypi]
     if: ${{ !cancelled() && needs.publish-pypi.result == 'success' && needs.sanity-checks.result != 'failure' }}
@@ -466,6 +473,8 @@ jobs:
   # CREATE GITHUB RELEASE
   # =============================================================================
   create-release:
+    permissions:
+      contents: write
     name: Create GitHub Release
     needs: [sanity-checks, collect-wheels]
     if: ${{ !cancelled() && needs.collect-wheels.result == 'success' && needs.sanity-checks.result != 'failure' }}
@@ -473,6 +482,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Download wheels
         uses: actions/download-artifact@v4
@@ -586,6 +597,7 @@ jobs:
   # SUMMARY
   # =============================================================================
   release-summary:
+    permissions: {}
     name: Release Summary
     needs: [sanity-checks, build, collect-wheels, create-release, publish-pypi, update-docs]
     if: always()
