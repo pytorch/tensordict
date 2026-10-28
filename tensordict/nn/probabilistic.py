@@ -493,8 +493,10 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             ``CompositeDistribution``, when ``distribution_kwargs`` holds its
             ``distribution_map``).
         cache_dist (bool, optional): has no effect. Deprecated: passing
-            ``True`` warns, and the argument will be removed in TensorDict
-            0.17. Defaults to ``False``.
+            ``True`` warns, and support for ``True`` will be removed in
+            TensorDict 0.17. ``cache_dist=False``, the default, does not warn,
+            and will keep working, doing nothing, after the removal. Defaults
+            to ``False``.
         n_empirical_estimate (int, optional): the number of samples that
             ``MEAN`` averages when the distribution has no mean. Defaults to
             ``1000``.
@@ -730,6 +732,8 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             self._check_log_prob_keys(log_prob_keys, log_prob_key)
         self.n_empirical_estimate = n_empirical_estimate
         if cache_dist:
+            # Only True is deprecated. Wrapper modules pass the default on
+            # explicitly, so cache_dist=False stays accepted after the removal.
             warn_deprecated(
                 "ProbabilisticTensorDictModule(cache_dist=True)", removal="0.17"
             )

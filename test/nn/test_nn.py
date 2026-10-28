@@ -4091,6 +4091,23 @@ class TestProbabilisticTensorDictModule:
         assert record[0].filename == __file__
         assert module.cache_dist is hasattr(Delta, "update")
 
+    def test_cache_dist_false_forwarded(self):
+        # Only cache_dist=True goes in TensorDict 0.17. A wrapper that passes
+        # the default on explicitly, as TorchRL's SafeProbabilisticModule does,
+        # must keep working without a warning.
+        class Wrapper(ProbabilisticTensorDictModule):
+            def __init__(self, in_keys, out_keys, cache_dist: bool = False):
+                super().__init__(
+                    in_keys=in_keys, out_keys=out_keys, cache_dist=cache_dist
+                )
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            module = Wrapper(in_keys=["param"], out_keys=["sample"])
+            td = module(TensorDict(param=torch.arange(3.0)))
+        assert module.cache_dist is False
+        assert (td["sample"] == torch.arange(3.0)).all()
+
     def test_distribution_class_str(self):
         module = ProbabilisticTensorDictModule(
             in_keys=["param"], out_keys=["sample"], distribution_class="Delta"
