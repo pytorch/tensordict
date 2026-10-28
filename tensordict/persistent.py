@@ -280,6 +280,8 @@ class _PersistentBackend:
 _H5_STR_ATTR = "__tensordict_str__"
 # marks the arrays that hold the elements of a NonTensorStack, with its shape
 _STACK_ATTR = "__tensordict_stack__"
+# the batch size and names of an h5 group, as a JSON string (#3263)
+_H5_METADATA_ATTR = "__tensordict__"
 
 
 class _NonTensorStackArray:
@@ -452,6 +454,24 @@ class _H5Backend(_PersistentBackend):
 
     def create_group(self, file, key, metadata=None) -> None:
         file.create_group(key)
+
+    # read_attrs_metadata stays a no-op until 0.17, when from_h5 starts to
+    # restore the stored metadata (#3263); stored_attrs_metadata reads it
+    def write_attrs_metadata(self, group, metadata: dict) -> None:
+        try:
+            group.attrs[_H5_METADATA_ATTR] = json.dumps(metadata)
+        except Exception:
+            # best effort, as with zarr
+            pass
+
+    def stored_attrs_metadata(self, group) -> dict | None:
+        """The metadata that :meth:`write_attrs_metadata` stored on ``group``, or ``None``."""
+        try:
+            metadata = json.loads(group.attrs[_H5_METADATA_ATTR])
+        except Exception:
+            # no attribute (an older or a foreign file), or not ours
+            return None
+        return metadata if isinstance(metadata, dict) else None
 
     def encode_non_tensor(self, value):
         if isinstance(value, str):
@@ -1462,7 +1482,13 @@ class PersistentTensorDict(
         """Persists batch size and names in the storage attributes (best effort)."""
         metadata = _attrs_metadata(self.batch_size, self._td_dim_names)
         self._backend.write_attrs_metadata(self.file, metadata)
-        for td in self._nested_tensordicts.values():
+        # the entries cached under a nested key first, so that a direct child,
+        # which has the batch size of its group, writes last: an h5 entry
+        # under a nested key has the batch size of its parent (#3263)
+        for _, td in sorted(
+            self._nested_tensordicts.items(),
+            key=lambda item: isinstance(item[0], str) or len(item[0]) == 1,
+        ):
             td._write_attrs_metadata()
 
     def _nested_batch_size_from_attrs(self, group):
@@ -2715,6 +2741,63 @@ class PersistentTensorDict(
 
 
 _register_tensor_class(PersistentTensorDict)
+
+
+def _warn_h5_metadata_differs(td: PersistentTensorDict, batch_size) -> None:
+    """Warns when the batch sizes or names that an h5 file stores differ from the ones ``from_h5`` returns (#3263).
+
+    Reads the group attributes only. With ``batch_size``, the root keeps it
+    and every nested group gets it, as ``_make_nested`` does.
+    """
+    stored = td._backend.stored_attrs_metadata
+    metadata = stored(td.file)
+    if metadata is None:
+        # every writer stores the root: a file written before 0.16, or by
+        # another program, loads as it did, without a warning
+        return
+    if batch_size is None:
+        differs = any(name is not None for name in metadata.get("names") or ())
+        # from_h5 has opened every nested group to infer its batch size; the
+        # cache also holds entries under nested keys, which are not walked
+        pending = [td]
+        while pending and not differs:
+            td = pending.pop()
+            metadata = stored(td.file)
+            differs = metadata is not None and metadata.get("batch_size") not in (
+                None,
+                list(td.batch_size),
+            )
+            pending.extend(
+                nested
+                for key, nested in td._nested_tensordicts.items()
+                if isinstance(key, str) or len(key) == 1
+            )
+    else:
+        import h5py
+
+        batch_size = list(td.batch_size)
+
+        def visit(name, node):
+            if isinstance(node, h5py.Group):
+                metadata = stored(node)
+                if metadata is not None and metadata.get("batch_size") not in (
+                    None,
+                    batch_size,
+                ):
+                    return True
+            return None
+
+        differs = td.file.visititems(visit)
+    if differs:
+        warnings.warn(
+            "This h5 file stores the batch sizes or the dim names of the "
+            "tensordict it was written from, and from_h5 returns other ones. "
+            "Starting with TensorDict 0.17, the default will change to "
+            "restoring the stored ones, as from_zarr does. Pass "
+            "auto_batch_size=True to keep the inferred batch sizes.",
+            FutureWarning,
+            stacklevel=_user_stacklevel(),
+        )
 
 
 def _set_max_batch_size(source: PersistentTensorDict):
