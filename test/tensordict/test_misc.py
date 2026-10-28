@@ -2288,12 +2288,7 @@ class TestMemmap:
         assert len(caught) == 1
         assert caught[0].category is UserWarning
         assert caught[0].filename == __file__
-        with warnings.catch_warnings():
-            # #3263: from_h5 warns that 0.17 restores the stored batch sizes
-            warnings.filterwarnings(
-                "ignore", "This h5 file stores the batch sizes", FutureWarning
-            )
-            loaded = load(tmp_path / f"unbatched.{fmt}")
+        loaded = load(tmp_path / f"unbatched.{fmt}")
         for key in ("u", ("nested", "v")):
             assert not isinstance(loaded.get(key), UnbatchedTensor)
             torch.testing.assert_close(loaded.get(key), data)
