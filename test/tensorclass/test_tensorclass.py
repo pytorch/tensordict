@@ -6408,8 +6408,10 @@ class TestTensorClass:
             foo.set_(("n", "x"), torch.ones(3))
         foo = make().lock_()
         keys = set(foo.keys(True))
-        with pytest.raises(KeyError, match='key "x" not found'):
+        with pytest.raises(KeyError, match='key "x" not found') as info:
             foo.set_(("x", "y"), torch.ones(3))
+        # it raised the lock RuntimeError, which still catches it
+        assert isinstance(info.value, RuntimeError)
         assert set(foo.keys(True)) == keys
 
     @set_list_to_stack(True)

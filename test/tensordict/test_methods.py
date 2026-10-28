@@ -6380,19 +6380,28 @@ def test_set__unexisting_nested_silent_calls():
     assert (td["p", "q"] == 1).all()
 
 
-@pytest.mark.parametrize("lock", ["lock_", "memmap"])
+@pytest.mark.parametrize("lock", ["lock_", "memmap", "lazy_stack"])
 def test_set__unexisting_nested_locked_raises(lock, tmp_path):
     # #3391: a locked tensordict raised the lock RuntimeError: it raises the
-    # KeyError that set_ gives for a missing key, and creates nothing.
+    # KeyError that set_ gives for a missing key, and creates nothing. The
+    # error is also a RuntimeError, so that `except RuntimeError` still
+    # catches it.
     td = _set_nested_td()
-    td = td.lock_() if lock == "lock_" else td.memmap_(tmp_path / "td")
+    if lock == "lock_":
+        td = td.lock_()
+    elif lock == "memmap":
+        td = td.memmap_(tmp_path / "td")
+    else:
+        td = lazy_stack([td, _set_nested_td()]).lock_()
     keys = set(td.keys(True))
+    value = torch.ones(td.batch_size)
     for key in (("x", "y"), ("n", "x", "y")):
-        with pytest.raises(KeyError, match='key "x" not found in TensorDict'):
-            td.set_(key, torch.ones(3))
+        with pytest.raises(KeyError, match='key "x" not found in TensorDict') as info:
+            td.set_(key, value)
+        assert isinstance(info.value, RuntimeError)
     assert set(td.keys(True)) == keys
     # set_ into an existing entry works on a locked tensordict
-    td.set_(("n", "b"), torch.ones(3))
+    td.set_(("n", "b"), value)
     assert (td["n", "b"] == 1).all()
 
 
@@ -6437,16 +6446,21 @@ def test_set__unexisting_nested_lazy_stack_some_members():
 def test_set__unexisting_nested_view_raises():
     # #3391: a view raised the KeyError for the leaf, after it created the
     # empty entry in its source: it raises for the entry, and creates nothing.
+    # A view of a locked tensordict raised the lock RuntimeError: the error is
+    # also a RuntimeError.
     views = (
         _SubTensorDict(_set_nested_td(), slice(0, 2)),
         _set_nested_td().unsqueeze(0),
+        _SubTensorDict(_set_nested_td().lock_(), slice(0, 2)),
+        _set_nested_td().lock_().unsqueeze(0),
     )
     for view in views:
         source = view._source
         keys = set(source.keys(True))
         for key in (("x", "y"), ("n", "x", "y")):
-            with pytest.raises(KeyError, match='key "x" not found in _'):
+            with pytest.raises(KeyError, match='key "x" not found in _') as info:
                 view.set_(key, torch.ones(view.batch_size))
+            assert isinstance(info.value, RuntimeError)
         assert set(source.keys(True)) == keys
 
 

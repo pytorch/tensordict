@@ -64,6 +64,7 @@ from tensordict.base import (
     _set_at_each_key,
     _set_subtensordict_type,
     _set_tensordict_type,
+    _SetMissingEntryError,
     _UNSET,
     _warn_empty_names,
     _warn_lazy_is_empty,
@@ -1733,7 +1734,7 @@ class TensorDict(TensorDictBase):
             if inplace is True:
                 # set_ writes into an existing entry
                 if self._is_locked:
-                    raise KeyError(
+                    raise _SetMissingEntryError(
                         _KEY_ERROR.format(
                             key[0], type(self).__name__, sorted(self.keys())
                         )
@@ -3503,7 +3504,7 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
         td = parent._get_str(key[0], None)
         if td is None:
             if inplace is True:
-                raise KeyError(
+                raise _SetMissingEntryError(
                     _KEY_ERROR.format(key[0], type(self).__name__, sorted(self.keys()))
                 )
             td = parent.select()

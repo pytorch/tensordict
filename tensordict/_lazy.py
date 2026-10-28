@@ -75,6 +75,7 @@ from tensordict.base import (
     _SET_AT_CAST_TYPES,
     _set_at_each_key,
     _SET_MEMBERS_CALL,
+    _SetMissingEntryError,
     _unwrap,
     _UPDATE_MEMBERS_CALL,
     _warn_names_length,
@@ -6045,7 +6046,7 @@ class _CustomOpTensorDict(TensorDictBase):
         source = self._source._get_str(key[0], None)
         if source is None:
             if inplace is True:
-                raise KeyError(
+                raise _SetMissingEntryError(
                     _KEY_ERROR.format(key[0], type(self).__name__, sorted(self.keys()))
                 )
             source = self._source._create_nested_str(key[0])

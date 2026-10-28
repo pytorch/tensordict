@@ -367,6 +367,15 @@ class _InplaceWriteError(ValueError, RuntimeError):
     """
 
 
+class _SetMissingEntryError(KeyError, RuntimeError):
+    """The error raised when :meth:`~TensorDictBase.set_` gets a nested key with a missing entry.
+
+    Subclasses KeyError, the type that :meth:`~TensorDictBase.set_` raises
+    for a missing key, and RuntimeError, which a locked tensordict raised
+    before for the same call (#3391).
+    """
+
+
 def _key_through_leaf_error(key: tuple, i: int, value: Any) -> _KeyThroughLeafError:
     """The error for reading ``key[i:]`` in ``value``, the leaf at ``key[i - 1]``."""
     rest = key[i] if len(key) == i + 1 else key[i:]
