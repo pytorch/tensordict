@@ -2209,6 +2209,28 @@ class TestPrintEveryContainer:
         assert leaves(out), out
         assert leaves(out) == leaves(expected), f"{out}\n!=\n{expected}"
 
+    @pytest.mark.parametrize("mode", _DETAILED_MODES)
+    @pytest.mark.parametrize("case", ["h5_non_tensor", "zarr_non_tensor"])
+    def test_print_reads_non_tensor_values(self, case, mode, tmp_path, _backend_reads):
+        # #3257: the detailed display reads the non-tensor leaves of an h5 or
+        # zarr file to print their values, as it prints them on every
+        # container, and reads none of its tensor leaves
+        obj = _make_print_case(case, tmp_path)
+        _backend_reads.clear()
+        with set_printoptions(**_PRINT_MODES[mode]), warnings.catch_warnings():
+            # reading a string of an h5 file warns about its future type
+            warnings.filterwarnings(
+                "ignore", "The h5 backend of PersistentTensorDict reads the string"
+            )
+            out = repr(obj)
+        backend = "_H5Backend" if case.startswith("h5") else "_ZarrBackend"
+        assert sorted(set(_backend_reads)) == [
+            f"{backend}.read_non_tensor(/s)",
+            f"{backend}.read_non_tensor_stack(/nested/t)",
+        ]
+        assert re.search(r"s: NonTensorData\(data=(b'text'|text),", out), out
+        assert "t: NonTensorStack(\n" in out and "['x', 'y', 'z']" in out, out
+
     @pytest.mark.parametrize(
         "case",
         [
