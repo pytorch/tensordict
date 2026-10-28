@@ -3300,6 +3300,7 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
     _masking_on_dense_copy = True
     _memmap_inplace_unsupported = True
     _pin_memory_unsupported = True
+    _inplace_shape_ops_unsupported = True
     # td[key] = value writes into an existing entry of the source
     _setitem_key_inplace = BEST_ATTEMPT_INPLACE
 
