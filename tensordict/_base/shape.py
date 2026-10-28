@@ -783,10 +783,10 @@ class _ShapeOps:
         try:
             shape = _get_shape_from_args(*args, **kwargs)
             shape = torch.Size(_infer_size_impl(shape, self.batch_size.numel()))
-        except (RuntimeError, TypeError):
+        except Exception:
             if inplace:
                 # a class without in-place support raises its in-place
-                # error for an invalid shape too, rather than the shape error
+                # error for any invalid shape too, rather than the shape error
                 self._raise_if_inplace_shape_ops_unsupported("reshape")
             raise
         if shape == self.shape:
