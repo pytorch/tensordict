@@ -5451,8 +5451,10 @@ class TestTensorDictParams:
         params = TensorDictParams(td, lock=variant == "lock")
         keys = set(params.keys(True))
         for key, entry in ((("module", "a"), "module"), (("n", "x", "y"), "x")):
-            with pytest.raises(KeyError, match=f'key "{entry}" not found'):
+            with pytest.raises(KeyError, match=f'key "{entry}" not found') as info:
                 params.set_(key, torch.ones(3))
+            # a locked TensorDictParams raised the lock RuntimeError
+            assert isinstance(info.value, RuntimeError)
         assert set(params.keys(True)) == keys
         # an existing nested entry is written in place
         param = params["n", "b"]
@@ -5463,6 +5465,24 @@ class TestTensorDictParams:
         if variant != "lock":
             params.set(("module", "a"), torch.ones(3), inplace=True)
             assert (params["module", "a"] == 1).all()
+
+    def test_set__leaves_non_tensor_unlocked(self):
+        # #3391: set_ checks that the entries of a nested key exist, without
+        # locking the temporary .data, whose non-tensor leaves are those of
+        # the parameters: a non-tensor leaf stays writable after set_.
+        td = TensorDict(
+            a=torch.zeros(3),
+            n=TensorDict(b=torch.zeros(3), batch_size=[3]),
+            batch_size=[3],
+        )
+        td["n", "s"] = NonTensorData("x", batch_size=[3])
+        params = TensorDictParams(td)
+        params.set_("a", torch.ones(3))
+        params.set_(("n", "b"), torch.ones(3))
+        leaf = params["n"].get("s")
+        assert not leaf.is_locked
+        leaf.data = "y"
+        assert params["n", "s"] == "y"
 
     @pytest.mark.parametrize("name", ["save", "dumps", "memmap", "memmap_like"])
     def test_save_family_signature(self, name):
