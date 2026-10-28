@@ -2209,6 +2209,51 @@ class TestPrintEveryContainer:
         assert leaves(out), out
         assert leaves(out) == leaves(expected), f"{out}\n!=\n{expected}"
 
+    @pytest.mark.parametrize(
+        "case",
+        [
+            "key",
+            "nested_key",
+            "string",
+            "lazy_key",
+            "lazy_tensor_and_string",
+            "tensorclass_string",
+            "non_tensor_data",
+            "non_tensor_stack",
+            "h5_key",
+        ],
+    )
+    @pytest.mark.parametrize("compact", [True, False], ids=["compact", "detailed"])
+    def test_html_escapes(self, case, compact, tmp_path):
+        script = "<script>alert(1)</script>"
+        cases = {
+            "key": lambda: TensorDict({script: torch.zeros(2)}),
+            "nested_key": lambda: TensorDict({"a": {script: torch.zeros(2)}}),
+            "string": lambda: TensorDict(s=script),
+            "lazy_key": lambda: LazyStackedTensorDict(
+                TensorDict({script: torch.zeros(2)}),
+                TensorDict({script: torch.zeros(2), "b": torch.zeros(())}),
+            ),
+            "lazy_tensor_and_string": lambda: _mixed_lazy(script),
+            "tensorclass_string": lambda: _PrintData(
+                x=torch.zeros(3), label=script, batch_size=[3]
+            ),
+            "non_tensor_data": lambda: NonTensorData(script),
+            "non_tensor_stack": lambda: NonTensorStack(script, script),
+            "h5_key": lambda: TensorDict({script: torch.zeros(2)}).to_h5(
+                tmp_path / "td.h5"
+            ),
+        }
+        if case == "h5_key" and not _has_h5py:
+            pytest.skip("h5py is not installed")
+        obj = cases[case]()
+        with set_printoptions(compact=compact):
+            out = obj._repr_html_()
+        assert isinstance(out, str), f"_repr_html_ returns {out!r}"
+        assert "<script" not in out, (
+            f"the HTML of {case} does not escape {script!r}: {out}"
+        )
+
     @pytest.mark.parametrize("mode", [mode for mode in _PRINT_MODES if mode != "plain"])
     @pytest.mark.parametrize(
         "index",
@@ -2291,51 +2336,6 @@ class TestPrintEveryContainer:
             assert sorted(reads) == non_tensor_reads(reads), reads
         assert non_tensor_reads(reads) == non_tensor_reads(expected_reads)
         assert any(read not in non_tensor_reads(reads) for read in expected_reads)
-
-    @pytest.mark.parametrize(
-        "case",
-        [
-            "key",
-            "nested_key",
-            "string",
-            "lazy_key",
-            "lazy_tensor_and_string",
-            "tensorclass_string",
-            "non_tensor_data",
-            "non_tensor_stack",
-            "h5_key",
-        ],
-    )
-    @pytest.mark.parametrize("compact", [True, False], ids=["compact", "detailed"])
-    def test_html_escapes(self, case, compact, tmp_path):
-        script = "<script>alert(1)</script>"
-        cases = {
-            "key": lambda: TensorDict({script: torch.zeros(2)}),
-            "nested_key": lambda: TensorDict({"a": {script: torch.zeros(2)}}),
-            "string": lambda: TensorDict(s=script),
-            "lazy_key": lambda: LazyStackedTensorDict(
-                TensorDict({script: torch.zeros(2)}),
-                TensorDict({script: torch.zeros(2), "b": torch.zeros(())}),
-            ),
-            "lazy_tensor_and_string": lambda: _mixed_lazy(script),
-            "tensorclass_string": lambda: _PrintData(
-                x=torch.zeros(3), label=script, batch_size=[3]
-            ),
-            "non_tensor_data": lambda: NonTensorData(script),
-            "non_tensor_stack": lambda: NonTensorStack(script, script),
-            "h5_key": lambda: TensorDict({script: torch.zeros(2)}).to_h5(
-                tmp_path / "td.h5"
-            ),
-        }
-        if case == "h5_key" and not _has_h5py:
-            pytest.skip("h5py is not installed")
-        obj = cases[case]()
-        with set_printoptions(compact=compact):
-            out = obj._repr_html_()
-        assert isinstance(out, str), f"_repr_html_ returns {out!r}"
-        assert "<script" not in out, (
-            f"the HTML of {case} does not escape {script!r}: {out}"
-        )
 
 
 if __name__ == "__main__":
