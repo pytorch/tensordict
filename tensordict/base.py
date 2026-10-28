@@ -2679,6 +2679,8 @@ def _warn_update_inserts_whole_entry(
         return
     state = getattr(_UPDATE_MEMBERS_CALL, "warned", None)
     if state:
+        # _update_keeping_whole_entries warns for the nn module instead
+        _UPDATE_MEMBERS_CALL.kept_whole_entry = True
         return
     if state is False:
         _UPDATE_MEMBERS_CALL.warned = True
@@ -2699,21 +2701,34 @@ def _warn_update_inserts_whole_entry(
 def _update_keeping_whole_entries(
     dest: TensorCollection, source: Any, **kwargs: Any
 ) -> TensorCollection:
-    """``dest.update(source, **kwargs)`` without the warning that update writes an entry whole (#3360).
+    """``dest.update(source, **kwargs)``, with a warning for the ``tensordict.nn`` modules where update writes an entry whole (#3360, #3367).
 
-    The ``tensordict.nn`` modules write their outputs with it, so they keep
-    their current outputs without a warning. In 0.17, when ``update`` narrows,
-    these calls must keep the current whole-copy result unless #3367 decides
-    otherwise.
+    The ``tensordict.nn`` modules write their outputs with it. Where ``update``
+    writes entries that are not listed, the module output keeps them until 0.17,
+    when these calls become plain ``update`` calls and narrow with it.
     """
     if is_dynamo_compiling():
         return dest.update(source, **kwargs)
     state = getattr(_UPDATE_MEMBERS_CALL, "warned", None)
     _UPDATE_MEMBERS_CALL.warned = True
+    _UPDATE_MEMBERS_CALL.kept_whole_entry = False
     try:
-        return dest.update(source, **kwargs)
+        result = dest.update(source, **kwargs)
     finally:
         _UPDATE_MEMBERS_CALL.warned = state
+    if _UPDATE_MEMBERS_CALL.kept_whole_entry:
+        # Fixed text, as in _warn_update_inserts_whole_entry (#3232).
+        warnings.warn(
+            "A tensordict.nn module wrote entries that are not in its out_keys "
+            "into its output: the other entries of a sub-tensordict that holds "
+            "a nested out key, which the output lacked. Starting with "
+            "TensorDict 0.17, the default will change to writing only the "
+            "out_keys, as TensorDictModule does. Read only the out_keys from "
+            "the output to get the same result in both versions.",
+            FutureWarning,
+            stacklevel=_user_stacklevel(),
+        )
+    return result
 
 
 def _warn_unsupported_operand(op: str, other: Any, result: bool) -> None:
