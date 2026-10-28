@@ -9310,7 +9310,7 @@ class TestGeneric:
     @pytest.mark.xfail(
         strict=True,
         raises=AssertionError,
-        reason="#XXXX: reshape and repeat_interleave with inplace=True on a legacy "
+        reason="#3406: reshape and repeat_interleave with inplace=True on a legacy "
         "lazy view rewrite the source's leaves to the new shape while the source "
         "keeps its batch size",
     )

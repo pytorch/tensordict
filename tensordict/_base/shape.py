@@ -761,7 +761,7 @@ class _ShapeOps:
                 that holds one, raises a ``NotImplementedError`` unless the
                 batch size stays: call :meth:`to_tensordict` first. The legacy
                 lazy views (``set_lazy_legacy(True)``) still accept it and
-                leave their source out of step with its batch size (#XXXX).
+                leave their source out of step with its batch size (#3406).
                 See :ref:`inplace-conventions`. Defaults to ``False``.
 
         Returns:
@@ -895,7 +895,7 @@ class _ShapeOps:
                 tensordict that holds one, raises a ``NotImplementedError``:
                 call :meth:`to_tensordict` first. The legacy lazy views
                 (``set_lazy_legacy(True)``) still accept it and leave their
-                source out of step with its batch size (#XXXX). See
+                source out of step with its batch size (#3406). See
                 :ref:`inplace-conventions`. Defaults to ``False``.
 
         Returns:
