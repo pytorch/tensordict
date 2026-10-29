@@ -2217,6 +2217,41 @@ def _file_leaf(td, key):
     return meta["shape"], [_FileLeaf(meta["dtype"], device, False)]
 
 
+def _viewed_file(td):
+    """The h5 or zarr file that ``td`` is an indexed view of, such as ``h5[0]``, or ``None``."""
+    from tensordict._td import _SubTensorDict
+    from tensordict.persistent import PersistentTensorDict
+
+    while isinstance(td, _SubTensorDict):
+        td = td._source
+        if isinstance(td, PersistentTensorDict):
+            return td
+    return None
+
+
+def _view_leaf(td, file, key):
+    """:func:`_file_leaf` of the view ``td`` of the h5 or zarr file ``file``.
+
+    Returns ``None`` if the entry is missing or is not a tensor. Also returns
+    ``None`` when a print option shows whether the leaf is contiguous or a
+    view, or its storage size, unless ``td`` reads the leaf from ``file`` with
+    a basic index, which gives a new tensor: other views can index a tensor
+    read in full, as ``h5[None]`` does.
+    """
+    from tensordict.persistent import _is_basic_index
+
+    opts = _REPR_OPTIONS
+    if (
+        opts["show_is_contiguous"] or opts["show_is_view"] or opts["show_storage_size"]
+    ) and (td._source is not file or not _is_basic_index(td.idx)):
+        return None
+    leaf = _file_leaf(file, key)
+    if leaf is None:
+        return None
+    shape, leaves = leaf
+    return td.batch_size + shape[file.batch_dims :], leaves
+
+
 def _stacked_leaf(td, key):
     """``LazyStackedTensorDict._plain_leaf`` for printing, which reads no h5 or zarr member.
 
@@ -2330,6 +2365,8 @@ def _td_fields(td: T, keys=None, sep=": ") -> str:
         source = getattr(source, type(source)._wrapped_attr)
     is_lazy = isinstance(source, LazyStackedTensorDict)
     is_file = isinstance(source, PersistentTensorDict)
+    # an indexed view of a file, such as h5[0] (#3403)
+    file = _viewed_file(source) if type(source)._lazy and not is_lazy else None
     strs = []
     if keys is None:
         keys = td.keys()
@@ -2346,6 +2383,8 @@ def _td_fields(td: T, keys=None, sep=": ") -> str:
                 continue
         elif is_file:
             leaf = _file_leaf(source, key)
+        elif file is not None:
+            leaf = _view_leaf(source, file, key)
         else:
             leaf = None
         if leaf is not None:
@@ -2495,6 +2534,12 @@ def _compact_leaf(td, key):
         meta = td._get_metadata(key)
         device = td.device if td.device is not None else torch.device("cpu")
         return list(meta["shape"][td.batch_dims :]), meta["dtype"], {device}
+    file = _viewed_file(td) if type(td)._lazy else None
+    leaf = None if file is None else _file_leaf(file, key)
+    if leaf is not None:
+        # an indexed view of a file, such as h5[0] (#3403)
+        shape, (file_leaf,) = leaf
+        return list(shape[file.batch_dims :]), file_leaf.dtype, {file_leaf.device}
     tensor = td._get_str(key, None)
     if is_non_tensor(tensor):
         return _compact_entry(td, key)
@@ -2541,6 +2586,13 @@ def _compact_entry(td, key):
         if meta.get("non_tensor"):
             return "NonTensorStack" if "shape" in meta else "NonTensorData"
         item = None if meta.get("array") else first._get_str(key, None)
+    elif (
+        type(first)._lazy
+        and (file := _viewed_file(first)) is not None
+        and _file_leaf(file, key)
+    ):
+        # a tensor entry of an indexed view of a file, such as h5[0] (#3403)
+        item = None
     else:
         item = first._get_str(key, None)
     if item is None or not _is_tensor_collection(type(item)):
