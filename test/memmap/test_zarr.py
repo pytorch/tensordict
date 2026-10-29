@@ -683,6 +683,54 @@ class TestZarrIndexing:
         else:
             assert ztd["n", "m"].batch_size == (3, 2)
 
+    def test_from_dict_stores_nested_batch_sizes_of_result(self, tmp_path):
+        # #3410: from_dict of a dict cached its nested groups at the root with
+        # the root's batch size, and stored that size, so the reopened store
+        # gave them the root's batch size
+        data = {"n": {"m": {"k": torch.ones(3, 2, 4), "q": torch.zeros(3, 2)}}}
+        data["n"]["z"] = torch.zeros(3, 9)
+        data["w"] = torch.ones(3)
+        path = tmp_path / "s.zarr"
+        fresh = PersistentTensorDict.from_dict(
+            data, filename=path, backend="zarr"
+        ).to_tensordict()
+        reopened = from_zarr(path).to_tensordict()
+        for key in fresh.keys(True):
+            if is_tensor_collection(fresh.get(key)):
+                assert reopened.get(key).batch_size == fresh.get(key).batch_size, key
+        assert reopened["n", "m"].batch_size == (3, 2)
+
+    def test_reopened_nested_group_keeps_names(self, tmp_path):
+        # #3410: from_zarr gave the names to the group it cached at the root
+        # under ("n", "m"), so td["n"]["m"] had no names
+        k = TensorDict(k=torch.zeros(3, 2, 4), batch_size=[3, 2])
+        data = TensorDict(n=TensorDict(m=k, batch_size=[3]), batch_size=[3])
+        data.names = ["b"]
+        path = tmp_path / "s.zarr"
+        PersistentTensorDict.from_dict(data, filename=path, backend="zarr")
+        ztd = from_zarr(path)
+        stored = zarr.open_group(str(path), mode="r")["n"]["m"].attrs
+        assert stored["__tensordict__"]["names"] == ["b", None]
+        assert ztd["n"]["m"].names == ["b", None]
+        assert ztd.to_tensordict()["n"]["m"].names == ["b", None]
+
+    def test_reopened_locked_root_locks_nested_groups(self, tmp_path):
+        # #3410: from_zarr cached "n", "m" at the root under its tuple key,
+        # and lock_ left that group unlocked, so writes into it went through.
+        # A reopened store now locks it, as a freshly written store and h5 do.
+        k = TensorDict(k=torch.zeros(3, 2, 4), batch_size=[3, 2])
+        data = TensorDict(n=TensorDict(m=k, batch_size=[3]), batch_size=[3])
+        path = tmp_path / "s.zarr"
+        PersistentTensorDict.from_dict(data, filename=path, backend="zarr")
+        ztd = from_zarr(path, mode="r+")
+        ztd.lock_()
+        assert ztd["n"]["m"].is_locked
+        assert ztd["n", "m"].is_locked
+        with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
+            ztd["n"]["m"].set("new", torch.zeros(3, 2))
+        with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
+            ztd.set(("n", "m", "new"), torch.zeros(3, 2))
+
 
 @pytest.mark.skipif(not _has_zarr, reason="zarr>=3.0 not found.")
 class TestZarrWriteOps:

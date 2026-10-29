@@ -1731,6 +1731,27 @@ def test_nested_key_get_matches_chained_get(tmp_path, source, reopen):
         assert td.get(("n", "m", "s")).batch_size == (3, 2)
 
 
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_from_dict_stores_nested_batch_sizes_of_result(tmp_path):
+    # #3410: from_dict of a dict cached its nested groups at the root with the
+    # root's batch size, and stored that size, so from_h5 warned that the
+    # stored batch sizes differ from the ones it returns
+    data = {"n": {"m": {"k": torch.ones(3, 2, 4), "q": torch.zeros(3, 2)}}}
+    data["n"]["z"] = torch.zeros(3, 9)
+    data["w"] = torch.ones(3)
+    td = PersistentTensorDict.from_dict(data, filename=tmp_path / "file.h5")
+    fresh = td.to_tensordict()
+    td.close()
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", FutureWarning)
+        td = PersistentTensorDict.from_h5(tmp_path / "file.h5")
+    reopened = td.to_tensordict()
+    for key in fresh.keys(True):
+        if is_tensor_collection(fresh.get(key)):
+            assert reopened.get(key).batch_size == fresh.get(key).batch_size, key
+    assert reopened["n", "m"].batch_size == (3, 2)
+
+
 def _h5_with_nested(tmp_path):
     td = TensorDict(
         a=torch.arange(12.0).view(4, 3),
