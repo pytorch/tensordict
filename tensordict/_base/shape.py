@@ -755,14 +755,13 @@ class _ShapeOps:
             inplace (bool, optional): if ``True``, the tensordict keeps its
                 identity and keys, its leaves are replaced one by one, and the
                 call returns ``self``. A leaf keeps its storage when the
-                reshape can return a view of it. A lazy stack or an indexed
+                reshape can return a view of it. A lazy stack, an indexed
                 view (such as a slice of a
-                :class:`~tensordict.PersistentTensorDict`), or a tensordict
-                that holds one, raises a ``NotImplementedError`` unless the
-                batch size stays: call :meth:`to_tensordict` first. The legacy
-                lazy views (``set_lazy_legacy(True)``) still accept it and
-                leave their source out of step with its batch size (#3406).
-                See :ref:`inplace-conventions`. Defaults to ``False``.
+                :class:`~tensordict.PersistentTensorDict`) or a legacy lazy
+                view (``set_lazy_legacy(True)``), or a tensordict that holds
+                one, raises a ``NotImplementedError`` unless the batch size
+                stays: call :meth:`to_tensordict` first. See
+                :ref:`inplace-conventions`. Defaults to ``False``.
 
         Returns:
             A tensordict with the new batch size, or ``self`` when
@@ -890,13 +889,12 @@ class _ShapeOps:
             inplace (bool, optional): if ``True``, the tensordict keeps its
                 identity and keys, its leaves are replaced one by one, and the
                 call returns ``self``. It needs a ``dim`` and at least one
-                batch dimension. A lazy stack or an indexed view (such as a
-                slice of a :class:`~tensordict.PersistentTensorDict`), or a
-                tensordict that holds one, raises a ``NotImplementedError``:
-                call :meth:`to_tensordict` first. The legacy lazy views
-                (``set_lazy_legacy(True)``) still accept it and leave their
-                source out of step with its batch size (#3406). See
-                :ref:`inplace-conventions`. Defaults to ``False``.
+                batch dimension. A lazy stack, an indexed view (such as a
+                slice of a :class:`~tensordict.PersistentTensorDict`) or a
+                legacy lazy view (``set_lazy_legacy(True)``), or a tensordict
+                that holds one, raises a ``NotImplementedError``: call
+                :meth:`to_tensordict` first. See :ref:`inplace-conventions`.
+                Defaults to ``False``.
 
         Returns:
             A tensordict with the same batch size, except along ``dim``, or
