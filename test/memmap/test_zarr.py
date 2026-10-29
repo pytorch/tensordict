@@ -1540,6 +1540,28 @@ class TestZarrInterop:
         assert reload["n", "m"].batch_size == torch.Size([3, 2])
         assert reload["n", "m", "k"].batch_size == torch.Size([3, 2, 4])
 
+    def test_clone_of_read_only_source_keeps_batch_sizes(self, tmp_path):
+        # #3409: the clone of a source with nothing cached returned the root's
+        # batch size for the nested groups, which the clone did not store
+        td = TensorDict(
+            n=TensorDict(
+                m=TensorDict(
+                    k=TensorDict(x=torch.zeros(3, 2, 4, 5), batch_size=[3, 2, 4]),
+                    batch_size=[3, 2],
+                ),
+                batch_size=[3],
+            ),
+            batch_size=[3],
+        )
+        td.to_zarr(tmp_path / "s.zarr")
+        ztd = PersistentTensorDict(
+            filename=tmp_path / "s.zarr", mode="r", backend="zarr", batch_size=[3]
+        )
+        clone = ztd.clone(newfile=tmp_path / "clone.zarr")
+        assert clone["n"].batch_size == torch.Size([3])
+        assert clone["n"]["m"].batch_size == torch.Size([3, 2])
+        assert clone["n"]["m"]["k"].batch_size == torch.Size([3, 2, 4])
+
     @pytest.mark.parametrize("reopen", [False, True])
     def test_clone_empty_nested(self, tmp_path, reopen):
         # #3412: clone(newfile=) raised a KeyError on an empty nested

@@ -245,6 +245,13 @@ class _PersistentBackend:
     def keys(self, file):
         raise NotImplementedError
 
+    def groups(self, file):
+        """Yields the ``(name, group)`` pairs of the direct children of ``file`` that are groups."""
+        for name in self.keys(file):
+            node = file[name]
+            if not self.is_array(node):
+                yield name, node
+
     def walk_keys(self, file):
         raise NotImplementedError
 
@@ -928,6 +935,10 @@ class _ZarrBackend(_PersistentBackend):
     def keys(self, file):
         return file.keys()
 
+    def groups(self, file):
+        # one listing, instead of a lookup of each member
+        return file.groups()
+
     def walk_keys(self, file):
         for name, _ in file.members(max_depth=None):
             yield name
@@ -1496,18 +1507,16 @@ class PersistentTensorDict(
         """
         metadata = _attrs_metadata(self.batch_size, self._td_dim_names)
         self._backend.write_attrs_metadata(group, metadata)
-        for name in self._backend.keys(self.file):
-            array = self._get_array((name,))
-            if not self._backend.is_array(array):
-                nested = self._process_array((name,), array)
-                try:
-                    nested_group = group[name]
-                except KeyError:
-                    # an empty group has no leaf to copy (#3412)
-                    metadata = _attrs_metadata(nested.batch_size, nested._td_dim_names)
-                    self._backend.create_group(group, name, metadata)
-                    nested_group = group[name]
-                nested._write_attrs_metadata_into(nested_group)
+        for name, node in self._backend.groups(self.file):
+            nested = self._process_array((name,), node)
+            try:
+                nested_group = group[name]
+            except KeyError:
+                # an empty group has no leaf to copy (#3412)
+                metadata = _attrs_metadata(nested.batch_size, nested._td_dim_names)
+                self._backend.create_group(group, name, metadata)
+                nested_group = group[name]
+            nested._write_attrs_metadata_into(nested_group)
 
     def _nested_batch_size_from_attrs(self, group):
         """Batch size persisted in a nested group's metadata, or ``None``."""
