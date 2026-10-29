@@ -1898,6 +1898,22 @@ def test_from_h5_auto_batch_size(tmp_path):
 
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_batch_size_change_pads_and_cuts_names(tmp_path):
+    # #3413: a new batch size kept the names as they were, fewer or more than
+    # the batch dims, where TensorDict pads them with None or cuts them
+    td = TensorDict(a=torch.zeros(2, 3, 4), batch_size=[2], names=["t"])
+    td.to_h5(tmp_path / "f.h5").close()
+    h5td = PersistentTensorDict.from_h5(tmp_path / "f.h5", batch_size=[2])
+    h5td.names = ["t"]
+    h5td.auto_batch_size_()
+    assert h5td.batch_size == (2, 3, 4)
+    assert h5td.names == td.clone().auto_batch_size_().names == ["t", None, None]
+    h5td.batch_size = [2, 3]
+    assert h5td.names == ["t", None]
+    h5td.close()
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 def test_from_dict_batch_dims(tmp_path):
     h5td = PersistentTensorDict.from_dict(
         {"a": torch.zeros(4, 3)}, filename=tmp_path / "f.h5", batch_dims=1
