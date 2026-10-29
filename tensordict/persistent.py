@@ -2876,7 +2876,8 @@ def _set_max_batch_size(source: PersistentTensorDict):
         data for data in tensor_data if not data.get("non_tensor") or "shape" in data
     ]
     while True:
-        if tensor_data[0]["dim"] > curr_dim:
+        # a group of non-tensor entries only has no batch dims (#3411)
+        if tensor_data and tensor_data[0]["dim"] > curr_dim:
             curr_dim_size = tensor_data[0]["shape"][curr_dim]
         else:
             source.batch_size = batch_size

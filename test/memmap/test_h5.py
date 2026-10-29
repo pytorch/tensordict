@@ -135,6 +135,39 @@ class TestH5Serialization:
         assert is_non_tensor(td_recover.get("f"))
         assert is_non_tensor(td_recover.get(("g", "h")))
 
+    # the h5 backend reads these strings as bytes, with a FutureWarning
+    @pytest.mark.filterwarnings("ignore:The h5 backend:FutureWarning")
+    @pytest.mark.parametrize("case", ["str", "nested", "only_nested", "stack", "empty"])
+    def test_from_h5_non_tensor_only(self, tmp_path, case):
+        # a file or a group that holds only non-tensor entries, or no entries,
+        # loads with the batch size it was written with (#3411)
+        td = {
+            "str": lambda: TensorDict(s="hello"),
+            "nested": lambda: TensorDict(a=torch.zeros(3), sub=TensorDict(s="hello")),
+            "only_nested": lambda: TensorDict(sub=TensorDict(s="hello")),
+            "stack": lambda: TensorDict(s=NonTensorStack("a", "b"), batch_size=[2]),
+            "empty": lambda: TensorDict(),
+        }[case]()
+        path = tmp_path / "file.h5"
+        td.to_h5(path)
+
+        def text(value):
+            return value.decode() if isinstance(value, bytes) else value
+
+        keys = set(td.keys(True, True, is_leaf=_is_leaf_nontensor))
+        for h5td in (PersistentTensorDict.from_h5(path), TensorDict.from_h5(path)):
+            assert h5td.batch_size == td.batch_size
+            assert set(h5td.keys(True, True, is_leaf=_is_leaf_nontensor)) == keys
+            for key in keys:
+                if key == "a":
+                    assert (h5td[key] == 0).all()
+                elif case == "stack":
+                    assert [text(v) for v in h5td[key]] == ["a", "b"]
+                else:
+                    assert text(h5td[key]) == "hello"
+            if "sub" in keys or ("sub", "s") in keys:
+                assert h5td["sub"].batch_size == ()
+
     def test_h5_str_read_as_bytes_warns(self, tmp_path):
         # strings that tensordict writes are marked; reading one still gives
         # bytes and warns that it will give str
