@@ -2209,6 +2209,28 @@ class TestPrintEveryContainer:
         assert leaves(out), out
         assert leaves(out) == leaves(expected), f"{out}\n!=\n{expected}"
 
+    @pytest.mark.parametrize("mode", _DETAILED_MODES)
+    @pytest.mark.parametrize("case", ["h5_non_tensor", "zarr_non_tensor"])
+    def test_print_reads_non_tensor_values(self, case, mode, tmp_path, _backend_reads):
+        # #3257: the detailed display reads the non-tensor leaves of an h5 or
+        # zarr file to print their values, as it prints them on every
+        # container, and reads none of its tensor leaves
+        obj = _make_print_case(case, tmp_path)
+        _backend_reads.clear()
+        with set_printoptions(**_PRINT_MODES[mode]), warnings.catch_warnings():
+            # reading a string of an h5 file warns about its future type
+            warnings.filterwarnings(
+                "ignore", "The h5 backend of PersistentTensorDict reads the string"
+            )
+            out = repr(obj)
+        backend = "_H5Backend" if case.startswith("h5") else "_ZarrBackend"
+        assert sorted(set(_backend_reads)) == [
+            f"{backend}.read_non_tensor(/s)",
+            f"{backend}.read_non_tensor_stack(/nested/t)",
+        ]
+        assert re.search(r"s: NonTensorData\(data=(b'text'|text),", out), out
+        assert "t: NonTensorStack(\n" in out and "['x', 'y', 'z']" in out, out
+
     @pytest.mark.parametrize(
         "case",
         [
@@ -2253,6 +2275,89 @@ class TestPrintEveryContainer:
         assert "<script" not in out, (
             f"the HTML of {case} does not escape {script!r}: {out}"
         )
+
+    @pytest.mark.parametrize("mode", [mode for mode in _PRINT_MODES if mode != "plain"])
+    @pytest.mark.parametrize(
+        "index",
+        [
+            "int",
+            "neg_int",
+            "slice_step",
+            "tuple",
+            "ellipsis",
+            "mask",
+            "long",
+            "none",
+            "view_of_view",
+            "nested",
+            "in_td",
+        ],
+    )
+    @pytest.mark.parametrize("non_tensor", [False, True], ids=["tensors", "non_tensor"])
+    @pytest.mark.parametrize("backend", ["h5", "zarr"])
+    def test_print_view_from_metadata(
+        self, backend, non_tensor, index, mode, tmp_path, _backend_reads, monkeypatch
+    ):
+        # #3403: an indexed view of an h5 or zarr file, such as h5[0], prints
+        # its tensor leaves from the metadata, with the text that reading
+        # them gives. The non-tensor entries are read, as on the file itself.
+        if backend == "zarr" and mode == "insertion_order":
+            pytest.skip("a zarr file lists its keys in a different order each time")
+        name = f"{backend}_non_tensor" if non_tensor else backend
+        obj = _make_print_case(name, tmp_path)
+        views = {
+            "int": lambda: obj[0],
+            "neg_int": lambda: obj[-1],
+            "slice_step": lambda: obj[::2],
+            "tuple": lambda: obj[(slice(1, None),)],
+            "ellipsis": lambda: obj[..., 1],
+            "mask": lambda: obj[torch.tensor([True, False, True])],
+            "long": lambda: obj[torch.tensor([2, 0])],
+            "none": lambda: obj[None],
+            "view_of_view": lambda: obj[1:][0],
+            "nested": lambda: obj[0]["nested"],
+            "in_td": lambda: TensorDict(f=obj, batch_size=[3])[1],
+        }
+        view = views[index]()
+
+        def print_view():
+            _backend_reads.clear()
+            with (
+                set_printoptions(**_PRINT_MODES[mode]),
+                warnings.catch_warnings(),
+            ):
+                # reading a string of an h5 file warns about its future type
+                warnings.simplefilter("ignore", FutureWarning)
+                text = repr(view), str(view)
+            return text, list(_backend_reads)
+
+        out, reads = print_view()
+        # the text that reading the leaves gives
+        monkeypatch.setattr(
+            "tensordict.utils._viewed_file", lambda td: None, raising=False
+        )
+        expected, expected_reads = print_view()
+        assert out == expected
+        assert "Tensor" in out[0] or "[" in out[0], out[0]
+
+        def non_tensor_reads(reads):
+            # sorted: a zarr file lists its keys in a different order each time
+            return sorted(
+                read for read in reads if read.endswith(("(/s)", "(/nested/t)"))
+            )
+
+        # the indices that read the leaves when the print shows whether they
+        # are contiguous or views, or their storage size
+        reads_tensors = mode == "detailed_all_flags" and index in (
+            "mask",
+            "long",
+            "none",
+            "view_of_view",
+        )
+        if not reads_tensors:
+            assert sorted(reads) == non_tensor_reads(reads), reads
+        assert non_tensor_reads(reads) == non_tensor_reads(expected_reads)
+        assert any(read not in non_tensor_reads(reads) for read in expected_reads)
 
 
 if __name__ == "__main__":
