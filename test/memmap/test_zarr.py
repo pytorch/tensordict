@@ -21,7 +21,7 @@ from tensordict import (
     TensorDict,
 )
 from tensordict._td import _SubTensorDict
-from tensordict.base import _is_leaf_nontensor
+from tensordict.base import _is_leaf_nontensor, is_tensor_collection
 from tensordict.utils import _NUMPY_TO_TORCH_DTYPE_DICT, is_non_tensor
 from torch import multiprocessing as mp
 from torch.utils.data import BatchSampler, DataLoader, SequentialSampler
@@ -636,6 +636,100 @@ class TestZarrIndexing:
         td[index] = 7
         for key in td.keys(True, True):
             assert (ztd.get(key) == td.get(key)).all(), key
+
+    @pytest.mark.parametrize("reopen", [False, True])
+    @pytest.mark.parametrize("source", ["tensordict", "dict"])
+    def test_nested_key_get_matches_chained_get(self, tmp_path, source, reopen):
+        # #3410: a tuple key gave a nested group the names, and a non-tensor
+        # the batch size, of the root, and a store without batch sizes the
+        # root's batch size, instead of what chained indexing gives
+        if source == "tensordict":
+            k = TensorDict(x=torch.zeros(3, 2, 4, 5), batch_size=[3, 2, 4])
+            m = TensorDict(
+                k=k, s=NonTensorData("a", batch_size=[3, 2]), batch_size=[3, 2]
+            )
+            data = TensorDict(
+                n=TensorDict(m=m, batch_size=[3]), w=torch.ones(3), batch_size=[3]
+            )
+            data.names = ["b"]
+        else:
+            data = {"n": {"m": {"k": torch.ones(3, 2, 4), "q": torch.zeros(3, 2)}}}
+            data["w"] = torch.ones(3)
+        path = tmp_path / "s.zarr"
+        ztd = PersistentTensorDict.from_dict(data, filename=path, backend="zarr")
+        if reopen:
+            ztd = from_zarr(path)
+        # the tuple keys are read first, as chained indexing fills the cache
+        keys = [key for key in ztd.keys(True) if isinstance(key, tuple)]
+        by_tuple = {key: (ztd.get(key), ztd[key]) for key in keys}
+        for key in keys:
+            chained_get, chained_getitem = ztd, ztd
+            for subkey in key:
+                chained_get = chained_get.get(subkey)
+                chained_getitem = chained_getitem[subkey]
+            for value, chained in zip(by_tuple[key], (chained_get, chained_getitem)):
+                assert type(value) is type(chained), key
+                if isinstance(value, torch.Tensor):
+                    assert (value == chained).all(), key
+                elif not is_tensor_collection(value):
+                    assert value == chained, key
+                else:
+                    assert value.batch_size == chained.batch_size, key
+                    assert value.names == chained.names, key
+                    assert set(value.keys(True)) == set(chained.keys(True)), key
+        if source == "tensordict":
+            assert ztd["n", "m", "k"].names == ["b", None, None]
+            assert ztd.get(("n", "m", "s")).batch_size == (3, 2)
+        else:
+            assert ztd["n", "m"].batch_size == (3, 2)
+
+    def test_from_dict_stores_nested_batch_sizes_of_result(self, tmp_path):
+        # #3410: from_dict of a dict cached its nested groups at the root with
+        # the root's batch size, and stored that size, so the reopened store
+        # gave them the root's batch size
+        data = {"n": {"m": {"k": torch.ones(3, 2, 4), "q": torch.zeros(3, 2)}}}
+        data["n"]["z"] = torch.zeros(3, 9)
+        data["w"] = torch.ones(3)
+        path = tmp_path / "s.zarr"
+        fresh = PersistentTensorDict.from_dict(
+            data, filename=path, backend="zarr"
+        ).to_tensordict()
+        reopened = from_zarr(path).to_tensordict()
+        for key in fresh.keys(True):
+            if is_tensor_collection(fresh.get(key)):
+                assert reopened.get(key).batch_size == fresh.get(key).batch_size, key
+        assert reopened["n", "m"].batch_size == (3, 2)
+
+    def test_reopened_nested_group_keeps_names(self, tmp_path):
+        # #3410: from_zarr gave the names to the group it cached at the root
+        # under ("n", "m"), so td["n"]["m"] had no names
+        k = TensorDict(k=torch.zeros(3, 2, 4), batch_size=[3, 2])
+        data = TensorDict(n=TensorDict(m=k, batch_size=[3]), batch_size=[3])
+        data.names = ["b"]
+        path = tmp_path / "s.zarr"
+        PersistentTensorDict.from_dict(data, filename=path, backend="zarr")
+        ztd = from_zarr(path)
+        stored = zarr.open_group(str(path), mode="r")["n"]["m"].attrs
+        assert stored["__tensordict__"]["names"] == ["b", None]
+        assert ztd["n"]["m"].names == ["b", None]
+        assert ztd.to_tensordict()["n"]["m"].names == ["b", None]
+
+    def test_reopened_locked_root_locks_nested_groups(self, tmp_path):
+        # #3410: from_zarr cached "n", "m" at the root under its tuple key,
+        # and lock_ left that group unlocked, so writes into it went through.
+        # A reopened store now locks it, as a freshly written store and h5 do.
+        k = TensorDict(k=torch.zeros(3, 2, 4), batch_size=[3, 2])
+        data = TensorDict(n=TensorDict(m=k, batch_size=[3]), batch_size=[3])
+        path = tmp_path / "s.zarr"
+        PersistentTensorDict.from_dict(data, filename=path, backend="zarr")
+        ztd = from_zarr(path, mode="r+")
+        ztd.lock_()
+        assert ztd["n"]["m"].is_locked
+        assert ztd["n", "m"].is_locked
+        with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
+            ztd["n"]["m"].set("new", torch.zeros(3, 2))
+        with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
+            ztd.set(("n", "m", "new"), torch.zeros(3, 2))
 
 
 @pytest.mark.skipif(not _has_zarr, reason="zarr>=3.0 not found.")

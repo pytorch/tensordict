@@ -1627,15 +1627,31 @@ class PersistentTensorDict(
                     )
                 else:
                     array = self._backend.read_non_tensor(array)
+                    # the batch size of the tensordict that holds the entry
                     out = NonTensorData(
-                        data=array, device=device, batch_size=self.batch_size
+                        data=array,
+                        device=device,
+                        batch_size=self._nested_owner(key).batch_size,
                     )
             return out
+        elif len(key) > 1:
+            # the group is read through the tensordicts that hold it, which
+            # give it its batch size and names, as chained indexing does (#3410)
+            return self._nested_owner(key)._process_array(key[-1:], array)
         else:
             out = self._nested_tensordicts.get(key)
             if out is None:
                 out = self._make_nested(key, array)
             return out
+
+    def _nested_owner(self, key):
+        """The tensordict that holds the existing entry at ``key``, as chained indexing reads it."""
+        owner = self
+        for subkey in key[:-1]:
+            # the cache saves a lookup in the file for each level
+            nested = owner._nested_tensordicts.get((subkey,))
+            owner = nested if nested is not None else owner._get_str(subkey, NO_DEFAULT)
+        return owner
 
     def _non_tensor_rows(self, key, array):
         """The batch size of the rows that the unmarked non-tensor ``array`` reads as, or ``None``."""

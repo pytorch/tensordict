@@ -24,7 +24,7 @@ from tensordict import (
     TypedTensorDict,
 )
 from tensordict._td import _SubTensorDict
-from tensordict.base import _is_leaf_nontensor
+from tensordict.base import _is_leaf_nontensor, is_tensor_collection
 from tensordict.utils import is_non_tensor
 from torch import multiprocessing as mp
 from torch.utils._pytree import tree_map
@@ -1702,6 +1702,76 @@ def test_inplace_methods_keep_key_order(tmp_path):
         assert data.lerp_(end, 1.0) is data
         assert (data["a"] == 10).all()
         assert (data["nested", "d"] == -10).all()
+
+
+def _assert_nested_key_get_matches_chained_get(td):
+    # a tuple key reads every group and leaf as chained indexing does; the
+    # tuple keys are read first, as chained indexing fills the cache
+    keys = [key for key in td.keys(True) if isinstance(key, tuple)]
+    by_tuple = {key: (td.get(key), td[key]) for key in keys}
+    for key in keys:
+        chained_get, chained_getitem = td, td
+        for subkey in key:
+            chained_get = chained_get.get(subkey)
+            chained_getitem = chained_getitem[subkey]
+        for value, chained in zip(by_tuple[key], (chained_get, chained_getitem)):
+            assert type(value) is type(chained), key
+            if isinstance(value, torch.Tensor):
+                assert (value == chained).all(), key
+            elif not is_tensor_collection(value):
+                assert value == chained, key
+            else:
+                assert value.batch_size == chained.batch_size, key
+                assert value.names == chained.names, key
+                assert set(value.keys(True)) == set(chained.keys(True)), key
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+@pytest.mark.parametrize("reopen", [False, True])
+@pytest.mark.parametrize("source", ["tensordict", "dict"])
+def test_nested_key_get_matches_chained_get(tmp_path, source, reopen):
+    # #3410: a tuple key gave a nested group, and a non-tensor in it, the batch
+    # size of the root instead of the one chained indexing gives it
+    if source == "tensordict":
+        k = TensorDict(x=torch.zeros(3, 2, 4, 5), batch_size=[3, 2, 4])
+        m = TensorDict(k=k, s=NonTensorData("a", batch_size=[3, 2]), batch_size=[3, 2])
+        data = TensorDict(
+            n=TensorDict(m=m, batch_size=[3]), w=torch.ones(3), batch_size=[3]
+        )
+        data.names = ["b"]
+    else:
+        data = {"n": {"m": {"k": torch.ones(3, 2, 4), "q": torch.zeros(3, 2)}}}
+        data["w"] = torch.ones(3)
+    td = PersistentTensorDict.from_dict(data, filename=tmp_path / "file.h5")
+    if reopen:
+        td.close()
+        td = PersistentTensorDict.from_h5(tmp_path / "file.h5")
+    _assert_nested_key_get_matches_chained_get(td)
+    if source == "tensordict" and not reopen:
+        assert td.get(("n", "m", "k")).batch_size == (3, 2, 4)
+        assert td["n", "m"].names == ["b", None]
+        assert td.get(("n", "m", "s")).batch_size == (3, 2)
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_from_dict_stores_nested_batch_sizes_of_result(tmp_path):
+    # #3410: from_dict of a dict cached its nested groups at the root with the
+    # root's batch size, and stored that size, so from_h5 warned that the
+    # stored batch sizes differ from the ones it returns
+    data = {"n": {"m": {"k": torch.ones(3, 2, 4), "q": torch.zeros(3, 2)}}}
+    data["n"]["z"] = torch.zeros(3, 9)
+    data["w"] = torch.ones(3)
+    td = PersistentTensorDict.from_dict(data, filename=tmp_path / "file.h5")
+    fresh = td.to_tensordict()
+    td.close()
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", FutureWarning)
+        td = PersistentTensorDict.from_h5(tmp_path / "file.h5")
+    reopened = td.to_tensordict()
+    for key in fresh.keys(True):
+        if is_tensor_collection(fresh.get(key)):
+            assert reopened.get(key).batch_size == fresh.get(key).batch_size, key
+    assert reopened["n", "m"].batch_size == (3, 2)
 
 
 def _h5_with_nested(tmp_path):
