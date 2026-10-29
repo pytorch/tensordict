@@ -1509,6 +1509,62 @@ class TestZarrInterop:
         assert reload["n", "m"].batch_size == torch.Size([3, 2])
         assert reload["n", "m", "k"].batch_size == torch.Size([3, 2, 4])
 
+    @pytest.mark.parametrize("writer", ["from_dict", "to_zarr", "from_zarr"])
+    @pytest.mark.parametrize("read", [None, ("n", "m"), ("n", "m", "k")])
+    def test_clone_stores_source_batch_sizes(self, tmp_path, writer, read):
+        # #3409: the clone stores the batch size of each group of the source,
+        # whichever entries were read before, however the source was written
+        td = TensorDict(
+            n=TensorDict(
+                m=TensorDict(
+                    k=TensorDict(x=torch.zeros(3, 2, 4, 5), batch_size=[3, 2, 4]),
+                    batch_size=[3, 2],
+                ),
+                batch_size=[3],
+            ),
+            batch_size=[3],
+        )
+        path = tmp_path / "s.zarr"
+        if writer == "from_dict":
+            ztd = PersistentTensorDict.from_dict(td, path, backend="zarr")
+        else:
+            ztd = td.to_zarr(path)
+            if writer == "from_zarr":
+                ztd = TensorDict.from_zarr(path)
+        if read is not None:
+            ztd.get(read)
+        ztd.clone(newfile=tmp_path / "clone.zarr")
+        reload = TensorDict.from_zarr(tmp_path / "clone.zarr")
+        assert reload.batch_size == torch.Size([3])
+        assert reload["n"].batch_size == torch.Size([3])
+        assert reload["n", "m"].batch_size == torch.Size([3, 2])
+        assert reload["n", "m", "k"].batch_size == torch.Size([3, 2, 4])
+
+    @pytest.mark.parametrize("reopen", [False, True])
+    def test_clone_empty_nested(self, tmp_path, reopen):
+        # #3412: clone(newfile=) raised a KeyError on an empty nested
+        # tensordict, which has no leaf to copy
+        td = TensorDict(
+            a=torch.zeros(3),
+            e=TensorDict(batch_size=[3]),
+            f=TensorDict(g=TensorDict(batch_size=[3, 2]), batch_size=[3, 2]),
+            batch_size=[3],
+        )
+        ztd = PersistentTensorDict.from_dict(td, tmp_path / "s.zarr", backend="zarr")
+        if reopen:
+            ztd = TensorDict.from_zarr(tmp_path / "s.zarr")
+        clone = ztd.clone(newfile=tmp_path / "clone.zarr")
+        for out in (clone, TensorDict.from_zarr(tmp_path / "clone.zarr")):
+            assert set(out.keys(include_nested=True)) == {
+                "a",
+                "e",
+                "f",
+                ("f", "g"),
+            }
+            assert out["e"].batch_size == torch.Size([3])
+            assert out["f"].batch_size == torch.Size([3, 2])
+            assert out["f", "g"].batch_size == torch.Size([3, 2])
+
     def test_device_kwarg(self, tmp_path):
         td = TensorDict({"a": torch.randn(3)}, batch_size=[3])
         td.to_zarr(tmp_path / "s.zarr")

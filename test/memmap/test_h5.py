@@ -684,6 +684,28 @@ class TestH5Serialization:
             "b": {"batch_size": [3, 4, 2], "version": 1},
         }
 
+    def test_clone_empty_nested(self, tmp_path):
+        # #3412: clone(newfile=) raised a KeyError on an empty nested
+        # tensordict, which has no leaf to copy
+        td = TensorDict(
+            a=torch.zeros(3),
+            e=TensorDict(batch_size=[3]),
+            f=TensorDict(g=TensorDict(batch_size=[3, 2]), batch_size=[3, 2]),
+            batch_size=[3],
+        )
+        h5td = PersistentTensorDict.from_dict(td, tmp_path / "s.h5")
+        clone = h5td.clone(newfile=tmp_path / "clone.h5")
+        assert set(clone.keys(include_nested=True)) == {"a", "e", "f", ("f", "g")}
+        assert clone["e"].batch_size == torch.Size([3])
+        assert clone["f"].batch_size == torch.Size([3, 2])
+        assert clone["f"]["g"].batch_size == torch.Size([3, 2])
+        h5td.close()
+        clone.close()
+        stored = self._stored_metadata(tmp_path / "clone.h5")
+        assert stored == self._stored_metadata(tmp_path / "s.h5")
+        assert stored["e"]["batch_size"] == [3]
+        assert stored["f/g"]["batch_size"] == [3, 2]
+
     @pytest.mark.parametrize(
         "td,kwargs,batch_size,nested_batch_size",
         [
