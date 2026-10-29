@@ -227,6 +227,29 @@ class TestZarrRoundTrip:
         assert type(td_recon) is PersistentTensorDict
         assert td_recon.batch_size == torch.Size([3])
 
+    @pytest.mark.parametrize("batch_dims", [None, 0, 1, 2, 3])
+    def test_auto_batch_size_names(self, tmp_path, batch_dims):
+        # #3413: the stored names were kept as they were, fewer or more than
+        # the inferred batch dims, where auto_batch_size_ pads or cuts them
+        td = TensorDict(
+            a=torch.zeros(2, 3, 4, 5),
+            b=TensorDict(
+                c=torch.zeros(2, 3, 4, 6), batch_size=[2, 3], names=["t", "u"]
+            ),
+            batch_size=[2],
+            names=["t"],
+        )
+        td.to_zarr(tmp_path / "s.zarr")
+        ztd = PersistentTensorDict.from_zarr(
+            tmp_path / "s.zarr", auto_batch_size=True, batch_dims=batch_dims
+        )
+        expected = td.clone().auto_batch_size_(batch_dims=batch_dims)
+        for sub, ref in ((ztd, expected), (ztd["b"], expected["b"])):
+            assert sub.batch_size == ref.batch_size
+            assert sub.names == ref.names
+        assert ztd.to_tensordict().names == expected.names
+        ztd.close()
+
     def test_free_function(self, tmp_path):
         from tensordict import from_zarr
 

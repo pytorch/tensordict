@@ -1922,7 +1922,8 @@ class PersistentTensorDict(
         raise NotImplementedError
 
     # Override: checks the batch size against the file; if it does not fit,
-    # keeps the old one and raises, like TensorDict.
+    # keeps the old one and raises, like TensorDict. The names are padded with
+    # None or cut to the new batch dims, as TensorDict does (#3413).
     @TensorDictBase.batch_size.setter
     def batch_size(self, value):
         _batch_size = self._batch_size
@@ -1932,6 +1933,11 @@ class PersistentTensorDict(
         except ValueError as err:
             self._batch_size = _batch_size
             raise RuntimeError(str(err)) from err
+        names = self._td_dim_names
+        ndim = len(self._batch_size)
+        if names is not None and len(names) != ndim:
+            self._erase_names()
+            self._set_names(list(names[:ndim]) + [None] * (ndim - len(names)))
 
     # Override: a nested name that clashes with the new names warns and is
     # dropped until 0.17, where it raises as on TensorDict.
