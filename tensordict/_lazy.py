@@ -5857,6 +5857,7 @@ class _CustomOpTensorDict(TensorDictBase):
 
     _lazy = True
     _masking_on_dense_copy = True
+    _inplace_shape_ops_unsupported = True
 
     def __init__(
         self,

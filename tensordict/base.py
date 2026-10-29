@@ -3725,9 +3725,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # place: pin_memory raises.
     _pin_memory_unsupported: bool = False
     # Set by LazyStackedTensorDict, whose leaves belong to its members, and by
-    # _SubTensorDict, whose leaves belong to its source: reshape and
-    # repeat_interleave with inplace=True raise NotImplementedError before
-    # they change anything.
+    # _SubTensorDict and the legacy lazy views (_CustomOpTensorDict), whose
+    # leaves belong to their source: reshape and repeat_interleave with
+    # inplace=True raise NotImplementedError before they change anything.
     _inplace_shape_ops_unsupported: bool = False
     # Set by LazyStackedTensorDict, whose flatten regroups its members rather
     # than flattening leaves: flatten(d, d) returns self, and for
@@ -10001,11 +10001,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         ``inplace=True``. Finding a lazy stack halfway through would leave the
         earlier leaves rewritten while ``batch_size`` is unchanged, so the
         whole tree is checked first. The check tests ``_lazy``, so it also
-        catches ``_SubTensorDict``, which refuses these ops too. The legacy
-        lazy views (``_CustomOpTensorDict``) refuse ``flatten``, ``unflatten``,
-        ``repeat``, ``gather`` and ``masked_select`` but not ``reshape`` and
-        ``repeat_interleave``, so the check lets them through for those two.
-        The calls on nested tensordicts skip the walk, which the top-level
+        catches ``_SubTensorDict`` and the legacy lazy views
+        (``_CustomOpTensorDict``), which refuse these ops too. The calls on nested tensordicts skip the walk, which the top-level
         call has done.
 
         ``new_batch_size`` is the batch size that the op gives ``self``. When
@@ -10035,20 +10032,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 value = value._tensordict
             nested_key = prefix + (key,)
             if value._lazy:
-                from tensordict._lazy import _CustomOpTensorDict
-
-                if not (
-                    op_name in ("reshape", "repeat_interleave")
-                    and isinstance(value, _CustomOpTensorDict)
-                ):
-                    raise NotImplementedError(
-                        f"{op_name}(inplace=True) is not supported on a tensordict "
-                        f"that holds a lazy tensordict (such as a "
-                        f"LazyStackedTensorDict or a NonTensorStack); found a "
-                        f"{type(value).__name__} at key "
-                        f"{nested_key[0] if len(nested_key) == 1 else nested_key!r}. "
-                        f"Use inplace=False instead."
-                    )
+                raise NotImplementedError(
+                    f"{op_name}(inplace=True) is not supported on a tensordict "
+                    f"that holds a lazy tensordict (such as a "
+                    f"LazyStackedTensorDict or a NonTensorStack); found a "
+                    f"{type(value).__name__} at key "
+                    f"{nested_key[0] if len(nested_key) == 1 else nested_key!r}. "
+                    f"Use inplace=False instead."
+                )
             if new_batch_size is not None and not value._inplace_batch_size_change:
                 raise NotImplementedError(
                     f"{op_name}(inplace=True) changes the batch size, which a "
