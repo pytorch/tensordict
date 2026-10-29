@@ -1483,6 +1483,32 @@ class TestZarrInterop:
         reload = TensorDict.from_zarr(tmp_path / "clone.zarr")
         assert reload.batch_size == torch.Size([3, 4])
 
+    @pytest.mark.parametrize("read_nested_key", [False, True])
+    def test_clone_keeps_nested_batch_sizes(self, tmp_path, read_nested_key):
+        # #3263: clone(newfile=) of a store opened with from_zarr stores the
+        # batch size of every nested group
+        td = TensorDict(
+            n=TensorDict(
+                m=TensorDict(
+                    k=TensorDict(x=torch.zeros(3, 2, 4, 5), batch_size=[3, 2, 4]),
+                    batch_size=[3, 2],
+                ),
+                batch_size=[3],
+            ),
+            batch_size=[3],
+            names=["t"],
+        )
+        td.to_zarr(tmp_path / "s.zarr")
+        ztd = TensorDict.from_zarr(tmp_path / "s.zarr")
+        if read_nested_key:
+            ztd.get(("n", "m", "k"))
+        ztd.clone(newfile=tmp_path / "clone.zarr")
+        reload = TensorDict.from_zarr(tmp_path / "clone.zarr")
+        assert reload.names == ["t"]
+        assert reload["n"].batch_size == torch.Size([3])
+        assert reload["n", "m"].batch_size == torch.Size([3, 2])
+        assert reload["n", "m", "k"].batch_size == torch.Size([3, 2, 4])
+
     def test_device_kwarg(self, tmp_path):
         td = TensorDict({"a": torch.randn(3)}, batch_size=[3])
         td.to_zarr(tmp_path / "s.zarr")
