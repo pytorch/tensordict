@@ -245,6 +245,13 @@ class _PersistentBackend:
     def keys(self, file):
         raise NotImplementedError
 
+    def groups(self, file):
+        """Yields the ``(name, group)`` pairs of the direct children of ``file`` that are groups."""
+        for name in self.keys(file):
+            node = file[name]
+            if not self.is_array(node):
+                yield name, node
+
     def walk_keys(self, file):
         raise NotImplementedError
 
@@ -928,6 +935,10 @@ class _ZarrBackend(_PersistentBackend):
     def keys(self, file):
         return file.keys()
 
+    def groups(self, file):
+        # one listing, instead of a lookup of each member
+        return file.groups()
+
     def walk_keys(self, file):
         for name, _ in file.members(max_depth=None):
             yield name
@@ -1490,15 +1501,22 @@ class PersistentTensorDict(
 
         Walks the direct children, which have the batch sizes that
         ``self[key]`` returns. The cache can also hold entries under a nested
-        key, which on h5 have the batch size of their parent (#3263).
+        key with a batch size that is not their own (#3263), and so can the
+        copy of it that a clone makes (#3409). Creates the groups of
+        ``group`` that hold no leaf (#3412).
         """
         metadata = _attrs_metadata(self.batch_size, self._td_dim_names)
         self._backend.write_attrs_metadata(group, metadata)
-        for name in self._backend.keys(self.file):
-            array = self._get_array((name,))
-            if not self._backend.is_array(array):
-                nested = self._process_array((name,), array)
-                nested._write_attrs_metadata_into(group[name])
+        for name, node in self._backend.groups(self.file):
+            nested = self._process_array((name,), node)
+            try:
+                nested_group = group[name]
+            except KeyError:
+                # an empty group has no leaf to copy (#3412)
+                metadata = _attrs_metadata(nested.batch_size, nested._td_dim_names)
+                self._backend.create_group(group, name, metadata)
+                nested_group = group[name]
+            nested._write_attrs_metadata_into(nested_group)
 
     def _nested_batch_size_from_attrs(self, group):
         """Batch size persisted in a nested group's metadata, or ``None``."""
@@ -2685,12 +2703,9 @@ class PersistentTensorDict(
                 names = list(names)
             clone.names = names
             clone._nested_tensordicts = {}
+            # before _set_metadata, which needs the empty groups (#3412)
+            self._write_attrs_metadata_into(f_dest)
             clone._set_metadata(self)
-            if self.backend == "h5":
-                # zarr writes the clone's cache, as before #3263
-                self._write_attrs_metadata_into(f_dest)
-            else:
-                clone._write_attrs_metadata()
             clone._backend.finalize(clone.file)
             return clone
         else:
