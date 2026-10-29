@@ -95,10 +95,20 @@ leaves of an h5 or zarr file (:class:`~tensordict.PersistentTensorDict`) from
 their shape and dtype, and the tensor leaves of a lazy stack from its
 members, without reading the file or stacking the leaves. The text is the
 same as for the same data in memory. ``plain=True`` is the exception: it
-prints statistics of the values, so it reads them. ``show_is_contiguous=True``
+prints statistics of the values, so it reads them. An indexed view of a
+file, such as ``h5[0]``, is another: both displays read its leaves. ``show_is_contiguous=True``
 also stacks a lazy leaf when one of its members is not contiguous (a
 ``channels_last`` tensor, for example), since the contiguity of the result
 depends on their strides.
+
+The detailed display prints the value of each non-tensor entry
+(:class:`~tensordict.NonTensorData`, :class:`~tensordict.NonTensorStack`) on
+every container, so it reads the non-tensor entries of an h5 or zarr file to
+print them. Their values are usually short strings, but a
+:class:`~tensordict.NonTensorStack` is read in full. On h5, a string entry
+prints as bytes (``data=b'text'``), and reading it emits the
+``FutureWarning`` about the type of h5 strings. The compact display prints
+these entries as ``NonTensorData`` or ``NonTensorStack`` and reads nothing.
 
 Choose what the display shows
 -----------------------------
