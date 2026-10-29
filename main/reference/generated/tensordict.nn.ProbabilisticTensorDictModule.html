@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6652+gf8ba09738.d20261028)">
+<meta name="llm:version" content="main (0.15.0.dev6658+g2490cdb87.d20261029)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6652+gf8ba09738.d20261028)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6658+g2490cdb87.d20261029)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1792,7 +1792,7 @@ otherwise. The method returns a <code class="docutils literal notranslate"><span
 <code class="docutils literal notranslate"><span class="pre">log_prob</span></code> in the layout of <code class="docutils literal notranslate"><span class="pre">dist.log_prob</span></code>. Define it when
 <code class="docutils literal notranslate"><span class="pre">dist.log_prob(sample)</span></code> cannot recover the draw exactly, for example
 for a tanh-squashed normal that saturates. Otherwise the module calls
-<code class="docutils literal notranslate"><span class="pre">dist.log_prob</span></code> on the sample. The <a class="reference external" href="https://docs.pytorch.org/docs/stable/distributions.html#module-torch.distributions" title="(in PyTorch v2.14)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.distributions</span></code></a> classes
+<code class="docutils literal notranslate"><span class="pre">dist.log_prob</span></code> on the sample. The <a class="reference external" href="https://docs.pytorch.org/docs/stable/distributions.html#module-torch.distributions" title="(in PyTorch v2.15)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.distributions</span></code></a> classes
 do not define these methods;
 <a class="reference internal" href="tensordict.nn.distributions.CompositeDistribution.html#tensordict.nn.distributions.CompositeDistribution" title="tensordict.nn.distributions.CompositeDistribution"><code class="xref py py-class docutils literal notranslate"><span class="pre">CompositeDistribution</span></code></a> defines both.</p>
 <p class="rubric" id="log-prob-keys">Log-probability keys</p>
@@ -1929,25 +1929,25 @@ would overwrite the sample. The check runs when
 <li><p><strong>n_empirical_estimate</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – the number of samples that
 <code class="docutils literal notranslate"><span class="pre">MEAN</span></code> averages when the distribution has no mean. Defaults to
 <code class="docutils literal notranslate"><span class="pre">1000</span></code>.</p></li>
-<li><p><strong>num_samples</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><em>Size</em></a><em>, </em><em>optional</em>) – the number of values per
+<li><p><strong>num_samples</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em> or </em><a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.15)"><em>Size</em></a><em>, </em><em>optional</em>) – the number of values per
 call. The output tensordict is expanded to
 <code class="docutils literal notranslate"><span class="pre">num_samples</span> <span class="pre">+</span> <span class="pre">batch_size</span></code>, and each value gets these leading
 dimensions. With the <code class="docutils literal notranslate"><span class="pre">RANDOM</span></code> interaction type, each value is a
 new draw. With another interaction type, the module repeats its
 one deterministic value. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>: one value, no extra
 dimension.</p></li>
-<li><p><strong>generator</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.14)"><em>Generator</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em> or </em><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a><em>, </em><em>optional</em>) – <p>the random
+<li><p><strong>generator</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.15)"><em>Generator</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em> or </em><a class="reference internal" href="tensordict.NestedKey.html#tensordict.NestedKey" title="tensordict.NestedKey"><em>NestedKey</em></a><em>, </em><em>optional</em>) – <p>the random
 number generator of the sampling, used by the <code class="docutils literal notranslate"><span class="pre">RANDOM</span></code>
 interaction type and by the sampled estimate of <code class="docutils literal notranslate"><span class="pre">MEAN</span></code>.</p>
 <ul>
 <li><p><code class="docutils literal notranslate"><span class="pre">None</span></code> (default): the global PyTorch generator.</p></li>
-<li><p>a <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Generator</span></code></a>: used for every call. Its state
+<li><p>a <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Generator</span></code></a>: used for every call. Its state
 advances in place, so consecutive calls draw different values.
 It must be on the device of the distribution parameters.</p></li>
 <li><p>an <code class="docutils literal notranslate"><span class="pre">int</span></code>: the seed of a CPU generator that the constructor
 creates, then used as above.</p></li>
 <li><p>a <code class="docutils literal notranslate"><span class="pre">NestedKey</span></code>: the key of an entry of the input, read at each
-call. The entry holds a <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Generator</span></code></a>, used as above,
+call. The entry holds a <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Generator.html#torch.Generator" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Generator</span></code></a>, used as above,
 or an integer seed (a scalar tensor or an <code class="docutils literal notranslate"><span class="pre">int</span></code>). A seed gives
 a new generator, and after sampling the module writes a new seed,
 drawn from that generator, back at the key. If the input has
@@ -1955,7 +1955,7 @@ no such entry, the global generator is used.</p></li>
 </ul>
 <p>Sampling with a generator does not change the state of the global
 generator, and works with every distribution. Under
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a>, the argument is ignored, without a warning.</p>
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a>, the argument is ignored, without a warning.</p>
 </p></li>
 </ul>
 </dd>
@@ -2048,7 +2048,7 @@ the sample:</p>
 </div>
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.nn.ProbabilisticTensorDictModule.build_dist_from_params">
-<span class="sig-name descname"><span class="pre">build_dist_from_params</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.base.TensorDictBase"><span class="pre">TensorDictBase</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/distributions.html#torch.distributions.distribution.Distribution" title="(in PyTorch v2.14)"><span class="pre">Distribution</span></a></span></span><a class="headerlink" href="#tensordict.nn.ProbabilisticTensorDictModule.build_dist_from_params" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">build_dist_from_params</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.base.TensorDictBase"><span class="pre">TensorDictBase</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/distributions.html#torch.distributions.distribution.Distribution" title="(in PyTorch v2.15)"><span class="pre">Distribution</span></a></span></span><a class="headerlink" href="#tensordict.nn.ProbabilisticTensorDictModule.build_dist_from_params" title="Link to this definition">#</a></dt>
 <dd><p>Creates a <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.distributions.Distribution</span></code> instance with the parameters provided in the input tensordict.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -2132,7 +2132,7 @@ input does not get the outputs then.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.nn.ProbabilisticTensorDictModule.get_dist">
-<span class="sig-name descname"><span class="pre">get_dist</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.base.TensorDictBase"><span class="pre">TensorDictBase</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/distributions.html#torch.distributions.distribution.Distribution" title="(in PyTorch v2.14)"><span class="pre">Distribution</span></a></span></span><a class="headerlink" href="#tensordict.nn.ProbabilisticTensorDictModule.get_dist" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">get_dist</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.base.TensorDictBase"><span class="pre">TensorDictBase</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/distributions.html#torch.distributions.distribution.Distribution" title="(in PyTorch v2.15)"><span class="pre">Distribution</span></a></span></span><a class="headerlink" href="#tensordict.nn.ProbabilisticTensorDictModule.get_dist" title="Link to this definition">#</a></dt>
 <dd><p>Creates a <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.distributions.Distribution</span></code> instance with the parameters provided in the input tensordict.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -2186,7 +2186,7 @@ fail this check in a <a class="reference internal" href="tensordict.nn.WrapModul
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.nn.ProbabilisticTensorDictModule.log_prob">
-<span class="sig-name descname"><span class="pre">log_prob</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dist</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/distributions.html#torch.distributions.distribution.Distribution" title="(in PyTorch v2.14)"><span class="pre">Distribution</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.nn.ProbabilisticTensorDictModule.log_prob" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">log_prob</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dist</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/distributions.html#torch.distributions.distribution.Distribution" title="(in PyTorch v2.15)"><span class="pre">Distribution</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.nn.ProbabilisticTensorDictModule.log_prob" title="Link to this definition">#</a></dt>
 <dd><p>Computes the log-probability of the value stored in <code class="docutils literal notranslate"><span class="pre">tensordict</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>

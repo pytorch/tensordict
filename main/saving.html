@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6652+gf8ba09738.d20261028)">
+<meta name="llm:version" content="main (0.15.0.dev6658+g2490cdb87.d20261029)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="documentation">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6652+gf8ba09738.d20261028)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6658+g2490cdb87.d20261029)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1790,8 +1790,8 @@ Face libraries, or load a safetensors checkpoint</p></td>
 <a class="reference internal" href="reference/generated/tensordict.from_safetensors.html#tensordict.from_safetensors" title="tensordict.from_safetensors"><code class="xref py py-func docutils literal notranslate"><span class="pre">from_safetensors()</span></code></a></p></td>
 <td><p><a class="reference internal" href="#safetensors-files">Safetensors files</a></p></td>
 </tr>
-<tr class="row-even"><td><p>Give the file to code that calls <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.load.html#torch.load" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.load()</span></code></a></p></td>
-<td><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.save()</span></code></a></p></td>
+<tr class="row-even"><td><p>Give the file to code that calls <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.load.html#torch.load" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.load()</span></code></a></p></td>
+<td><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.save()</span></code></a></p></td>
 <td><p><a class="reference internal" href="#torch-save-and-torch-load">torch.save and torch.load</a></p></td>
 </tr>
 <tr class="row-odd"><td><p>Give the tensors to code that expects a flat state dict</p></td>
@@ -1837,7 +1837,7 @@ tensordict for each sub-module:</p>
 <p>To load the checkpoint into a model, read it with <code class="docutils literal notranslate"><span class="pre">load_memmap</span></code>, and call
 <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.to_module.html#tensordict.TensorDictBase.to_module" title="tensordict.TensorDictBase.to_module"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_module()</span></code></a> with <code class="docutils literal notranslate"><span class="pre">inplace=True</span></code>. It copies
 each value into the existing parameter of the model, so the parameters stay
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.parameter.Parameter.html#torch.nn.parameter.Parameter" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Parameter</span></code></a> instances in memory:</p>
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.parameter.Parameter.html#torch.nn.parameter.Parameter" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Parameter</span></code></a> instances in memory:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">new_model</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">(),</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">loaded</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">load_memmap</span><span class="p">(</span><span class="n">root</span> <span class="o">/</span> <span class="s2">"checkpoint"</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">loaded</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span><span class="n">new_model</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -1887,7 +1887,7 @@ replace an entry (see <a class="reference internal" href="concepts/keys.html#key
 <p>To write several files at the same time, pass <code class="docutils literal notranslate"><span class="pre">num_threads</span></code>. Threads make
 the save faster when the tensordict has a few large leaves, and slower when
 it has many small ones. In one measurement, <code class="docutils literal notranslate"><span class="pre">num_threads=4</span></code> saved the
-weights of <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Transformer.html#torch.nn.Transformer" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Transformer</span></code></a> (184 leaves, 168 MiB) 1.6 times as
+weights of <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Transformer.html#torch.nn.Transformer" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Transformer</span></code></a> (184 leaves, 168 MiB) 1.6 times as
 fast as one thread, and saved 2000 small leaves 3 times as slowly. Measure
 both on your data.</p>
 <p>A job that is killed while it saves to a directory leaves some files new,
@@ -2039,7 +2039,7 @@ doesn’t for every tree:</p>
 <section id="save-to-one-file">
 <h2>Save to one file<a class="headerlink" href="#save-to-one-file" title="Link to this heading">#</a></h2>
 <p>A directory has one file for each leaf. To write one file instead, use an
-archive, a consolidated file, or <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.save()</span></code></a>:</p>
+archive, a consolidated file, or <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.save()</span></code></a>:</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <colgroup>
 <col style="width: 20.0%" />
@@ -2245,10 +2245,10 @@ is matched by its full name, so a tensorclass defined in a script
 </section>
 <section id="torch-save-and-torch-load">
 <h2>torch.save and torch.load<a class="headerlink" href="#torch-save-and-torch-load" title="Link to this heading">#</a></h2>
-<p><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.load.html#torch.load" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.load()</span></code></a> reads a tensordict that <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.save()</span></code></a> wrote, with
+<p><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.load.html#torch.load" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.load()</span></code></a> reads a tensordict that <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.save()</span></code></a> wrote, with
 <code class="docutils literal notranslate"><span class="pre">weights_only=True</span></code> (the default since PyTorch 2.6). When you import
 tensordict, it allowlists the classes and functions that these files
-reference, with <a class="reference external" href="https://docs.pytorch.org/docs/stable/notes/serialization.html#torch.serialization.add_safe_globals" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.serialization.add_safe_globals()</span></code></a>. The list covers
+reference, with <a class="reference external" href="https://docs.pytorch.org/docs/stable/notes/serialization.html#torch.serialization.add_safe_globals" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.serialization.add_safe_globals()</span></code></a>. The list covers
 <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>, <a class="reference internal" href="reference/generated/tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict" title="tensordict.LazyStackedTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyStackedTensorDict</span></code></a>,
 consolidated tensordicts, non-tensor values made of Python builtins, such
 as strings, numbers, lists, and dicts, and the <code class="docutils literal notranslate"><span class="pre">torch.return_types</span></code> that
@@ -2289,7 +2289,7 @@ tensorclass, allowlist the tensorclass:</p>
 <h2>state_dict and load_state_dict<a class="headerlink" href="#state-dict-and-load-state-dict" title="Link to this heading">#</a></h2>
 <p><a class="reference internal" href="reference/generated/tensordict.TensorDictBase.state_dict.html#tensordict.TensorDictBase.state_dict" title="tensordict.TensorDictBase.state_dict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">state_dict()</span></code></a> and
 <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.load_state_dict.html#tensordict.TensorDictBase.load_state_dict" title="tensordict.TensorDictBase.load_state_dict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_state_dict()</span></code></a> follow the conventions of
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict" title="(in PyTorch v2.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.nn.Module.state_dict()</span></code></a>. By default, <code class="docutils literal notranslate"><span class="pre">state_dict()</span></code> returns a
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict" title="(in PyTorch v2.15)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.nn.Module.state_dict()</span></code></a>. By default, <code class="docutils literal notranslate"><span class="pre">state_dict()</span></code> returns a
 flat <a class="reference external" href="https://docs.python.org/3/library/collections.html#collections.OrderedDict" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">OrderedDict</span></code></a> with dot-separated keys, as
 <code class="docutils literal notranslate"><span class="pre">nn.Module</span></code> does:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">"b"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"c"</span><span class="p">:</span> <span class="mi">2</span><span class="p">}},</span> <span class="p">[])</span>
@@ -2343,7 +2343,7 @@ fields. The non-tensor fields are in <code class="docutils literal notranslate">
 not in a public issue.</p>
 <p>Pickle can run any code when it loads a file. For memory-mapped saves,
 tensordict uses <code class="docutils literal notranslate"><span class="pre">other.pickle</span></code> files in a directory or archive.
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.save()</span></code></a> files and some Zarr non-tensor values also use pickle.
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.save()</span></code></a> files and some Zarr non-tensor values also use pickle.
 Set the read policy explicitly rather than relying on a default.</p>
 <p>Non-tensor values, such as strings, are in
 <a class="reference internal" href="reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a> entries or in tensorclass fields (see
@@ -2392,9 +2392,9 @@ output of <a class="reference internal" href="reference/generated/tensordict.Ten
 classes for older versions, and also saves their names in a
 <code class="docutils literal notranslate"><span class="pre">json_types.json</span></code> file, which <code class="docutils literal notranslate"><span class="pre">load_memmap</span></code> reads instead of the pickle
 file. Other classes, such as namedtuples, and the stacked results of
-<code class="docutils literal notranslate"><span class="pre">from_pytree</span></code> (for example after <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.stack()</span></code></a>) load only from the
+<code class="docutils literal notranslate"><span class="pre">from_pytree</span></code> (for example after <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.stack()</span></code></a>) load only from the
 pickle file. <code class="docutils literal notranslate"><span class="pre">load_memmap_</span></code> and <code class="docutils literal notranslate"><span class="pre">memmap_refresh_</span></code> take the same
-argument. For <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.load.html#torch.load" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.load()</span></code></a>, keep <code class="docutils literal notranslate"><span class="pre">weights_only=True</span></code> and allowlist
+argument. For <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.load.html#torch.load" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.load()</span></code></a>, keep <code class="docutils literal notranslate"><span class="pre">weights_only=True</span></code> and allowlist
 only the classes that you trust (see <a class="reference internal" href="#torch-save-and-torch-load">torch.save and torch.load</a>).</p>
 <p>A module <code class="docutils literal notranslate"><span class="pre">state_dict()</span></code> round-trips this way:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">model</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
@@ -2407,7 +2407,7 @@ only the classes that you trust (see <a class="reference internal" href="#torch-
 <p>The state dicts of an optimizer and of a learning-rate scheduler hold
 <code class="docutils literal notranslate"><span class="pre">None</span></code>, <code class="docutils literal notranslate"><span class="pre">str</span></code> values and Python numbers, which <code class="docutils literal notranslate"><span class="pre">from_pytree</span></code> rejects
 (<code class="docutils literal notranslate"><span class="pre">None</span></code> and <code class="docutils literal notranslate"><span class="pre">str</span></code> leaves) or returns as tensors (numbers). Save them with
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.save()</span></code></a> and load them with <code class="docutils literal notranslate"><span class="pre">torch.load(path,</span> <span class="pre">weights_only=True)</span></code>,
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.save()</span></code></a> and load them with <code class="docutils literal notranslate"><span class="pre">torch.load(path,</span> <span class="pre">weights_only=True)</span></code>,
 which round-trips them exactly without unpickling arbitrary objects:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">optim</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">Adam</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">parameters</span><span class="p">(),</span> <span class="n">lr</span><span class="o">=</span><span class="mf">1e-3</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">model</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">backward</span><span class="p">()</span>

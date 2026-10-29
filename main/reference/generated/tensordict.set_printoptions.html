@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6652+gf8ba09738.d20261028)">
+<meta name="llm:version" content="main (0.15.0.dev6658+g2490cdb87.d20261029)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6652+gf8ba09738.d20261028)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6658+g2490cdb87.d20261029)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1789,6 +1789,12 @@ dimensions (<code class="docutils literal notranslate"><span class="pre">f32[3]<
 <code class="docutils literal notranslate"><span class="pre">show_is_view</span></code>, <code class="docutils literal notranslate"><span class="pre">show_storage_size</span></code> and <code class="docutils literal notranslate"><span class="pre">plain</span></code>) also set
 <code class="docutils literal notranslate"><span class="pre">compact=False</span></code> when <code class="docutils literal notranslate"><span class="pre">compact</span></code> is not passed; with an
 explicit <code class="docutils literal notranslate"><span class="pre">compact=True</span></code>, the compact form ignores them.
+Neither form reads tensor data to print it (<a class="reference internal" href="../../printing.html#printing"><span class="std std-ref">Printing and display</span></a> lists
+the exceptions, such as <code class="docutils literal notranslate"><span class="pre">plain=True</span></code>, which prints statistics
+of the values). The detailed form prints the value of each
+non-tensor entry (<code class="docutils literal notranslate"><span class="pre">NonTensorData</span></code>, <code class="docutils literal notranslate"><span class="pre">NonTensorStack</span></code>), so it
+reads the non-tensor entries of an h5 or zarr file
+(<a class="reference internal" href="tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict" title="tensordict.PersistentTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">PersistentTensorDict</span></code></a>).
 <code class="docutils literal notranslate"><span class="pre">html=False</span></code> turns off the HTML display of notebooks; with
 <code class="docutils literal notranslate"><span class="pre">compact=False</span></code>, a notebook shows the detailed text instead of
 the HTML tree.</p></li>
@@ -2170,7 +2176,7 @@ the HTML tree.</p></li>
        "headline": "set_printoptions",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - set_printoptions",
        "url": "/reference/generated/tensordict.set_printoptions.html",
-       "articleBody": "set_printoptions# class tensordict.set_printoptions(*, verbose: bool = True, **kwargs)# Sets the options that control what the repr of a tensordict shows. Use it as a context manager or a decorator to change the options for a block of code; the previous options come back at the end of the block. Call set_printoptions(...).set() to change them for the rest of the program. The options that are not passed keep their current value. Printing and display describes every option with examples, and get_printoptions() returns the current values. Keyword Arguments: verbose (bool, optional) \u2013 if False, hides the device, dtype and is_shared attributes, unless a keyword argument sets them. Defaults to True. **kwargs \u2013 the options to set: show_batch_size, show_device, show_is_shared, show_shape, show_field_device, show_dtype, show_field_is_shared, show_grad, show_is_contiguous, show_is_view, show_storage_size, plain, sort_keys, compact and html. compact=True, the default, prints each entry as its dtype and its feature dimensions (f32[3]); compact=False prints each entry as a Tensor(...) line with its full shape, device, dtype and is_shared. The options that only the detailed form uses (show_is_shared, show_shape, show_field_device, show_field_is_shared, show_grad, show_is_contiguous, show_is_view, show_storage_size and plain) also set compact=False when compact is not passed; with an explicit compact=True, the compact form ignores them. html=False turns off the HTML display of notebooks; with compact=False, a notebook shows the detailed text instead of the HTML tree. Raises: TypeError \u2013 if an option is unknown. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict, set_printoptions \u003e\u003e\u003e td = TensorDict(a=torch.zeros(3), batch_size=[3]) \u003e\u003e\u003e print(td) TensorDict(batch_size=[3], fields={a: f32[]}) \u003e\u003e\u003e with set_printoptions(compact=False, verbose=False): ... print(td) TensorDict( fields={ a: Tensor(shape=torch.Size([3]))}, batch_size=torch.Size([3]))",
+       "articleBody": "set_printoptions# class tensordict.set_printoptions(*, verbose: bool = True, **kwargs)# Sets the options that control what the repr of a tensordict shows. Use it as a context manager or a decorator to change the options for a block of code; the previous options come back at the end of the block. Call set_printoptions(...).set() to change them for the rest of the program. The options that are not passed keep their current value. Printing and display describes every option with examples, and get_printoptions() returns the current values. Keyword Arguments: verbose (bool, optional) \u2013 if False, hides the device, dtype and is_shared attributes, unless a keyword argument sets them. Defaults to True. **kwargs \u2013 the options to set: show_batch_size, show_device, show_is_shared, show_shape, show_field_device, show_dtype, show_field_is_shared, show_grad, show_is_contiguous, show_is_view, show_storage_size, plain, sort_keys, compact and html. compact=True, the default, prints each entry as its dtype and its feature dimensions (f32[3]); compact=False prints each entry as a Tensor(...) line with its full shape, device, dtype and is_shared. The options that only the detailed form uses (show_is_shared, show_shape, show_field_device, show_field_is_shared, show_grad, show_is_contiguous, show_is_view, show_storage_size and plain) also set compact=False when compact is not passed; with an explicit compact=True, the compact form ignores them. Neither form reads tensor data to print it (Printing and display lists the exceptions, such as plain=True, which prints statistics of the values). The detailed form prints the value of each non-tensor entry (NonTensorData, NonTensorStack), so it reads the non-tensor entries of an h5 or zarr file (PersistentTensorDict). html=False turns off the HTML display of notebooks; with compact=False, a notebook shows the detailed text instead of the HTML tree. Raises: TypeError \u2013 if an option is unknown. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict, set_printoptions \u003e\u003e\u003e td = TensorDict(a=torch.zeros(3), batch_size=[3]) \u003e\u003e\u003e print(td) TensorDict(batch_size=[3], fields={a: f32[]}) \u003e\u003e\u003e with set_printoptions(compact=False, verbose=False): ... print(td) TensorDict( fields={ a: Tensor(shape=torch.Size([3]))}, batch_size=torch.Size([3]))",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

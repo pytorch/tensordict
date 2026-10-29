@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6652+gf8ba09738.d20261028)">
+<meta name="llm:version" content="main (0.15.0.dev6658+g2490cdb87.d20261029)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6652+gf8ba09738.d20261028)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6658+g2490cdb87.d20261029)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1768,10 +1768,10 @@ have one row per other rank: its first batch dimension is
 <code class="docutils literal notranslate"><span class="pre">world_size</span> <span class="pre">-</span> <span class="pre">1</span></code>, and its own data is not in the result. When the
 backend of the group is exactly <code class="docutils literal notranslate"><span class="pre">gloo</span></code>, each other rank consolidates
 its tensordict (see <a class="reference internal" href="tensordict.TensorDictBase.consolidate.html#tensordict.TensorDictBase.consolidate" title="tensordict.TensorDictBase.consolidate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">consolidate()</span></code></a>) and sends its storage and its
-pickled metadata to <code class="docutils literal notranslate"><span class="pre">dst</span></code> with <a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.gather" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.gather()</span></code></a>. With
+pickled metadata to <code class="docutils literal notranslate"><span class="pre">dst</span></code> with <a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.gather" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.gather()</span></code></a>. With
 any other backend, including a group with several backends such as
 <code class="docutils literal notranslate"><span class="pre">&quot;cpu:gloo,cuda:nccl&quot;</span></code> or one whose backend is <code class="docutils literal notranslate"><span class="pre">&quot;undefined&quot;</span></code>, the
-tensordicts are sent with <a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.gather_object" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.gather_object()</span></code></a>,
+tensordicts are sent with <a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.gather_object" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.gather_object()</span></code></a>,
 which pickles them. With <code class="docutils literal notranslate"><span class="pre">gloo</span></code>, a rank other than <code class="docutils literal notranslate"><span class="pre">dst</span></code> pickles its
 tensordict when it cannot be consolidated, or when it holds one of
 these:</p>

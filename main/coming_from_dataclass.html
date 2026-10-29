@@ -80,7 +80,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6652+gf8ba09738.d20261028)">
+<meta name="llm:version" content="main (0.15.0.dev6658+g2490cdb87.d20261029)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="documentation">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -186,7 +186,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6652+gf8ba09738.d20261028)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6658+g2490cdb87.d20261029)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1738,11 +1738,11 @@ document.write(`
 write the operations that the batch needs: a <code class="docutils literal notranslate"><span class="pre">to(device)</span></code> and a
 <code class="docutils literal notranslate"><span class="pre">pin_memory()</span></code> that move every field, a <code class="docutils literal notranslate"><span class="pre">__getitem__</span></code> that slices every
 field, and a <code class="docutils literal notranslate"><span class="pre">stack</span></code> or <code class="docutils literal notranslate"><span class="pre">collate_fn</span></code> helper for the
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataLoader</span></code></a>. Each new field means an edit to each of
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataLoader</span></code></a>. Each new field means an edit to each of
 these methods. A <a class="reference internal" href="reference/generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorClass</span></code></a> declares its fields in the
 same way, and has these operations for all its fields, nested ones too. It is
-also a pytree, so <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a>, <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.vmap()</span></code></a> and
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/func.api.html#module-torch.func" title="(in PyTorch v2.14)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.func</span></code></a> accept it.</p>
+also a pytree, so <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a>, <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.vmap()</span></code></a> and
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/func.api.html#module-torch.func" title="(in PyTorch v2.15)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.func</span></code></a> accept it.</p>
 <p>This page shows each hand-written method next to what replaces it, then three
 worked examples: a rollout batch for RL post-training, a ray bundle for
 rendering, and a batch of images with nested targets. Run the examples in
@@ -1904,7 +1904,7 @@ samples into a batch, often a static method passed as <code class="docutils lite
     <span class="p">)</span>
 </pre></div>
 </div>
-<p><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.stack()</span></code></a> and <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.cat()</span></code></a> accept a list of tensorclasses
+<p><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.stack()</span></code></a> and <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.cat()</span></code></a> accept a list of tensorclasses
 and return one, and the default <code class="docutils literal notranslate"><span class="pre">collate_fn</span></code> of a <code class="docutils literal notranslate"><span class="pre">DataLoader</span></code> stacks
 them too. A sample here has an empty batch size:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">samples</span> <span class="o">=</span> <span class="p">[</span><span class="n">Batch</span><span class="p">(</span><span class="n">images</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">),</span> <span class="n">labels</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">i</span><span class="p">))</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">)]</span>
@@ -1992,7 +1992,7 @@ the loss is a method:</p>
 <span class="gp">... </span>        <span class="k">return</span> <span class="p">(</span><span class="n">loss</span> <span class="o">*</span> <span class="n">mask</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">/</span> <span class="n">mask</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
 </pre></div>
 </div>
-<p>Each row comes from one generation. <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.stack()</span></code></a> makes the batch, and
+<p>Each row comes from one generation. <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.stack()</span></code></a> makes the batch, and
 the <code class="docutils literal notranslate"><span class="pre">str</span></code> field becomes one value for each row:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">rows</span> <span class="o">=</span> <span class="p">[</span>
 <span class="gp">... </span>    <span class="n">Rollout</span><span class="p">(</span>
@@ -2151,7 +2151,7 @@ tensorclass.</p></li>
 <li><p><a class="reference internal" href="data_loading.html#data-loading"><span class="std std-ref">Load data and share it between processes</span></a>: datasets, <code class="docutils literal notranslate"><span class="pre">collate_fn</span></code>, worker processes and pinned
 memory.</p></li>
 <li><p><a class="reference internal" href="coming_from_jax.html#coming-from-jax"><span class="std std-ref">Coming from JAX pytrees</span></a>: the JAX pytree idioms in tensordict.</p></li>
-<li><p><a class="reference internal" href="compile.html#compile"><span class="std std-ref">torch.compile, torch.func, torch.export, and CUDA graphs</span></a>: <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a> with tensorclasses.</p></li>
+<li><p><a class="reference internal" href="compile.html#compile"><span class="std std-ref">torch.compile, torch.func, torch.export, and CUDA graphs</span></a>: <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a> with tensorclasses.</p></li>
 </ul>
 </section>
 </section>

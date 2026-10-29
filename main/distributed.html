@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6652+gf8ba09738.d20261028)">
+<meta name="llm:version" content="main (0.15.0.dev6658+g2490cdb87.d20261029)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="documentation">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6652+gf8ba09738.d20261028)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6658+g2490cdb87.d20261029)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1735,7 +1735,7 @@ document.write(`
 <span id="distributed"></span><h1>Distributed tensordicts<a class="headerlink" href="#distributed-tensordicts" title="Link to this heading">#</a></h1>
 <p>A tensordict sends, receives, and reduces all its tensors with one call:
 <code class="docutils literal notranslate"><span class="pre">td.send(dst=1)</span></code> sends every leaf to rank 1, and <code class="docutils literal notranslate"><span class="pre">td.all_reduce()</span></code>
-reduces every leaf over all ranks of <a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#module-torch.distributed" title="(in PyTorch v2.14)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.distributed</span></code></a>. To stream
+reduces every leaf over all ranks of <a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#module-torch.distributed" title="(in PyTorch v2.15)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.distributed</span></code></a>. To stream
 tensordicts between two nodes without a process group, use a UCXX pipe. To
 share a tensordict between processes on one node, see <a class="reference internal" href="data_loading.html#data-loading"><span class="std std-ref">Load data and share it between processes</span></a>.</p>
 <section id="choose-a-method">
@@ -1803,7 +1803,7 @@ example, to average gradients).</p></td>
 <section id="run-the-examples">
 <h2>Run the examples<a class="headerlink" href="#run-the-examples" title="Link to this heading">#</a></h2>
 <p>Every process must join a process group before it calls these methods (see
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.init_process_group" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.init_process_group()</span></code></a>). The script below starts two
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.init_process_group" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.init_process_group()</span></code></a>). The script below starts two
 processes on one machine, with the <code class="docutils literal notranslate"><span class="pre">gloo</span></code> backend on CPU, and runs one
 example in each. Each example on this page is a function of <code class="docutils literal notranslate"><span class="pre">rank</span></code> and
 <code class="docutils literal notranslate"><span class="pre">world_size</span></code>. To run an example, add it to the script, and pass its name to
@@ -1958,7 +1958,7 @@ the group must call them:</p>
 <p>Every rank of the group must call a collective. The methods that send the
 structure (<code class="docutils literal notranslate"><span class="pre">broadcast</span></code>, <code class="docutils literal notranslate"><span class="pre">scatter</span></code>, <code class="docutils literal notranslate"><span class="pre">all_gather</span></code>,
 <code class="docutils literal notranslate"><span class="pre">gather_and_stack</span></code>, <code class="docutils literal notranslate"><span class="pre">init_remote</span></code>) send it with the object collectives of
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#module-torch.distributed" title="(in PyTorch v2.14)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.distributed</span></code></a>, which use pickle.</p>
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#module-torch.distributed" title="(in PyTorch v2.15)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.distributed</span></code></a>, which use pickle.</p>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>Use these methods only in a process group whose ranks you trust. Each
@@ -2087,7 +2087,7 @@ them costs about 10 µs for each leaf.</p>
 are global ranks. To give a rank relative to the group, pass <code class="docutils literal notranslate"><span class="pre">group_dst</span></code> or
 <code class="docutils literal notranslate"><span class="pre">group_src</span></code> instead. With them, a standalone <code class="docutils literal notranslate"><span class="pre">ProcessGroup</span></code> that you
 built against a store also works. All ranks must call
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.new_group" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.new_group()</span></code></a>, also the ranks that are not in the
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.new_group" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.new_group()</span></code></a>, also the ranks that are not in the
 group:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">custom_group</span><span class="p">(</span><span class="n">rank</span><span class="p">,</span> <span class="n">world_size</span><span class="p">):</span>
     <span class="n">group</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">new_group</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="n">world_size</span> <span class="o">-</span> <span class="mi">1</span><span class="p">])</span>

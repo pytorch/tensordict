@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6652+gf8ba09738.d20261028)">
+<meta name="llm:version" content="main (0.15.0.dev6658+g2490cdb87.d20261029)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="tutorial">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6652+gf8ba09738.d20261028)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6658+g2490cdb87.d20261029)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1742,7 +1742,7 @@ to download the full example code.</p>
 <p>One index on a <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> indexes every tensor in it in
 the same way. If you now index the images, the labels, and the weights of a
 batch one by one, one index replaces these lines. This tutorial is for
-readers who know how to index a <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code></a>.</p>
+readers who know how to index a <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code></a>.</p>
 <p>What you will learn:</p>
 <ul class="simple">
 <li><p>How an index applies to the batch dimensions of every entry.</p></li>
@@ -1752,7 +1752,7 @@ readers who know how to index a <a class="reference external" href="https://docs
 <p>When you create a <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>, you give it a
 <code class="docutils literal notranslate"><span class="pre">batch_size</span></code>: the leading dimensions that all its entries share (see
 <a class="reference internal" href="../concepts/batch_size.html#batch-size"><span class="std std-ref">Batch size, shapes, and indexing</span></a>). You can index these batch dimensions as you index a
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code></a>. The index applies to all the entries of the
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code></a>. The index applies to all the entries of the
 <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>.</p>
 <p>For example, the tensordict below has two batch dimensions.
 <code class="docutils literal notranslate"><span class="pre">tensordict[0]</span></code> returns a new <a class="reference internal" href="../reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> with the same

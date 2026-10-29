@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6652+gf8ba09738.d20261028)">
+<meta name="llm:version" content="main (0.15.0.dev6658+g2490cdb87.d20261029)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6652+gf8ba09738.d20261028)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6658+g2490cdb87.d20261029)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1761,15 +1761,15 @@ document.write(`
 <h1>TensorDictBase.record_stream<a class="headerlink" href="#tensordictbase-record-stream" title="Link to this heading">#</a></h1>
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.record_stream">
-<span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">record_stream</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stream</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cuda.streams.Stream.html#torch.cuda.streams.Stream" title="(in PyTorch v2.14)"><span class="pre">Stream</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.record_stream" title="Link to this definition">#</a></dt>
+<span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">record_stream</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stream</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cuda.streams.Stream.html#torch.cuda.streams.Stream" title="(in PyTorch v2.15)"><span class="pre">Stream</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.record_stream" title="Link to this definition">#</a></dt>
 <dd><p>Marks the tensor leaves of the tensordict as used by <code class="docutils literal notranslate"><span class="pre">stream</span></code>.</p>
-<p>Calls <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.record_stream.html#torch.Tensor.record_stream" title="(in PyTorch v2.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">record_stream()</span></code></a> on every tensor leaf: when
+<p>Calls <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.record_stream.html#torch.Tensor.record_stream" title="(in PyTorch v2.15)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">record_stream()</span></code></a> on every tensor leaf: when
 a leaf is freed, its memory is not reused until the work queued on
 <code class="docutils literal notranslate"><span class="pre">stream</span></code> at that time is complete. A tensordict can be marked with
 one stream only.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>stream</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cuda.Stream_class.html#torch.cuda.Stream" title="(in PyTorch v2.14)"><em>Stream</em></a>) – the stream that uses the leaves.</p>
+<dd class="field-odd"><p><strong>stream</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cuda.Stream_class.html#torch.cuda.Stream" title="(in PyTorch v2.15)"><em>Stream</em></a>) – the stream that uses the leaves.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p><code class="docutils literal notranslate"><span class="pre">self</span></code>.</p>

@@ -80,7 +80,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6652+gf8ba09738.d20261028)">
+<meta name="llm:version" content="main (0.15.0.dev6658+g2490cdb87.d20261029)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="documentation">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -186,7 +186,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6652+gf8ba09738.d20261028)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6658+g2490cdb87.d20261029)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1737,11 +1737,11 @@ document.write(`
 <p>How do you batch samples that have different sizes in PyTorch, such as
 molecules with different numbers of atoms, meshes with different numbers of
 vertices, point clouds, or token sequences? The default <code class="docutils literal notranslate"><span class="pre">collate_fn</span></code> of a
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataLoader</span></code></a> calls <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.stack()</span></code></a>, which raises
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataLoader</span></code></a> calls <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.stack()</span></code></a>, which raises
 for them, and padding every sample to the largest one wastes memory and
 compute. A <a class="reference internal" href="reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a> or
 <a class="reference internal" href="reference/generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorClass</span></code></a> holds such a batch without padding, as
-jagged nested tensors (<a class="reference external" href="https://docs.pytorch.org/docs/stable/nested.html#module-torch.nested" title="(in PyTorch v2.14)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.nested</span></code></a>) or as a lazy stack of the
+jagged nested tensors (<a class="reference external" href="https://docs.pytorch.org/docs/stable/nested.html#module-torch.nested" title="(in PyTorch v2.15)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.nested</span></code></a>) or as a lazy stack of the
 samples, and you index, split, concatenate, move and send it as one object.
 You pad only the entries that a model needs as dense tensors, with a mask.</p>
 <p>This page shows each layout on a batch of molecules, then the
@@ -1801,7 +1801,7 @@ positions instead of 40:</p>
 <section id="index-split-and-concatenate-along-the-batch">
 <h3>Index, split and concatenate along the batch<a class="headerlink" href="#index-split-and-concatenate-along-the-batch" title="Link to this heading">#</a></h3>
 <p>Indexing with an int, a slice, a boolean mask or a tensor of indices,
-<code class="docutils literal notranslate"><span class="pre">split</span></code>, <code class="docutils literal notranslate"><span class="pre">chunk</span></code> and <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.cat()</span></code></a> work along the batch dimension.
+<code class="docutils literal notranslate"><span class="pre">split</span></code>, <code class="docutils literal notranslate"><span class="pre">chunk</span></code> and <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.cat()</span></code></a> work along the batch dimension.
 PyTorch does not slice, split, concatenate, or index with a mask or an
 index tensor along the batch dimension of a jagged nested tensor itself: for
 example, <code class="docutils literal notranslate"><span class="pre">pos[torch.tensor([3,</span> <span class="pre">0])]</span></code> raises a <code class="docutils literal notranslate"><span class="pre">NotImplementedError</span></code>. The
@@ -1816,23 +1816,23 @@ entries that shared their offsets still share them in the result:</p>
 <span class="go">(torch.Size([6]), tensor([ 0,  3,  8, 10, 14, 17, 22]))</span>
 </pre></div>
 </div>
-<p><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.stack()</span></code></a> raises, because the result would need a second ragged
+<p><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.stack()</span></code></a> raises, because the result would need a second ragged
 dimension, which <code class="docutils literal notranslate"><span class="pre">torch.jagged</span></code> does not have. Use
 <a class="reference internal" href="reference/generated/tensordict.lazy_stack.html#tensordict.lazy_stack" title="tensordict.lazy_stack"><code class="xref py py-func docutils literal notranslate"><span class="pre">lazy_stack()</span></code></a> for that, as in the next section.</p>
 </section>
 <section id="compute-on-the-atoms">
 <h3>Compute on the atoms<a class="headerlink" href="#compute-on-the-atoms" title="Link to this heading">#</a></h3>
 <p>Many PyTorch operations accept a jagged nested tensor: elementwise
-operations, <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Linear</span></code></a>, reductions over the ragged
+operations, <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Linear</span></code></a>, reductions over the ragged
 dimension, softmax, and
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html#torch.nn.functional.scaled_dot_product_attention" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">scaled_dot_product_attention()</span></code></a>. A mean over the
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html#torch.nn.functional.scaled_dot_product_attention" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">scaled_dot_product_attention()</span></code></a>. A mean over the
 atoms gives one vector for each molecule:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">embed</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">8</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">embed</span><span class="p">(</span><span class="n">batch</span><span class="p">[</span><span class="s2">"pos"</span><span class="p">])</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">shape</span>
 <span class="go">torch.Size([4, 8])</span>
 </pre></div>
 </div>
-<p>A function that reads such a TensorDict compiles with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a>.
+<p>A function that reads such a TensorDict compiles with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a>.
 After the first call, a batch with other lengths recompiles once with a
 dynamic ragged dimension, and the next ones reuse that graph:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">def</span><span class="w"> </span><span class="nf">center</span><span class="p">(</span><span class="n">batch</span><span class="p">):</span>
@@ -1968,7 +1968,7 @@ after the other, and either the offsets where each molecule starts (the
 <code class="docutils literal notranslate"><span class="pre">cu_seqlens</span></code> of variable-length attention, the <code class="docutils literal notranslate"><span class="pre">ptr</span></code> of PyG) or the
 index of the molecule of each atom (the <code class="docutils literal notranslate"><span class="pre">batch</span></code> vector of PyG). The
 <code class="docutils literal notranslate"><span class="pre">values()</span></code> and <code class="docutils literal notranslate"><span class="pre">offsets()</span></code> of a jagged nested tensor are that layout,
-and <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.repeat_interleave.html#torch.repeat_interleave" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.repeat_interleave()</span></code></a> gives the molecule index. A sum over
+and <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.repeat_interleave.html#torch.repeat_interleave" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.repeat_interleave()</span></code></a> gives the molecule index. A sum over
 the atoms of each molecule is then one <code class="docutils literal notranslate"><span class="pre">index_add_</span></code>:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">atoms</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">z</span><span class="o">=</span><span class="n">jagged</span><span class="p">[</span><span class="s2">"z"</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span> <span class="n">pos</span><span class="o">=</span><span class="n">jagged</span><span class="p">[</span><span class="s2">"pos"</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">14</span><span class="p">])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">lengths</span> <span class="o">=</span> <span class="n">jagged</span><span class="p">[</span><span class="s2">"pos"</span><span class="p">]</span><span class="o">.</span><span class="n">offsets</span><span class="p">()</span><span class="o">.</span><span class="n">diff</span><span class="p">()</span>
@@ -1985,7 +1985,7 @@ nested tensors and from a padded batch, and how to go back.</p>
 <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap" title="tensordict.TensorDictBase.memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap()</span></code></a> and
 <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.save.html#tensordict.TensorDictBase.save" title="tensordict.TensorDictBase.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a> raise a <code class="docutils literal notranslate"><span class="pre">NotImplementedError</span></code> for
 jagged nested tensors. Save the packed atoms and the offsets, then rebuild
-the nested tensors with <a class="reference external" href="https://docs.pytorch.org/docs/stable/nested.html#torch.nested.nested_tensor_from_jagged" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.nested.nested_tensor_from_jagged()</span></code></a>:</p>
+the nested tensors with <a class="reference external" href="https://docs.pytorch.org/docs/stable/nested.html#torch.nested.nested_tensor_from_jagged" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.nested.nested_tensor_from_jagged()</span></code></a>:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">tmp</span> <span class="o">=</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">()</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">offsets</span> <span class="o">=</span> <span class="n">jagged</span><span class="p">[</span><span class="s2">"pos"</span><span class="p">]</span><span class="o">.</span><span class="n">offsets</span><span class="p">()</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">atoms</span><span class="o">=</span><span class="n">atoms</span><span class="p">,</span> <span class="n">offsets</span><span class="o">=</span><span class="n">offsets</span><span class="p">)</span><span class="o">.</span><span class="n">memmap</span><span class="p">(</span><span class="n">tmp</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
@@ -2021,7 +2021,7 @@ the nested tensors with <a class="reference external" href="https://docs.pytorch
 <tr class="row-even"><td><p>Jagged nested tensors in a TensorDict or TensorClass</p></td>
 <td><p>The values and one offsets tensor</p></td>
 <td><p>Indexing, <code class="docutils literal notranslate"><span class="pre">split</span></code> and <code class="docutils literal notranslate"><span class="pre">cat</span></code> along the batch, <code class="docutils literal notranslate"><span class="pre">to</span></code>,
-<code class="docutils literal notranslate"><span class="pre">consolidate</span></code>, pickle, <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a>, and the PyTorch ops
+<code class="docutils literal notranslate"><span class="pre">consolidate</span></code>, pickle, <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a>, and the PyTorch ops
 that support nested tensors. Not <code class="docutils literal notranslate"><span class="pre">torch.stack</span></code>, <code class="docutils literal notranslate"><span class="pre">memmap</span></code> or
 <code class="docutils literal notranslate"><span class="pre">save</span></code>.</p></td>
 <td><p>The default for a model that reads per-sample sets or sequences,
@@ -2035,7 +2035,7 @@ Each operation loops over the samples.</p></td>
 </tr>
 <tr class="row-even"><td><p>Padded tensors with a mask</p></td>
 <td><p>The longest sample times the batch size</p></td>
-<td><p>Every PyTorch op, static shapes for <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a> and CUDA
+<td><p>Every PyTorch op, static shapes for <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a> and CUDA
 graphs if you pad to a fixed length.</p></td>
 <td><p>Models and kernels that need dense input, or batches whose sizes
 are close.</p></td>
@@ -2064,13 +2064,13 @@ tensordict does not shift edge indices.</p></td>
 <li><p>One ragged dimension, right after the batch dimension. A TensorDict that
 holds jagged nested tensors has one batch dimension: <code class="docutils literal notranslate"><span class="pre">reshape</span></code> and
 <code class="docutils literal notranslate"><span class="pre">view</span></code> of the batch raise.</p></li>
-<li><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.stack()</span></code></a> raises. Use <a class="reference internal" href="reference/generated/tensordict.lazy_stack.html#tensordict.lazy_stack" title="tensordict.lazy_stack"><code class="xref py py-func docutils literal notranslate"><span class="pre">lazy_stack()</span></code></a>.</p></li>
+<li><p><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.stack()</span></code></a> raises. Use <a class="reference internal" href="reference/generated/tensordict.lazy_stack.html#tensordict.lazy_stack" title="tensordict.lazy_stack"><code class="xref py py-func docutils literal notranslate"><span class="pre">lazy_stack()</span></code></a>.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">memmap</span></code> and <code class="docutils literal notranslate"><span class="pre">save</span></code> raise. Save the packed values and offsets, as
 above, or convert to the <code class="docutils literal notranslate"><span class="pre">torch.strided</span></code> layout.</p></li>
 <li><p>Writing a sample of another length in place, as in
 <code class="docutils literal notranslate"><span class="pre">batch[0]</span> <span class="pre">=</span> <span class="pre">other_molecule</span></code>, raises, in a lazy stack too. Build a new
-batch instead, for example with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.cat()</span></code></a> of slices.</p></li>
-<li><p>Not every PyTorch op supports nested tensors. The <a class="reference external" href="https://docs.pytorch.org/docs/stable/nested.html#module-torch.nested" title="(in PyTorch v2.14)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.nested</span></code></a>
+batch instead, for example with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.cat()</span></code></a> of slices.</p></li>
+<li><p>Not every PyTorch op supports nested tensors. The <a class="reference external" href="https://docs.pytorch.org/docs/stable/nested.html#module-torch.nested" title="(in PyTorch v2.15)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.nested</span></code></a>
 documentation lists the supported ones, and an op without support
 raises an error.</p></li>
 </ul>

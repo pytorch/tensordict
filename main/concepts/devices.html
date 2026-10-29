@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6652+gf8ba09738.d20261028)">
+<meta name="llm:version" content="main (0.15.0.dev6658+g2490cdb87.d20261029)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="documentation">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6652+gf8ba09738.d20261028)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6658+g2490cdb87.d20261029)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1743,7 +1743,7 @@ The examples that need a CUDA device are marked <code class="docutils literal no
 <section id="move-and-cast-with-to">
 <h2>Move and cast with <code class="docutils literal notranslate"><span class="pre">to()</span></code><a class="headerlink" href="#move-and-cast-with-to" title="Link to this heading">#</a></h2>
 <p><a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.to.html#tensordict.TensorDictBase.to" title="tensordict.TensorDict.to"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to()</span></code></a> takes the same arguments as
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.to.html#torch.Tensor.to" title="(in PyTorch v2.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.Tensor.to()</span></code></a>, and applies them to each leaf (each tensor at the end
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.to.html#torch.Tensor.to" title="(in PyTorch v2.15)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.Tensor.to()</span></code></a>, and applies them to each leaf (each tensor at the end
 of a key path). It returns a new tensordict, and sets its <code class="docutils literal notranslate"><span class="pre">device</span></code> attribute
 (see <a class="reference internal" href="#the-device-of-a-tensordict">The device of a tensordict</a>) when you give a device:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
@@ -1769,7 +1769,7 @@ all its leaves have one dtype.</p></li>
 <li><p><a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.float.html#tensordict.TensorDictBase.float" title="tensordict.TensorDict.float"><code class="xref py py-meth docutils literal notranslate"><span class="pre">float()</span></code></a>, <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.double.html#tensordict.TensorDictBase.double" title="tensordict.TensorDict.double"><code class="xref py py-meth docutils literal notranslate"><span class="pre">double()</span></code></a>,
 <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.half.html#tensordict.TensorDictBase.half" title="tensordict.TensorDict.half"><code class="xref py py-meth docutils literal notranslate"><span class="pre">half()</span></code></a>, <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.int.html#tensordict.TensorDictBase.int" title="tensordict.TensorDict.int"><code class="xref py py-meth docutils literal notranslate"><span class="pre">int()</span></code></a>,
 <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.bool.html#tensordict.TensorDictBase.bool" title="tensordict.TensorDict.bool"><code class="xref py py-meth docutils literal notranslate"><span class="pre">bool()</span></code></a>, and the other dtype methods of
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code></a> cast every leaf.</p></li>
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code></a> cast every leaf.</p></li>
 <li><p><a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.cpu.html#tensordict.TensorDictBase.cpu" title="tensordict.TensorDict.cpu"><code class="xref py py-meth docutils literal notranslate"><span class="pre">cpu()</span></code></a> and <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.cuda.html#tensordict.TensorDictBase.cuda" title="tensordict.TensorDict.cuda"><code class="xref py py-meth docutils literal notranslate"><span class="pre">cuda()</span></code></a>
 are the same as <code class="docutils literal notranslate"><span class="pre">to(&quot;cpu&quot;)</span></code> and <code class="docutils literal notranslate"><span class="pre">to(&quot;cuda&quot;)</span></code>.</p></li>
 </ul>
@@ -1782,7 +1782,7 @@ the cast leaves into the same tensordict and returns it.</p>
 If the target device is not a CUDA device (for example, the CPU), <code class="docutils literal notranslate"><span class="pre">to()</span></code>
 then synchronizes once, after all the copies. If the target is the CPU,
 <code class="docutils literal notranslate"><span class="pre">to()</span></code> synchronizes only if a leaf comes from another device.
-Under <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a>, these copies are blocking.</p></li>
+Under <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a>, these copies are blocking.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">True</span></code>: the copies are non-blocking and <code class="docutils literal notranslate"><span class="pre">to()</span></code> does not synchronize.
 You must synchronize before you read the data.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">False</span></code>: the copies are blocking.</p></li>
@@ -1965,7 +1965,7 @@ in version 0.17. Use <code class="docutils literal notranslate"><span class="pre
 <p><a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.share_memory_.html#tensordict.TensorDictBase.share_memory_" title="tensordict.TensorDict.share_memory_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">share_memory_()</span></code></a> moves each CPU leaf to shared
 memory. Other processes on the same machine can then read and write the
 leaves without a copy, for example the workers of
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/multiprocessing.html#module-torch.multiprocessing" title="(in PyTorch v2.14)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.multiprocessing</span></code></a>. After this call, the tensordict is locked (see
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/multiprocessing.html#module-torch.multiprocessing" title="(in PyTorch v2.15)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.multiprocessing</span></code></a>. After this call, the tensordict is locked (see
 <a class="reference internal" href="keys.html#keys-locking"><span class="std std-ref">Locking and temporary changes</span></a>). You can write into the existing leaves, but you cannot
 add, remove, or replace an entry:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span><span class="o">.</span><span class="n">share_memory_</span><span class="p">()</span>
@@ -2017,7 +2017,7 @@ page.</p></li>
 <li><p><a class="reference internal" href="operations.html#operations"><span class="std std-ref">Arithmetic, apply, reductions, and gradients</span></a>: arithmetic, and the in-place conventions that
 <code class="docutils literal notranslate"><span class="pre">share_memory_()</span></code> and <code class="docutils literal notranslate"><span class="pre">memmap_()</span></code> do not follow.</p></li>
 <li><p><a class="reference internal" href="../saving.html#saving"><span class="std std-ref">Save and load tensordicts</span></a>: memory-mapped tensordicts and consolidation.</p></li>
-<li><p><a class="reference internal" href="../compile.html#compile"><span class="std std-ref">torch.compile, torch.func, torch.export, and CUDA graphs</span></a>: <code class="docutils literal notranslate"><span class="pre">to()</span></code> and device copies under <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a>.</p></li>
+<li><p><a class="reference internal" href="../compile.html#compile"><span class="std std-ref">torch.compile, torch.func, torch.export, and CUDA graphs</span></a>: <code class="docutils literal notranslate"><span class="pre">to()</span></code> and device copies under <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a>.</p></li>
 <li><p>The <a class="reference internal" href="../tutorials/tensordict_memory.html"><span class="doc">Devices and memory-mapped tensors</span></a> tutorial: devices and memory
 placement, step by step.</p></li>
 </ul>

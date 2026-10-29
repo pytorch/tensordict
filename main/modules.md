@@ -392,6 +392,11 @@ shallow copy of the input. The sequence returns a new tensordict with its
 ['x']
 ```
 
+When the output lacks the sub-tensordict of a nested out key, such as
+`("next", "y")`, the sequence writes that whole sub-tensordict, entries
+that are not out keys included, and warns if it holds any. Starting with
+TensorDict 0.17, the default will change to writing only the `out_keys`.
+
 ## Control the outputs
 
 To save memory, keep only some of the outputs of a model. To save work, skip

@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6652+gf8ba09738.d20261028)">
+<meta name="llm:version" content="main (0.15.0.dev6658+g2490cdb87.d20261029)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="documentation">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6652+gf8ba09738.d20261028)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6658+g2490cdb87.d20261029)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1769,8 +1769,8 @@ too. Device moves and dtype casts also apply to every entry:</p>
 </pre></div>
 </div>
 <p>You can also save a TensorDict to disk, send it to other processes or nodes,
-and pass it to <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a> objects through <a class="reference internal" href="reference/nn.html#module-tensordict.nn" title="tensordict.nn"><code class="xref py py-mod docutils literal notranslate"><span class="pre">tensordict.nn</span></code></a>.
-With <a class="reference external" href="https://docs.pytorch.org/docs/stable/func.api.html#module-torch.func" title="(in PyTorch v2.14)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.func</span></code></a>, a TensorDict of parameters makes model ensembles and
+and pass it to <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a> objects through <a class="reference internal" href="reference/nn.html#module-tensordict.nn" title="tensordict.nn"><code class="xref py py-mod docutils literal notranslate"><span class="pre">tensordict.nn</span></code></a>.
+With <a class="reference external" href="https://docs.pytorch.org/docs/stable/func.api.html#module-torch.func" title="(in PyTorch v2.15)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.func</span></code></a>, a TensorDict of parameters makes model ensembles and
 parameter edits shorter to write (see <a class="reference internal" href="compile.html#compile"><span class="std std-ref">torch.compile, torch.func, torch.export, and CUDA graphs</span></a>). TensorDict started as
 part of TorchRL and is now a separate library.</p>
 </section>
@@ -1863,7 +1863,7 @@ when an entry does not match the batch size:</p>
 <span class="gr">RuntimeError</span>: <span class="n">batch dimension mismatch, got self.batch_size=torch.Size([3]) and value.shape=torch.Size([5]) for key 'type'. The leading dimensions of a value must match the batch size.</span>
 </pre></div>
 </div>
-<p>TensorDict is registered as a pytree node, so tree_map and <a class="reference external" href="https://docs.pytorch.org/docs/stable/func.api.html#module-torch.func" title="(in PyTorch v2.14)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.func</span></code></a>
+<p>TensorDict is registered as a pytree node, so tree_map and <a class="reference external" href="https://docs.pytorch.org/docs/stable/func.api.html#module-torch.func" title="(in PyTorch v2.15)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.func</span></code></a>
 also work on a TensorDict. The result is a TensorDict:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nb">type</span><span class="p">(</span><span class="n">tree_map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">td</span><span class="p">))</span><span class="o">.</span><span class="vm">__name__</span>
 <span class="go">'TensorDict'</span>
@@ -1886,7 +1886,7 @@ tensor:</p>
 </pre></div>
 </div>
 <p><a class="reference internal" href="concepts/batch_size.html#batch-size-not-a-dict"><span class="std std-ref">A TensorDict is not exactly a dict</span></a> lists these differences.</p>
-<p>A TensorDict is not a <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code></a> either. Each entry keeps its own
+<p>A TensorDict is not a <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code></a> either. Each entry keeps its own
 dtype, device, and the dimensions after the batch dimensions.
 <code class="docutils literal notranslate"><span class="pre">robots.shape</span></code> is the batch size, not the shape of an entry:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nb">isinstance</span><span class="p">(</span><span class="n">robots</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span>
@@ -1920,7 +1920,7 @@ modules that read and write tensordicts.</p></li>
 <li><p><a class="reference internal" href="pitfalls.html#pitfalls"><span class="std std-ref">Common surprises</span></a>: the behaviors that surprise new users most often.</p></li>
 </ul>
 <p>For saving, storage, data loading, distributed training, and
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a>, see <a class="reference internal" href="saving.html#saving"><span class="std std-ref">Save and load tensordicts</span></a>, <a class="reference internal" href="storage.html#storage"><span class="std std-ref">Large datasets and storage backends</span></a>, <a class="reference internal" href="data_loading.html#data-loading"><span class="std std-ref">Load data and share it between processes</span></a>,
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a>, see <a class="reference internal" href="saving.html#saving"><span class="std std-ref">Save and load tensordicts</span></a>, <a class="reference internal" href="storage.html#storage"><span class="std std-ref">Large datasets and storage backends</span></a>, <a class="reference internal" href="data_loading.html#data-loading"><span class="std std-ref">Load data and share it between processes</span></a>,
 <a class="reference internal" href="distributed.html#distributed"><span class="std std-ref">Distributed tensordicts</span></a>, and <a class="reference internal" href="compile.html#compile"><span class="std std-ref">torch.compile, torch.func, torch.export, and CUDA graphs</span></a>.</p>
 </section>
 <section id="see-also">

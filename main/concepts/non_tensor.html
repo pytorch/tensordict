@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6652+gf8ba09738.d20261028)">
+<meta name="llm:version" content="main (0.15.0.dev6658+g2490cdb87.d20261029)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="documentation">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6652+gf8ba09738.d20261028)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6658+g2490cdb87.d20261029)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1961,7 +1961,7 @@ list is one value for the whole batch:</p>
 </section>
 <section id="stacking-tensordicts-with-non-tensor-data">
 <h3>Stacking tensordicts with non-tensor data<a class="headerlink" href="#stacking-tensordicts-with-non-tensor-data" title="Link to this heading">#</a></h3>
-<p><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">stack()</span></code></a> makes a <a class="reference internal" href="../reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack" title="tensordict.NonTensorStack"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorStack</span></code></a> from
+<p><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">stack()</span></code></a> makes a <a class="reference internal" href="../reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack" title="tensordict.NonTensorStack"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorStack</span></code></a> from
 <a class="reference internal" href="../reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a> entries, also if their values are the
 same:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
@@ -1974,7 +1974,7 @@ same:</p>
 <span class="go">TensorDict(batch_size=[2], fields={genome: NonTensorStack, score: f32[]})</span>
 </pre></div>
 </div>
-<p>For <a class="reference internal" href="../reference/generated/tensordict.MetaData.html#tensordict.MetaData" title="tensordict.MetaData"><code class="xref py py-class docutils literal notranslate"><span class="pre">MetaData</span></code></a> entries, <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">stack()</span></code></a> returns one
+<p>For <a class="reference internal" href="../reference/generated/tensordict.MetaData.html#tensordict.MetaData" title="tensordict.MetaData"><code class="xref py py-class docutils literal notranslate"><span class="pre">MetaData</span></code></a> entries, <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">stack()</span></code></a> returns one
 <a class="reference internal" href="../reference/generated/tensordict.MetaData.html#tensordict.MetaData" title="tensordict.MetaData"><code class="xref py py-class docutils literal notranslate"><span class="pre">MetaData</span></code></a> if all the stacked values are the same Python
 object. It compares them with <code class="docutils literal notranslate"><span class="pre">is</span></code>, not with <code class="docutils literal notranslate"><span class="pre">==</span></code>. Otherwise, it returns
 a <a class="reference internal" href="../reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack" title="tensordict.NonTensorStack"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorStack</span></code></a>, as for
@@ -1992,7 +1992,7 @@ a <a class="reference internal" href="../reference/generated/tensordict.NonTenso
 <span class="go">'NonTensorStack'</span>
 </pre></div>
 </div>
-<p><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.unsqueeze.html#torch.unsqueeze" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">unsqueeze()</span></code></a> also keeps one <a class="reference internal" href="../reference/generated/tensordict.MetaData.html#tensordict.MetaData" title="tensordict.MetaData"><code class="xref py py-class docutils literal notranslate"><span class="pre">MetaData</span></code></a>, and
+<p><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.unsqueeze.html#torch.unsqueeze" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">unsqueeze()</span></code></a> also keeps one <a class="reference internal" href="../reference/generated/tensordict.MetaData.html#tensordict.MetaData" title="tensordict.MetaData"><code class="xref py py-class docutils literal notranslate"><span class="pre">MetaData</span></code></a>, and
 makes a <a class="reference internal" href="../reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack" title="tensordict.NonTensorStack"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorStack</span></code></a> from a
 <a class="reference internal" href="../reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData" title="tensordict.NonTensorData"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonTensorData</span></code></a>. Use <a class="reference internal" href="../reference/generated/tensordict.MetaData.html#tensordict.MetaData" title="tensordict.MetaData"><code class="xref py py-class docutils literal notranslate"><span class="pre">MetaData</span></code></a> for a
 value that must not become a stack, such as a label or a configuration dict
@@ -2017,9 +2017,9 @@ pass <code class="docutils literal notranslate"><span class="pre">is_leaf=tensor
 </pre></div>
 </div>
 </li>
-<li><p>Under <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a>, a function that returns a string entry
+<li><p>Under <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a>, a function that returns a string entry
 compiles again for each new string, and non-strict
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/export/api_reference.html#torch.export.export" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.export.export()</span></code></a> does not accept non-tensor entries. See
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/export/api_reference.html#torch.export.export" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.export.export()</span></code></a> does not accept non-tensor entries. See
 <a class="reference internal" href="../compile.html#compile"><span class="std std-ref">torch.compile, torch.func, torch.export, and CUDA graphs</span></a>.</p></li>
 <li><p><a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.share_memory_.html#tensordict.TensorDictBase.share_memory_" title="tensordict.TensorDict.share_memory_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">share_memory_()</span></code></a> can change non-tensor values
 (see <a class="reference internal" href="devices.html#devices"><span class="std std-ref">Devices, dtypes, and memory</span></a>), and <a class="reference internal" href="../reference/generated/tensordict.parse_tensor_dict_string.html#tensordict.parse_tensor_dict_string" title="tensordict.parse_tensor_dict_string"><code class="xref py py-func docutils literal notranslate"><span class="pre">parse_tensor_dict_string()</span></code></a>
@@ -2134,7 +2134,7 @@ converts like a regular PyTorch tensor:</p>
 support <a class="reference internal" href="../reference/generated/tensordict.UnbatchedTensor.html#tensordict.UnbatchedTensor" title="tensordict.UnbatchedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">UnbatchedTensor</span></code></a> yet.
 <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap" title="tensordict.TensorDict.memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap()</span></code></a> with a directory prefix and
 <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.consolidate.html#tensordict.TensorDictBase.consolidate" title="tensordict.TensorDict.consolidate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">consolidate()</span></code></a> raise <code class="docutils literal notranslate"><span class="pre">NotImplementedError</span></code>
-when the tensordict contains one. <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.save()</span></code></a> keeps them.</p></li>
+when the tensordict contains one. <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.save()</span></code></a> keeps them.</p></li>
 <li><p><a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.to_h5.html#tensordict.TensorDictBase.to_h5" title="tensordict.TensorDict.to_h5"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_h5()</span></code></a>,
 <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.to_zarr.html#tensordict.TensorDictBase.to_zarr" title="tensordict.TensorDict.to_zarr"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_zarr()</span></code></a> and <code class="docutils literal notranslate"><span class="pre">.tdz</span></code> archives (written by
 <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap" title="tensordict.TensorDict.memmap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">memmap()</span></code></a> or

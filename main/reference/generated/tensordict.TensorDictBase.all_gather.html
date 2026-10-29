@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6652+gf8ba09738.d20261028)">
+<meta name="llm:version" content="main (0.15.0.dev6658+g2490cdb87.d20261029)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6652+gf8ba09738.d20261028)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6658+g2490cdb87.d20261029)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1766,8 +1766,8 @@ document.write(`
 <p>Every rank of the group must call it. The tensordicts can have different
 structures. Each rank consolidates its tensordict (see
 <a class="reference internal" href="tensordict.TensorDictBase.consolidate.html#tensordict.TensorDictBase.consolidate" title="tensordict.TensorDictBase.consolidate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">consolidate()</span></code></a>), the metadata is gathered with
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.all_gather_object" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.all_gather_object()</span></code></a>, which pickles it, and the
-storages with <a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.all_gather" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.all_gather()</span></code></a>. Use it only with ranks
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.all_gather_object" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.all_gather_object()</span></code></a>, which pickles it, and the
+storages with <a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.all_gather" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.all_gather()</span></code></a>. Use it only with ranks
 you trust. See <a class="reference internal" href="../../distributed.html#distributed-collectives"><span class="std std-ref">Collectives</span></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Keyword Arguments<span class="colon">:</span></dt>

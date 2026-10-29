@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6652+gf8ba09738.d20261028)">
+<meta name="llm:version" content="main (0.15.0.dev6658+g2490cdb87.d20261029)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6652+gf8ba09738.d20261028)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6658+g2490cdb87.d20261029)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1781,8 +1781,8 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">None</s
 must be given. Exclusive with <code class="docutils literal notranslate"><span class="pre">src</span></code>. The messages then go through
 the backend of <code class="docutils literal notranslate"><span class="pre">group</span></code> directly, so <code class="docutils literal notranslate"><span class="pre">group</span></code> can be a standalone
 <code class="xref py py-class docutils literal notranslate"><span class="pre">ProcessGroup</span></code> built on a store, never
-registered by <a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.init_process_group" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">init_process_group()</span></code></a> or
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.new_group" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">new_group()</span></code></a>. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+registered by <a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.init_process_group" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">init_process_group()</span></code></a> or
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.new_group" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">new_group()</span></code></a>. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 <li><p><strong>init_tag</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – the <code class="docutils literal notranslate"><span class="pre">init_tag</span></code> that the sender passed.
 Defaults to <code class="docutils literal notranslate"><span class="pre">0</span></code>.</p></li>
 <li><p><strong>pseudo_rand</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – the <code class="docutils literal notranslate"><span class="pre">pseudo_rand</span></code> that the sender

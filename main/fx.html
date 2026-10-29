@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6652+gf8ba09738.d20261028)">
+<meta name="llm:version" content="main (0.15.0.dev6658+g2490cdb87.d20261029)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="documentation">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6652+gf8ba09738.d20261028)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6658+g2490cdb87.d20261029)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1735,15 +1735,15 @@ document.write(`
 <span id="fx"></span><h1>FX tracing (prototype)<a class="headerlink" href="#fx-tracing-prototype" title="Link to this heading">#</a></h1>
 <p><code class="xref py py-func docutils literal notranslate"><span class="pre">tensordict.prototype.fx.symbolic_trace()</span></code> traces a
 <a class="reference internal" href="reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a> or a
-<a class="reference internal" href="reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a> into a <a class="reference external" href="https://docs.pytorch.org/docs/stable/fx.html#module-torch.fx" title="(in PyTorch v2.14)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.fx</span></code></a> graph
+<a class="reference internal" href="reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a> into a <a class="reference external" href="https://docs.pytorch.org/docs/stable/fx.html#module-torch.fx" title="(in PyTorch v2.15)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.fx</span></code></a> graph
 that you can read and transform. Use it instead of
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/fx.html#torch.fx.symbolic_trace" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.fx.symbolic_trace()</span></code></a>, which raises <code class="docutils literal notranslate"><span class="pre">TypeError:</span> <span class="pre">'TensorDictModule'</span>
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/fx.html#torch.fx.symbolic_trace" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.fx.symbolic_trace()</span></code></a>, which raises <code class="docutils literal notranslate"><span class="pre">TypeError:</span> <span class="pre">'TensorDictModule'</span>
 <span class="pre">object</span> <span class="pre">is</span> <span class="pre">not</span> <span class="pre">subscriptable</span></code> on a <a class="reference internal" href="reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a>.</p>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p><code class="docutils literal notranslate"><span class="pre">tensordict.prototype.fx</span></code> is a prototype. Its API can change without a
 deprecation cycle. To make a module faster or to export it, use
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a> or <a class="reference external" href="https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/export/api_reference.html#torch.export.export" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.export.export()</span></code></a> (see
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a> or <a class="reference external" href="https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/export/api_reference.html#torch.export.export" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.export.export()</span></code></a> (see
 <a class="reference internal" href="compile.html#compile"><span class="std std-ref">torch.compile, torch.func, torch.export, and CUDA graphs</span></a>). If you find a problem, open an issue.</p>
 </div>
 <section id="trace-a-tensordictmodule">
@@ -1887,11 +1887,11 @@ as <code class="docutils literal notranslate"><span class="pre">graph_module(x=t
 <section id="see-also">
 <h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p><a class="reference internal" href="compile.html#compile"><span class="std std-ref">torch.compile, torch.func, torch.export, and CUDA graphs</span></a>: <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a> and <a class="reference external" href="https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/export/api_reference.html#torch.export.export" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.export.export()</span></code></a>
+<li><p><a class="reference internal" href="compile.html#compile"><span class="std std-ref">torch.compile, torch.func, torch.export, and CUDA graphs</span></a>: <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a> and <a class="reference external" href="https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/export/api_reference.html#torch.export.export" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.export.export()</span></code></a>
 with tensordicts and tensordict modules.</p></li>
 <li><p><a class="reference internal" href="modules.html#modules-guide"><span class="std std-ref">Modules: TensorDictModule and tensordict.nn</span></a>: <a class="reference internal" href="reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a> and
 <a class="reference internal" href="reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a>.</p></li>
-<li><p>The PyTorch documentation of <a class="reference external" href="https://docs.pytorch.org/docs/stable/fx.html#module-torch.fx" title="(in PyTorch v2.14)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.fx</span></code></a>.</p></li>
+<li><p>The PyTorch documentation of <a class="reference external" href="https://docs.pytorch.org/docs/stable/fx.html#module-torch.fx" title="(in PyTorch v2.15)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.fx</span></code></a>.</p></li>
 </ul>
 </section>
 </section>

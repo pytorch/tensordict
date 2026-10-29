@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6652+gf8ba09738.d20261028)">
+<meta name="llm:version" content="main (0.15.0.dev6658+g2490cdb87.d20261029)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6652+gf8ba09738.d20261028)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6658+g2490cdb87.d20261029)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1765,7 +1765,7 @@ document.write(`
 <dd><p>Reduces each leaf over all the ranks of the group, into the tensordict of rank <code class="docutils literal notranslate"><span class="pre">dst</span></code>.</p>
 <p>Every rank of the group must call it, with a tensordict of the same
 structure. Each leaf is reduced in place with
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.reduce" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.reduce()</span></code></a>. After the call, rank <code class="docutils literal notranslate"><span class="pre">dst</span></code> holds the
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.reduce" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.reduce()</span></code></a>. After the call, rank <code class="docutils literal notranslate"><span class="pre">dst</span></code> holds the
 result. On the other ranks, the values of the tensordict are not defined
 (with <code class="docutils literal notranslate"><span class="pre">gloo</span></code>, they can hold partial results): clone the tensordict
 before the call if you need them. A lazy stack reduces each stacked
@@ -1779,7 +1779,7 @@ raises. See <a class="reference internal" href="../../distributed.html#distribut
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>dst</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – the rank that receives the result.</p></li>
-<li><p><strong>op</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.ReduceOp" title="(in PyTorch v2.14)"><em>ReduceOp</em></a><em>, </em><em>optional</em>) – the reduction. Defaults to
+<li><p><strong>op</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.ReduceOp" title="(in PyTorch v2.15)"><em>ReduceOp</em></a><em>, </em><em>optional</em>) – the reduction. Defaults to
 <code class="docutils literal notranslate"><span class="pre">None</span></code>, which is <code class="docutils literal notranslate"><span class="pre">torch.distributed.ReduceOp.SUM</span></code>.</p></li>
 <li><p><strong>async_op</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the reductions of all the
 leaves run at the same time, and the call waits for them unless
@@ -1789,7 +1789,7 @@ leaves run at the same time, and the call waits for them unless
 without waiting for them: call <code class="docutils literal notranslate"><span class="pre">wait()</span></code> on each one before you use
 the tensordict, even if an earlier one raises. On rank <code class="docutils literal notranslate"><span class="pre">dst</span></code>,
 the leaves of a lazy stack give a
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/futures.html#torch.futures.Future" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.futures.Future</span></code></a> instead, which also writes the
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/futures.html#torch.futures.Future" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.futures.Future</span></code></a> instead, which also writes the
 result back. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>group</strong> (<em>torch.distributed.ProcessGroup</em><em>, </em><em>optional</em>) – the process group.
 Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, the default process group.</p></li>
@@ -1803,7 +1803,7 @@ reduction per bucket instead of one per leaf, which is faster
 with many small leaves. Rank <code class="docutils literal notranslate"><span class="pre">dst</span></code> copies the results back
 into the leaves once each reduction completes, and with
 <code class="docutils literal notranslate"><span class="pre">return_premature=True</span></code>, the list holds one entry per
-bucket: a <code class="docutils literal notranslate"><span class="pre">Work</span></code>, or a <a class="reference external" href="https://docs.pytorch.org/docs/stable/futures.html#torch.futures.Future" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.futures.Future</span></code></a> that
+bucket: a <code class="docutils literal notranslate"><span class="pre">Work</span></code>, or a <a class="reference external" href="https://docs.pytorch.org/docs/stable/futures.html#torch.futures.Future" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.futures.Future</span></code></a> that
 also copies the results back. Packing copies the leaves, so a
 <code class="docutils literal notranslate"><span class="pre">bucket_bytes</span></code> below the size of the large leaves keeps
 them out of the buckets: with <code class="docutils literal notranslate"><span class="pre">gloo</span></code> on CPU, packing leaves

@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6652+gf8ba09738.d20261028)">
+<meta name="llm:version" content="main (0.15.0.dev6658+g2490cdb87.d20261029)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="documentation">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6652+gf8ba09738.d20261028)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6658+g2490cdb87.d20261029)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1733,14 +1733,14 @@ document.write(`
                   
   <section id="stacking-and-variable-size-data">
 <span id="stacking"></span><h1>Stacking and variable-size data<a class="headerlink" href="#stacking-and-variable-size-data" title="Link to this heading">#</a></h1>
-<p><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.stack()</span></code></a> and <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.cat()</span></code></a> join tensordicts as they join
+<p><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.stack()</span></code></a> and <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.cat()</span></code></a> join tensordicts as they join
 tensors, so a list of samples becomes one batch in one call. A lazy stack also
 joins tensordicts whose keys or shapes differ, such as graphs with different
 numbers of nodes or sequences of different lengths.</p>
 <section id="dense-stacking-torch-stack-and-torch-cat">
 <h2>Dense stacking: torch.stack and torch.cat<a class="headerlink" href="#dense-stacking-torch-stack-and-torch-cat" title="Link to this heading">#</a></h2>
-<p><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.stack()</span></code></a> puts tensordicts along a new batch dimension.
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.cat()</span></code></a> joins them along an existing batch dimension. Here, each
+<p><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.stack()</span></code></a> puts tensordicts along a new batch dimension.
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.cat()</span></code></a> joins them along an existing batch dimension. Here, each
 tensordict holds the 3-D positions of 2 particles:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">TensorDict</span>
@@ -1794,7 +1794,7 @@ tensordict holds 10 time steps of one robot:</p>
 <span class="go">torch.Size([3, 10])</span>
 </pre></div>
 </div>
-<p>You also get a lazy stack from <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.stack()</span></code></a> or <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.cat()</span></code></a> of lazy
+<p>You also get a lazy stack from <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.stack()</span></code></a> or <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.cat()</span></code></a> of lazy
 stacks, and from <a class="reference internal" href="../reference/generated/tensordict.maybe_dense_stack.html#tensordict.maybe_dense_stack" title="tensordict.maybe_dense_stack"><code class="xref py py-func docutils literal notranslate"><span class="pre">maybe_dense_stack()</span></code></a> if the inputs cannot
 make a dense stack. The table in <a class="reference internal" href="#stacking-which-function"><span class="std std-ref">Which function to use</span></a> lists each
 case.</p>
@@ -1988,7 +1988,7 @@ arguments to <a class="reference internal" href="../reference/generated/tensordi
 <li><p><code class="docutils literal notranslate"><span class="pre">as_padded_tensor=True</span></code> returns one tensor, padded to the longest element.
 Set the padding with <code class="docutils literal notranslate"><span class="pre">padding_value</span></code> (default <code class="docutils literal notranslate"><span class="pre">0.0</span></code>) and
 <code class="docutils literal notranslate"><span class="pre">padding_side</span></code> (<code class="docutils literal notranslate"><span class="pre">&quot;right&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;left&quot;</span></code>).</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">as_nested_tensor=True</span></code> returns a nested tensor (<a class="reference external" href="https://docs.pytorch.org/docs/stable/nested.html#module-torch.nested" title="(in PyTorch v2.14)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.nested</span></code></a>). The
+<li><p><code class="docutils literal notranslate"><span class="pre">as_nested_tensor=True</span></code> returns a nested tensor (<a class="reference external" href="https://docs.pytorch.org/docs/stable/nested.html#module-torch.nested" title="(in PyTorch v2.15)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.nested</span></code></a>). The
 default layout is <code class="docutils literal notranslate"><span class="pre">torch.jagged</span></code>. Set another one with <code class="docutils literal notranslate"><span class="pre">layout</span></code>.</p></li>
 </ul>
 <p>A dense tensordict returns the stored tensor for <code class="docutils literal notranslate"><span class="pre">as_list=True</span></code> and
@@ -2033,10 +2033,10 @@ directly. Its first dimension is a batch dimension:</p>
 </pre></div>
 </div>
 <p>Indexing (with an int, a slice, a mask or a tensor of indices), <code class="docutils literal notranslate"><span class="pre">split</span></code>,
-<code class="docutils literal notranslate"><span class="pre">chunk</span></code> and <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.cat()</span></code></a> work along that dimension. On the nested tensor
+<code class="docutils literal notranslate"><span class="pre">chunk</span></code> and <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.cat()</span></code></a> work along that dimension. On the nested tensor
 itself, torch does only the int index and <code class="docutils literal notranslate"><span class="pre">chunk</span></code> along it, and raises for
 the others. Leaves that share their offsets, such as token ids and their
-attention mask, still share them in the result. <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.stack()</span></code></a> raises,
+attention mask, still share them in the result. <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.stack()</span></code></a> raises,
 because the result would need a second ragged dimension: use
 <a class="reference internal" href="../reference/generated/tensordict.lazy_stack.html#tensordict.lazy_stack" title="tensordict.lazy_stack"><code class="xref py py-func docutils literal notranslate"><span class="pre">lazy_stack()</span></code></a> instead.</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">data</span><span class="p">,</span> <span class="n">data</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mi">1</span><span class="p">])]])</span>

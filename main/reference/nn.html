@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6652+gf8ba09738.d20261028)">
+<meta name="llm:version" content="main (0.15.0.dev6658+g2490cdb87.d20261029)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="documentation">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6652+gf8ba09738.d20261028)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6658+g2490cdb87.d20261029)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1756,14 +1756,14 @@ entries named in its <code class="docutils literal notranslate"><span class="pre
 named in its <code class="docutils literal notranslate"><span class="pre">out_keys</span></code> into it. For a guide with examples, see
 <a class="reference internal" href="../modules.html#modules-guide"><span class="std std-ref">Modules: TensorDictModule and tensordict.nn</span></a>.</p>
 <p>The page of a module class lists its methods and the methods of its
-tensordict base classes. For the methods of <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a>, see
+tensordict base classes. For the methods of <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a>, see
 the PyTorch documentation.</p>
 <section id="modules">
 <h2>Modules<a class="headerlink" href="#modules" title="Link to this heading">#</a></h2>
 <ul class="simple">
 <li><p><a class="reference internal" href="generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase" title="tensordict.nn.TensorDictModuleBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModuleBase</span></code></a> is the base class of the tensordict
 modules.</p></li>
-<li><p><a class="reference internal" href="generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a> wraps a <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a> that takes and
+<li><p><a class="reference internal" href="generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModule</span></code></a> wraps a <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.Module</span></code></a> that takes and
 returns tensors, and gives it <code class="docutils literal notranslate"><span class="pre">in_keys</span></code> and <code class="docutils literal notranslate"><span class="pre">out_keys</span></code>.</p></li>
 <li><p><a class="reference internal" href="generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a> runs modules one after the other on the
 same tensordict.</p></li>
@@ -1880,14 +1880,14 @@ tensor.</p>
 <h2>Ensembles<a class="headerlink" href="#ensembles" title="Link to this heading">#</a></h2>
 <p><a class="reference internal" href="generated/tensordict.nn.EnsembleModule.html#tensordict.nn.EnsembleModule" title="tensordict.nn.EnsembleModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleModule</span></code></a> makes <code class="docutils literal notranslate"><span class="pre">num_copies</span></code> copies of a module, each with
 its own newly initialized parameters, and calls all of them on the input
-with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.vmap()</span></code></a>. The output has a new leading batch dimension of
+with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.vmap()</span></code></a>. The output has a new leading batch dimension of
 size <code class="docutils literal notranslate"><span class="pre">num_copies</span></code>. To keep parameters as a tensordict on a module, see
 <a class="reference internal" href="generated/tensordict.TensorDictParams.html#tensordict.TensorDictParams" title="tensordict.TensorDictParams"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictParams</span></code></a> on <a class="reference internal" href="td.html#api-tensordict"><span class="std std-ref">tensordict: containers and functions</span></a>.</p>
 <p><a class="reference internal" href="generated/tensordict.nn.functional_vmap.html#tensordict.nn.functional_vmap" title="tensordict.nn.functional_vmap"><code class="xref py py-func docutils literal notranslate"><span class="pre">functional_vmap()</span></code></a> calls a module once per set of parameters in a
 stacked tensordict, such as one built with
 <a class="reference internal" href="generated/tensordict.TensorDictBase.from_modules.html#tensordict.TensorDictBase.from_modules" title="tensordict.TensorDict.from_modules"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_modules()</span></code></a>, and stacks the outputs. It runs
-the sets with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.vmap()</span></code></a>, or one at a time for modules that
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.vmap()</span></code></a> cannot handle.</p>
+the sets with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.vmap()</span></code></a>, or one at a time for modules that
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.vmap()</span></code></a> cannot handle.</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/tensordict.nn.EnsembleModule.html#tensordict.nn.EnsembleModule" title="tensordict.nn.EnsembleModule"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EnsembleModule</span></code></a>(module, num_copies[, ...])</p></td>
@@ -1907,7 +1907,7 @@ the sets with <a class="reference external" href="https://docs.pytorch.org/docs/
 </section>
 <section id="compiling-modules">
 <h2>Compiling modules<a class="headerlink" href="#compiling-modules" title="Link to this heading">#</a></h2>
-<p>The modules of <code class="docutils literal notranslate"><span class="pre">tensordict.nn</span></code> work with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a>. For
+<p>The modules of <code class="docutils literal notranslate"><span class="pre">tensordict.nn</span></code> work with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a>. For
 example, you can compile a <a class="reference internal" href="generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictSequential</span></code></a>. For the limits
 and their workarounds, see <a class="reference internal" href="../compile.html#compile"><span class="std std-ref">torch.compile, torch.func, torch.export, and CUDA graphs</span></a>. To capture a module in CUDA
 graphs, use <a class="reference internal" href="generated/tensordict.nn.CudaGraphModule.html#tensordict.nn.CudaGraphModule" title="tensordict.nn.CudaGraphModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">CudaGraphModule</span></code></a>.</p>

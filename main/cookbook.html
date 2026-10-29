@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6652+gf8ba09738.d20261028)">
+<meta name="llm:version" content="main (0.15.0.dev6658+g2490cdb87.d20261029)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="documentation">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6652+gf8ba09738.d20261028)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6658+g2490cdb87.d20261029)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1803,7 +1803,7 @@ of tokens), and the longest length. Point clouds and graphs use the same
 packed layout, for example the <code class="docutils literal notranslate"><span class="pre">ptr</span></code> and <code class="docutils literal notranslate"><span class="pre">batch</span></code> tensors of PyG.</p>
 <section id="from-a-list-of-samples">
 <h3>From a list of samples<a class="headerlink" href="#from-a-list-of-samples" title="Link to this heading">#</a></h3>
-<p><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.cat()</span></code></a> along the first dimension packs samples of batch size
+<p><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.cat()</span></code></a> along the first dimension packs samples of batch size
 <code class="docutils literal notranslate"><span class="pre">[length]</span></code>. The offsets are the cumulative sum of the lengths, with a zero
 in front:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">torch.nn.functional</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">F</span>
@@ -1849,7 +1849,7 @@ packed form, and its <code class="docutils literal notranslate"><span class="pre
 tensordict of such nested tensors, for example from
 <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.densify.html#tensordict.TensorDictBase.densify" title="tensordict.LazyStackedTensorDict.densify"><code class="xref py py-meth docutils literal notranslate"><span class="pre">densify()</span></code></a>,
 <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.apply.html#tensordict.TensorDictBase.apply" title="tensordict.TensorDictBase.apply"><code class="xref py py-meth docutils literal notranslate"><span class="pre">apply()</span></code></a> with a new <code class="docutils literal notranslate"><span class="pre">batch_size</span></code> packs every
-entry. <a class="reference external" href="https://docs.pytorch.org/docs/stable/nested.html#torch.nested.nested_tensor_from_jagged" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.nested.nested_tensor_from_jagged()</span></code></a> goes back:</p>
+entry. <a class="reference external" href="https://docs.pytorch.org/docs/stable/nested.html#torch.nested.nested_tensor_from_jagged" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.nested.nested_tensor_from_jagged()</span></code></a> goes back:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">lazy_stack</span><span class="p">(</span><span class="n">samples</span><span class="p">)</span><span class="o">.</span><span class="n">densify</span><span class="p">(</span><span class="n">layout</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">jagged</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">offsets</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s2">"input_ids"</span><span class="p">]</span><span class="o">.</span><span class="n">offsets</span><span class="p">()</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">offsets</span>
@@ -1865,7 +1865,7 @@ entry. <a class="reference external" href="https://docs.pytorch.org/docs/stable/
 <span class="go">[torch.Size([3, 4]), torch.Size([5, 4]), torch.Size([2, 4])]</span>
 </pre></div>
 </div>
-<p>Indexing, <code class="docutils literal notranslate"><span class="pre">split</span></code>, and <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.cat()</span></code></a> work along the first dimension of
+<p>Indexing, <code class="docutils literal notranslate"><span class="pre">split</span></code>, and <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.cat()</span></code></a> work along the first dimension of
 such a tensordict, so you can select or split the sequences before you pack
 them, as <a class="reference internal" href="#split-and-balance-the-sequences">Split and balance the sequences</a> below does.</p>
 </section>
@@ -2062,7 +2062,7 @@ as for any other one. <a class="reference internal" href="modules.html#modules-p
 tensordict, and save it with <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.save.html#tensordict.TensorDictBase.save" title="tensordict.TensorDictBase.save"><code class="xref py py-meth docutils literal notranslate"><span class="pre">save()</span></code></a>.
 A tensordict cannot hold the state dict of an optimizer: its keys are
 integers, and its <code class="docutils literal notranslate"><span class="pre">param_groups</span></code> hold lists of Python values. Save it with
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.save()</span></code></a>:</p>
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.save()</span></code></a>:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">state</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">"model"</span><span class="p">:</span> <span class="n">params</span><span class="p">,</span> <span class="s2">"ema"</span><span class="p">:</span> <span class="n">ema</span><span class="p">,</span> <span class="s2">"step"</span><span class="p">:</span> <span class="n">step</span><span class="p">})</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">root</span> <span class="o">/</span> <span class="s2">"checkpoint"</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">torch</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">optim</span><span class="o">.</span><span class="n">state_dict</span><span class="p">(),</span> <span class="n">root</span> <span class="o">/</span> <span class="s2">"optim.pt"</span><span class="p">)</span>
@@ -2089,7 +2089,7 @@ average from the files into memory:</p>
 models with the same structure, along a new first dimension. With
 <code class="docutils literal notranslate"><span class="pre">as_module=True</span></code>, the result is a
 <a class="reference internal" href="reference/generated/tensordict.TensorDictParams.html#tensordict.TensorDictParams" title="tensordict.TensorDictParams"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictParams</span></code></a>, a module whose parameters an
-optimizer can take. <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.vmap()</span></code></a> then calls one model with each set of
+optimizer can take. <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.vmap()</span></code></a> then calls one model with each set of
 parameters, and one backward pass gives the gradients of all the models:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">members</span> <span class="o">=</span> <span class="p">[</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">)]</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">ensemble</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">from_modules</span><span class="p">(</span><span class="o">*</span><span class="n">members</span><span class="p">,</span> <span class="n">as_module</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -2115,7 +2115,7 @@ parameters, and one backward pass gives the gradients of all the models:</p>
 its own module, use <code class="docutils literal notranslate"><span class="pre">ensemble.data[2].to_module(members[2],</span> <span class="pre">inplace=True)</span></code>.
 <a class="reference internal" href="modules.html#modules-guide"><span class="std std-ref">Modules: TensorDictModule and tensordict.nn</span></a> shows the same pattern with
 <a class="reference internal" href="reference/generated/tensordict.nn.EnsembleModule.html#tensordict.nn.EnsembleModule" title="tensordict.nn.EnsembleModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnsembleModule</span></code></a>, and <a class="reference internal" href="compile.html#compile"><span class="std std-ref">torch.compile, torch.func, torch.export, and CUDA graphs</span></a> with
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a>.</p>
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.compile.html#torch.compile" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.compile()</span></code></a>.</p>
 </section>
 <section id="process-a-dataset-in-parallel">
 <h2>Process a dataset in parallel<a class="headerlink" href="#process-a-dataset-in-parallel" title="Link to this heading">#</a></h2>
@@ -2168,7 +2168,7 @@ share one tensordict in memory.</p>
 <h2>Cast the floating-point leaves only<a class="headerlink" href="#cast-the-floating-point-leaves-only" title="Link to this heading">#</a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">td.to(torch.bfloat16)</span></code> casts every leaf, the integer and boolean ones
 too. Pass <code class="docutils literal notranslate"><span class="pre">cast_filter=is_floating</span></code> to cast only the floating-point leaves,
-as <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.to" title="(in PyTorch v2.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.nn.Module.to()</span></code></a> does. Labels and masks then keep their dtype:</p>
+as <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.to" title="(in PyTorch v2.15)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.nn.Module.to()</span></code></a> does. Labels and masks then keep their dtype:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">is_floating</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">batch</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
 <span class="gp">... </span>    <span class="p">{</span>

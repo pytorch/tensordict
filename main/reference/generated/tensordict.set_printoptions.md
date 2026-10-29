@@ -30,6 +30,12 @@ dimensions (`f32[3]`); `compact=False` prints each entry as a
 `show_is_view`, `show_storage_size` and `plain`) also set
 `compact=False` when `compact` is not passed; with an
 explicit `compact=True`, the compact form ignores them.
+Neither form reads tensor data to print it ([Printing and display](../../printing.html#printing) lists
+the exceptions, such as `plain=True`, which prints statistics
+of the values). The detailed form prints the value of each
+non-tensor entry (`NonTensorData`, `NonTensorStack`), so it
+reads the non-tensor entries of an h5 or zarr file
+([`PersistentTensorDict`](tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict)).
 `html=False` turns off the HTML display of notebooks; with
 `compact=False`, a notebook shows the detailed text instead of
 the HTML tree.

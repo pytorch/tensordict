@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6652+gf8ba09738.d20261028)">
+<meta name="llm:version" content="main (0.15.0.dev6658+g2490cdb87.d20261029)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="documentation">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6652+gf8ba09738.d20261028)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6658+g2490cdb87.d20261029)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -2077,7 +2077,7 @@ unlocked one.</p></li>
 </ul>
 <p>A new tensordict that a method returns is not always locked like the original.
 On a locked tensordict, <code class="docutils literal notranslate"><span class="pre">clone()</span></code>, <code class="docutils literal notranslate"><span class="pre">select()</span></code>, <code class="docutils literal notranslate"><span class="pre">apply()</span></code>, indexing, and
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.stack()</span></code></a> return an unlocked tensordict. <code class="docutils literal notranslate"><span class="pre">view()</span></code>, <code class="docutils literal notranslate"><span class="pre">reshape()</span></code>,
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.stack()</span></code></a> return an unlocked tensordict. <code class="docutils literal notranslate"><span class="pre">view()</span></code>, <code class="docutils literal notranslate"><span class="pre">reshape()</span></code>,
 <code class="docutils literal notranslate"><span class="pre">unsqueeze()</span></code>, and <code class="docutils literal notranslate"><span class="pre">to()</span></code> return a locked one. Read <code class="docutils literal notranslate"><span class="pre">is_locked</span></code> on the
 result if your code depends on it.</p>
 </section>

@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6652+gf8ba09738.d20261028)">
+<meta name="llm:version" content="main (0.15.0.dev6658+g2490cdb87.d20261029)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="documentation">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6652+gf8ba09738.d20261028)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6658+g2490cdb87.d20261029)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -2002,7 +2002,7 @@ Without a shared file system, use a Redis server.</p>
 <ul class="simple">
 <li><p>Give each writer its own range of indices.</p></li>
 <li><p>Make the readers wait until the writers are done, for example with
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.barrier" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.barrier()</span></code></a>.</p></li>
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.barrier" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.barrier()</span></code></a>.</p></li>
 </ul>
 <section id="share-data-between-nodes-with-redis">
 <span id="storage-redis"></span><h3>Share data between nodes with Redis<a class="headerlink" href="#share-data-between-nodes-with-redis" title="Link to this heading">#</a></h3>
@@ -2194,7 +2194,7 @@ This example writes 500 readings of 4 sensors:</p>
 </div>
 <p>HDF5 holds dense tensors with numpy dtypes only: writing a <code class="docutils literal notranslate"><span class="pre">bfloat16</span></code> or
 nested tensor raises an error that names the entry. The <code class="docutils literal notranslate"><span class="pre">&quot;memmap&quot;</span></code> backend
-stores <code class="docutils literal notranslate"><span class="pre">bfloat16</span></code>, and <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.save()</span></code></a> stores both.</p>
+stores <code class="docutils literal notranslate"><span class="pre">bfloat16</span></code>, and <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.save()</span></code></a> stores both.</p>
 </section>
 <section id="zarr">
 <span id="storage-zarr"></span><h3>zarr<a class="headerlink" href="#zarr" title="Link to this heading">#</a></h3>
@@ -2205,7 +2205,7 @@ can be a local directory, a <code class="docutils literal notranslate"><span cla
 The zarr backend needs <code class="docutils literal notranslate"><span class="pre">zarr&gt;=3.1.1</span></code> (<code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">&quot;tensordict[zarr]&quot;</span></code>).
 Like HDF5, zarr holds dense tensors with numpy dtypes only: writing a
 <code class="docutils literal notranslate"><span class="pre">bfloat16</span></code> or nested tensor raises an error that names the entry. The
-<code class="docutils literal notranslate"><span class="pre">&quot;memmap&quot;</span></code> backend stores <code class="docutils literal notranslate"><span class="pre">bfloat16</span></code>, and <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.save()</span></code></a> stores both.</p>
+<code class="docutils literal notranslate"><span class="pre">&quot;memmap&quot;</span></code> backend stores <code class="docutils literal notranslate"><span class="pre">bfloat16</span></code>, and <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.save()</span></code></a> stores both.</p>
 <p><a class="reference internal" href="reference/generated/tensordict.TensorDictBase.to_zarr.html#tensordict.TensorDictBase.to_zarr" title="tensordict.TensorDictBase.to_zarr"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_zarr()</span></code></a> writes a tensordict, and
 <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.from_zarr.html#tensordict.TensorDictBase.from_zarr" title="tensordict.TensorDictBase.from_zarr"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_zarr()</span></code></a> reads it back. <code class="docutils literal notranslate"><span class="pre">to_zarr</span></code> stores
 the batch size and the dimension names in the attributes of the store, so
@@ -2307,7 +2307,7 @@ so that the two can be combined. A tensordict with
 jagged tensors can be indexed with an integer, a slice, an index tensor or a
 boolean mask, and split, chunked, unbound and concatenated along its batch
 dimension, but not stacked. <code class="docutils literal notranslate"><span class="pre">memmap</span></code> does not take jagged tensors: pad them
-first, with <a class="reference external" href="https://docs.pytorch.org/docs/stable/nested.html#torch.nested.to_padded_tensor" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.nested.to_padded_tensor()</span></code></a>.
+first, with <a class="reference external" href="https://docs.pytorch.org/docs/stable/nested.html#torch.nested.to_padded_tensor" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.nested.to_padded_tensor()</span></code></a>.
 <a class="reference internal" href="reference/generated/tensordict.TensorDictBase.from_parquet.html#tensordict.TensorDictBase.from_parquet" title="tensordict.TensorDict.from_parquet"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_parquet()</span></code></a> keeps its own conversion, which
 reads list and struct columns as Python objects. To convert a Parquet file
 as <code class="docutils literal notranslate"><span class="pre">from_arrow</span></code> does, read it with <code class="docutils literal notranslate"><span class="pre">pyarrow.parquet.read_table</span></code>.

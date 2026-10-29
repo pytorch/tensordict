@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6652+gf8ba09738.d20261028)">
+<meta name="llm:version" content="main (0.15.0.dev6658+g2490cdb87.d20261029)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6652+gf8ba09738.d20261028)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6658+g2490cdb87.d20261029)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1762,15 +1762,15 @@ document.write(`
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.TensorDictBase.state_dict">
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">state_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">destination</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_vars</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">flatten</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.OrderedDict" title="(in Python v3.15)"><span class="pre">OrderedDict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.state_dict" title="Link to this definition">#</a></dt>
-<dd><p>Returns the leaves of the tensordict in an <code class="docutils literal notranslate"><span class="pre">OrderedDict</span></code>, as <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict" title="(in PyTorch v2.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.nn.Module.state_dict()</span></code></a> does.</p>
+<dd><p>Returns the leaves of the tensordict in an <code class="docutils literal notranslate"><span class="pre">OrderedDict</span></code>, as <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict" title="(in PyTorch v2.15)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.nn.Module.state_dict()</span></code></a> does.</p>
 <p>The state dict is flat by default: the key of a nested leaf joins its
 keys with <code class="docutils literal notranslate"><span class="pre">&quot;.&quot;</span></code> (<code class="docutils literal notranslate"><span class="pre">&quot;n.b&quot;</span></code> for <code class="docutils literal notranslate"><span class="pre">(&quot;n&quot;,</span> <span class="pre">&quot;b&quot;)</span></code>), following
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict" title="(in PyTorch v2.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.nn.Module.state_dict()</span></code></a>. With <code class="docutils literal notranslate"><span class="pre">flatten=False</span></code>, each
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict" title="(in PyTorch v2.15)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.nn.Module.state_dict()</span></code></a>. With <code class="docutils literal notranslate"><span class="pre">flatten=False</span></code>, each
 nested tensordict becomes a nested <code class="docutils literal notranslate"><span class="pre">OrderedDict</span></code>. Read it back with
 <a class="reference internal" href="tensordict.TensorDictBase.load_state_dict.html#tensordict.TensorDictBase.load_state_dict" title="tensordict.TensorDictBase.load_state_dict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_state_dict()</span></code></a>.</p>
 <p>The batch size and device of each level are stored in a
 <code class="docutils literal notranslate"><span class="pre">_metadata</span></code> attribute of the result, as in
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict" title="(in PyTorch v2.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.nn.Module.state_dict()</span></code></a>. In a flat state dict, they are
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.state_dict" title="(in PyTorch v2.15)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.nn.Module.state_dict()</span></code></a>. In a flat state dict, they are
 stored under the <code class="docutils literal notranslate"><span class="pre">&quot;.&quot;</span></code>-joined key of the level (<code class="docutils literal notranslate"><span class="pre">&quot;&quot;</span></code> for the root,
 <code class="docutils literal notranslate"><span class="pre">&quot;n&quot;</span></code> for the nested tensordict <code class="docutils literal notranslate"><span class="pre">&quot;n&quot;</span></code>). In a nested state dict,
 each nested <code class="docutils literal notranslate"><span class="pre">OrderedDict</span></code> has its own <code class="docutils literal notranslate"><span class="pre">_metadata</span></code>.</p>

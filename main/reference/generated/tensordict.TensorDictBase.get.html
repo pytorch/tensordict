@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6652+gf8ba09738.d20261028)">
+<meta name="llm:version" content="main (0.15.0.dev6658+g2490cdb87.d20261029)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6652+gf8ba09738.d20261028)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6658+g2490cdb87.d20261029)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1799,11 +1799,11 @@ the levels of a lazy stack of lazy stacks, and stacks them
 into one tensor. Exclusive with <code class="docutils literal notranslate"><span class="pre">as_list</span></code> and
 <code class="docutils literal notranslate"><span class="pre">as_nested_tensor</span></code>. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>as_nested_tensor</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, a lazy stack returns
-the entries as a nested tensor (<a class="reference external" href="https://docs.pytorch.org/docs/stable/nested.html#module-torch.nested" title="(in PyTorch v2.14)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.nested</span></code></a>). A lazy
+the entries as a nested tensor (<a class="reference external" href="https://docs.pytorch.org/docs/stable/nested.html#module-torch.nested" title="(in PyTorch v2.15)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch.nested</span></code></a>). A lazy
 stack of lazy stacks raises a <code class="docutils literal notranslate"><span class="pre">ValueError</span></code>, as a nested
 tensor has a single nested level. Exclusive with <code class="docutils literal notranslate"><span class="pre">as_list</span></code>
 and <code class="docutils literal notranslate"><span class="pre">as_padded_tensor</span></code>. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
-<li><p><strong>layout</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.layout" title="(in PyTorch v2.14)"><em>layout</em></a><em>, </em><em>optional</em>) – with <code class="docutils literal notranslate"><span class="pre">as_nested_tensor=True</span></code>,
+<li><p><strong>layout</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.layout" title="(in PyTorch v2.15)"><em>layout</em></a><em>, </em><em>optional</em>) – with <code class="docutils literal notranslate"><span class="pre">as_nested_tensor=True</span></code>,
 the layout of the nested tensor: <code class="docutils literal notranslate"><span class="pre">torch.jagged</span></code> or
 <code class="docutils literal notranslate"><span class="pre">torch.strided</span></code>. Defaults to <code class="docutils literal notranslate"><span class="pre">torch.jagged</span></code>.</p></li>
 <li><p><strong>padding_side</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>optional</em>) – with <code class="docutils literal notranslate"><span class="pre">as_padded_tensor=True</span></code>, the

@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6652+gf8ba09738.d20261028)">
+<meta name="llm:version" content="main (0.15.0.dev6658+g2490cdb87.d20261029)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6652+gf8ba09738.d20261028)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6658+g2490cdb87.d20261029)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1764,12 +1764,12 @@ document.write(`
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">all_reduce</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">op</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="s"><span class="pre">'torch.distributed.ProcessGroup'</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">async_op</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bucket_bytes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="headerlink" href="#tensordict.TensorDictBase.all_reduce" title="Link to this definition">#</a></dt>
 <dd><p>Reduces each leaf over all the ranks of the group, in place, so that every rank holds the result.</p>
 <p>Every rank of the group must call it, with a tensordict of the same
-structure. Each leaf is reduced with <a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.all_reduce" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.all_reduce()</span></code></a>,
+structure. Each leaf is reduced with <a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.all_reduce" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.all_reduce()</span></code></a>,
 for example to sum or average gradients. See
 <a class="reference internal" href="../../distributed.html#distributed-collectives"><span class="std std-ref">Collectives</span></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>op</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.ReduceOp" title="(in PyTorch v2.14)"><em>ReduceOp</em></a><em>, </em><em>optional</em>) – the reduction. Defaults to
+<dd class="field-odd"><p><strong>op</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.ReduceOp" title="(in PyTorch v2.15)"><em>ReduceOp</em></a><em>, </em><em>optional</em>) – the reduction. Defaults to
 <code class="docutils literal notranslate"><span class="pre">None</span></code>, which is <code class="docutils literal notranslate"><span class="pre">torch.distributed.ReduceOp.SUM</span></code>.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
@@ -1786,7 +1786,7 @@ reduction per bucket instead of one per leaf, which is faster
 with many small leaves. The results are copied back into the
 leaves once each reduction completes, and with
 <code class="docutils literal notranslate"><span class="pre">async_op=True</span></code>, the list holds one entry per bucket: a
-<code class="docutils literal notranslate"><span class="pre">Work</span></code>, or a <a class="reference external" href="https://docs.pytorch.org/docs/stable/futures.html#torch.futures.Future" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.futures.Future</span></code></a> that also copies
+<code class="docutils literal notranslate"><span class="pre">Work</span></code>, or a <a class="reference external" href="https://docs.pytorch.org/docs/stable/futures.html#torch.futures.Future" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.futures.Future</span></code></a> that also copies
 the results back. Packing copies the leaves, so a
 <code class="docutils literal notranslate"><span class="pre">bucket_bytes</span></code> below the size of the large leaves keeps
 them out of the buckets: with <code class="docutils literal notranslate"><span class="pre">gloo</span></code> on CPU, packing leaves

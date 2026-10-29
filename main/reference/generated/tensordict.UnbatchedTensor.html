@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6652+gf8ba09738.d20261028)">
+<meta name="llm:version" content="main (0.15.0.dev6658+g2490cdb87.d20261029)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6652+gf8ba09738.d20261028)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6658+g2490cdb87.d20261029)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1762,7 +1762,7 @@ document.write(`
 <dl class="py class">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">tensordict.</span></span><span class="sig-name descname"><span class="pre">UnbatchedTensor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.UnbatchedTensor" title="Link to this definition">#</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">_UnbatchedTensorMixin</span></code>, <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a></p>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">_UnbatchedTensorMixin</span></code>, <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tensor</span></code></a></p>
 <p>A tensor entry that has no batch dimensions and that batch operations leave unchanged.</p>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
@@ -1778,7 +1778,7 @@ any shape. See <a class="reference internal" href="../../concepts/non_tensor.htm
 <code class="docutils literal notranslate"><span class="pre">reshape</span></code>, <code class="docutils literal notranslate"><span class="pre">unsqueeze</span></code>, <code class="docutils literal notranslate"><span class="pre">squeeze</span></code>, <code class="docutils literal notranslate"><span class="pre">transpose</span></code>…) return the
 unbatched entry with its data and shape unchanged. Other operations
 (arithmetic, <code class="docutils literal notranslate"><span class="pre">clone</span></code>, <code class="docutils literal notranslate"><span class="pre">to</span></code>…) apply to it as to any tensor, and
-return an <a class="reference internal" href="#tensordict.UnbatchedTensor" title="tensordict.UnbatchedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">UnbatchedTensor</span></code></a>. It is a <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code></a>
+return an <a class="reference internal" href="#tensordict.UnbatchedTensor" title="tensordict.UnbatchedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">UnbatchedTensor</span></code></a>. It is a <a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Tensor</span></code></a>
 subclass, so <code class="docutils literal notranslate"><span class="pre">td[&quot;a&quot;]</span></code> can be used as a tensor.</p>
 <p>An <a class="reference internal" href="#tensordict.UnbatchedTensor" title="tensordict.UnbatchedTensor"><code class="xref py py-class docutils literal notranslate"><span class="pre">UnbatchedTensor</span></code></a> has these constraints:</p>
 <ul class="simple">
@@ -1792,11 +1792,11 @@ unbatched entries: the batch size comes from the other entries.</p></li>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>data</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.14)"><em>Tensor</em></a><em> or </em><em>array-like</em>) – the payload. Data that is not a
-tensor is converted with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.as_tensor.html#torch.as_tensor" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.as_tensor()</span></code></a>.</p></li>
-<li><p><strong>batch_size</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.14)"><em>Size</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><em>list</em></a><em> of </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – the batch size
+<li><p><strong>data</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.15)"><em>Tensor</em></a><em> or </em><em>array-like</em>) – the payload. Data that is not a
+tensor is converted with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.as_tensor.html#torch.as_tensor" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.as_tensor()</span></code></a>.</p></li>
+<li><p><strong>batch_size</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.15)"><em>Size</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><em>list</em></a><em> of </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – the batch size
 of the tensordict that holds the tensor, read by
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.vmap()</span></code></a>. A tensordict sets it when the tensor is
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.vmap()</span></code></a>. A tensordict sets it when the tensor is
 stored, so you rarely pass it. It does not change the shape
 of the payload. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, which gives <code class="docutils literal notranslate"><span class="pre">[]</span></code>.</p></li>
 </ul>
@@ -1822,13 +1822,13 @@ of the payload. Defaults to <code class="docutils literal notranslate"><span cla
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.data_ptr">
 <span class="sig-name descname"><span class="pre">data_ptr</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.UnbatchedTensor.data_ptr" title="Link to this definition">#</a></dt>
-<dd><p>Returns the address of the first element of the payload, as <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.data_ptr.html#torch.Tensor.data_ptr" title="(in PyTorch v2.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.Tensor.data_ptr()</span></code></a>.</p>
+<dd><p>Returns the address of the first element of the payload, as <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.data_ptr.html#torch.Tensor.data_ptr" title="(in PyTorch v2.15)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.Tensor.data_ptr()</span></code></a>.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="tensordict.UnbatchedTensor.untyped_storage">
 <span class="sig-name descname"><span class="pre">untyped_storage</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#tensordict.UnbatchedTensor.untyped_storage" title="Link to this definition">#</a></dt>
-<dd><p>Returns the storage of the payload, as <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.untyped_storage.html#torch.Tensor.untyped_storage" title="(in PyTorch v2.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.Tensor.untyped_storage()</span></code></a>.</p>
+<dd><p>Returns the storage of the payload, as <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.untyped_storage.html#torch.Tensor.untyped_storage" title="(in PyTorch v2.15)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.Tensor.untyped_storage()</span></code></a>.</p>
 </dd></dl>
 
 </dd></dl>

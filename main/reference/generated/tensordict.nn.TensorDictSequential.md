@@ -60,6 +60,12 @@ With `False` or `"empty"`, the modules run on a shallow copy
 of the input, so the input does not change. See the last example.
 Defaults to `None`.
 
+Where the output lacks the sub-tensordict of a nested out key, the
+sequence writes that whole sub-tensordict, entries that are not
+out keys included, and warns if it holds any. Starting with
+TensorDict 0.17, the default will change to writing only the
+`out_keys`.
+
 Examples
 
 ```
@@ -304,6 +310,10 @@ The sequence changes in place, and `reset_out_keys()` undoes the
 change. The modules still compute all their outputs; the call then
 writes only the selected ones, and the entries of the input, into the
 output.
+Where the output lacks the sub-tensordict of a selected nested key, the
+call writes that whole sub-tensordict, and warns if it holds other
+entries. Starting with TensorDict 0.17, the default will change to
+writing only the selected keys.
 
 Parameters:
 
