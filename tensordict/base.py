@@ -3724,9 +3724,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # Set by the views and the backends whose leaves cannot be pinned in
     # place: pin_memory raises.
     _pin_memory_unsupported: bool = False
-    # Set by LazyStackedTensorDict, whose leaves belong to its members:
-    # reshape and repeat_interleave with inplace=True raise
-    # NotImplementedError before they change anything.
+    # Set by LazyStackedTensorDict, whose leaves belong to its members, and by
+    # _SubTensorDict, whose leaves belong to its source: reshape and
+    # repeat_interleave with inplace=True raise NotImplementedError before
+    # they change anything.
     _inplace_shape_ops_unsupported: bool = False
     # Set by LazyStackedTensorDict, whose flatten regroups its members rather
     # than flattening leaves: flatten(d, d) returns self, and for
