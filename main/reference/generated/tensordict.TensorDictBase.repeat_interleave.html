@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6663+g631e2c669.d20261029)">
+<meta name="llm:version" content="main (0.15.0.dev6670+g99c3a2303.d20261029)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6663+g631e2c669.d20261029)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6670+g99c3a2303.d20261029)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1789,13 +1789,12 @@ computes it.</p></li>
 <li><p><strong>inplace</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the tensordict keeps its
 identity and keys, its leaves are replaced one by one, and the
 call returns <code class="docutils literal notranslate"><span class="pre">self</span></code>. It needs a <code class="docutils literal notranslate"><span class="pre">dim</span></code> and at least one
-batch dimension. A lazy stack or an indexed view (such as a
-slice of a <a class="reference internal" href="tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict" title="tensordict.PersistentTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">PersistentTensorDict</span></code></a>), or a
-tensordict that holds one, raises a <code class="docutils literal notranslate"><span class="pre">NotImplementedError</span></code>:
-call <a class="reference internal" href="tensordict.TensorDictBase.to_tensordict.html#tensordict.TensorDictBase.to_tensordict" title="tensordict.TensorDictBase.to_tensordict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_tensordict()</span></code></a> first. The legacy lazy views
-(<code class="docutils literal notranslate"><span class="pre">set_lazy_legacy(True)</span></code>) still accept it and leave their
-source out of step with its batch size (#3406). See
-<a class="reference internal" href="../../concepts/operations.html#inplace-conventions"><span class="std std-ref">In-place operations</span></a>. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+batch dimension. A lazy stack, an indexed view (such as a
+slice of a <a class="reference internal" href="tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict" title="tensordict.PersistentTensorDict"><code class="xref py py-class docutils literal notranslate"><span class="pre">PersistentTensorDict</span></code></a>) or a
+legacy lazy view (<code class="docutils literal notranslate"><span class="pre">set_lazy_legacy(True)</span></code>), or a tensordict
+that holds one, raises a <code class="docutils literal notranslate"><span class="pre">NotImplementedError</span></code>: call
+<a class="reference internal" href="tensordict.TensorDictBase.to_tensordict.html#tensordict.TensorDictBase.to_tensordict" title="tensordict.TensorDictBase.to_tensordict"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_tensordict()</span></code></a> first. See <a class="reference internal" href="../../concepts/operations.html#inplace-conventions"><span class="std std-ref">In-place operations</span></a>.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 </ul>
 </dd>
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
@@ -2179,7 +2178,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.repeat_interleave",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.repeat_interleave",
        "url": "/reference/generated/tensordict.TensorDictBase.repeat_interleave.html",
-       "articleBody": "TensorDictBase.repeat_interleave# TensorDictBase.repeat_interleave(repeats: Tensor | int, dim: int | None = None, *, output_size: int | None = None, inplace: bool = False) \u2192 Self# Repeats each element of the batch along dim, as torch.Tensor.repeat_interleave() does. Each element is repeated next to itself, as with numpy.repeat(). To repeat the whole batch instead, as with numpy.tile(), use repeat(). The data is copied. With a dim, the names are kept. Parameters: repeats (Tensor or int) \u2013 the number of repetitions of each element, broadcast to the size of dim. dim (int, optional) \u2013 the batch dimension to repeat along. Defaults to None, which flattens the batch dimensions first, so the result has one batch dimension. A dim past the batch dimensions warns, and is used on the dimensions of the leaves. Starting with TensorDict 0.17, the default will change to raising an IndexError, as for a tensor. Keyword Arguments: output_size (int, optional) \u2013 the size of the result along dim (the sum of repeats). Passing it avoids the device synchronization that computes it. Defaults to None, which computes it. inplace (bool, optional) \u2013 if True, the tensordict keeps its identity and keys, its leaves are replaced one by one, and the call returns self. It needs a dim and at least one batch dimension. A lazy stack or an indexed view (such as a slice of a PersistentTensorDict), or a tensordict that holds one, raises a NotImplementedError: call to_tensordict() first. The legacy lazy views (set_lazy_legacy(True)) still accept it and leave their source out of step with its batch size (#3406). See In-place operations. Defaults to False. Returns: A tensordict with the same batch size, except along dim, or self with inplace=True. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.tensor([[0, 1], [2, 3]]), batch_size=[2, 2]) \u003e\u003e\u003e td.repeat_interleave(2, dim=0)[\"a\"] tensor([[0, 1], [0, 1], [2, 3], [2, 3]]) \u003e\u003e\u003e td.repeat_interleave(torch.tensor([1, 2]), dim=1)[\"a\"] tensor([[0, 1, 1], [2, 3, 3]]) \u003e\u003e\u003e td.repeat_interleave(2).batch_size torch.Size([8]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.repeat_interleave# TensorDictBase.repeat_interleave(repeats: Tensor | int, dim: int | None = None, *, output_size: int | None = None, inplace: bool = False) \u2192 Self# Repeats each element of the batch along dim, as torch.Tensor.repeat_interleave() does. Each element is repeated next to itself, as with numpy.repeat(). To repeat the whole batch instead, as with numpy.tile(), use repeat(). The data is copied. With a dim, the names are kept. Parameters: repeats (Tensor or int) \u2013 the number of repetitions of each element, broadcast to the size of dim. dim (int, optional) \u2013 the batch dimension to repeat along. Defaults to None, which flattens the batch dimensions first, so the result has one batch dimension. A dim past the batch dimensions warns, and is used on the dimensions of the leaves. Starting with TensorDict 0.17, the default will change to raising an IndexError, as for a tensor. Keyword Arguments: output_size (int, optional) \u2013 the size of the result along dim (the sum of repeats). Passing it avoids the device synchronization that computes it. Defaults to None, which computes it. inplace (bool, optional) \u2013 if True, the tensordict keeps its identity and keys, its leaves are replaced one by one, and the call returns self. It needs a dim and at least one batch dimension. A lazy stack, an indexed view (such as a slice of a PersistentTensorDict) or a legacy lazy view (set_lazy_legacy(True)), or a tensordict that holds one, raises a NotImplementedError: call to_tensordict() first. See In-place operations. Defaults to False. Returns: A tensordict with the same batch size, except along dim, or self with inplace=True. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e td = TensorDict(a=torch.tensor([[0, 1], [2, 3]]), batch_size=[2, 2]) \u003e\u003e\u003e td.repeat_interleave(2, dim=0)[\"a\"] tensor([[0, 1], [0, 1], [2, 3], [2, 3]]) \u003e\u003e\u003e td.repeat_interleave(torch.tensor([1, 2]), dim=1)[\"a\"] tensor([[0, 1, 1], [2, 3, 3]]) \u003e\u003e\u003e td.repeat_interleave(2).batch_size torch.Size([8]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

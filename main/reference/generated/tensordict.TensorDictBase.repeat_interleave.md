@@ -29,13 +29,12 @@ computes it.
 - **inplace** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the tensordict keeps its
 identity and keys, its leaves are replaced one by one, and the
 call returns `self`. It needs a `dim` and at least one
-batch dimension. A lazy stack or an indexed view (such as a
-slice of a [`PersistentTensorDict`](tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict)), or a
-tensordict that holds one, raises a `NotImplementedError`:
-call [`to_tensordict()`](tensordict.TensorDictBase.to_tensordict.html#tensordict.TensorDictBase.to_tensordict) first. The legacy lazy views
-(`set_lazy_legacy(True)`) still accept it and leave their
-source out of step with its batch size (#3406). See
-[In-place operations](../../concepts/operations.html#inplace-conventions). Defaults to `False`.
+batch dimension. A lazy stack, an indexed view (such as a
+slice of a [`PersistentTensorDict`](tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict)) or a
+legacy lazy view (`set_lazy_legacy(True)`), or a tensordict
+that holds one, raises a `NotImplementedError`: call
+[`to_tensordict()`](tensordict.TensorDictBase.to_tensordict.html#tensordict.TensorDictBase.to_tensordict) first. See [In-place operations](../../concepts/operations.html#inplace-conventions).
+Defaults to `False`.
 
 Returns:
 
