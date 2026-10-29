@@ -8912,6 +8912,90 @@ class TestGeneric:
             assert type(td).__name__ != "LazyStackedTensorDict"
             assert source.batch_size == (4, 2)
 
+    @pytest.mark.parametrize("op", ["reshape", "repeat_interleave"])
+    @pytest.mark.parametrize(
+        "container", ["sub_tensordict", "empty", "non_tensor", "h5_slice"]
+    )
+    def test_inplace_reshape_repeat_interleave_sub_tensordict_raises(
+        self, op, container, tmp_path
+    ):
+        # #3371: on an indexed view these failed on the first leaf write with
+        # an unrelated RuntimeError, and on a view without tensor leaves set a
+        # batch size that the index cannot hold. They now raise
+        # NotImplementedError, as flatten and repeat do.
+        leaves = {
+            "empty": {},
+            "non_tensor": {"s": NonTensorData("x", batch_size=[4, 2])},
+        }.get(container, {"a": torch.zeros(4, 2, 3)})
+        source = TensorDict(leaves, [4, 2])
+        if container in ("sub_tensordict", "empty", "non_tensor"):
+            td = source._get_sub_tensordict(slice(1, 3))
+        else:
+            if not _has_h5py:
+                pytest.skip("h5py not found.")
+            source = PersistentTensorDict.from_dict(source, filename=tmp_path / "td.h5")
+            td = source[1:3]
+        batch_size = td.batch_size
+        leaf_shapes = {k: v.shape for k, v in source.items()}
+        args = {"reshape": (-1,), "repeat_interleave": (2, 0)}[op]
+        # the message names the view, and except RuntimeError still catches it
+        assert issubclass(NotImplementedError, RuntimeError)
+        with pytest.raises(
+            NotImplementedError,
+            match=f"{op}.inplace=True. is not supported on {type(td).__name__};",
+        ):
+            getattr(td, op)(*args, inplace=True)
+        assert td.batch_size == batch_size
+        assert source.batch_size == (4, 2)
+        assert {k: v.shape for k, v in source.items()} == leaf_shapes
+        if op == "reshape":
+            # an invalid shape raises the in-place error too
+            for shape in [(7,), (-1, -1), (-2,), (2.5,), ({"a": 1},), ("ab",)]:
+                with pytest.raises(NotImplementedError, match="reshape.inplace=True"):
+                    td.reshape(*shape, inplace=True)
+        # a reshape that keeps the batch size still returns the view
+        assert td.reshape(batch_size, inplace=True) is td
+
+    @pytest.mark.parametrize(
+        "container", ["lazy_stack", "non_tensor_stack", "tensorclass_lazy_stack"]
+    )
+    @pytest.mark.parametrize(
+        "shape",
+        [(7,), (-1, -1), (-2,), (2.5,), ({"a": 1},), ("ab",), (None,), ([[2, 2]],)],
+    )
+    def test_inplace_reshape_invalid_shape_lazy_stack_raises(self, container, shape):
+        # #3371: the in-place check of reshape now follows the shape inference,
+        # so that a no-op reshape returns; an invalid shape on a lazy stack
+        # still raises the in-place error rather than the shape error.
+        @tensorclass
+        class TC:
+            a: torch.Tensor
+
+        if container == "non_tensor_stack":
+            td = NonTensorStack(*[NonTensorData(i) for i in range(4)])
+            name = "NonTensorStack"
+        else:
+            td = LazyStackedTensorDict(
+                *TensorDict(a=torch.zeros(4, 2), batch_size=[4, 2])
+            )
+            name = "LazyStackedTensorDict"
+            if container == "tensorclass_lazy_stack":
+                td = TC._from_tensordict(td)
+        with pytest.raises(
+            NotImplementedError,
+            match=f"reshape.inplace=True. is not supported on {name};",
+        ):
+            td.reshape(*shape, inplace=True)
+        # without inplace, the same error as on a dense tensordict
+        with pytest.raises(Exception) as dense_error:
+            TensorDict(batch_size=td.batch_size).reshape(*shape)
+        with pytest.raises(
+            type(dense_error.value), match=re.escape(str(dense_error.value))
+        ):
+            td.reshape(*shape)
+        # a reshape that keeps the batch size returns the stack; it raised before
+        assert td.reshape(td.batch_size, inplace=True) is td
+
     @pytest.mark.parametrize(
         "op",
         [
@@ -9222,6 +9306,32 @@ class TestGeneric:
             assert td.batch_size == torch.Size([2, 3])
             assert torch.equal(td["x"], x)
             assert torch.equal(td["s", "y"], ref["s", "y"])
+
+    @pytest.mark.xfail(
+        strict=True,
+        raises=AssertionError,
+        reason="#3406: reshape and repeat_interleave with inplace=True on a legacy "
+        "lazy view rewrite the source's leaves to the new shape while the source "
+        "keeps its batch size",
+    )
+    @pytest.mark.parametrize("op", ["reshape", "repeat_interleave"])
+    @pytest.mark.parametrize("view", ["permute", "unsqueeze", "nested_permute"])
+    def test_inplace_reshape_legacy_lazy_view_keeps_source(self, op, view):
+        # Found while fixing #3371: the in-place call writes the reshaped leaves
+        # into the view's source, whose batch size stays.
+        src = TensorDict(y=torch.arange(24).view(3, 2, 4), batch_size=[3, 2])
+        with legacy_lazy_mode():
+            td = src.unsqueeze(0) if view == "unsqueeze" else src.permute(1, 0)
+        if view == "nested_permute":
+            td = TensorDict(s=td, batch_size=[2, 3])
+        args = {"reshape": (-1,), "repeat_interleave": (2, 0)}[op]
+        try:
+            getattr(td, op)(*args, inplace=True)
+        except NotImplementedError:
+            pass
+        assert src.batch_size == (3, 2)
+        assert src["y"].shape == (3, 2, 4)
+        assert src.to_tensordict()["y"].shape == (3, 2, 4)
 
     @pytest.mark.parametrize("inplace", [True, False])
     def test_unflatten_minus_one(self, inplace):

@@ -155,6 +155,12 @@ class set_printoptions(_DecoratorContextManager):
             ``show_is_view``, ``show_storage_size`` and ``plain``) also set
             ``compact=False`` when ``compact`` is not passed; with an
             explicit ``compact=True``, the compact form ignores them.
+            Neither form reads tensor data to print it (:ref:`printing` lists
+            the exceptions, such as ``plain=True``, which prints statistics
+            of the values). The detailed form prints the value of each
+            non-tensor entry (``NonTensorData``, ``NonTensorStack``), so it
+            reads the non-tensor entries of an h5 or zarr file
+            (:class:`~tensordict.PersistentTensorDict`).
             ``html=False`` turns off the HTML display of notebooks; with
             ``compact=False``, a notebook shows the detailed text instead of
             the HTML tree.
