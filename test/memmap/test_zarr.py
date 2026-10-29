@@ -190,6 +190,26 @@ class TestZarrRoundTrip:
         assert td.batch_size == torch.Size([3, 4])
         assert td["sub"].batch_size == torch.Size([3, 4, 5])
 
+    def test_foreign_store_non_tensor_only(self, tmp_path):
+        # a store without tensordict metadata whose groups hold only string
+        # columns loads with no batch dims (#3411)
+        path = str(tmp_path / "foreign.zarr")
+        root = zarr.open_group(path, mode="w")
+        root.create_array("s", shape=(4,), dtype=str)[:] = ["a", "b", "c", "d"]
+        sub = root.create_group("sub")
+        sub.create_array("t", shape=(4,), dtype=str)[:] = ["e", "f", "g", "h"]
+        root.create_group("empty")
+        for td in (
+            PersistentTensorDict.from_zarr(path),
+            TensorDict.from_zarr(path),
+            PersistentTensorDict.from_zarr(path, non_tensor_as_stack=True),
+        ):
+            assert td.batch_size == ()
+            assert td["sub"].batch_size == ()
+            assert td["empty"].batch_size == ()
+            assert td["s"].tolist() == ["a", "b", "c", "d"]
+            assert td["sub", "t"].tolist() == ["e", "f", "g", "h"]
+
     def test_auto_batch_size(self, tmp_path):
         td = TensorDict({"a": torch.randn(3, 4)}, batch_size=[3, 4])
         td.to_zarr(tmp_path / "s.zarr")
