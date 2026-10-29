@@ -227,6 +227,7 @@ class TestZarrRoundTrip:
         for sub, ref in ((ztd, expected), (ztd["b"], expected["b"])):
             assert sub.batch_size == ref.batch_size
             assert sub.names == ref.names
+        assert ztd.to_tensordict().names == expected.names
         ztd.close()
 
     def test_free_function(self, tmp_path):
