@@ -932,7 +932,7 @@ class _Conversion:
             result.auto_batch_size_(batch_dims=batch_dims)
         elif batch_dims is not None:
             _warn_batch_dims_ignored("from_h5", result, batch_dims, batch_size)
-        _warn_h5_metadata_differs(result, batch_size, auto_batch_size)
+        _warn_h5_metadata_differs(result, batch_size, auto_batch_size, batch_dims)
         return result
 
     @classmethod

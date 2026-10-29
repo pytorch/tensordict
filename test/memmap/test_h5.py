@@ -738,6 +738,17 @@ class TestH5Serialization:
                 [3],
                 [],
             ),
+            # batch_dims cuts the batch size that an empty tensordict keeps
+            (
+                TensorDict(
+                    a=torch.zeros(3),
+                    nested=TensorDict(batch_size=[3, 2]),
+                    batch_size=[3],
+                ),
+                {"auto_batch_size": True, "batch_dims": 1},
+                [3],
+                [],
+            ),
         ],
         ids=[
             "root_batch_size",
@@ -747,6 +758,7 @@ class TestH5Serialization:
             "batch_size",
             "auto_names",
             "auto_empty",
+            "auto_batch_dims",
         ],
     )
     def test_from_h5_warns_stored_metadata_differs(
@@ -784,6 +796,16 @@ class TestH5Serialization:
         h5td, record = self._from_h5_warnings(path, batch_size=[3])
         assert not record
         assert h5td.batch_size == torch.Size([3])
+        assert h5td["nested"].batch_size == torch.Size([3])
+        h5td.close()
+        # batch_dims cuts the batch size that a non-tensor entry keeps
+        TensorDict(
+            a=torch.zeros(3, 2),
+            nested=TensorDict(s="hi", b=torch.zeros(3, 2, 5), batch_size=[3, 2]),
+            batch_size=[3],
+        ).to_h5(path).close()
+        h5td, record = self._from_h5_warnings(path, auto_batch_size=True, batch_dims=1)
+        assert not record
         assert h5td["nested"].batch_size == torch.Size([3])
         h5td.close()
         # the stored batch sizes are the inferred ones

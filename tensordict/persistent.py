@@ -2763,24 +2763,43 @@ def _restored_batch_size(metadata, parent_size):
     return parent_size
 
 
-def _keeps_batch_size(td: PersistentTensorDict) -> bool:
-    """Whether ``auto_batch_size_`` keeps, in part, the batch size that ``td`` starts with.
+def _auto_batch_size_kept(group, size, batch_dims):
+    """The batch size that ``auto_batch_size_`` gives the tensordict of the h5 ``group`` when it starts with ``size``, or ``None`` if it doesn't depend on it.
 
-    An empty tensordict keeps it, and a non-tensor entry has it.
+    An empty tensordict keeps ``size``, and a non-tensor entry other than a
+    stack has it, as ``auto_batch_size_`` does. Reads the types of the
+    datasets only.
     """
-    metadata = [m for _, m in td._items_metadata()]
-    return not metadata or any(m.get("non_tensor") for m in metadata)
+    import h5py
+
+    gid = group.id
+    names = list(gid)
+    if not names:
+        return size[:batch_dims] if batch_dims else size
+    for name in names:
+        try:
+            dataset = h5py.h5d.open(gid, name)
+        except KeyError:
+            # a nested group
+            continue
+        if dataset.get_type().get_class() in (h5py.h5t.INTEGER, h5py.h5t.FLOAT):
+            continue
+        if dataset.dtype not in _NUMPY_TO_TORCH_DTYPE_DICT and not h5py.h5a.exists(
+            dataset, _STACK_ATTR.encode()
+        ):
+            return size if batch_dims is None else size[:batch_dims]
+    return None
 
 
 def _warn_h5_metadata_differs(
-    td: PersistentTensorDict, batch_size, auto_batch_size: bool
+    td: PersistentTensorDict, batch_size, auto_batch_size: bool, batch_dims
 ) -> None:
     """Warns when ``from_h5`` returns other batch sizes or names than restoring the stored ones would, as ``from_zarr`` does (#3263).
 
     Reads the group attributes only. Restoring them, the root keeps
     ``batch_size`` when it is passed, and gets no names then; with
     ``auto_batch_size``, the inferred batch sizes replace the stored ones,
-    except where :func:`_keeps_batch_size`.
+    except where :func:`_auto_batch_size_kept`.
     """
     stored = td._backend.stored_attrs_metadata
     metadata = stored(td.file)
@@ -2796,11 +2815,10 @@ def _warn_h5_metadata_differs(
         while pending and not differs:
             td, parent_size = pending.pop()
             size = _restored_batch_size(stored(td.file), parent_size)
-            differs = (
-                size is not None
-                and size != list(td.batch_size)
-                and (not auto_batch_size or _keeps_batch_size(td))
-            )
+            restored = size
+            if auto_batch_size and size is not None and size != list(td.batch_size):
+                restored = _auto_batch_size_kept(td.file, size, batch_dims)
+            differs = restored is not None and restored != list(td.batch_size)
             pending.extend(
                 (nested, size)
                 for key, nested in td._nested_tensordicts.items()
