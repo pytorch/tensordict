@@ -1500,11 +1500,14 @@ class PersistentTensorDict(
             array = self._get_array((name,))
             if not self._backend.is_array(array):
                 nested = self._process_array((name,), array)
-                if not self._backend.contains(group, name):
+                try:
+                    nested_group = group[name]
+                except KeyError:
                     # an empty group has no leaf to copy (#3412)
                     metadata = _attrs_metadata(nested.batch_size, nested._td_dim_names)
                     self._backend.create_group(group, name, metadata)
-                nested._write_attrs_metadata_into(group[name])
+                    nested_group = group[name]
+                nested._write_attrs_metadata_into(nested_group)
 
     def _nested_batch_size_from_attrs(self, group):
         """Batch size persisted in a nested group's metadata, or ``None``."""
