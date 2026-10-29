@@ -709,8 +709,45 @@ class TestH5Serialization:
             ),
             # an empty tensordict
             (TensorDict(batch_size=[3]), {}, [], None),
+            # batch_size= is kept, and given to the nested groups too
+            (
+                TensorDict(
+                    a=torch.zeros(3),
+                    nested=TensorDict(c=torch.zeros(3, 1), batch_size=[3, 1]),
+                    batch_size=[3],
+                ),
+                {"batch_size": [3]},
+                [3],
+                [3],
+            ),
+            # auto_batch_size=True drops the names
+            (
+                TensorDict(a=torch.zeros(3), batch_size=[3], names=["t"]),
+                {"auto_batch_size": True},
+                [3],
+                None,
+            ),
+            # auto_batch_size=True drops the batch size of an empty tensordict
+            (
+                TensorDict(
+                    a=torch.zeros(3),
+                    nested=TensorDict(batch_size=[3]),
+                    batch_size=[3],
+                ),
+                {"auto_batch_size": True},
+                [3],
+                [],
+            ),
         ],
-        ids=["root_batch_size", "names", "nested_batch_size", "empty"],
+        ids=[
+            "root_batch_size",
+            "names",
+            "nested_batch_size",
+            "empty",
+            "batch_size",
+            "auto_names",
+            "auto_empty",
+        ],
     )
     def test_from_h5_warns_stored_metadata_differs(
         self, tmp_path, td, kwargs, batch_size, nested_batch_size
@@ -735,16 +772,15 @@ class TestH5Serialization:
             a=torch.zeros(3),
             nested=TensorDict(c=torch.zeros(3, 1, 2), batch_size=[3]),
             batch_size=[3],
-            names=["time"],
         )
         path = tmp_path / "file.h5"
         td.to_h5(path).close()
-        # auto_batch_size=True asks for the inferred batch sizes
+        # auto_batch_size=True infers the batch sizes of non-empty tensordicts
         h5td, record = self._from_h5_warnings(path, auto_batch_size=True)
         assert not record
         assert h5td["nested"].batch_size == torch.Size([3, 1, 2])
         h5td.close()
-        # batch_size= asks for that batch size
+        # batch_size= is the stored batch size of every nested tensordict
         h5td, record = self._from_h5_warnings(path, batch_size=[3])
         assert not record
         assert h5td.batch_size == torch.Size([3])

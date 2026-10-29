@@ -2756,10 +2756,31 @@ class PersistentTensorDict(
 _register_tensor_class(PersistentTensorDict)
 
 
-def _warn_h5_metadata_differs(td: PersistentTensorDict) -> None:
-    """Warns when the batch sizes or names that an h5 file stores differ from the ones ``from_h5`` infers (#3263).
+def _restored_batch_size(metadata, parent_size):
+    """The batch size that a group gets from its stored ``metadata``, as on zarr: its own, or else its parent's."""
+    if metadata is not None and metadata.get("batch_size") is not None:
+        return metadata["batch_size"]
+    return parent_size
 
-    Reads the group attributes only.
+
+def _keeps_batch_size(td: PersistentTensorDict) -> bool:
+    """Whether ``auto_batch_size_`` keeps, in part, the batch size that ``td`` starts with.
+
+    An empty tensordict keeps it, and a non-tensor entry has it.
+    """
+    metadata = [m for _, m in td._items_metadata()]
+    return not metadata or any(m.get("non_tensor") for m in metadata)
+
+
+def _warn_h5_metadata_differs(
+    td: PersistentTensorDict, batch_size, auto_batch_size: bool
+) -> None:
+    """Warns when ``from_h5`` returns other batch sizes or names than restoring the stored ones would, as ``from_zarr`` does (#3263).
+
+    Reads the group attributes only. Restoring them, the root keeps
+    ``batch_size`` when it is passed, and gets no names then; with
+    ``auto_batch_size``, the inferred batch sizes replace the stored ones,
+    except where :func:`_keeps_batch_size`.
     """
     stored = td._backend.stored_attrs_metadata
     metadata = stored(td.file)
@@ -2767,28 +2788,50 @@ def _warn_h5_metadata_differs(td: PersistentTensorDict) -> None:
         # every writer stores the root: a file written before 0.16, or by
         # another program, loads as it did, without a warning
         return
-    differs = any(name is not None for name in metadata.get("names") or ())
-    # from_h5 has opened every nested group to infer its batch size; the
-    # cache also holds entries under nested keys, which are not walked
-    pending = [td]
-    while pending and not differs:
-        td = pending.pop()
-        metadata = stored(td.file)
-        differs = metadata is not None and metadata.get("batch_size") not in (
-            None,
-            list(td.batch_size),
+    if batch_size is None:
+        differs = any(name is not None for name in metadata.get("names") or ())
+        # from_h5 has opened every nested group to infer its batch size; the
+        # cache also holds entries under nested keys, which are not walked
+        pending = [(td, None)]
+        while pending and not differs:
+            td, parent_size = pending.pop()
+            size = _restored_batch_size(stored(td.file), parent_size)
+            differs = (
+                size is not None
+                and size != list(td.batch_size)
+                and (not auto_batch_size or _keeps_batch_size(td))
+            )
+            pending.extend(
+                (nested, size)
+                for key, nested in td._nested_tensordicts.items()
+                if isinstance(key, str) or len(key) == 1
+            )
+    else:
+        import h5py
+
+        # every nested tensordict has the batch size of the root, so a group
+        # without a stored one keeps it; list the groups without opening the
+        # datasets
+        batch_size = list(td.batch_size)
+        groups = []
+        h5py.h5o.visit(
+            td.file.id,
+            lambda name, info: (
+                groups.append(name) if info.type == h5py.h5o.TYPE_GROUP else None
+            ),
+            info=True,
         )
-        pending.extend(
-            nested
-            for key, nested in td._nested_tensordicts.items()
-            if isinstance(key, str) or len(key) == 1
+        differs = any(
+            _restored_batch_size(stored(td.file[name]), batch_size) != batch_size
+            for name in groups
         )
     if differs:
         warnings.warn(
             "This h5 file stores the batch sizes or the dim names of the "
             "tensordict it was written from, and from_h5 returns other ones. "
             "Starting with TensorDict 0.17, the default will change to "
-            "restoring the stored ones, as from_zarr does.",
+            "restoring the stored ones, as from_zarr does. With batch_size, "
+            "only the nested tensordicts get their stored batch sizes.",
             FutureWarning,
             stacklevel=_user_stacklevel(),
         )
