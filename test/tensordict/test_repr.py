@@ -21,6 +21,7 @@ from tensordict import (
     LazyStackedTensorDict,
     NonTensorData,
     NonTensorStack,
+    PersistentTensorDict,
     set_printoptions,
     TensorClass,
     tensorclass,
@@ -53,7 +54,7 @@ else:
 _has_ipython = importlib.util.find_spec("IPython", None) is not None
 
 try:
-    import h5py  # noqa
+    import h5py
 
     _has_h5py = True
 except ImportError:
@@ -2358,6 +2359,81 @@ class TestPrintEveryContainer:
             assert sorted(reads) == non_tensor_reads(reads), reads
         assert non_tensor_reads(reads) == non_tensor_reads(expected_reads)
         assert any(read not in non_tensor_reads(reads) for read in expected_reads)
+
+    @pytest.mark.skipif(not _has_h5py, reason="h5py is not installed")
+    def test_print_h5_enum_as_non_tensor(self, tmp_path):
+        # an h5 enum dataset, written by another tool, has an integer dtype
+        # but reads as NonTensorData: it prints as the data in memory does
+        path = tmp_path / "enum.h5"
+        with h5py.File(path, "w") as file:
+            file.create_dataset(
+                "x",
+                data=[0, 1, 0],
+                dtype=h5py.enum_dtype({"A": 0, "B": 1}, basetype="i1"),
+            )
+        td = PersistentTensorDict.from_h5(path, batch_size=[3])
+
+        def entry(obj):
+            return [line.strip() for line in repr(obj).splitlines() if "x:" in line]
+
+        with set_printoptions(compact=False):
+            assert entry(td) == entry(td.to_tensordict())
+            assert entry(td[0]) == entry(td[0].to_tensordict())
+            lazy = LazyStackedTensorDict(td, td)
+            in_memory = LazyStackedTensorDict(td.to_tensordict(), td.to_tensordict())
+            assert entry(lazy) == entry(in_memory)
+        assert "x: NonTensorData(" in entry(td)[0]
+        assert "x: NonTensorStack(" in entry(lazy)[0]
+        # the compact display
+        fields = repr(td[0].to_tensordict()).split("fields=")[1]
+        assert repr(td[0]).split("fields=")[1] == fields
+
+    @pytest.mark.skipif(not _has_h5py, reason="h5py is not installed")
+    def test_print_h5_uint64_element_view(self, tmp_path):
+        # h5[0] of a uint64 dataset reads the dataset in full and indexes it:
+        # the print says so
+        td = TensorDict(
+            x=torch.tensor([0, 1, 2], dtype=torch.uint64), batch_size=[3]
+        ).to_h5(tmp_path / "u64.h5")
+        view = td[0]
+        x = view.get("x")
+        with set_printoptions(
+            compact=False,
+            show_is_contiguous=True,
+            show_is_view=True,
+            show_storage_size=True,
+        ):
+            out = repr(view)
+        assert (
+            f"is_contiguous={x.is_contiguous()}, is_view={x._is_view()}, "
+            f"storage_size={x.untyped_storage().nbytes()})"
+        ) in out, out
+
+    @pytest.mark.skipif(not _has_h5py, reason="h5py is not installed")
+    def test_print_lazy_stack_of_h5_views_reads_strings_once(
+        self, tmp_path, _backend_reads, monkeypatch
+    ):
+        # a view of a file holds no UnbatchedTensor, so printing a lazy stack
+        # of views does not read its string entries to look for one
+        td = TensorDict(a=torch.zeros(3), s="text", batch_size=[3]).to_h5(
+            tmp_path / "s.h5"
+        )
+        lazy = LazyStackedTensorDict(td[0], td[1])
+
+        def print_lazy():
+            _backend_reads.clear()
+            with set_printoptions(compact=False), warnings.catch_warnings():
+                # reading a string of an h5 file warns about its future type
+                warnings.simplefilter("ignore", FutureWarning)
+                text = repr(lazy)
+            return text, [read for read in _backend_reads if read.endswith("(/s)")]
+
+        out, reads = print_lazy()
+        monkeypatch.setattr("tensordict.utils._unbatched_leaf", lambda td, key: None)
+        expected, expected_reads = print_lazy()
+        assert out == expected
+        assert reads, out
+        assert len(reads) == len(expected_reads), (reads, expected_reads)
 
 
 if __name__ == "__main__":
