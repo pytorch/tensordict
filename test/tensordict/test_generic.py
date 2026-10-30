@@ -14,6 +14,7 @@ import importlib.util
 import inspect
 import io
 import json
+import mmap
 import os
 import pickle
 import platform
@@ -21,6 +22,7 @@ import re
 import shutil
 import subprocess
 import sys
+import textwrap
 import threading
 import time
 import warnings
@@ -36,6 +38,7 @@ from unittest import mock
 import numpy as np
 import pytest
 import tensordict
+import tensordict._utils_key_json as td_key_json
 import tensordict.base as tensordict_base
 import torch
 from tensordict import (
@@ -53,6 +56,7 @@ from tensordict import (
     TensorDict,
     TypedTensorDict,
 )
+from tensordict._base import serialization as serialization_module
 from tensordict._indexing import convert_ellipsis_to_idx
 from tensordict._lazy import _CustomOpTensorDict
 from tensordict._td import _SubTensorDict, _TensorDictKeysView, is_tensor_collection
@@ -1469,24 +1473,29 @@ class TestGeneric:
     @pytest.mark.skipif(
         _IS_WINDOWS, reason="Windows cannot replace a file while the source maps it"
     )
-    @pytest.mark.xfail(
-        # the copy reads the source views correctly on macOS (#3197)
-        not _IS_OSX,
-        strict=True,
-        raises=AssertionError,
-        reason="#3197: a file of the same size is written in place while the source "
-        "reads views into it",
-    )
-    def test_consolidated_file_overwrite_same_size_source_view(self, tmp_path):
+    @pytest.mark.parametrize("source_kind", ["private", "shared"])
+    @pytest.mark.parametrize("num_threads,return_early", [(0, False), (4, True)])
+    @pytest.mark.parametrize("inplace", [False, True])
+    def test_consolidated_file_overwrite_same_size_source_view(
+        self, tmp_path, source_kind, num_threads, return_early, inplace
+    ):
         # load a checkpoint, swap two leaves and save it back under the same name
         filename = tmp_path / "td.bin"
-        TensorDict(a=torch.zeros(4), b=torch.ones(4), batch_size=[4]).consolidate(
-            filename=filename
-        )
-        original = TensorDict.from_consolidated(filename)
-        saved = TensorDict(
-            a=original["b"], b=original["a"], batch_size=[4]
+        original = TensorDict(
+            a=torch.zeros(4), b=torch.ones(4), batch_size=[4]
         ).consolidate(filename=filename)
+        if source_kind == "private":
+            original = TensorDict.from_consolidated(filename)
+        source = TensorDict(a=original["b"], b=original["a"], batch_size=[4])
+        saved = source.consolidate(
+            filename=filename,
+            num_threads=num_threads,
+            return_early=return_early,
+            inplace=inplace,
+        )
+        if return_early:
+            saved = saved.result()
+        assert (saved is source) is inplace
         loaded = TensorDict.from_consolidated(filename)
         for td in (saved, loaded):
             torch.testing.assert_close(td["a"], torch.ones(4))
@@ -1495,12 +1504,6 @@ class TestGeneric:
     @pytest.mark.skipif(
         _IS_WINDOWS, reason="Windows cannot replace a file while a result maps it"
     )
-    @pytest.mark.xfail(
-        strict=True,
-        raises=AssertionError,
-        reason="#3197: an older result writes its metadata over a newer file of "
-        "the same size",
-    )
     def test_consolidated_file_stale_refresh_same_size(self, tmp_path):
         # refresh an older checkpoint's metadata after a newer one was saved
         filename = tmp_path / "td.bin"
@@ -1508,10 +1511,748 @@ class TestGeneric:
             filename=filename
         )
         TensorDict(c=torch.ones(4), batch_size=[4]).consolidate(filename=filename)
-        previous.consolidate(filename=filename)
+        with pytest.warns(UserWarning, match="writes nothing"):
+            previous.consolidate(filename=filename)
         loaded = TensorDict.from_consolidated(filename)
         assert list(loaded.keys()) == ["c"]
         torch.testing.assert_close(loaded["c"], torch.ones(4))
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS, reason="Windows cannot replace a file while a result maps it"
+    )
+    @pytest.mark.parametrize("backend", ["json", "orjson"])
+    @pytest.mark.parametrize("use_buffer", [False, True])
+    def test_consolidated_file_generation_json_backends(
+        self, tmp_path, backend, use_buffer
+    ):
+        if backend == "orjson":
+            pytest.importorskip("orjson")
+        previous_backend = td_key_json.get_json_backend().__name__
+        try:
+            td_key_json.set_json_backend(backend)
+            filename = tmp_path / "td.bin"
+            previous = TensorDict(
+                a=torch.zeros(4), batch_size=[4], names=["one"]
+            ).consolidate(filename=filename, use_buffer=use_buffer)
+            previous.names = ["uno"]
+            previous.consolidate(filename=filename)
+            newer = TensorDict(
+                c=torch.ones(4), batch_size=[4], names=["two"]
+            ).consolidate(filename=filename, use_buffer=use_buffer)
+            newer.names = ["dos"]
+            newer.consolidate(filename=filename)
+            with pytest.warns(UserWarning, match="writes nothing"):
+                previous.consolidate(filename=filename)
+            loaded = TensorDict.from_consolidated(filename)
+            assert list(loaded.keys()) == ["c"]
+            assert loaded.names == ["dos"]
+            torch.testing.assert_close(loaded["c"], torch.ones(4))
+        finally:
+            td_key_json.set_json_backend(previous_backend)
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS, reason="Windows cannot replace a file while the source maps it"
+    )
+    def test_consolidated_file_overwrite_source_view_before_footer(self, tmp_path):
+        # The new footer starts inside the old payload, before the source view.
+        filename = tmp_path / "td.bin"
+        TensorDict(a=torch.arange(40, dtype=torch.float32), batch_size=[]).consolidate(
+            filename=filename
+        )
+        original = TensorDict.from_consolidated(filename)
+        key = "k" * 156
+        source = TensorDict({key: original["a"][10:11]}, batch_size=[])
+        expected = source[key].clone()
+        source.consolidate(filename=tmp_path / "fresh.bin")
+        assert filename.stat().st_size == (tmp_path / "fresh.bin").stat().st_size
+
+        saved = source.consolidate(filename=filename)
+        loaded = TensorDict.from_consolidated(filename)
+        torch.testing.assert_close(saved[key], expected)
+        torch.testing.assert_close(loaded[key], expected)
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS, reason="Windows cannot replace a file while the source maps it"
+    )
+    @pytest.mark.parametrize("hardlink", [False, True])
+    def test_consolidated_file_overwrite_from_mmap_buffer(self, tmp_path, hardlink):
+        filename = tmp_path / "td.bin"
+        TensorDict(a=torch.zeros(4), b=torch.ones(4), batch_size=[4]).consolidate(
+            filename=filename
+        )
+        destination = filename
+        if hardlink:
+            destination = tmp_path / "hardlink.bin"
+            os.link(filename, destination)
+        with open(filename, "r+b") as handle:
+            with mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_COPY) as mapping:
+                first = torch.frombuffer(
+                    mapping, dtype=torch.float32, count=4, offset=0
+                )
+                second = torch.frombuffer(
+                    mapping, dtype=torch.float32, count=4, offset=16
+                )
+                source = TensorDict(a=second, b=first, batch_size=[4])
+                saved = source.consolidate(filename=destination)
+                loaded = TensorDict.from_consolidated(destination)
+                for td in (saved, loaded):
+                    torch.testing.assert_close(td["a"], torch.ones(4))
+                    torch.testing.assert_close(td["b"], torch.zeros(4))
+                del source, first, second
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS, reason="Windows cannot replace a file while the source maps it"
+    )
+    def test_consolidated_file_overwrite_from_numpy_memmap(self, tmp_path):
+        filename = tmp_path / "td.bin"
+        TensorDict(a=torch.zeros(4), b=torch.ones(4), batch_size=[4]).consolidate(
+            filename=filename
+        )
+        mapped = np.memmap(filename, dtype=np.float32, mode="c", shape=(8,))
+        source = TensorDict(
+            a=torch.from_numpy(mapped[4:]),
+            b=torch.from_numpy(mapped[:4]),
+            batch_size=[4],
+        )
+        saved = source.consolidate(filename=filename)
+        loaded = TensorDict.from_consolidated(filename)
+        for td in (saved, loaded):
+            torch.testing.assert_close(td["a"], torch.ones(4))
+            torch.testing.assert_close(td["b"], torch.zeros(4))
+
+    @pytest.mark.skipif(
+        not sys.platform.startswith("linux")
+        or not os.access("/proc/self/maps", os.R_OK),
+        reason="needs readable Linux process mappings",
+    )
+    def test_consolidated_file_overwrite_unrelated_numpy_view(self, tmp_path):
+        filename = tmp_path / "td.bin"
+        TensorDict(a=torch.zeros(4), batch_size=[4]).consolidate(filename=filename)
+        source = TensorDict(a=torch.ones(4), batch_size=[4])
+        numpy_view = source["a"].numpy()
+        with mock.patch(
+            "tensordict._base.serialization.tempfile.TemporaryFile",
+            side_effect=OSError("unexpected snapshot"),
+        ):
+            saved = source.consolidate(filename=filename)
+        torch.testing.assert_close(saved["a"], torch.ones(4))
+        assert (numpy_view == 1).all()
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS, reason="Windows cannot replace a file while the source maps it"
+    )
+    def test_consolidated_file_overwrite_without_process_maps(self, tmp_path):
+        filename = tmp_path / "td.bin"
+        original = TensorDict(
+            a=torch.zeros(4), b=torch.ones(4), batch_size=[4]
+        ).consolidate(filename=filename)
+        source = TensorDict(a=original["b"], b=original["a"], batch_size=[4])
+        open_file = open
+
+        def deny_process_maps(path, *args, **kwargs):
+            if path == "/proc/self/maps":
+                raise PermissionError("process maps unavailable")
+            return open_file(path, *args, **kwargs)
+
+        with mock.patch("builtins.open", side_effect=deny_process_maps):
+            saved = source.consolidate(filename=filename)
+        torch.testing.assert_close(saved["a"], torch.ones(4))
+        torch.testing.assert_close(saved["b"], torch.zeros(4))
+
+    @pytest.mark.skipif(
+        not sys.platform.startswith("linux")
+        or not os.access("/proc/self/maps", os.R_OK),
+        reason="needs readable Linux process mappings",
+    )
+    def test_consolidated_file_overwrite_with_different_mapping_device(self, tmp_path):
+        filename = tmp_path / "td.bin"
+        TensorDict(a=torch.zeros(4), b=torch.ones(4), batch_size=[4]).consolidate(
+            filename=filename
+        )
+        original = TensorDict.from_consolidated(filename)
+        source = TensorDict(a=original["b"], b=original["a"], batch_size=[4])
+        inode = filename.stat().st_ino
+        altered = []
+        changed = False
+        with open("/proc/self/maps", encoding="utf-8") as mappings:
+            for line in mappings:
+                fields = line.split(maxsplit=5)
+                if int(fields[4]) == inode:
+                    fields[3] = "ff:ff"
+                    changed = True
+                altered.append(" ".join(fields) + "\n")
+        assert changed
+        open_file = open
+
+        def alternate_maps(path, *args, **kwargs):
+            if path == "/proc/self/maps":
+                return io.StringIO("".join(altered))
+            return open_file(path, *args, **kwargs)
+
+        with mock.patch("builtins.open", side_effect=alternate_maps):
+            saved = source.consolidate(filename=filename)
+        torch.testing.assert_close(saved["a"], torch.ones(4))
+        torch.testing.assert_close(saved["b"], torch.zeros(4))
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS, reason="Windows cannot replace a file while the source maps it"
+    )
+    def test_consolidated_file_overwrite_mixed_dtype_views(self, tmp_path):
+        filename = tmp_path / "td.bin"
+        original = TensorDict(
+            a=torch.arange(3, dtype=torch.float32),
+            b=torch.tensor([1 + 2j, 3 + 4j], dtype=torch.complex128),
+            batch_size=[],
+        ).consolidate(filename=filename)
+        source = TensorDict(
+            a=original["a"], b=original["b"], extra=torch.zeros(100), batch_size=[]
+        )
+        expected_a, expected_b = source["a"].clone(), source["b"].clone()
+        saved = source.consolidate(filename=filename)
+        loaded = TensorDict.from_consolidated(filename)
+        for td in (saved, loaded):
+            torch.testing.assert_close(td["a"], expected_a)
+            torch.testing.assert_close(td["b"], expected_b)
+            torch.testing.assert_close(td["extra"], torch.zeros(100))
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    @pytest.mark.parametrize("return_early", [False, True])
+    def test_consolidated_file_overwrite_mapped_and_cuda_leaves(
+        self, tmp_path, return_early
+    ):
+        filename = tmp_path / "td.bin"
+        TensorDict(a=torch.zeros(4), b=torch.ones(4), batch_size=[4]).consolidate(
+            filename=filename
+        )
+        original = TensorDict.from_consolidated(filename)
+        expected_b = torch.tensor([7.0, 8.0, 9.0, 10.0])
+        source = TensorDict(a=original["b"], b=expected_b.cuda(), batch_size=[4])
+        saved = source.consolidate(
+            filename=filename, num_threads=2, return_early=return_early
+        )
+        if return_early:
+            saved = saved.result()
+        torch.cuda.synchronize()
+        loaded = TensorDict.from_consolidated(filename)
+        for td in (saved, loaded):
+            torch.testing.assert_close(td["a"], torch.ones(4))
+            torch.testing.assert_close(td["b"], expected_b)
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS, reason="Windows cannot replace a file while the source maps it"
+    )
+    @pytest.mark.parametrize("grow", [False, True])
+    @pytest.mark.parametrize("return_early", [False, True])
+    def test_consolidated_file_snapshot_failure_preserves_target(
+        self, tmp_path, grow, return_early
+    ):
+        filename = tmp_path / "td.bin"
+        original = TensorDict(
+            a=torch.zeros(4), b=torch.ones(4), batch_size=[]
+        ).consolidate(filename=filename)
+        source_data = {"a": original["b"], "b": original["a"]}
+        if grow:
+            source_data["extra"] = torch.zeros(128)
+        source = TensorDict(source_data, batch_size=[])
+        before = filename.read_bytes()
+        with mock.patch(
+            "tensordict._base.serialization.tempfile.TemporaryFile",
+            side_effect=OSError("snapshot unavailable"),
+        ):
+            with pytest.raises(OSError, match="snapshot unavailable"):
+                result = source.consolidate(
+                    filename=filename, num_threads=4, return_early=return_early
+                )
+                if return_early:
+                    result.result()
+        assert filename.read_bytes() == before
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS, reason="Windows cannot replace a file while the source maps it"
+    )
+    def test_consolidated_file_snapshot_return_early(self, tmp_path):
+        filename = tmp_path / "td.bin"
+        original = TensorDict(
+            {f"k{i}": torch.full((64,), float(i)) for i in range(4)},
+            batch_size=[64],
+            names=["at_call"],
+        ).consolidate(filename=filename)
+        source = TensorDict(
+            {f"k{i}": original[f"k{3 - i}"] for i in range(4)},
+            batch_size=[64],
+            names=["at_call"],
+        )
+        snapshot_started = threading.Event()
+        release_snapshot = threading.Event()
+        copies_started = threading.Event()
+        release_copies = threading.Event()
+        returned = threading.Event()
+        copy_threads = set()
+        snapshot_threads = []
+        lock = threading.Lock()
+        outcome = {}
+        snapshot_file_sources = serialization_module._snapshot_file_sources
+        cat = torch.cat
+
+        def blocked_snapshot(values, indices):
+            snapshot_threads.append(threading.get_ident())
+            snapshot_started.set()
+            if not release_snapshot.wait(timeout=30):
+                raise TimeoutError("snapshot was not released")
+            return snapshot_file_sources(values, indices)
+
+        def blocked_copy(*args, **kwargs):
+            if kwargs.get("out") is not None:
+                with lock:
+                    copy_threads.add(threading.get_ident())
+                    if len(copy_threads) >= 2:
+                        copies_started.set()
+                if not release_copies.wait(timeout=30):
+                    raise TimeoutError("copies were not released")
+            return cat(*args, **kwargs)
+
+        def invoke():
+            try:
+                outcome["future"] = source.consolidate(
+                    filename=filename, num_threads=4, return_early=True
+                )
+            except Exception as error:
+                outcome["error"] = error
+            finally:
+                returned.set()
+
+        with (
+            mock.patch(
+                "tensordict._base.serialization._snapshot_file_sources",
+                side_effect=blocked_snapshot,
+            ),
+            mock.patch("torch.cat", side_effect=blocked_copy),
+        ):
+            caller = threading.Thread(target=invoke)
+            caller.start()
+            try:
+                assert snapshot_started.wait(timeout=10)
+                assert snapshot_threads == [caller.ident]
+                assert not returned.is_set(), "future returned before the snapshot"
+                release_snapshot.set()
+                assert copies_started.wait(timeout=10), "copies did not run in parallel"
+                assert returned.wait(timeout=10), "future waited for the copies"
+                assert "error" not in outcome
+                future = outcome["future"]
+                assert not all(f.done() for f in future.futures)
+                source.names = ["after_return"]
+                source.set("added_after_return", torch.full((64,), 9.0))
+            finally:
+                release_snapshot.set()
+                release_copies.set()
+                caller.join(timeout=10)
+            assert not caller.is_alive()
+            saved = future.result()
+
+        loaded = TensorDict.from_consolidated(filename)
+        for td in (saved, loaded):
+            assert td.names == ["at_call"]
+            assert set(td.keys()) == {f"k{i}" for i in range(4)}
+            for index in range(4):
+                torch.testing.assert_close(
+                    td[f"k{index}"], torch.full((64,), float(3 - index))
+                )
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS, reason="Windows cannot replace a file while the source maps it"
+    )
+    @pytest.mark.parametrize("inplace", [False, True])
+    def test_consolidated_tensorclass_snapshot_return_early(self, tmp_path, inplace):
+        @tensorclass
+        class Sample:
+            a: torch.Tensor
+            b: torch.Tensor
+
+        filename = tmp_path / "td.bin"
+        original = TensorDict(
+            a=torch.zeros(4), b=torch.ones(4), batch_size=[4]
+        ).consolidate(filename=filename)
+        source = Sample(a=original["b"], b=original["a"], batch_size=[4])
+        started, release, returned = (
+            threading.Event(),
+            threading.Event(),
+            threading.Event(),
+        )
+        snapshot_file_sources = serialization_module._snapshot_file_sources
+        snapshot_threads = []
+        outcome = {}
+
+        def blocked_snapshot(values, indices):
+            snapshot_threads.append(threading.get_ident())
+            started.set()
+            if not release.wait(timeout=30):
+                raise TimeoutError("snapshot was not released")
+            return snapshot_file_sources(values, indices)
+
+        def invoke():
+            try:
+                outcome["future"] = source.consolidate(
+                    filename=filename, num_threads=4, return_early=True, inplace=inplace
+                )
+            except Exception as error:
+                outcome["error"] = error
+            finally:
+                returned.set()
+
+        with mock.patch(
+            "tensordict._base.serialization._snapshot_file_sources",
+            side_effect=blocked_snapshot,
+        ):
+            caller = threading.Thread(target=invoke)
+            caller.start()
+            try:
+                assert started.wait(timeout=10)
+                assert snapshot_threads == [caller.ident]
+                assert not returned.is_set(), "future returned before the snapshot"
+            finally:
+                release.set()
+                caller.join(timeout=10)
+            assert not caller.is_alive()
+            assert "error" not in outcome
+            saved = outcome["future"].result()
+        assert isinstance(saved, Sample)
+        assert (saved is source) is inplace
+        torch.testing.assert_close(saved.a, torch.ones(4))
+        torch.testing.assert_close(saved.b, torch.zeros(4))
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS, reason="Windows cannot replace a file while the source maps it"
+    )
+    def test_consolidated_tensorclass_snapshot_failure_before_future(self, tmp_path):
+        @tensorclass
+        class Sample:
+            a: torch.Tensor
+            b: torch.Tensor
+
+        filename = tmp_path / "td.bin"
+        original = TensorDict(
+            a=torch.zeros(4), b=torch.ones(4), batch_size=[4]
+        ).consolidate(filename=filename)
+        source = Sample(a=original["b"], b=original["a"], batch_size=[4])
+        with mock.patch(
+            "tensordict._base.serialization.tempfile.TemporaryFile",
+            side_effect=OSError("snapshot unavailable"),
+        ):
+            with pytest.raises(OSError, match="snapshot unavailable"):
+                source.consolidate(filename=filename, num_threads=4, return_early=True)
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS, reason="Windows cannot replace a file while the source maps it"
+    )
+    def test_consolidated_file_snapshot_future_copy_failure(self, tmp_path):
+        filename = tmp_path / "td.bin"
+        original = TensorDict(
+            a=torch.zeros(4), b=torch.ones(4), batch_size=[4]
+        ).consolidate(filename=filename)
+        source = TensorDict(a=original["b"], b=original["a"], batch_size=[4])
+        cat = torch.cat
+
+        def fail_copy(*args, **kwargs):
+            if kwargs.get("out") is not None:
+                raise RuntimeError("copy failed")
+            return cat(*args, **kwargs)
+
+        with mock.patch("torch.cat", side_effect=fail_copy):
+            future = source.consolidate(
+                filename=filename, num_threads=4, return_early=True
+            )
+            with pytest.raises(RuntimeError, match="copy failed"):
+                future.result()
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS, reason="Windows cannot replace a file while the source maps it"
+    )
+    def test_consolidated_file_snapshot_inplace_future_locks_source(self, tmp_path):
+        filename = tmp_path / "td.bin"
+        original = TensorDict(
+            a=torch.zeros(4), b=torch.ones(4), batch_size=[4], names=["at_call"]
+        ).consolidate(filename=filename)
+        source = TensorDict(
+            a=original["b"], b=original["a"], batch_size=[4], names=["at_call"]
+        )
+        future = source.consolidate(
+            filename=filename, num_threads=4, return_early=True, inplace=True
+        )
+        assert source.is_locked
+        with pytest.raises(RuntimeError):
+            source.set("added_after_return", torch.zeros(4))
+        source.names = ["after_return"]
+        assert future.result() is source
+        loaded = TensorDict.from_consolidated(filename)
+        assert loaded.names == ["at_call"]
+        torch.testing.assert_close(loaded["a"], torch.ones(4))
+        torch.testing.assert_close(loaded["b"], torch.zeros(4))
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS, reason="Windows cannot replace a file while the source maps it"
+    )
+    def test_consolidated_file_snapshot_future_preserves_inference_mode(self, tmp_path):
+        filename = tmp_path / "td.bin"
+        original = TensorDict(
+            a=torch.zeros(4), b=torch.ones(4), batch_size=[4]
+        ).consolidate(filename=filename)
+        source = TensorDict(a=original["b"], b=original["a"], batch_size=[4])
+        observed = []
+        caller = threading.get_ident()
+        cat = torch.cat
+
+        def inspect_cat(*args, **kwargs):
+            if kwargs.get("out") is not None:
+                observed.append(
+                    (threading.get_ident(), torch.is_inference_mode_enabled())
+                )
+            return cat(*args, **kwargs)
+
+        with torch.inference_mode(), mock.patch("torch.cat", side_effect=inspect_cat):
+            saved = source.consolidate(
+                filename=filename, num_threads=4, return_early=True
+            ).result()
+            control = TensorDict(a=torch.ones(4), batch_size=[4]).consolidate(
+                filename=tmp_path / "control.bin"
+            )
+        assert torch.is_inference(saved["a"]) == torch.is_inference(control["a"])
+        assert any(thread_id != caller for thread_id, _ in observed)
+        assert all(enabled for _, enabled in observed)
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS, reason="Windows cannot replace a file while the source maps it"
+    )
+    def test_consolidated_file_snapshot_future_preserves_no_grad(self, tmp_path):
+        filename = tmp_path / "td.bin"
+        original = TensorDict(a=torch.zeros(4), batch_size=[]).consolidate(
+            filename=filename
+        )
+        grad_source = torch.arange(8.0, requires_grad=True)[::2]
+        source = TensorDict(a=original["a"], b=grad_source, batch_size=[])
+        observed = []
+        caller = threading.get_ident()
+        cat = torch.cat
+
+        def inspect_cat(*args, **kwargs):
+            if kwargs.get("out") is not None:
+                observed.append((threading.get_ident(), torch.is_grad_enabled()))
+            return cat(*args, **kwargs)
+
+        with torch.no_grad(), mock.patch("torch.cat", side_effect=inspect_cat):
+            saved = source.consolidate(
+                filename=filename, num_threads=4, return_early=True
+            ).result()
+        torch.testing.assert_close(saved["b"], torch.arange(8.0)[::2])
+        assert not saved["b"].requires_grad
+        assert any(thread_id != caller for thread_id, _ in observed)
+        assert not any(enabled for _, enabled in observed)
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS, reason="Windows cannot replace a file while the source maps it"
+    )
+    def test_consolidated_file_snapshot_future_respects_torch_function_mode(
+        self, tmp_path
+    ):
+        filename = tmp_path / "td.bin"
+        original = TensorDict(
+            a=torch.zeros(4), b=torch.ones(4), batch_size=[4]
+        ).consolidate(filename=filename)
+        source = TensorDict(a=original["b"], b=original["a"], batch_size=[4])
+
+        class RejectFromFile(torch.overrides.TorchFunctionMode):
+            def __torch_function__(self, func, types, args=(), kwargs=None):
+                if func is torch.from_file:
+                    raise RuntimeError("from_file intercepted")
+                return func(*args, **(kwargs or {}))
+
+        with RejectFromFile():
+            with pytest.raises(RuntimeError, match="from_file intercepted"):
+                source.consolidate(
+                    filename=filename, num_threads=4, return_early=True
+                ).result()
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS, reason="Windows cannot replace a file while the source maps it"
+    )
+    def test_consolidated_file_snapshot_future_respects_torch_dispatch_mode(
+        self, tmp_path
+    ):
+        filename = tmp_path / "td.bin"
+        original = TensorDict(
+            a=torch.zeros(4), b=torch.ones(4), batch_size=[4]
+        ).consolidate(filename=filename)
+        source = TensorDict(a=original["b"], b=original["a"], batch_size=[4])
+
+        class RejectFromFile(TorchDispatchMode):
+            def __torch_dispatch__(self, func, types, args=(), kwargs=None):
+                if func is torch.ops.aten.from_file.default:
+                    raise RuntimeError("from_file intercepted")
+                return func(*args, **(kwargs or {}))
+
+        with RejectFromFile():
+            with pytest.raises(RuntimeError, match="from_file intercepted"):
+                source.consolidate(
+                    filename=filename, num_threads=4, return_early=True
+                ).result()
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS, reason="Windows cannot replace a file while the source maps it"
+    )
+    def test_consolidated_file_snapshot_respects_thread_local_dispatch_mode(
+        self, tmp_path
+    ):
+        # Isolate PyTorch's process-global auxiliary flag from the test runner.
+        program = textwrap.dedent(
+            """\
+            import sys
+            import threading
+            import torch
+            from tensordict import TensorDict
+            from torch.utils._python_dispatch import TorchDispatchMode
+
+            class PassMode(TorchDispatchMode):
+                def __torch_dispatch__(self, func, types, args=(), kwargs=None):
+                    return func(*args, **(kwargs or {}))
+
+            class RejectFromFile(PassMode):
+                def __torch_dispatch__(self, func, types, args=(), kwargs=None):
+                    if func is torch.ops.aten.from_file.default:
+                        raise RuntimeError("from_file intercepted")
+                    return super().__torch_dispatch__(func, types, args, kwargs)
+
+            filename = sys.argv[1]
+            original = TensorDict(a=torch.zeros(4), b=torch.ones(4), batch_size=[4]).consolidate(filename=filename)
+            source = TensorDict(a=original["b"], b=original["a"], batch_size=[4])
+            first_entered, second_entered, first_exited = (threading.Event() for _ in range(3))
+            outcome = []
+
+            def first():
+                with PassMode():
+                    first_entered.set()
+                    assert second_entered.wait(10)
+                first_exited.set()
+
+            def second():
+                assert first_entered.wait(10)
+                with RejectFromFile():
+                    second_entered.set()
+                    assert first_exited.wait(10)
+                    try:
+                        source.consolidate(filename=filename, num_threads=4, return_early=True).result()
+                    except RuntimeError as error:
+                        outcome.append(str(error))
+
+            threads = [threading.Thread(target=first), threading.Thread(target=second)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(20)
+            assert all(not thread.is_alive() for thread in threads)
+            assert outcome == ["from_file intercepted"], outcome
+            """
+        )
+        completed = subprocess.run(
+            [sys.executable, "-c", program, str(tmp_path / "td.bin")],
+            capture_output=True,
+            text=True,
+            timeout=40,
+        )
+        assert completed.returncode == 0, completed.stderr
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS, reason="Windows cannot replace a file while a result maps it"
+    )
+    def test_consolidated_file_stale_refresh_same_schema(self, tmp_path):
+        # A newer save with the same schema is still a different checkpoint.
+        filename = tmp_path / "td.bin"
+        previous = TensorDict(a=torch.zeros(4), batch_size=[4]).consolidate(
+            filename=filename
+        )
+        TensorDict(a=torch.ones(4), batch_size=[4]).consolidate(filename=filename)
+        previous.names = ["stale"]
+        with pytest.warns(UserWarning, match="writes nothing"):
+            assert previous.consolidate(filename=filename) is previous
+        loaded = TensorDict.from_consolidated(filename)
+        assert loaded.names == [None]
+        torch.testing.assert_close(loaded["a"], torch.ones(4))
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS, reason="Windows cannot replace a file while a result maps it"
+    )
+    def test_consolidated_file_stale_refresh_after_other_process(self, tmp_path):
+        filename = tmp_path / "td.bin"
+        previous = TensorDict(a=torch.zeros(4), batch_size=[4]).consolidate(
+            filename=filename
+        )
+        old_stat = filename.stat()
+        subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import sys, torch; from tensordict import TensorDict; "
+                "TensorDict(a=torch.ones(4), batch_size=[4]).consolidate(filename=sys.argv[1])",
+                str(filename),
+            ],
+            check=True,
+            timeout=60,
+        )
+        new_stat = filename.stat()
+        assert (old_stat.st_dev, old_stat.st_ino, old_stat.st_size) == (
+            new_stat.st_dev,
+            new_stat.st_ino,
+            new_stat.st_size,
+        )
+        previous.names = ["stale"]
+        before = filename.read_bytes()
+        with pytest.warns(UserWarning, match="writes nothing"):
+            previous.consolidate(filename=filename)
+        assert filename.read_bytes() == before
+        loaded = TensorDict.from_consolidated(filename)
+        assert loaded.names == [None]
+        torch.testing.assert_close(loaded["a"], torch.ones(4))
+
+    def test_consolidated_file_refresh_after_inplace_leaf_write(self, tmp_path):
+        filename = tmp_path / "td.bin"
+        td = TensorDict(a=torch.zeros(4), batch_size=[4]).consolidate(filename=filename)
+        td["a"].fill_(3)
+        td.names = ["rows"]
+        td.consolidate(filename=filename)
+        loaded = TensorDict.from_consolidated(filename)
+        assert loaded.names == ["rows"]
+        torch.testing.assert_close(loaded["a"], torch.full((4,), 3.0))
+
+    def test_consolidated_file_refresh_rejects_reencoded_footer(self, tmp_path):
+        filename = tmp_path / "td.bin"
+        td = TensorDict(a=torch.zeros(4), batch_size=[4]).consolidate(filename=filename)
+        raw = filename.read_bytes()
+        metadata_size = int.from_bytes(raw[-8:], byteorder=sys.byteorder, signed=True)
+        metadata_start = len(raw) - 8 - metadata_size
+        metadata = json.loads(raw[metadata_start:-8])
+        reencoded = json.dumps(metadata, separators=(",", ":")).encode()
+        assert len(reencoded) <= metadata_size
+        with open(filename, "r+b") as handle:
+            handle.seek(metadata_start)
+            handle.write(reencoded.ljust(metadata_size))
+        before = filename.read_bytes()
+        td.names = ["stale"]
+        with pytest.warns(UserWarning, match="writes nothing"):
+            td.consolidate(filename=filename)
+        assert filename.read_bytes() == before
+        assert TensorDict.from_consolidated(filename).names == [None]
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS, reason="Windows cannot unlink a file while a result maps it"
+    )
+    def test_consolidated_file_stale_refresh_path_becomes_directory(self, tmp_path):
+        filename = tmp_path / "td.bin"
+        previous = TensorDict(a=torch.zeros(4), batch_size=[4]).consolidate(
+            filename=filename
+        )
+        filename.unlink()
+        filename.mkdir()
+        with pytest.warns(UserWarning, match="writes nothing"):
+            assert previous.consolidate(filename=filename) is previous
+        assert filename.is_dir()
 
     @pytest.mark.parametrize("existing", [False, True])
     def test_consolidated_file_overwrite_empty(self, tmp_path, existing):

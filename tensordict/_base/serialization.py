@@ -13,9 +13,12 @@ mixin imports in ``tensordict/base.py`` gives the other rules.
 
 from __future__ import annotations
 
+import bisect
 import collections
 import concurrent.futures
+import errno
 import json
+import mmap
 import os.path
 import shutil
 import sys
@@ -886,11 +889,12 @@ class _Serialization:
                 are replaced by the views, and ``self`` is returned. Defaults
                 to ``False``.
             return_early (bool, optional): if ``True`` and ``num_threads > 1``,
-                returns a :class:`~tensordict.utils.TensorDictFuture` at once,
+                returns a :class:`~tensordict.utils.TensorDictFuture` after setup,
                 while the threads copy the leaves: ``future.result()`` waits
-                for them and returns the tensordict. Not supported with
-                ``use_buffer=True`` or ``non_blocking=True``. Defaults to
-                ``False``.
+                for them and returns the tensordict. A file-source snapshot,
+                when needed, completes before the future is returned. Not
+                supported with ``use_buffer=True`` or ``non_blocking=True``.
+                Defaults to ``False``.
             use_buffer (bool, optional): if ``True`` and ``filename`` is given,
                 the leaves are copied into a buffer in shared memory, which is
                 written to the file at the end. This can be faster on a remote
@@ -920,6 +924,20 @@ class _Serialization:
             recorded here: setting the batch size of a nested tensordict, as in
             ``td["nested"].batch_size = ...``, may not update it until
             ``consolidate()`` is called again.
+
+            When an existing file may also back an input leaf, the affected
+            leaves are first copied to a file in the system temporary directory
+            before the output is written. This needs temporary space for those
+            leaves and their alignment padding; the temporary directory may
+            itself be memory-backed. This snapshot completes before a
+            ``return_early`` future is returned and may delay that return. A
+            result from an earlier completed file write cannot refresh the
+            metadata after a newer write: it warns and writes nothing. This
+            check does not synchronize concurrent writers.
+
+            Files contain a random generation marker in the trailing JSON
+            whitespace. Older readers can still parse the metadata, but two
+            saves of identical data need not be byte-for-byte identical.
 
         Examples:
             >>> import pickle
@@ -956,23 +974,29 @@ class _Serialization:
             self._update_consolidated_metadata()
             consolidated = self._consolidated
             storage = consolidated["storage"]
+            refreshed = False
             if (
                 filename is not None
                 and consolidated.get("filename") == Path(filename).resolve()
                 and consolidated["file_id"] == _file_id(filename)
             ):
-                _write_consolidated_metadata(
+                refreshed = _write_consolidated_metadata(
                     filename,
                     consolidated["metadata"],
                     data_size=consolidated["storage"].numel(),
+                    consolidated=consolidated,
                 )
-                consolidated["file_id"] = _file_id(filename)
-            elif filename is not None:
+            if filename is not None and not refreshed:
                 if consolidated.get("filename") is None:
                     reason = (
                         "it has no file of its own to rewrite (it was "
                         "consolidated in memory or loaded with "
                         "from_consolidated)"
+                    )
+                elif consolidated["filename"] == Path(filename).resolve():
+                    reason = (
+                        "the file it was consolidated into is missing, replaced, "
+                        "or has been rewritten since"
                     )
                 else:
                     reason = "only the file it was consolidated into is rewritten"
@@ -1028,6 +1052,7 @@ class _Serialization:
             requires_metadata=filename is not None or metadata, dtype=None
         )
         filesize = sum(flat_size)
+        snapshot_indices = []
         device = torch.device(device) if device is not None else None
         if filename is None:
             storage = torch.empty(
@@ -1042,8 +1067,10 @@ class _Serialization:
                 storage.share_memory_()
         else:
             # Represent the json metadata as a tensor
+            file_generation = _new_consolidated_file_generation()
             metadata_dict_json = torch.as_tensor(
-                bytearray(_consolidated_metadata_json(metadata_dict)), dtype=torch.uint8
+                bytearray(_consolidated_metadata_json(metadata_dict) + file_generation),
+                dtype=torch.uint8,
             )
             len_metadata = torch.tensor(
                 [metadata_dict_json.numel()], dtype=torch.int64
@@ -1055,7 +1082,22 @@ class _Serialization:
                 )
             suffix = len_metadata.numel() + metadata_dict_json.numel()
             if not use_buffer:
+                previous_file_id = _file_id(filename)
                 _replace_larger_file(filename, filesize + suffix)
+                if previous_file_id is not None and previous_file_id == _file_id(
+                    filename
+                ):
+                    snapshot_indices = _file_snapshot_indices(list(flat_dict.values()))
+                if snapshot_indices:
+                    if return_early and (num_threads or 0) > 1 and non_blocking:
+                        raise NotImplementedError(
+                            "return_early=True is not supported with non_blocking=True in `consolidate`: "
+                            "the storage cannot be synchronized once the copies are done."
+                        )
+                    values = _snapshot_file_sources(
+                        list(flat_dict.values()), snapshot_indices
+                    )
+                    flat_dict = dict(zip(flat_dict, values, strict=True))
                 total_storage = torch.from_file(
                     str(filename),
                     size=filesize + suffix,
@@ -1189,8 +1231,20 @@ class _Serialization:
                         chunks.append((chunk_start, idx))
                     chunk_start = idx
             executor = _get_shared_executor(num_threads)
+            copy_chunk = _copy_chunk
+            if snapshot_indices:
+                inference_mode = torch.is_inference_mode_enabled()
+                grad_enabled = torch.is_grad_enabled()
+
+                def copy_chunk(start_idx, stop_idx):
+                    with (
+                        torch.inference_mode(inference_mode),
+                        torch.set_grad_enabled(grad_enabled),
+                    ):
+                        return _copy_chunk(start_idx, stop_idx)
+
             futures = [
-                executor.submit(_copy_chunk, start_idx, stop_idx)
+                executor.submit(copy_chunk, start_idx, stop_idx)
                 for start_idx, stop_idx in chunks
             ]
             if return_early:
@@ -1310,6 +1364,7 @@ class _Serialization:
                     f.write(total_storage._handler.buffer)
             result._consolidated["filename"] = Path(filename).resolve()
             result._consolidated["file_id"] = _file_id(filename)
+            result._consolidated["file_generation"] = file_generation
         if consolidate_futures is not None:
             return TensorDictFuture(consolidate_futures, result)
         return result
@@ -2686,17 +2741,161 @@ def _replace_larger_file(filename, size: int) -> None:
         os.unlink(tmp)
 
 
-def _write_consolidated_metadata(filename, metadata: dict, data_size: int) -> None:
-    """Rewrites the metadata that follows the ``data_size`` bytes of leaves in a consolidated file."""
-    metadata_json = _consolidated_metadata_json(metadata)
-    # Pad a shorter json with spaces rather than shrink the file, which the
-    # tensordict maps
-    metadata_json = metadata_json.ljust(os.path.getsize(filename) - data_size - 8)
-    len_metadata = torch.tensor([len(metadata_json)], dtype=torch.int64)
-    with open(filename, "r+b") as f:
+def _file_snapshot_indices(values: list[torch.Tensor]) -> list[int]:
+    """Finds leaves that may map the destination file.
+
+    PyTorch file mappings are non-resizable, including private mappings whose
+    storage does not expose a filename. On Linux, only storages completely
+    covered by anonymous mappings can be excluded. File-backed mappings stay
+    candidates: overlay filesystems can report different device and inode
+    identities in ``stat`` and ``/proc/self/maps`` for the same file.
+    """
+    candidates = [
+        index
+        for index, value in enumerate(values)
+        if not value.is_nested
+        and value.device.type == "cpu"
+        and value.numel()
+        and not value.untyped_storage().resizable()
+    ]
+    if not candidates or not sys.platform.startswith("linux"):
+        return candidates
+    try:
+        regions = []
+        with open("/proc/self/maps", encoding="utf-8") as mappings:
+            for line in mappings:
+                address, _, _, device, inode, *_ = line.split(maxsplit=5)
+                start, end = (int(part, 16) for part in address.split("-"))
+                regions.append((start, end, device == "00:00" and int(inode) == 0))
+        if not regions:
+            return candidates
+        region_starts = [region[0] for region in regions]
+        indices = []
+        for index in candidates:
+            storage = values[index].untyped_storage()
+            start = storage.data_ptr()
+            end = start + storage.nbytes()
+            cursor = start
+            region_index = bisect.bisect_right(region_starts, cursor) - 1
+            while cursor < end and 0 <= region_index < len(regions):
+                begin, stop, anonymous = regions[region_index]
+                if begin > cursor or stop <= cursor or not anonymous:
+                    break
+                cursor = min(stop, end)
+                region_index += 1
+            if cursor < end:
+                indices.append(index)
+        return indices
+    except (OSError, ValueError, OverflowError, RuntimeError):
+        return candidates
+
+
+def _snapshot_file_sources(
+    values: list[torch.Tensor], indices: list[int]
+) -> list[torch.Tensor]:
+    """Snapshots potentially file-backed leaves to an anonymous temporary file.
+
+    Only the logical leaves are copied, not their potentially much larger
+    backing storages. The returned tensor views keep the temporary mapping
+    alive until the copies into the destination have finished.
+    """
+    offsets = []
+    size = 0
+    for index in indices:
+        value = values[index]
+        alignment = max(8, value.element_size())
+        size += (-size) % alignment
+        offsets.append(size)
+        size += value.numel() * value.element_size()
+
+    with tempfile.TemporaryFile() as handle:
+        allocated = False
+        if hasattr(os, "posix_fallocate"):
+            try:
+                os.posix_fallocate(handle.fileno(), 0, size)
+                allocated = True
+            except OSError as error:
+                if error.errno not in (errno.EINVAL, errno.ENOSYS, errno.ENOTSUP):
+                    raise
+        if not allocated:
+            # Allocate before mapping so a full temporary filesystem raises an
+            # exception rather than faulting while a mapped page is written.
+            block = bytes(min(size, 1024 * 1024))
+            remaining = size
+            while remaining:
+                written = handle.write(block[:remaining])
+                if not written:
+                    raise OSError("Could not allocate the consolidation snapshot")
+                remaining -= written
+            handle.flush()
+        mapping = mmap.mmap(handle.fileno(), size, access=mmap.ACCESS_WRITE)
+        buffer = torch.frombuffer(mapping, dtype=torch.uint8)
+        result = list(values)
+        with torch.no_grad():
+            for index, offset in zip(indices, offsets):
+                value = values[index]
+                length = value.numel() * value.element_size()
+                snapshot = (
+                    buffer[offset : offset + length].view(value.dtype).view(value.shape)
+                )
+                snapshot.copy_(value)
+                result[index] = snapshot
+    return result
+
+
+def _new_consolidated_file_generation() -> bytes:
+    """Returns a random, JSON-compatible whitespace marker for a file write.
+
+    Older readers parse the metadata with ``json.loads``, which ignores this
+    trailing whitespace. Each bit of the random token is encoded as a space
+    or tab so it remains readable by those readers without changing the schema.
+    """
+    token = os.urandom(16)
+    return (
+        b"\n\t \t\n"
+        + bytes(9 if byte & (1 << bit) else 32 for byte in token for bit in range(8))
+        + b"\n"
+    )
+
+
+def _write_consolidated_metadata(
+    filename, metadata: dict, data_size: int, consolidated: dict
+) -> bool:
+    """Refreshes metadata only while the file still has this result's generation."""
+    expected_generation = consolidated.get("file_generation")
+    if expected_generation is None:
+        return False
+    try:
+        f = open(filename, "r+b")
+    except FileNotFoundError:
+        return False
+    with f:
+        stat = os.fstat(f.fileno())
+        if (stat.st_dev, stat.st_ino, stat.st_size) != consolidated[
+            "file_id"
+        ] or stat.st_size < len(expected_generation) + 8:
+            return False
+        f.seek(-8 - len(expected_generation), os.SEEK_END)
+        if f.read(len(expected_generation)) != expected_generation:
+            return False
+        generation = _new_consolidated_file_generation()
+        metadata_json = _consolidated_metadata_json(metadata)
+        # Keep a shorter JSON padded to the old size; put the marker last so
+        # it can be checked without parsing the user metadata.
+        metadata_size = max(
+            stat.st_size - data_size - 8, len(metadata_json) + len(generation)
+        )
+        metadata_json = (
+            metadata_json.ljust(metadata_size - len(generation)) + generation
+        )
         f.seek(data_size)
         f.write(metadata_json)
-        f.write(len_metadata.view(torch.uint8).numpy().tobytes())
+        f.write(metadata_size.to_bytes(8, byteorder=sys.byteorder, signed=True))
+        f.flush()
+        stat = os.fstat(f.fileno())
+        consolidated["file_id"] = (stat.st_dev, stat.st_ino, stat.st_size)
+        consolidated["file_generation"] = generation
+    return True
 
 
 def _update_consolidated_metadata(td, metadata: dict) -> None:
