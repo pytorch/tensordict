@@ -789,9 +789,9 @@ def _finish_killed_append(prefix: Path) -> None:
 
     A killed append leaves ``.meta.json.append.tmp`` files. They were all
     complete before the top ``meta.json`` was replaced, which was replaced
-    first. If the top temporary file is gone and the top ``meta.json`` has
-    the number of rows of every temporary file, rename each one over the
-    ``meta.json`` next to it; otherwise delete every one.
+    first. If the top temporary file is gone and every temporary file is the
+    ``meta.json`` next to it with the number of rows of the top ``meta.json``,
+    rename each one over that ``meta.json``; otherwise delete every one.
     """
     import tensordict.base
 
@@ -819,15 +819,19 @@ def _finish_killed_append(prefix: Path) -> None:
     if not (top / tmp_name).exists():
         # A rollback cut short can also delete the top temporary file and
         # leave others over old meta.json files. Rename them only if the top
-        # meta.json already has their number of rows.
+        # meta.json already has their number of rows. A save over the
+        # directory keeps them too, next to new meta.json files: rename them
+        # only if each one is the meta.json next to it with new row counts.
         try:
             num_rows = json.loads((top / "meta.json").read_bytes())["shape"][0]
             replaced = all(
-                json.loads(tmp_file.read_bytes())["shape"][0] == num_rows
+                json.loads(tmp_file.read_bytes())
+                == _with_num_rows(tmp_file.with_name("meta.json"), num_rows)
                 for tmp_file in leftovers
             )
-        except ValueError:
-            # An incomplete temporary file: nothing was replaced.
+        except (FileNotFoundError, LookupError, ValueError):
+            # An incomplete temporary file, a missing meta.json, or one with
+            # no batch dimension: nothing was replaced.
             pass
     if replaced:
         for tmp_file in leftovers:
@@ -836,6 +840,16 @@ def _finish_killed_append(prefix: Path) -> None:
         # The top one last, so that a kill here leaves it for the next call.
         for tmp_file in reversed(leftovers):
             os.remove(tmp_file)
+
+
+def _with_num_rows(metadata_file: Path, num_rows: int) -> dict:
+    """Reads a ``meta.json`` with the numbers of rows that append_memmap sets."""
+    metadata = json.loads(metadata_file.read_bytes())
+    metadata["shape"][0] = num_rows
+    for entry in metadata.values():
+        if isinstance(entry, dict) and "dtype" in entry and "shape" in entry:
+            entry["shape"][0] = num_rows
+    return metadata
 
 
 def _check_append(saved, rows, key, leaves, metadata_files) -> None:

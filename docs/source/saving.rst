@@ -263,13 +263,16 @@ A killed append can leave its new ``meta.json`` files behind, as
 writes every temporary file before it replaces any ``meta.json``, and it
 replaces the top one first: the one in the directory itself, or in its
 ``_tensordict`` subdirectory for a saved tensorclass. If
-``.meta.json.append.tmp`` is gone from the top directory and the top
-``meta.json`` already has the number of rows of every temporary file, the
-append got past its first replacement and every temporary file is
-complete: renaming each one over the ``meta.json`` next to it completes the
-append. Otherwise no ``meta.json`` was replaced, or the rollback of a
-failed append put the old ones back, and the temporary files may be
-incomplete: they must all be deleted, and the directory holds the old rows.
+``.meta.json.append.tmp`` is gone from the top directory and every
+temporary file is the ``meta.json`` next to it with the number of rows of
+the top ``meta.json`` (in its shape and in the shape of each of its
+leaves), the append got past its first replacement and every temporary
+file is complete: renaming each one over the ``meta.json`` next to it
+completes the append. Otherwise no ``meta.json`` was replaced, the rollback
+of a failed append put the old ones back, or the directory was saved again
+since the append was killed, and the temporary files may be incomplete or
+stale: they must all be deleted, and the ``meta.json`` files stay as they
+are.
 The next ``append_memmap`` to the directory applies this rule before it
 appends, so you can append again with no manual step.
 
@@ -285,15 +288,26 @@ doesn't for every tree:
     saved = root / "particles"  # or its "_tensordict" for a tensorclass
     leftovers = list(saved.rglob(".meta.json.append.tmp"))
 
-    def num_rows(path):
-        try:
-            return json.loads(path.read_bytes())["shape"][0]
-        except ValueError:  # an incomplete temporary file
-            return None
+    def with_num_rows(path, num_rows):
+        # The meta.json at path, with the numbers of rows an append sets.
+        metadata = json.loads(path.read_bytes())
+        metadata["shape"][0] = num_rows
+        for entry in metadata.values():
+            if isinstance(entry, dict) and {"dtype", "shape"} <= entry.keys():
+                entry["shape"][0] = num_rows
+        return metadata
 
-    replaced = not (saved / ".meta.json.append.tmp").exists() and all(
-        num_rows(tmp) == num_rows(saved / "meta.json") for tmp in leftovers
-    )
+    try:
+        num_rows = json.loads((saved / "meta.json").read_bytes())["shape"][0]
+        replaced = not (saved / ".meta.json.append.tmp").exists() and all(
+            json.loads(tmp.read_bytes())
+            == with_num_rows(tmp.with_name("meta.json"), num_rows)
+            for tmp in leftovers
+        )
+    except (FileNotFoundError, LookupError, ValueError):
+        # An incomplete temporary file, a missing meta.json, or no batch
+        # dimension.
+        replaced = False
     for tmp in leftovers:
         if replaced:
             os.replace(tmp, tmp.with_name("meta.json"))
