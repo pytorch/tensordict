@@ -866,8 +866,10 @@ class _Serialization:
                 ``use_buffer=False``, an existing file that is not empty is
                 replaced by a new file, and the tensordicts that map the old
                 file keep their data; its disk space is freed once none of
-                them maps it. Defaults to ``None``, which keeps the storage in
-                memory.
+                them maps it. With ``use_buffer=True``, or on Windows while the
+                file is open (for example mapped by a tensordict), the file
+                is written in place. Defaults to ``None``, which keeps the
+                storage in memory.
 
         Keyword Args:
             num_threads (int, optional): the number of threads that copy the
