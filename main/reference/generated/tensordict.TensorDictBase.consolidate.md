@@ -32,11 +32,14 @@ Parameters:
 **filename** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**Path**,**optional*) - a file to use as the storage. The
 leaves are views into a memory map of the file, and the
 metadata is written after them, so that
-[`from_consolidated()`](tensordict.TensorDictBase.from_consolidated.html#tensordict.TensorDictBase.from_consolidated) can read the file back. An
-existing file is written in place, unless it is larger than
-the new one and `use_buffer=False`: it is then replaced by a
-new file, and the tensordicts that map the old file keep their
-data. Defaults to `None`, which keeps the storage in memory.
+[`from_consolidated()`](tensordict.TensorDictBase.from_consolidated.html#tensordict.TensorDictBase.from_consolidated) can read the file back. With
+`use_buffer=False`, an existing file that is not empty is
+replaced by a new file, and the tensordicts that map the old
+file keep their data; its disk space is freed once none of
+them maps it. With `use_buffer=True`, or on Windows while the
+file is open (for example mapped by a tensordict), the file
+is written in place. Defaults to `None`, which keeps the
+storage in memory.
 
 Keyword Arguments:
 
