@@ -478,7 +478,21 @@ class _H5Backend(_PersistentBackend):
         except Exception:
             # no attribute (an older or a foreign file), or not ours
             return None
-        return metadata if isinstance(metadata, dict) else None
+        if not isinstance(metadata, dict):
+            return None
+        batch_size = metadata.get("batch_size")
+        names = metadata.get("names")
+        if batch_size is not None and not (
+            isinstance(batch_size, list)
+            and all(isinstance(size, int) and size >= 0 for size in batch_size)
+        ):
+            return None
+        if names is not None and not (
+            isinstance(names, list)
+            and all(name is None or isinstance(name, str) for name in names)
+        ):
+            return None
+        return metadata
 
     def encode_non_tensor(self, value):
         if isinstance(value, str):
