@@ -1483,12 +1483,6 @@ class TestGeneric:
     @pytest.mark.skipif(
         _IS_WINDOWS, reason="Windows cannot replace a file while a result maps it"
     )
-    @pytest.mark.xfail(
-        strict=True,
-        raises=AssertionError,
-        reason="#3197: an older result writes its metadata over a newer file of "
-        "the same size",
-    )
     def test_consolidated_file_stale_refresh_same_size(self, tmp_path):
         # refresh an older checkpoint's metadata after a newer one was saved
         filename = tmp_path / "td.bin"
@@ -1496,7 +1490,8 @@ class TestGeneric:
             filename=filename
         )
         TensorDict(c=torch.ones(4), batch_size=[4]).consolidate(filename=filename)
-        previous.consolidate(filename=filename)
+        with pytest.warns(UserWarning, match="writes nothing"):
+            previous.consolidate(filename=filename)
         loaded = TensorDict.from_consolidated(filename)
         assert list(loaded.keys()) == ["c"]
         torch.testing.assert_close(loaded["c"], torch.ones(4))
