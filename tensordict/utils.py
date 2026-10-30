@@ -2187,6 +2187,12 @@ def _stacked_repr(shape, tensors) -> str | None:
         dtype = functools.reduce(torch.promote_types, [t.dtype for t in tensors])
     except RuntimeError:
         return None
+    # requires_grad reads every member: only when the print shows it.
+    flags = {}
+    if _REPR_OPTIONS["show_grad"]:
+        flags["requires_grad"] = torch.is_grad_enabled() and any(
+            t.requires_grad for t in tensors
+        )
     # torch.stack returns a new tensor, which is_shared() reports as shared
     # only on CUDA.
     return _get_repr_custom(
@@ -2195,7 +2201,7 @@ def _stacked_repr(shape, tensors) -> str | None:
         device,
         dtype,
         device.type == "cuda",
-        requires_grad=torch.is_grad_enabled() and any(t.requires_grad for t in tensors),
+        **flags,
         is_contiguous=True,
         is_view=False,
         storage_size=shape.numel() * dtype.itemsize,
@@ -2273,6 +2279,7 @@ def _stacked_leaf(td, key):
     The members that are h5 or zarr files give a :class:`_FileLeaf`.
     """
     from tensordict._lazy import _is_plain_tensor, LazyStackedTensorDict
+    from tensordict._td import TensorDict
     from tensordict.persistent import PersistentTensorDict
 
     if (
@@ -2284,9 +2291,12 @@ def _stacked_leaf(td, key):
         return None
     shapes, tensors = [], []
     for member in td.tensordicts:
-        if isinstance(member, LazyStackedTensorDict):
+        # A TensorDict member skips the two isinstance tests, which go through
+        # the ABC machinery and made the print of a lazy stack slower.
+        is_td = type(member) is TensorDict
+        if not is_td and isinstance(member, LazyStackedTensorDict):
             leaf = _stacked_leaf(member, key)
-        elif isinstance(member, PersistentTensorDict):
+        elif not is_td and isinstance(member, PersistentTensorDict):
             leaf = _file_leaf(member, key)
         else:
             tensor = member._get_str(key, None)
