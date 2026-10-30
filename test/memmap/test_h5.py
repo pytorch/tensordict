@@ -894,6 +894,83 @@ class TestH5Serialization:
         h5td.close()
 
     @pytest.mark.parametrize(
+        "root_attr,nested_attr,nested",
+        [
+            ('{"names": 5}', None, "tensor"),
+            ('{"names": true}', None, "tensor"),
+            ('{"names": "ab"}', None, "tensor"),
+            ('{"batch_size": 3}', None, "tensor"),
+            ('{"batch_size": [1e400]}', None, "tensor"),
+            ('{"batch_size": [3]}', '{"batch_size": 3}', "empty"),
+            ('{"batch_size": [3]}', '{"batch_size": 3}', "non_tensor"),
+            ('{"batch_size": [3]}', '{"batch_size": {"x": 1}}', "empty"),
+        ],
+        ids=[
+            "names_int",
+            "names_bool",
+            "names_str",
+            "batch_size_int",
+            "batch_size_float",
+            "nested_batch_size_int_empty",
+            "nested_batch_size_int_non_tensor",
+            "nested_batch_size_dict_empty",
+        ],
+    )
+    @pytest.mark.parametrize(
+        "from_h5,kwargs",
+        [
+            (PersistentTensorDict.from_h5, {}),
+            (PersistentTensorDict.from_h5, {"auto_batch_size": True}),
+            (PersistentTensorDict.from_h5, {"auto_batch_size": True, "batch_dims": 1}),
+            (TensorDict.from_h5, {}),
+        ],
+        ids=["default", "auto", "auto_batch_dims", "tensordict"],
+    )
+    def test_from_h5_ignores_malformed_stored_metadata(
+        self, tmp_path, root_attr, nested_attr, nested, from_h5, kwargs
+    ):
+        # #3263: a "__tensordict__" attribute whose values have the wrong types
+        # is ignored for its own group: the file loads, and warns, as without it
+        def load(path, root_attr, nested_attr):
+            with h5py.File(path, "w") as file:
+                file["a"] = np.zeros((3, 4), dtype=np.float32)
+                group = file.create_group("nested")
+                if nested != "empty":
+                    group["b"] = np.zeros((3, 2), dtype=np.float32)
+                if nested == "non_tensor":
+                    group["s"] = "hello"
+                if root_attr is not None:
+                    file.attrs["__tensordict__"] = root_attr
+                if nested_attr is not None:
+                    group.attrs["__tensordict__"] = nested_attr
+            with warnings.catch_warnings(record=True) as record:
+                warnings.simplefilter("always")
+                td = from_h5(path, **kwargs)
+            record = [
+                w for w in record if self._STORED_METADATA_WARNING in str(w.message)
+            ]
+            result = (
+                td.batch_size,
+                td.names,
+                td["nested"].batch_size,
+                td["nested"].names,
+                set(td.keys(True, True)),
+                len(record),
+            )
+            td.close()
+            return result
+
+        result = load(tmp_path / "malformed.h5", root_attr, nested_attr)
+        if nested_attr is None:
+            # the root attribute is malformed: no stored metadata is left
+            expected = load(tmp_path / "plain.h5", None, None)
+            assert result[-1] == 0
+        else:
+            # the well-formed root attribute keeps its meaning
+            expected = load(tmp_path / "plain.h5", root_attr, None)
+        assert result == expected
+
+    @pytest.mark.parametrize(
         "op_name,args,same_args",
         [
             ("reshape", (6,), (2, 3)),
