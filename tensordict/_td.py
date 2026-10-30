@@ -64,11 +64,13 @@ from tensordict.base import (
     _set_at_each_key,
     _set_subtensordict_type,
     _set_tensordict_type,
+    _SetMissingEntryError,
     _UNSET,
     _warn_empty_names,
     _warn_lazy_is_empty,
     _warn_scalar_over_non_tensor,
     _warn_set_at_cast,
+    _warn_set_creates_entry,
     _warn_update_inserts_whole_entry,
     _warn_update_keys_narrowed,
     _wrap_extra_state,
@@ -1729,6 +1731,15 @@ class TensorDict(TensorDictBase):
             )
         td = self._get_str(key[0], None)
         if td is None:
+            if inplace is True:
+                # set_ writes into an existing entry
+                if self._is_locked:
+                    raise _SetMissingEntryError(
+                        _KEY_ERROR.format(
+                            key[0], type(self).__name__, sorted(self.keys())
+                        )
+                    )
+                _warn_set_creates_entry()
             td = self._create_nested_str(key[0])
             inplace = False
         elif not _is_tensor_collection(type(td)):
@@ -3289,6 +3300,7 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
     _masking_on_dense_copy = True
     _memmap_inplace_unsupported = True
     _pin_memory_unsupported = True
+    _inplace_shape_ops_unsupported = True
     # td[key] = value writes into an existing entry of the source
     _setitem_key_inplace = BEST_ATTEMPT_INPLACE
 
@@ -3492,6 +3504,10 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
         parent = self._source
         td = parent._get_str(key[0], None)
         if td is None:
+            if inplace is True:
+                raise _SetMissingEntryError(
+                    _KEY_ERROR.format(key[0], type(self).__name__, sorted(self.keys()))
+                )
             td = parent.select()
             parent._set_str(
                 key[0], td, inplace=False, validated=True, non_blocking=non_blocking

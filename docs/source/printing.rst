@@ -100,6 +100,15 @@ also stacks a lazy leaf when one of its members is not contiguous (a
 ``channels_last`` tensor, for example), since the contiguity of the result
 depends on their strides.
 
+The detailed display prints the value of each non-tensor entry
+(:class:`~tensordict.NonTensorData`, :class:`~tensordict.NonTensorStack`) on
+every container, so it reads the non-tensor entries of an h5 or zarr file to
+print them. Their values are usually short strings, but a
+:class:`~tensordict.NonTensorStack` is read in full. On h5, a string entry
+prints as bytes (``data=b'text'``), and reading it emits the
+``FutureWarning`` about the type of h5 strings. The compact display prints
+these entries as ``NonTensorData`` or ``NonTensorStack`` and reads nothing.
+
 Choose what the display shows
 -----------------------------
 

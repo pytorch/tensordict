@@ -367,6 +367,15 @@ class _InplaceWriteError(ValueError, RuntimeError):
     """
 
 
+class _SetMissingEntryError(KeyError, RuntimeError):
+    """The error raised when :meth:`~TensorDictBase.set_` gets a nested key with a missing entry.
+
+    Subclasses KeyError, the type that :meth:`~TensorDictBase.set_` raises
+    for a missing key, and RuntimeError, which a locked tensordict raised
+    before for the same call (#3391).
+    """
+
+
 def _key_through_leaf_error(key: tuple, i: int, value: Any) -> _KeyThroughLeafError:
     """The error for reading ``key[i:]`` in ``value``, the leaf at ``key[i - 1]``."""
     rest = key[i] if len(key) == i + 1 else key[i:]
@@ -2552,6 +2561,31 @@ def _warn_update_invalid_key() -> None:
     )
 
 
+# Set to False while a lazy stack writes the members of a nested key with
+# set_, and to True once a member has warned, so that they warn once in all.
+_SET_MEMBERS_CALL = local()
+
+
+def _warn_set_creates_entry() -> None:
+    """Warns that ``set_`` creates the missing entry on the path of a nested key, until 0.17 (#3391)."""
+    if is_dynamo_compiling():
+        return
+    state = getattr(_SET_MEMBERS_CALL, "warned", None)
+    if state:
+        return
+    if state is False:
+        _SET_MEMBERS_CALL.warned = True
+    # Fixed text: the key would make Python warn again for each new value (#3232).
+    warnings.warn(
+        "set_() got a nested key whose parent entry is missing, and creates "
+        "it, while set_() raises a KeyError for any other missing key. "
+        "Starting with TensorDict 0.17, the default will change to raising a "
+        "KeyError. Use set() or td[key] = value to add an entry, or fix the key.",
+        FutureWarning,
+        stacklevel=_user_stacklevel(),
+    )
+
+
 # Set while update() writes the members of a lazy stack one by one, so that
 # they warn once in all, and while the nn modules write their outputs, so that
 # they do not warn (#3360).
@@ -2593,8 +2627,8 @@ def _warn_update_inserts_whole_entry(
 
     ``selection`` is ``_selection_trie(keys_to_update)``, which ``update``
     builds once per call. ``select`` and an update into an existing entry keep
-    only the listed keys. The 0.17 switch must keep the result of the
-    ``tensordict.nn`` calls, see ``_update_keeping_whole_entries``.
+    only the listed keys. The ``tensordict.nn`` calls get their own
+    warning and the same 0.17 switch, see ``_update_keeping_whole_entries``.
     """
     # the keys listed under key, pruned as update() prunes them at each level
     for part in key:
@@ -2645,6 +2679,8 @@ def _warn_update_inserts_whole_entry(
         return
     state = getattr(_UPDATE_MEMBERS_CALL, "warned", None)
     if state:
+        # _update_keeping_whole_entries warns for the nn module instead
+        _UPDATE_MEMBERS_CALL.kept_whole_entry = True
         return
     if state is False:
         _UPDATE_MEMBERS_CALL.warned = True
@@ -2665,21 +2701,34 @@ def _warn_update_inserts_whole_entry(
 def _update_keeping_whole_entries(
     dest: TensorCollection, source: Any, **kwargs: Any
 ) -> TensorCollection:
-    """``dest.update(source, **kwargs)`` without the warning that update writes an entry whole (#3360).
+    """``dest.update(source, **kwargs)``, with a warning for the ``tensordict.nn`` modules where update writes an entry whole (#3360, #3367).
 
-    The ``tensordict.nn`` modules write their outputs with it, so they keep
-    their current outputs without a warning. In 0.17, when ``update`` narrows,
-    these calls must keep the current whole-copy result unless #3367 decides
-    otherwise.
+    The ``tensordict.nn`` modules write their outputs with it. Where ``update``
+    writes entries that are not listed, the module output keeps them until 0.17,
+    when these calls become plain ``update`` calls and narrow with it.
     """
     if is_dynamo_compiling():
         return dest.update(source, **kwargs)
     state = getattr(_UPDATE_MEMBERS_CALL, "warned", None)
     _UPDATE_MEMBERS_CALL.warned = True
+    _UPDATE_MEMBERS_CALL.kept_whole_entry = False
     try:
-        return dest.update(source, **kwargs)
+        result = dest.update(source, **kwargs)
     finally:
         _UPDATE_MEMBERS_CALL.warned = state
+    if _UPDATE_MEMBERS_CALL.kept_whole_entry:
+        # Fixed text, as in _warn_update_inserts_whole_entry (#3232).
+        warnings.warn(
+            "A tensordict.nn module wrote entries that are not in its out_keys "
+            "into its output: the other entries of a sub-tensordict that holds "
+            "a nested out key, which the output lacked. Starting with "
+            "TensorDict 0.17, the default will change to writing only the "
+            "out_keys, as TensorDictModule does. Read only the out_keys from "
+            "the output to get the same result in both versions.",
+            FutureWarning,
+            stacklevel=_user_stacklevel(),
+        )
+    return result
 
 
 def _warn_unsupported_operand(op: str, other: Any, result: bool) -> None:
@@ -3675,9 +3724,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     # Set by the views and the backends whose leaves cannot be pinned in
     # place: pin_memory raises.
     _pin_memory_unsupported: bool = False
-    # Set by LazyStackedTensorDict, whose leaves belong to its members:
-    # reshape and repeat_interleave with inplace=True raise
-    # NotImplementedError before they change anything.
+    # Set by LazyStackedTensorDict, whose leaves belong to its members, and by
+    # _SubTensorDict and the legacy lazy views (_CustomOpTensorDict), whose
+    # leaves belong to their source: reshape and repeat_interleave with
+    # inplace=True raise NotImplementedError before they change anything.
     _inplace_shape_ops_unsupported: bool = False
     # Set by LazyStackedTensorDict, whose flatten regroups its members rather
     # than flattening leaves: flatten(d, d) returns self, and for
@@ -6229,7 +6279,13 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             ``self``.
 
         Raises:
-            KeyError: if the key is missing.
+            KeyError: if the key is missing. If an entry on the path of a
+                nested key is missing, a tensordict, a lazy stack and a
+                tensorclass create it and emit a :class:`FutureWarning`:
+                starting with TensorDict 0.17, the default will change to
+                raising the ``KeyError``. A locked tensordict, a
+                :class:`~tensordict.nn.TensorDictParams` and a view of a
+                tensordict, such as a sub-tensordict, raise it now.
             RuntimeError: if the leading dimensions of the value do not match
                 the batch size.
             ValueError: if the value does not fit the shape of the entry.
@@ -9945,11 +10001,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         ``inplace=True``. Finding a lazy stack halfway through would leave the
         earlier leaves rewritten while ``batch_size`` is unchanged, so the
         whole tree is checked first. The check tests ``_lazy``, so it also
-        catches ``_SubTensorDict``, which refuses these ops too. The legacy
-        lazy views (``_CustomOpTensorDict``) refuse ``flatten``, ``unflatten``,
-        ``repeat``, ``gather`` and ``masked_select`` but not ``reshape`` and
-        ``repeat_interleave``, so the check lets them through for those two.
-        The calls on nested tensordicts skip the walk, which the top-level
+        catches ``_SubTensorDict`` and the legacy lazy views
+        (``_CustomOpTensorDict``), which refuse these ops too. The calls on nested tensordicts skip the walk, which the top-level
         call has done.
 
         ``new_batch_size`` is the batch size that the op gives ``self``. When
@@ -9979,20 +10032,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 value = value._tensordict
             nested_key = prefix + (key,)
             if value._lazy:
-                from tensordict._lazy import _CustomOpTensorDict
-
-                if not (
-                    op_name in ("reshape", "repeat_interleave")
-                    and isinstance(value, _CustomOpTensorDict)
-                ):
-                    raise NotImplementedError(
-                        f"{op_name}(inplace=True) is not supported on a tensordict "
-                        f"that holds a lazy tensordict (such as a "
-                        f"LazyStackedTensorDict or a NonTensorStack); found a "
-                        f"{type(value).__name__} at key "
-                        f"{nested_key[0] if len(nested_key) == 1 else nested_key!r}. "
-                        f"Use inplace=False instead."
-                    )
+                raise NotImplementedError(
+                    f"{op_name}(inplace=True) is not supported on a tensordict "
+                    f"that holds a lazy tensordict (such as a "
+                    f"LazyStackedTensorDict or a NonTensorStack); found a "
+                    f"{type(value).__name__} at key "
+                    f"{nested_key[0] if len(nested_key) == 1 else nested_key!r}. "
+                    f"Use inplace=False instead."
+                )
             if new_batch_size is not None and not value._inplace_batch_size_change:
                 raise NotImplementedError(
                     f"{op_name}(inplace=True) changes the batch size, which a "

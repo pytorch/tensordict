@@ -1421,6 +1421,12 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
             With ``False`` or ``"empty"``, the modules run on a shallow copy
             of the input, so the input does not change.
 
+            Where the output lacks the sub-tensordict of a nested out key, the
+            sequence writes that whole sub-tensordict, entries that are not
+            out keys included, and warns if it holds any. Starting with
+            TensorDict 0.17, the default will change to writing only the
+            ``out_keys``.
+
     Raises:
         ValueError: if ``modules`` is empty.
         TypeError: if ``return_composite=False`` and the last module is not a

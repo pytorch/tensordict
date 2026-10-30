@@ -40,6 +40,7 @@ from tensordict.base import (
     _NESTED_TENSORS_AS_LISTS_NONTENSOR,
     _register_tensor_class,
     _SELF_NESTING_ERROR,
+    _SetMissingEntryError,
     CompatibleType,
     NO_DEFAULT,
     T,
@@ -48,6 +49,7 @@ from tensordict.base import (
 from tensordict.utils import (
     _BufferLegacy,
     _erase_cache_first,
+    _KEY_ERROR,
     _lock_blocked,
     _LOCK_ERROR,
     _unravel_key_to_tuple,
@@ -324,13 +326,31 @@ def _set_replaced_non_tensor(param_td, data):
         )
 
 
+def _raise_if_entry_missing(td, key):
+    # set_ runs on .data, a copy, where it would create a missing entry of a
+    # nested key and lose the value: raise the KeyError of set_ for it (#3391).
+    key = _unravel_key_to_tuple(key)
+    for part in key[:-1]:
+        entry = td._get_str(part, None)
+        if entry is None:
+            raise _SetMissingEntryError(
+                _KEY_ERROR.format(part, type(td).__name__, sorted(td.keys()))
+            )
+        if not _is_tensor_collection(type(entry)):
+            return
+        td = entry
+
+
 def _apply_on_data_and_non_tensor(func):
     # As _apply_on_data, on a .data that holds the non-tensor leaves of the
     # wrapped tensordict, which .data rebuilds: the writes reach them (#2263).
     replaces_leaves = func.__name__ in ("set_at_", "update_at_")
+    writes_existing = func.__name__ == "set_"
 
     @wraps(func)
     def new_func(self, *args, **kwargs):  # type: ignore[misc]
+        if writes_existing:
+            _raise_if_entry_missing(self._param_td, args[0] if args else kwargs["key"])
         has_non_tensor = self._param_td._has_non_tensor
         if has_non_tensor:
             data = self._param_td._fast_apply(
