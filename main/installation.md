@@ -38,10 +38,25 @@ Some features need other packages. Install them with an extra, for example
 | `h5` | `h5py>=3.11` | HDF5 files: [`to_h5()`](reference/generated/tensordict.TensorDictBase.to_h5.html#tensordict.TensorDictBase.to_h5), [`from_h5()`](reference/generated/tensordict.TensorDictBase.from_h5.html#tensordict.TensorDictBase.from_h5), and [`PersistentTensorDict`](reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict). |
 | `zarr` | `zarr>=3.1.1` | Zarr stores: [`to_zarr()`](reference/generated/tensordict.TensorDictBase.to_zarr.html#tensordict.TensorDictBase.to_zarr) and [`from_zarr()`](reference/generated/tensordict.TensorDictBase.from_zarr.html#tensordict.TensorDictBase.from_zarr). zarr 3 needs Python 3.11+. On Python 3.10, this extra installs nothing. |
 | `pandas` | `pandas>=1.5` | DataFrames and CSV files: [`to_pandas()`](reference/generated/tensordict.TensorDictBase.to_pandas.html#tensordict.TensorDictBase.to_pandas), [`from_pandas()`](reference/generated/tensordict.TensorDictBase.from_pandas.html#tensordict.TensorDictBase.from_pandas), [`to_csv()`](reference/generated/tensordict.TensorDictBase.to_csv.html#tensordict.TensorDictBase.to_csv), and [`from_csv()`](reference/generated/tensordict.TensorDictBase.from_csv.html#tensordict.TensorDictBase.from_csv). |
-| `parquet` | `pyarrow>=10.0` | Parquet files: [`to_parquet()`](reference/generated/tensordict.TensorDictBase.to_parquet.html#tensordict.TensorDictBase.to_parquet) and [`from_parquet()`](reference/generated/tensordict.TensorDictBase.from_parquet.html#tensordict.TensorDictBase.from_parquet). These methods use pyarrow, or pandas if pyarrow is not installed. Arrow tables: [`from_arrow()`](reference/generated/tensordict.from_arrow.html#tensordict.from_arrow) and [`to_arrow()`](reference/generated/tensordict.to_arrow.html#tensordict.to_arrow), which need pyarrow 15 or later. |
-| `tabular` | `pandas>=1.5` and `pyarrow>=10.0` | The `pandas` and `parquet` extras together. |
+| `parquet` | `pyarrow>=14.0.1` | Parquet files: [`to_parquet()`](reference/generated/tensordict.TensorDictBase.to_parquet.html#tensordict.TensorDictBase.to_parquet) and [`from_parquet()`](reference/generated/tensordict.TensorDictBase.from_parquet.html#tensordict.TensorDictBase.from_parquet). These methods use pyarrow, or pandas if pyarrow is not installed. Arrow tables: [`from_arrow()`](reference/generated/tensordict.from_arrow.html#tensordict.from_arrow) and [`to_arrow()`](reference/generated/tensordict.to_arrow.html#tensordict.to_arrow), which need pyarrow 15 or later. |
+| `tabular` | `pandas>=1.5` and `pyarrow>=14.0.1` | The `pandas` and `parquet` extras together. |
 | `safetensors` | `safetensors>=0.7.0` | safetensors files: [`to_safetensors()`](reference/generated/tensordict.to_safetensors.html#tensordict.to_safetensors) and [`from_safetensors()`](reference/generated/tensordict.from_safetensors.html#tensordict.from_safetensors). |
 | `onnx` | `onnx`, `onnxscript`, and `onnxruntime` | Export of a [`TensorDictModule`](reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule) to ONNX with [`torch.onnx.export()`](https://docs.pytorch.org/docs/stable/onnx_export.html#torch.onnx.export), and running the result. |
+
+The `parquet` and `tabular` extras require PyArrow 14.0.1 or later to
+exclude versions affected by [CVE-2023-47248](https://github.com/advisories/GHSA-5wvp-7f3h-6wmm), a deserialization
+code-execution vulnerability. PyArrow 10 through 14.0.0 no longer satisfies
+these extras. Existing installations and manually installed optional
+packages are not upgraded automatically. To upgrade PyArrow explicitly:
+
+```
+pip install --upgrade "pyarrow>=14.0.1"
+```
+
+This minimum does not fix vulnerabilities in Arrow's bundled native Brotli
+library. It does not make untrusted Parquet files safe to load.
+[`from_arrow()`](reference/generated/tensordict.from_arrow.html#tensordict.from_arrow) and [`to_arrow()`](reference/generated/tensordict.to_arrow.html#tensordict.to_arrow) still require
+PyArrow 15 or later.
 
 [Large datasets and storage backends](storage.html#storage) explains the HDF5, Zarr, and tabular formats.
 

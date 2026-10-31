@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**01:23.687** total execution time for 15 files **from tutorials**:
+**01:19.383** total execution time for 15 files **from tutorials**:
 
 .. container::
 
@@ -33,46 +33,46 @@ Computation times
      - Time
      - Mem (MB)
    * - :ref:`sphx_glr_tutorials_serialization_speed.py` (``serialization_speed.py``)
-     - 00:37.055
+     - 00:34.868
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensordict_module.py` (``tensordict_module.py``)
-     - 00:17.981
+     - 00:16.458
      - 0.0
    * - :ref:`sphx_glr_tutorials_data_fashion.py` (``data_fashion.py``)
-     - 00:15.598
+     - 00:15.347
      - 0.0
    * - :ref:`sphx_glr_tutorials_streamed_tensordict.py` (``streamed_tensordict.py``)
-     - 00:06.019
+     - 00:06.017
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensorclass_fashion.py` (``tensorclass_fashion.py``)
-     - 00:04.243
+     - 00:04.195
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensorclass_imagenet.py` (``tensorclass_imagenet.py``)
-     - 00:01.592
+     - 00:01.369
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensorclass_particles.py` (``tensorclass_particles.py``)
-     - 00:00.904
+     - 00:00.853
      - 0.0
    * - :ref:`sphx_glr_tutorials_export.py` (``export.py``)
-     - 00:00.138
+     - 00:00.128
      - 0.0
    * - :ref:`sphx_glr_tutorials_zarr_storage.py` (``zarr_storage.py``)
-     - 00:00.116
-     - 0.0
-   * - :ref:`sphx_glr_tutorials_functional.py` (``functional.py``)
-     - 00:00.010
+     - 00:00.110
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensordict_shapes.py` (``tensordict_shapes.py``)
+     - 00:00.009
+     - 0.0
+   * - :ref:`sphx_glr_tutorials_functional.py` (``functional.py``)
      - 00:00.009
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensordict_keys.py` (``tensordict_keys.py``)
      - 00:00.008
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensordict_memory.py` (``tensordict_memory.py``)
-     - 00:00.006
+     - 00:00.005
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensordict_slicing.py` (``tensordict_slicing.py``)
-     - 00:00.005
+     - 00:00.004
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensordict_preallocation.py` (``tensordict_preallocation.py``)
      - 00:00.003
