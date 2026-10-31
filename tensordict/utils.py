@@ -2187,6 +2187,12 @@ def _stacked_repr(shape, tensors) -> str | None:
         dtype = functools.reduce(torch.promote_types, [t.dtype for t in tensors])
     except RuntimeError:
         return None
+    # requires_grad reads every member: only when the print shows it.
+    flags = {}
+    if _REPR_OPTIONS["show_grad"]:
+        flags["requires_grad"] = torch.is_grad_enabled() and any(
+            t.requires_grad for t in tensors
+        )
     # torch.stack returns a new tensor, which is_shared() reports as shared
     # only on CUDA.
     return _get_repr_custom(
@@ -2195,7 +2201,7 @@ def _stacked_repr(shape, tensors) -> str | None:
         device,
         dtype,
         device.type == "cuda",
-        requires_grad=torch.is_grad_enabled() and any(t.requires_grad for t in tensors),
+        **flags,
         is_contiguous=True,
         is_view=False,
         storage_size=shape.numel() * dtype.itemsize,
@@ -2212,6 +2218,10 @@ def _file_leaf(td, key):
     except KeyError:
         return None
     if not meta.get("array"):
+        return None
+    # an h5 enum dataset has a tensor dtype in the metadata, but reads as
+    # NonTensorData
+    if td._backend.is_non_tensor(td._get_array(key)):
         return None
     device = td.device if td.device is not None else torch.device("cpu")
     return meta["shape"], [_FileLeaf(meta["dtype"], device, False)]
@@ -2236,20 +2246,31 @@ def _view_leaf(td, file, key):
     ``None`` when a print option shows whether the leaf is contiguous or a
     view, or its storage size, unless ``td`` reads the leaf from ``file`` with
     a basic index, which gives a new tensor: other views can index a tensor
-    read in full, as ``h5[None]`` does.
+    read in full, as ``h5[None]`` does. So does a basic index that gives a
+    single uint64 element of an h5 file: h5py returns a numpy scalar there,
+    which ``torch.as_tensor`` rejects.
     """
     from tensordict.persistent import _is_basic_index
 
     opts = _REPR_OPTIONS
-    if (
+    flags = (
         opts["show_is_contiguous"] or opts["show_is_view"] or opts["show_storage_size"]
-    ) and (td._source is not file or not _is_basic_index(td.idx)):
+    )
+    if flags and (td._source is not file or not _is_basic_index(td.idx)):
         return None
     leaf = _file_leaf(file, key)
     if leaf is None:
         return None
     shape, leaves = leaf
-    return td.batch_size + shape[file.batch_dims :], leaves
+    shape = td.batch_size + shape[file.batch_dims :]
+    if (
+        flags
+        and not shape
+        and leaves[0].dtype == torch.uint64
+        and file._backend.name == "h5"
+    ):
+        return None
+    return shape, leaves
 
 
 def _stacked_leaf(td, key):
@@ -2258,6 +2279,7 @@ def _stacked_leaf(td, key):
     The members that are h5 or zarr files give a :class:`_FileLeaf`.
     """
     from tensordict._lazy import _is_plain_tensor, LazyStackedTensorDict
+    from tensordict._td import TensorDict
     from tensordict.persistent import PersistentTensorDict
 
     if (
@@ -2269,9 +2291,12 @@ def _stacked_leaf(td, key):
         return None
     shapes, tensors = [], []
     for member in td.tensordicts:
-        if isinstance(member, LazyStackedTensorDict):
+        # A TensorDict member skips the two isinstance tests, which go through
+        # the ABC machinery and made the print of a lazy stack slower.
+        is_td = type(member) is TensorDict
+        if not is_td and isinstance(member, LazyStackedTensorDict):
             leaf = _stacked_leaf(member, key)
-        elif isinstance(member, PersistentTensorDict):
+        elif not is_td and isinstance(member, PersistentTensorDict):
             leaf = _file_leaf(member, key)
         else:
             tensor = member._get_str(key, None)
@@ -2307,7 +2332,7 @@ def _unbatched_leaf(td, key):
         return None
     leaves = []
     for member in td.tensordicts:
-        if isinstance(member, PersistentTensorDict):
+        if isinstance(member, PersistentTensorDict) or _viewed_file(member) is not None:
             # a file holds no UnbatchedTensor, and _get_str would read it
             return None
         if isinstance(member, LazyStackedTensorDict):
