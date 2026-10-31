@@ -19,12 +19,13 @@ before the first `meta.json` is replaced, and the top `meta.json`,
 in the `_tensordict` subdirectory for a tensorclass, is replaced
 first. The next `append_memmap` to the directory finds these files
 first. If `.meta.json.append.tmp` is gone from the top directory and
-the top `meta.json` already has the number of rows of every temporary
-file, it renames each one over the `meta.json` next to it, which
-completes the killed append. Otherwise no `meta.json` was replaced, or
-the rollback of a failed append put the old ones back: it deletes every
-temporary file, which may be incomplete, and the directory holds the old
-rows. To read the directory without appending, apply the same rule
+every temporary file is the `meta.json` next to it with the number of
+rows of the top `meta.json`, it renames each one over the
+`meta.json` next to it, which completes the killed append. Otherwise
+no `meta.json` was replaced, the rollback of a failed append put the
+old ones back, or the directory was saved again since the append was
+killed: it deletes every temporary file, which may be incomplete or
+stale, and the `meta.json` files stay as they are. To read the directory without appending, apply the same rule
 yourself (see [Save and load tensordicts](../../saving.html#saving)), and decide by these files, not by whether
 [`load_memmap()`](tensordict.load_memmap.html#tensordict.load_memmap) raises, which it doesn't for every tree.
 Each append maps the whole saved tree, as [`load_memmap()`](tensordict.load_memmap.html#tensordict.load_memmap)
