@@ -263,20 +263,52 @@ A killed append can leave its new ``meta.json`` files behind, as
 writes every temporary file before it replaces any ``meta.json``, and it
 replaces the top one first: the one in the directory itself, or in its
 ``_tensordict`` subdirectory for a saved tensorclass. If
-``.meta.json.append.tmp`` is still there, no ``meta.json`` was replaced and
-the temporary files may be incomplete: delete every one of them, and the
-directory holds the old rows. Otherwise every temporary file is complete:
-rename each one over the ``meta.json`` next to it, which completes the
-append. Decide by this file, not by whether ``load_memmap`` raises, which
-it doesn't for every tree:
+``.meta.json.append.tmp`` is gone from the top directory and every
+temporary file is the ``meta.json`` next to it with the number of rows of
+the top ``meta.json`` (in its shape and in the shape of each of its
+leaves), the append got past its first replacement and every temporary
+file is complete: renaming each one over the ``meta.json`` next to it
+completes the append. Otherwise no ``meta.json`` was replaced, the rollback
+of a failed append put the old ones back, or the directory was saved again
+since the append was killed, and the temporary files may be incomplete or
+stale: they must all be deleted, and the ``meta.json`` files stay as they
+are.
+The next ``append_memmap`` to the directory applies this rule before it
+appends, so you can append again with no manual step.
+
+To read the directory without appending, apply the same rule yourself.
+Decide by these files, not by whether ``load_memmap`` raises, which it
+doesn't for every tree:
 
 .. code-block:: python
 
+    import json
     import os
 
     saved = root / "particles"  # or its "_tensordict" for a tensorclass
-    replaced = not (saved / ".meta.json.append.tmp").exists()
-    for tmp in saved.rglob(".meta.json.append.tmp"):
+    leftovers = list(saved.rglob(".meta.json.append.tmp"))
+
+    def with_num_rows(path, num_rows):
+        # The meta.json at path, with the numbers of rows an append sets.
+        metadata = json.loads(path.read_bytes())
+        metadata["shape"][0] = num_rows
+        for entry in metadata.values():
+            if isinstance(entry, dict) and {"dtype", "shape"} <= entry.keys():
+                entry["shape"][0] = num_rows
+        return metadata
+
+    try:
+        num_rows = json.loads((saved / "meta.json").read_bytes())["shape"][0]
+        replaced = not (saved / ".meta.json.append.tmp").exists() and all(
+            json.loads(tmp.read_bytes())
+            == with_num_rows(tmp.with_name("meta.json"), num_rows)
+            for tmp in leftovers
+        )
+    except (FileNotFoundError, LookupError, ValueError):
+        # An incomplete temporary file, a missing meta.json, or no batch
+        # dimension.
+        replaced = False
+    for tmp in leftovers:
         if replaced:
             os.replace(tmp, tmp.with_name("meta.json"))
         else:
@@ -581,12 +613,19 @@ fields. The non-tensor fields are in ``_metadata``:
   >>> sd._metadata[""]["_non_tensor"]
   {'label': 'hello'}
 
+.. _safe-loading:
+
 Load data that you did not write
 --------------------------------
 
-Pickle can run any code when it loads a file. tensordict uses pickle in two
-places on disk: the ``other.pickle`` files of a saved directory or archive,
-and :func:`torch.save` files.
+Report suspected vulnerabilities through the private channel described in
+`SECURITY.md <https://github.com/pytorch/tensordict/blob/main/SECURITY.md>`_,
+not in a public issue.
+
+Pickle can run any code when it loads a file. For memory-mapped saves,
+tensordict uses ``other.pickle`` files in a directory or archive.
+:func:`torch.save` files and some Zarr non-tensor values also use pickle.
+Set the read policy explicitly rather than relying on a default.
 
 Non-tensor values, such as strings, are in
 :class:`~tensordict.NonTensorData` entries or in tensorclass fields (see
@@ -694,7 +733,52 @@ tensordict also protects the paths that it writes:
 Two other features unpickle what they receive: the Redis backend of
 :class:`~tensordict.store.TensorDictStore` (see :ref:`storage-redis`) and the
 metadata of the ``torch.distributed`` methods (see
-:ref:`distributed-collectives`).
+:ref:`distributed-collectives`). Treat Redis writers and distributed peers
+as trusted to execute code in the reading process. Restrict writer and peer
+access with authentication, authorization, network isolation and protected
+transport. File-loading options such as ``allow_pickle=False`` do not
+protect these channels.
+
+Disabling pickle, using ``weights_only=True``, or choosing safetensors does
+not isolate a parser or bound its memory, CPU or disk use. TensorDict archive
+size and CRC checks are not a global decompression-memory budget or proof
+of who wrote the data. For hostile inputs, use a separate, restricted
+process with resource limits and no secrets. Keep the libraries that parse
+the input patched.
+
+Optional compression and Parquet dependencies
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The following guidance was checked on October 27, 2026. Consult the linked
+advisories for updates; dependency version ranges alone do not establish
+which versions or native libraries are installed.
+
+- MosaicML streaming uses the Python ``Brotli`` package to decode
+  Brotli-compressed datasets. TensorDict's ``to_mds`` writes datasets;
+  reading them is delegated to streaming. Brotli is not a TensorDict core
+  dependency. For this integration, use ``Brotli>=1.2.1``; if you use
+  ``brotlicffi``, use ``brotlicffi>=1.2.1.0``. See the
+  `Brotli decoder advisory <https://github.com/advisories/GHSA-9v8h-qqgm-4m35>`_
+  and `Brotli 1.2.1 release <https://github.com/google/brotli/releases/tag/v1.2.1>`_.
+- Arrow uses a separate native Brotli decoder for Brotli-compressed Parquet.
+  Updating Python ``Brotli`` or ``brotlicffi`` does not update that decoder.
+  The `Arrow 26.0.0 source <https://github.com/apache/arrow/blob/apache-arrow-26.0.0/cpp/thirdparty/versions.txt#L61-L62>`_
+  pins bundled Brotli to 1.0.9; the
+  `upstream update issue <https://github.com/apache/arrow/issues/55165>`_
+  was still open on the date above. No patched PyPI Arrow release was
+  verified for this guidance. Verify the native decoder in your Arrow
+  distribution, or do not accept untrusted Brotli-compressed Parquet.
+  Source evidence is not an exploit test of each wheel; builds that link
+  system libraries can differ.
+- Separately, ``PyArrow>=14.0.1`` fixes the older Parquet/IPC deserialization
+  vulnerability `CVE-2023-47248 <https://github.com/advisories/GHSA-5wvp-7f3h-6wmm>`_.
+  Upgrade older PyArrow installations before reading untrusted data.
+  This version floor does not fix the October 2026 Brotli decoder issue
+  or make arbitrary Parquet input safe.
+
+TensorDict's own archives use stored, deflate, bzip2 or lzma entries, not
+Brotli. Their pickle controls and checks do not protect a separate streaming
+or Parquet reader.
 
 The directory layout
 --------------------

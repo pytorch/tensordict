@@ -42,7 +42,9 @@ If `pad_dim` is a batch dimension, the mask has the output's
 batch size. Otherwise, its shape is the output's batch size
 followed by the padded length, regardless of the feature
 dimension's position. Tensorclass inputs raise a
-`RuntimeError`. Use [`unpad_sequence()`](tensordict.unpad_sequence.html#tensordict.unpad_sequence) to turn
+`RuntimeError`, and inputs that already hold an entry at the
+masks key raise a `ValueError`. Use
+[`unpad_sequence()`](tensordict.unpad_sequence.html#tensordict.unpad_sequence) to turn
 the result back into the variable-length samples. Defaults to
 `False`.
 - **padding_side** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - `"right"` puts the padding after the

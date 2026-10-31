@@ -1906,7 +1906,7 @@ same <code class="docutils literal notranslate"><span class="pre">FutureWarning<
 <code class="docutils literal notranslate"><span class="pre">for</span> <span class="pre">leaf</span> <span class="pre">in</span> <span class="pre">td.select(&quot;joints&quot;).values(True,</span> <span class="pre">True):</span> <span class="pre">leaf[:,</span> <span class="pre">:,</span> <span class="pre">[0,</span> <span class="pre">1]]</span> <span class="pre">=</span> <span class="pre">0</span></code>.</p>
 <p>A list of strings is not a key selection. To keep some keys, use
 <a class="reference internal" href="../reference/generated/tensordict.TensorDictBase.select.html#tensordict.TensorDictBase.select" title="tensordict.TensorDict.select"><code class="xref py py-meth docutils literal notranslate"><span class="pre">select()</span></code></a> (see <a class="reference internal" href="keys.html#keys"><span class="std std-ref">Keys, nested keys, and locking</span></a>).</p>
-<p>Indexing follows the rules of <a class="reference external" href="https://docs.pytorch.org/docs/stable/torch.html#module-torch" title="(in PyTorch v2.14)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch</span></code></a> for storage. An integer or a slice
+<p>Indexing follows the rules of <a class="reference external" href="https://docs.pytorch.org/docs/stable/torch.html#module-torch" title="(in PyTorch v2.15)"><code class="xref py py-mod docutils literal notranslate"><span class="pre">torch</span></code></a> for storage. An integer or a slice
 gives views, so an in-place change of an entry of the result changes the
 original. A mask or a tensor of indices gives copies. A new key that you write
 into the result does not appear in the original:</p>
@@ -1963,7 +1963,7 @@ and <a class="reference internal" href="../reference/generated/tensordict.Tensor
 storage. <code class="docutils literal notranslate"><span class="pre">expand</span></code> repeats the same memory, so an in-place write into an
 expanded entry raises a <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code>. Call <code class="docutils literal notranslate"><span class="pre">clone()</span></code> first to get
 separate copies.</p>
-<p>To join tensordicts with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.stack()</span></code></a> and <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.cat()</span></code></a>, see
+<p>To join tensordicts with <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.stack()</span></code></a> and <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.cat()</span></code></a>, see
 <a class="reference internal" href="stacking.html#stacking"><span class="std std-ref">Stacking and variable-size data</span></a>.</p>
 </section>
 <section id="dimension-names">
@@ -2052,7 +2052,7 @@ list. A TensorDict is not hashable.</p>
 </pre></div>
 </div>
 <p>If a dataset returns tensordicts with no batch dimensions, the default collate
-function of <a class="reference external" href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.utils.data.DataLoader</span></code></a> stacks them into a tensordict
+function of <a class="reference external" href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.utils.data.DataLoader</span></code></a> stacks them into a tensordict
 with one batch dimension (see <a class="reference internal" href="../data_loading.html#data-loading"><span class="std std-ref">Load data and share it between processes</span></a>).</p>
 </section>
 <section id="see-also">

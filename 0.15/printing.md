@@ -89,6 +89,37 @@ TensorDict(
  is_shared=False)
 ```
 
+The detailed display reads no tensor data either. It prints the tensor
+leaves of an h5 or zarr file ([`PersistentTensorDict`](reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict)) from
+their shape and dtype, and the tensor leaves of a lazy stack from its
+members, without reading the file or stacking the leaves. The text is the
+same as for the same data in memory. `plain=True` is the exception: it
+prints statistics of the values, so it reads them. `show_is_contiguous=True`
+also stacks a lazy leaf when one of its members is not contiguous (a
+`channels_last` tensor, for example), since the contiguity of the result
+depends on their strides.
+
+The detailed display prints the value of each non-tensor entry
+([`NonTensorData`](reference/generated/tensordict.NonTensorData.html#tensordict.NonTensorData), [`NonTensorStack`](reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack)) on
+every container, so it reads the non-tensor entries of an h5 or zarr file to
+print them. Their values are usually short strings, but a
+[`NonTensorStack`](reference/generated/tensordict.NonTensorStack.html#tensordict.NonTensorStack) is read in full. On h5, a string entry
+prints as bytes (`data=b'text'`), and reading it emits the
+`FutureWarning` about the type of h5 strings. The compact display of a file
+prints these entries as `NonTensorData` or `NonTensorStack` and reads
+nothing.
+
+An indexed view of a file, such as `h5[0]`, and a lazy stack of views
+still read some leaves:
+
+- The compact display of a view reads its non-tensor entries and prints
+their data type, such as `s: bytes`.
+- A view with an index tensor, a mask, a list, a range or `None`, and a
+view of a view, read every tensor leaf when `show_is_contiguous`,
+`show_is_view` or `show_storage_size` is set.
+- The detailed display of a lazy stack of views, such as
+`LazyStackedTensorDict(h5[0], h5[1])`, reads every tensor leaf.
+
 ## Choose what the display shows
 
 [`set_printoptions`](reference/generated/tensordict.set_printoptions.html#tensordict.set_printoptions) selects the format and the attributes
@@ -276,7 +307,7 @@ of the keys:
 | `show_is_contiguous` | `False` | Show `is_contiguous=`. |
 | `show_is_view` | `False` | Show `is_view=` (whether `._base` is set). |
 | `show_storage_size` | `False` | Show `storage_size=` (bytes). |
-| `plain` | `False` | Append a short value summary (mean/std for floats, min/max for ints). |
+| `plain` | `False` | Append a short value summary (mean/std for floats, min/max for ints). It reads the values: the data of a file, and the stacked leaves of a lazy stack. |
 | `sort_keys` | `"alphabetical"` | Key ordering: `"alphabetical"` (default), `"insertion"` (dict order), or a callable passed as `key` to [`sorted()`](https://docs.python.org/3/builtins/functions.html#sorted). |
 
 ### Read the current options

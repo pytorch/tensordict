@@ -151,8 +151,10 @@ would overwrite the sample. The check runs when
 `CompositeDistribution`, when `distribution_kwargs` holds its
 `distribution_map`).
 - **cache_dist** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - has no effect. Deprecated: passing
-`True` warns, and the argument will be removed in TensorDict
-0.17. Defaults to `False`.
+`True` warns, and support for `True` will be removed in
+TensorDict 0.17. `cache_dist=False`, the default, does not warn,
+and will keep working, doing nothing, after the removal. Defaults
+to `False`.
 - **n_empirical_estimate** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the number of samples that
 `MEAN` averages when the distribution has no mean. Defaults to
 `1000`.

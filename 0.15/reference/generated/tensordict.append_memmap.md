@@ -17,11 +17,16 @@ while you append to it. A killed append can leave its new `meta.json`
 files behind as `.meta.json.append.tmp` files. They are all written
 before the first `meta.json` is replaced, and the top `meta.json`,
 in the `_tensordict` subdirectory for a tensorclass, is replaced
-first. If `.meta.json.append.tmp` is still in the top directory, no
-`meta.json` was replaced: delete every temporary file, which may be
-incomplete, and the directory holds the old rows. Otherwise, rename each
-temporary file over the `meta.json` next to it, which completes the
-append. Decide by this file, not by whether
+first. The next `append_memmap` to the directory finds these files
+first. If `.meta.json.append.tmp` is gone from the top directory and
+every temporary file is the `meta.json` next to it with the number of
+rows of the top `meta.json`, it renames each one over the
+`meta.json` next to it, which completes the killed append. Otherwise
+no `meta.json` was replaced, the rollback of a failed append put the
+old ones back, or the directory was saved again since the append was
+killed: it deletes every temporary file, which may be incomplete or
+stale, and the `meta.json` files stay as they are. To read the directory without appending, apply the same rule
+yourself (see [Save and load tensordicts](../../saving.html#saving)), and decide by these files, not by whether
 [`load_memmap()`](tensordict.load_memmap.html#tensordict.load_memmap) raises, which it doesn't for every tree.
 Each append maps the whole saved tree, as [`load_memmap()`](tensordict.load_memmap.html#tensordict.load_memmap)
 does, to read its structure, so many small appends to a save with many

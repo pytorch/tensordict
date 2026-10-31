@@ -845,6 +845,12 @@ a `@tensorclass` class, but not its tensordict methods or its
 `batch_size` and `device` arguments. In code that a type checker reads,
 use a subclass of `TensorClass`.
 
+Type checkers read torch's own signatures for `torch.stack` and
+`torch.cat`, which take and return a `Tensor`, so they reject a list of
+tensorclass instances there. Use [`tensordict.stack()`](reference/generated/tensordict.stack.html#tensordict.stack) and
+[`tensordict.cat()`](reference/generated/tensordict.cat.html#tensordict.cat), or the classmethods (`Obs.stack`, `Obs.cat`),
+which return the type of the inputs.
+
 mypy reports each `frozen=True` tensorclass as "Frozen dataclass cannot
 inherit from a non-frozen dataclass". These statements hold for pyright
 1.1.414 and mypy 2.4.0.

@@ -1793,7 +1793,7 @@ applied to a batch draws one set of random parameters for all its images:</p>
 dataset, before the batch is built. Samples for object detection have
 different numbers of boxes, so <code class="docutils literal notranslate"><span class="pre">torch.stack</span></code> cannot stack them. Pass
 <a class="reference internal" href="reference/generated/tensordict.lazy_stack.html#tensordict.lazy_stack" title="tensordict.lazy_stack"><code class="xref py py-func docutils literal notranslate"><span class="pre">lazy_stack()</span></code></a> as the <code class="docutils literal notranslate"><span class="pre">collate_fn</span></code> of the
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataLoader</span></code></a> instead (see <a class="reference internal" href="data_loading.html#data-loading"><span class="std std-ref">Load data and share it between processes</span></a>):</p>
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataLoader</span></code></a> instead (see <a class="reference internal" href="data_loading.html#data-loading"><span class="std std-ref">Load data and share it between processes</span></a>):</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">tensordict</span><span class="w"> </span><span class="kn">import</span> <span class="n">lazy_stack</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">one_box</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>  
 <span class="gp">... </span>    <span class="n">image</span><span class="o">=</span><span class="n">tv_tensors</span><span class="o">.</span><span class="n">Image</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">32</span><span class="p">,</span> <span class="mi">48</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">)),</span>
@@ -2027,7 +2027,7 @@ batch dimensions, and then raises because the batch looks empty.</p>
 </section>
 <section id="distributeddataparallel-and-pytrees">
 <h2>DistributedDataParallel and pytrees<a class="headerlink" href="#distributeddataparallel-and-pytrees" title="Link to this heading">#</a></h2>
-<p><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html#torch.nn.parallel.DistributedDataParallel" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">DistributedDataParallel</span></code></a> passes a tensorclass or a
+<p><a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html#torch.nn.parallel.DistributedDataParallel" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">DistributedDataParallel</span></code></a> passes a tensorclass or a
 tensordict to the <code class="docutils literal notranslate"><span class="pre">forward</span></code> of the module, and returns one if <code class="docutils literal notranslate"><span class="pre">forward</span></code>
 does. Here, with one process, it trains the <code class="docutils literal notranslate"><span class="pre">Regressor</span></code> of the previous
 section:</p>
@@ -2104,7 +2104,7 @@ validates a tensorclass too:</p>
 <section id="arrays-from-jax">
 <h2>Arrays from JAX<a class="headerlink" href="#arrays-from-jax" title="Link to this heading">#</a></h2>
 <p>A JAX simulator returns a pytree of JAX arrays. Convert each array with
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.from_dlpack.html#torch.from_dlpack" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.from_dlpack()</span></code></a>, then build the tensordict. On the same device,
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.from_dlpack.html#torch.from_dlpack" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.from_dlpack()</span></code></a>, then build the tensordict. On the same device,
 DLPack shares the memory of the array, without a copy. Pass the tensors back
 to JAX the same way, with <code class="docutils literal notranslate"><span class="pre">jax.numpy.from_dlpack</span></code>:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">jax</span>  

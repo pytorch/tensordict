@@ -383,6 +383,18 @@ This example writes 500 readings of 4 sensors:
 torch.Size([500, 4])
 ```
 
+`from_dict` and [`to_h5()`](reference/generated/tensordict.TensorDictBase.to_h5.html#tensordict.TensorDictBase.to_h5) also store the
+batch size and the dimension names of each group in its attributes.
+`from_h5` does not read them yet: it infers each batch size from the
+entries (`[500, 4]` here), or gives every nested tensordict the
+`batch_size` that is passed, and warns when the stored ones differ.
+Starting with TensorDict 0.17, the default will change to restoring the
+stored ones, as `from_zarr` does.
+
+HDF5 holds dense tensors with numpy dtypes only: writing a `bfloat16` or
+nested tensor raises an error that names the entry. The `"memmap"` backend
+stores `bfloat16`, and [`torch.save()`](https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save) stores both.
+
 ### zarr
 
 With `backend="zarr"`, [`PersistentTensorDict`](reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) stores each
@@ -390,6 +402,9 @@ tensor as a zarr array and each nested tensordict as a zarr group. The store
 can be a local directory, a `zarr.storage.ZipStore`, or any other
 `zarr.abc.store.Store`. You can read and write separate chunks in parallel.
 The zarr backend needs `zarr>=3.1.1` (`pip install "tensordict[zarr]"`).
+Like HDF5, zarr holds dense tensors with numpy dtypes only: writing a
+`bfloat16` or nested tensor raises an error that names the entry. The
+`"memmap"` backend stores `bfloat16`, and [`torch.save()`](https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save) stores both.
 
 [`to_zarr()`](reference/generated/tensordict.TensorDictBase.to_zarr.html#tensordict.TensorDictBase.to_zarr) writes a tensordict, and
 [`from_zarr()`](reference/generated/tensordict.TensorDictBase.from_zarr.html#tensordict.TensorDictBase.from_zarr) reads it back. `to_zarr` stores

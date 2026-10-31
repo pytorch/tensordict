@@ -111,11 +111,23 @@ with :func:`torch.vmap`. The output has a new leading batch dimension of
 size ``num_copies``. To keep parameters as a tensordict on a module, see
 :class:`~tensordict.TensorDictParams` on :ref:`api-tensordict`.
 
+:func:`functional_vmap` calls a module once per set of parameters in a
+stacked tensordict, such as one built with
+:meth:`~tensordict.TensorDict.from_modules`, and stacks the outputs. It runs
+the sets with :func:`torch.vmap`, or one at a time for modules that
+:func:`torch.vmap` cannot handle.
+
 .. autosummary::
     :toctree: generated/
     :template: nn_module.rst
 
     EnsembleModule
+
+.. autosummary::
+    :toctree: generated/
+    :template: function.rst
+
+    functional_vmap
 
 Compiling modules
 -----------------

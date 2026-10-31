@@ -84,7 +84,16 @@ with [`torch.vmap()`](https://docs.pytorch.org/docs/stable/generated/torch.vmap.
 size `num_copies`. To keep parameters as a tensordict on a module, see
 [`TensorDictParams`](generated/tensordict.TensorDictParams.html#tensordict.TensorDictParams) on [tensordict: containers and functions](td.html#api-tensordict).
 
+[`functional_vmap()`](generated/tensordict.nn.functional_vmap.html#tensordict.nn.functional_vmap) calls a module once per set of parameters in a
+stacked tensordict, such as one built with
+[`from_modules()`](generated/tensordict.TensorDictBase.from_modules.html#tensordict.TensorDictBase.from_modules), and stacks the outputs. It runs
+the sets with [`torch.vmap()`](https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap), or one at a time for modules that
+[`torch.vmap()`](https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap) cannot handle.
+
 | [`EnsembleModule`](generated/tensordict.nn.EnsembleModule.html#tensordict.nn.EnsembleModule)(module, num_copies[, ...]) | Runs `num_copies` copies of a module, each with its own parameters, on the same input. |
+| --- | --- |
+
+| [`functional_vmap`](generated/tensordict.nn.functional_vmap.html#tensordict.nn.functional_vmap)(module, *, params[, args, ...]) | Calls `module` once per set of parameters in `params` and stacks the outputs. |
 | --- | --- |
 
 ## Compiling modules

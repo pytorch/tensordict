@@ -1765,7 +1765,7 @@ document.write(`
 <dd><p>Returns the data pointers of the leaves, as a tensordict of integers.</p>
 <p>The result has the keys of the tensordict, an empty batch size and the
 CPU device. Each leaf is replaced by its
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.data_ptr.html#torch.Tensor.data_ptr" title="(in PyTorch v2.14)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">data_ptr()</span></code></a>, as a 0-d <code class="docutils literal notranslate"><span class="pre">int64</span></code> tensor. Compare two
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.data_ptr.html#torch.Tensor.data_ptr" title="(in PyTorch v2.15)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">data_ptr()</span></code></a>, as a 0-d <code class="docutils literal notranslate"><span class="pre">int64</span></code> tensor. Compare two
 results to check whether two tensordicts share memory. In a lazy stack,
 each member is a nested entry named by its index (<code class="docutils literal notranslate"><span class="pre">&quot;0&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;1&quot;</span></code>,
 …), which gives the data pointers of the leaves it really holds.</p>

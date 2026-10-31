@@ -489,6 +489,7 @@
 - [OneHotCategorical](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.distributions.OneHotCategorical.md)
 - [TruncatedNormal](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.distributions.TruncatedNormal.md)
 - [TruncatedStandardNormal](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.distributions.truncated_normal.TruncatedStandardNormal.md)
+- [functional_vmap](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.functional_vmap.md)
 - [interaction_type](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.interaction_type.md)
 - [inv_softplus](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.inv_softplus.md)
 - [mappings](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.mappings.md)

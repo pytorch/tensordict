@@ -1734,7 +1734,7 @@ document.write(`
   <section id="load-data-and-share-it-between-processes">
 <span id="data-loading"></span><h1>Load data and share it between processes<a class="headerlink" href="#load-data-and-share-it-between-processes" title="Link to this heading">#</a></h1>
 <p>A tensordict with a batch dimension is a dataset. A
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataLoader</span></code></a> reads each batch from it with one index
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">DataLoader</span></code></a> reads each batch from it with one index
 operation, and the batch is a tensordict. Processes on one node can also share
 one tensordict, in shared memory or in memory-mapped files, and see the writes
 of the other processes.
@@ -1780,7 +1780,7 @@ worker processes, this gives the same batches:</p>
 <section id="a-dataset-that-returns-tensordicts">
 <h2>A dataset that returns tensordicts<a class="headerlink" href="#a-dataset-that-returns-tensordicts" title="Link to this heading">#</a></h2>
 <p>A dataset can return one tensordict for each sample, for example a list of
-tensordicts, or a <a class="reference external" href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.Dataset" title="(in PyTorch v2.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Dataset</span></code></a> whose <code class="docutils literal notranslate"><span class="pre">__getitem__</span></code>
+tensordicts, or a <a class="reference external" href="https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.Dataset" title="(in PyTorch v2.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Dataset</span></code></a> whose <code class="docutils literal notranslate"><span class="pre">__getitem__</span></code>
 builds a tensordict. The <code class="docutils literal notranslate"><span class="pre">DataLoader</span></code> then gets a list of tensordicts for
 each batch. The default <code class="docutils literal notranslate"><span class="pre">collate_fn</span></code> stacks them into one tensordict, as
 <a class="reference internal" href="reference/generated/tensordict.collate.html#tensordict.collate" title="tensordict.collate"><code class="xref py py-func docutils literal notranslate"><span class="pre">collate()</span></code></a> does (see below). A batch of tensorclasses keeps

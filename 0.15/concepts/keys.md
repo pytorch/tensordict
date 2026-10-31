@@ -196,7 +196,10 @@ the key does not exist, it is added.
 - `td.set(key, value, inplace=True)` copies `value` into the existing
 tensor if the key exists. If the key does not exist, it is added.
 - `td.set_(key, value)` copies `value` into the existing tensor. If the key
-does not exist, it raises a `KeyError`.
+does not exist, it raises a `KeyError`. For a nested key such as
+`("a", "b")` where `"a"` does not exist, a tensordict, a lazy stack and a
+tensorclass create `"a"` and emit a `FutureWarning`: starting with
+TensorDict 0.17, the default will change to raising the `KeyError`.
 
 For example:
 

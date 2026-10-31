@@ -5,9 +5,11 @@ TensorDictBase.to_h5(*filename*, ***kwargs*) → [Any](https://docs.python.org/3
 Writes the tensordict to a new HDF5 file and returns a tensordict backed by it.
 
 Each leaf becomes a dataset of the file, and each nested tensordict a
-group. An existing file at `filename` is overwritten. The batch size
-and the names of the batch dimensions are kept. Requires `h5py`.
-[`from_h5()`](tensordict.TensorDictBase.from_h5.html#tensordict.TensorDictBase.from_h5) opens the file again. See [Save and load tensordicts](../../saving.html#saving).
+group. An existing file at `filename` is overwritten. The returned
+tensordict keeps the batch size and the names of the batch dimensions,
+and the file stores them in the attributes of each group. Requires
+`h5py`. [`from_h5()`](tensordict.TensorDictBase.from_h5.html#tensordict.TensorDictBase.from_h5) opens the file again, but infers the batch
+sizes until TensorDict 0.17. See [Save and load tensordicts](../../saving.html#saving).
 
 Parameters:
 

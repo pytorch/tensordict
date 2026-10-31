@@ -60,7 +60,7 @@
     <link rel="canonical" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.EnsembleModule.html" />
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="AddStateIndependentNormalScale" href="tensordict.nn.distributions.AddStateIndependentNormalScale.html" />
+    <link rel="next" title="functional_vmap" href="tensordict.nn.functional_vmap.html" />
     <link rel="prev" title="interaction_type" href="tensordict.nn.interaction_type.html" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -1768,7 +1768,7 @@ document.write(`
 with the <code class="docutils literal notranslate"><span class="pre">reset_parameters</span></code> method of the submodules. It stacks them in
 <code class="docutils literal notranslate"><span class="pre">ensemble.params_td</span></code>, a <code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictParams</span></code> with
 batch size <code class="docutils literal notranslate"><span class="pre">[num_copies]</span></code>. A call runs the module once per copy with
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.14)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.vmap()</span></code></a>, so every output gets a leading dimension of size
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.vmap.html#torch.vmap" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.vmap()</span></code></a>, so every output gets a leading dimension of size
 <code class="docutils literal notranslate"><span class="pre">num_copies</span></code>.</p>
 <p><code class="docutils literal notranslate"><span class="pre">ensemble.parameters()</span></code> returns the stacked copies, which an optimizer
 can train. It also returns the parameters of the original <code class="docutils literal notranslate"><span class="pre">module</span></code>,
@@ -2028,11 +2028,11 @@ the selection.</p>
       </div>
     </a>
     <a class="right-next"
-       href="tensordict.nn.distributions.AddStateIndependentNormalScale.html"
+       href="tensordict.nn.functional_vmap.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">AddStateIndependentNormalScale</p>
+        <p class="prev-next-title">functional_vmap</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -2067,11 +2067,11 @@ the selection.</p>
       </div>
     </a>
     <a class="right-next"
-       href="tensordict.nn.distributions.AddStateIndependentNormalScale.html"
+       href="tensordict.nn.functional_vmap.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">AddStateIndependentNormalScale</p>
+        <p class="prev-next-title">functional_vmap</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
