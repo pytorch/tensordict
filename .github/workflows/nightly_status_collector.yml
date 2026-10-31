@@ -74,6 +74,8 @@ jobs:
         uses: astral-sh/setup-uv@v4
         with:
           enable-cache: false
+          version: "0.13.6"
+          checksum: "f29c3e94ffabd7e6f3ba521dba169a9b7ec12100bf3257087f0f24f6123f3645"
 
       - name: Collect nightly status
         env:
@@ -99,7 +101,7 @@ jobs:
           fi
 
           # Run the collector script with inline dependencies
-          uv run --no-project --with requests --script .github/scripts/collect_nightly_status.py \
+          uv run --no-project --with requests --with "certifi>=2026.10.23" --script .github/scripts/collect_nightly_status.py \
             --owner "${{ github.repository_owner }}" \
             --repo "$REPO_NAME" \
             --days "$DAYS" \

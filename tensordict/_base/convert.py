@@ -875,7 +875,16 @@ class _Conversion:
                 the result: the leading dimensions that all its entries share.
                 Exclusive with ``auto_batch_size``. Defaults to ``None``, which
                 gives each nested tensordict the largest batch size that its
-                entries share.
+                entries share, and every nested tensordict ``batch_size`` when
+                it is passed. A file written by :meth:`~.to_h5` stores the
+                batch sizes and the dim names. Starting with TensorDict 0.17,
+                the default will change to restoring the stored ones, as
+                ``from_zarr`` does: with ``batch_size``, the nested
+                tensordicts get their stored batch sizes, and with
+                ``auto_batch_size=True``, the stored names are kept and the
+                batch sizes are inferred from the stored ones, which an empty
+                tensordict or a non-tensor entry keeps. ``from_h5`` warns when
+                this changes its result.
             non_tensor_as_stack (bool, optional): if ``True``, a non-tensor
                 dataset that tensordict did not write, such as a string column
                 with one string per row, reads as a
@@ -904,7 +913,10 @@ class _Conversion:
             ...     print(td)
             PersistentTensorDict(batch_size=[3], fields={key1: f32[], key2: f32[]})
         """
-        from tensordict.persistent import PersistentTensorDict
+        from tensordict.persistent import (
+            _warn_h5_metadata_differs,
+            PersistentTensorDict,
+        )
 
         if not issubclass(cls, PersistentTensorDict):
             cls = PersistentTensorDict
@@ -920,6 +932,7 @@ class _Conversion:
             result.auto_batch_size_(batch_dims=batch_dims)
         elif batch_dims is not None:
             _warn_batch_dims_ignored("from_h5", result, batch_dims, batch_size)
+        _warn_h5_metadata_differs(result, batch_size, auto_batch_size, batch_dims)
         return result
 
     @classmethod
@@ -3463,9 +3476,11 @@ class _Conversion:
         """Writes the tensordict to a new HDF5 file and returns a tensordict backed by it.
 
         Each leaf becomes a dataset of the file, and each nested tensordict a
-        group. An existing file at ``filename`` is overwritten. The batch size
-        and the names of the batch dimensions are kept. Requires ``h5py``.
-        :meth:`~.from_h5` opens the file again. See :ref:`saving`.
+        group. An existing file at ``filename`` is overwritten. The returned
+        tensordict keeps the batch size and the names of the batch dimensions,
+        and the file stores them in the attributes of each group. Requires
+        ``h5py``. :meth:`~.from_h5` opens the file again, but infers the batch
+        sizes until TensorDict 0.17. See :ref:`saving`.
 
         Args:
             filename (str or path): the path of the HDF5 file.
@@ -3497,6 +3512,7 @@ class _Conversion:
         )
         if self._has_names():
             out.names = self.names
+            out._write_attrs_metadata()
         return out
 
     def to_zarr(

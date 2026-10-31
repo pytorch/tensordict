@@ -1816,7 +1816,8 @@ class TestSubclassing:
 
 class TestLikeConstructors:
     @pytest.fixture(scope="module")
-    def td(self):
+    @classmethod
+    def td(cls):
         yield TensorDict(
             a=torch.randn(3, 4),
             b=TensorDict(c=torch.randint(10, (3, 4, 5)), batch_size=(3, 4)),
@@ -2287,7 +2288,12 @@ class TestMemmap:
         assert len(caught) == 1
         assert caught[0].category is UserWarning
         assert caught[0].filename == __file__
-        loaded = load(tmp_path / f"unbatched.{fmt}")
+        with warnings.catch_warnings():
+            # #3263: from_h5 warns that 0.17 restores the stored batch sizes
+            warnings.filterwarnings(
+                "ignore", "This h5 file stores the batch sizes", FutureWarning
+            )
+            loaded = load(tmp_path / f"unbatched.{fmt}")
         for key in ("u", ("nested", "v")):
             assert not isinstance(loaded.get(key), UnbatchedTensor)
             torch.testing.assert_close(loaded.get(key), data)

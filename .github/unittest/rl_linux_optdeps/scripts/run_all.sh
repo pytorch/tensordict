@@ -34,8 +34,9 @@ env_dir="${root_dir}/venv"
 cd "${root_dir}"
 
 # Install uv
-curl -LsSf --retry 3 https://astral.sh/uv/install.sh | sh
+bash "${root_dir}/.github/scripts/install_ci_tool.sh" uv "$HOME/.local/bin"
 export PATH="$HOME/.local/bin:$PATH"
+export UV_CONSTRAINT="${root_dir}/.github/ci-constraints.txt"
 
 # Create venv with uv
 printf "* Creating venv with Python ${PYTHON_VERSION}\n"
@@ -70,6 +71,7 @@ export TD_GET_DEFAULTS_TO_NONE='1'
 printf "* Installing dependencies\n"
 
 # Install base dependencies
+uv_pip_install pip certifi
 uv_pip_install \
   hypothesis \
   future \

@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 import argparse
 import itertools
+import json
 import pickle
 import warnings
 from pathlib import Path
@@ -23,7 +24,7 @@ from tensordict import (
     TypedTensorDict,
 )
 from tensordict._td import _SubTensorDict
-from tensordict.base import _is_leaf_nontensor
+from tensordict.base import _is_leaf_nontensor, is_tensor_collection
 from tensordict.utils import is_non_tensor
 from torch import multiprocessing as mp
 from torch.utils._pytree import tree_map
@@ -133,6 +134,39 @@ class TestH5Serialization:
         assert is_non_tensor(td_recover.get(("d", "e")))
         assert is_non_tensor(td_recover.get("f"))
         assert is_non_tensor(td_recover.get(("g", "h")))
+
+    # the h5 backend reads these strings as bytes, with a FutureWarning
+    @pytest.mark.filterwarnings("ignore:The h5 backend:FutureWarning")
+    @pytest.mark.parametrize("case", ["str", "nested", "only_nested", "stack", "empty"])
+    def test_from_h5_non_tensor_only(self, tmp_path, case):
+        # a file or a group that holds only non-tensor entries, or no entries,
+        # loads with the batch size it was written with (#3411)
+        td = {
+            "str": lambda: TensorDict(s="hello"),
+            "nested": lambda: TensorDict(a=torch.zeros(3), sub=TensorDict(s="hello")),
+            "only_nested": lambda: TensorDict(sub=TensorDict(s="hello")),
+            "stack": lambda: TensorDict(s=NonTensorStack("a", "b"), batch_size=[2]),
+            "empty": lambda: TensorDict(),
+        }[case]()
+        path = tmp_path / "file.h5"
+        td.to_h5(path)
+
+        def text(value):
+            return value.decode() if isinstance(value, bytes) else value
+
+        keys = set(td.keys(True, True, is_leaf=_is_leaf_nontensor))
+        for h5td in (PersistentTensorDict.from_h5(path), TensorDict.from_h5(path)):
+            assert h5td.batch_size == td.batch_size
+            assert set(h5td.keys(True, True, is_leaf=_is_leaf_nontensor)) == keys
+            for key in keys:
+                if key == "a":
+                    assert (h5td[key] == 0).all()
+                elif case == "stack":
+                    assert [text(v) for v in h5td[key]] == ["a", "b"]
+                else:
+                    assert text(h5td[key]) == "hello"
+            if "sub" in keys or ("sub", "s") in keys:
+                assert h5td["sub"].batch_size == ()
 
     def test_h5_str_read_as_bytes_warns(self, tmp_path):
         # strings that tensordict writes are marked; reading one still gives
@@ -610,6 +644,331 @@ class TestH5Serialization:
             h5td.names = ["x"]
         assert h5td["s"].names == ["x", None]
         h5td.close()
+
+    _STORED_METADATA_WARNING = "default will change to restoring the stored ones"
+
+    @staticmethod
+    def _stored_metadata(path):
+        # the metadata that every group of the file stores, by group path
+        with h5py.File(path, "r") as file:
+            groups = {"": file}
+            file.visititems(
+                lambda name, node: (
+                    groups.__setitem__(name, node)
+                    if isinstance(node, h5py.Group)
+                    else None
+                )
+            )
+            return {
+                name: json.loads(group.attrs["__tensordict__"])
+                for name, group in groups.items()
+                if "__tensordict__" in group.attrs
+            }
+
+    def _from_h5_warnings(self, path, **kwargs):
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            td = TensorDict.from_h5(path, **kwargs)
+        record = [w for w in record if self._STORED_METADATA_WARNING in str(w.message)]
+        return td, record
+
+    def test_h5_writers_store_batch_sizes_and_names(self, tmp_path):
+        # #3263: every writer of an h5 file stores the batch size and the names
+        # of each group, for from_h5 to restore them in 0.17
+        td = TensorDict(
+            a=torch.zeros(3),
+            nested=TensorDict(
+                c=torch.zeros(3, 1, 2),
+                deep=TensorDict(x=torch.zeros(3, 2, 5), batch_size=[3, 2]),
+                batch_size=[3],
+            ),
+            batch_size=[3],
+            names=["time"],
+        )
+        expected = {
+            "": {"batch_size": [3], "names": ["time"], "version": 1},
+            "nested": {"batch_size": [3], "names": ["time"], "version": 1},
+            "nested/deep": {
+                "batch_size": [3, 2],
+                "names": ["time", None],
+                "version": 1,
+            },
+        }
+        td.to_h5(tmp_path / "to_h5.h5").close()
+        assert self._stored_metadata(tmp_path / "to_h5.h5") == expected
+        h5td = PersistentTensorDict.from_dict(td, tmp_path / "from_dict.h5")
+        clone = h5td.clone(newfile=tmp_path / "clone.h5")
+        # an entry read under a nested key has the batch size of its parent
+        h5td.get(("nested", "deep"))
+        clone_nested_key = h5td.clone(newfile=tmp_path / "clone_nested_key.h5")
+        h5td.close()
+        clone.close()
+        clone_nested_key.close()
+        from_dict = self._stored_metadata(tmp_path / "from_dict.h5")
+        assert from_dict["nested/deep"] == expected["nested/deep"]
+        assert self._stored_metadata(tmp_path / "clone.h5") == from_dict
+        assert self._stored_metadata(tmp_path / "clone_nested_key.h5") == from_dict
+        PersistentTensorDict.from_dict(
+            {"a": torch.zeros(3, 4), "b": {"c": torch.zeros(3, 4, 2)}},
+            tmp_path / "dict.h5",
+        ).close()
+        assert self._stored_metadata(tmp_path / "dict.h5") == {
+            "": {"batch_size": [3, 4], "version": 1},
+            "b": {"batch_size": [3, 4, 2], "version": 1},
+        }
+
+    def test_clone_empty_nested(self, tmp_path):
+        # #3412: clone(newfile=) raised a KeyError on an empty nested
+        # tensordict, which has no leaf to copy
+        td = TensorDict(
+            a=torch.zeros(3),
+            e=TensorDict(batch_size=[3]),
+            f=TensorDict(g=TensorDict(batch_size=[3, 2]), batch_size=[3, 2]),
+            batch_size=[3],
+        )
+        h5td = PersistentTensorDict.from_dict(td, tmp_path / "s.h5")
+        clone = h5td.clone(newfile=tmp_path / "clone.h5")
+        assert set(clone.keys(include_nested=True)) == {"a", "e", "f", ("f", "g")}
+        assert clone["e"].batch_size == torch.Size([3])
+        assert clone["f"].batch_size == torch.Size([3, 2])
+        assert clone["f"]["g"].batch_size == torch.Size([3, 2])
+        h5td.close()
+        clone.close()
+        stored = self._stored_metadata(tmp_path / "clone.h5")
+        assert stored == self._stored_metadata(tmp_path / "s.h5")
+        assert stored["e"]["batch_size"] == [3]
+        assert stored["f/g"]["batch_size"] == [3, 2]
+
+    @pytest.mark.parametrize(
+        "td,kwargs,batch_size,nested_batch_size",
+        [
+            # an inferred root batch size
+            (TensorDict(a=torch.zeros(3, 4), batch_size=[3]), {}, [3, 4], None),
+            # names
+            (
+                TensorDict(a=torch.zeros(3), batch_size=[3], names=["t"]),
+                {},
+                [3],
+                None,
+            ),
+            # an inferred nested batch size
+            (
+                TensorDict(
+                    a=torch.zeros(3),
+                    nested=TensorDict(c=torch.zeros(3, 1, 2), batch_size=[3]),
+                    batch_size=[3],
+                ),
+                {},
+                [3],
+                [3, 1, 2],
+            ),
+            # an empty tensordict
+            (TensorDict(batch_size=[3]), {}, [], None),
+            # batch_size= is kept, and given to the nested groups too
+            (
+                TensorDict(
+                    a=torch.zeros(3),
+                    nested=TensorDict(c=torch.zeros(3, 1), batch_size=[3, 1]),
+                    batch_size=[3],
+                ),
+                {"batch_size": [3]},
+                [3],
+                [3],
+            ),
+            # auto_batch_size=True drops the names
+            (
+                TensorDict(a=torch.zeros(3), batch_size=[3], names=["t"]),
+                {"auto_batch_size": True},
+                [3],
+                None,
+            ),
+            # auto_batch_size=True drops the batch size of an empty tensordict
+            (
+                TensorDict(
+                    a=torch.zeros(3),
+                    nested=TensorDict(batch_size=[3]),
+                    batch_size=[3],
+                ),
+                {"auto_batch_size": True},
+                [3],
+                [],
+            ),
+            # batch_dims cuts the batch size that an empty tensordict keeps
+            (
+                TensorDict(
+                    a=torch.zeros(3),
+                    nested=TensorDict(batch_size=[3, 2]),
+                    batch_size=[3],
+                ),
+                {"auto_batch_size": True, "batch_dims": 1},
+                [3],
+                [],
+            ),
+        ],
+        ids=[
+            "root_batch_size",
+            "names",
+            "nested_batch_size",
+            "empty",
+            "batch_size",
+            "auto_names",
+            "auto_empty",
+            "auto_batch_dims",
+        ],
+    )
+    def test_from_h5_warns_stored_metadata_differs(
+        self, tmp_path, td, kwargs, batch_size, nested_batch_size
+    ):
+        # #3263: from_h5 returns what it returned before the file stored the
+        # metadata, and warns once that 0.17 will restore the stored one
+        path = tmp_path / "file.h5"
+        td.to_h5(path).close()
+        h5td, record = self._from_h5_warnings(path, **kwargs)
+        assert len(record) == 1
+        assert record[0].category is FutureWarning
+        assert record[0].filename == __file__
+        assert h5td.batch_size == torch.Size(batch_size)
+        assert h5td.names == [None] * len(batch_size)
+        if nested_batch_size is not None:
+            assert h5td["nested"].batch_size == torch.Size(nested_batch_size)
+        h5td.close()
+
+    def test_from_h5_silent_when_stored_metadata_matches(self, tmp_path):
+        # #3263: no warning where from_h5 will return the same in 0.17
+        td = TensorDict(
+            a=torch.zeros(3),
+            nested=TensorDict(c=torch.zeros(3, 1, 2), batch_size=[3]),
+            batch_size=[3],
+        )
+        path = tmp_path / "file.h5"
+        td.to_h5(path).close()
+        # auto_batch_size=True infers the batch sizes of non-empty tensordicts
+        h5td, record = self._from_h5_warnings(path, auto_batch_size=True)
+        assert not record
+        assert h5td["nested"].batch_size == torch.Size([3, 1, 2])
+        h5td.close()
+        # batch_size= is the stored batch size of every nested tensordict
+        h5td, record = self._from_h5_warnings(path, batch_size=[3])
+        assert not record
+        assert h5td.batch_size == torch.Size([3])
+        assert h5td["nested"].batch_size == torch.Size([3])
+        h5td.close()
+        # batch_dims cuts the batch size that a non-tensor entry keeps
+        TensorDict(
+            a=torch.zeros(3, 2),
+            nested=TensorDict(s="hi", b=torch.zeros(3, 2, 5), batch_size=[3, 2]),
+            batch_size=[3],
+        ).to_h5(path).close()
+        h5td, record = self._from_h5_warnings(path, auto_batch_size=True, batch_dims=1)
+        assert not record
+        assert h5td["nested"].batch_size == torch.Size([3])
+        h5td.close()
+        # the stored batch sizes are the inferred ones
+        TensorDict(
+            a=torch.zeros(3, 4),
+            nested=TensorDict(c=torch.zeros(3, 4), batch_size=[3, 4]),
+            batch_size=[3, 4],
+        ).to_h5(path).close()
+        for kwargs in ({}, {"batch_size": [3, 4]}):
+            h5td, record = self._from_h5_warnings(path, **kwargs)
+            assert not record
+            h5td.close()
+        # a file written before the metadata was stored loads as it did
+        with h5py.File(path, "w") as file:
+            file.create_dataset("a", data=np.zeros((3, 4)))
+            file.create_dataset("nested/c", data=np.zeros((3, 1, 2)))
+        for kwargs in ({}, {"batch_size": [3]}):
+            h5td, record = self._from_h5_warnings(path, **kwargs)
+            assert not record
+            assert h5td["nested"].batch_size == (
+                torch.Size(kwargs.get("batch_size", [3, 1, 2]))
+            )
+            h5td.close()
+        # an attribute of that name that tensordict did not write is ignored
+        with h5py.File(path, "a") as file:
+            file.attrs["__tensordict__"] = "not json"
+            file["nested"].attrs["__tensordict__"] = 1
+        h5td, record = self._from_h5_warnings(path)
+        assert not record
+        assert h5td["nested"].batch_size == torch.Size([3, 1, 2])
+        h5td.close()
+
+    @pytest.mark.parametrize(
+        "root_attr,nested_attr,nested",
+        [
+            ('{"names": 5}', None, "tensor"),
+            ('{"names": true}', None, "tensor"),
+            ('{"names": "ab"}', None, "tensor"),
+            ('{"batch_size": 3}', None, "tensor"),
+            ('{"batch_size": [1e400]}', None, "tensor"),
+            ('{"batch_size": [3]}', '{"batch_size": 3}', "empty"),
+            ('{"batch_size": [3]}', '{"batch_size": 3}', "non_tensor"),
+            ('{"batch_size": [3]}', '{"batch_size": {"x": 1}}', "empty"),
+        ],
+        ids=[
+            "names_int",
+            "names_bool",
+            "names_str",
+            "batch_size_int",
+            "batch_size_float",
+            "nested_batch_size_int_empty",
+            "nested_batch_size_int_non_tensor",
+            "nested_batch_size_dict_empty",
+        ],
+    )
+    @pytest.mark.parametrize(
+        "from_h5,kwargs",
+        [
+            (PersistentTensorDict.from_h5, {}),
+            (PersistentTensorDict.from_h5, {"auto_batch_size": True}),
+            (PersistentTensorDict.from_h5, {"auto_batch_size": True, "batch_dims": 1}),
+            (TensorDict.from_h5, {}),
+        ],
+        ids=["default", "auto", "auto_batch_dims", "tensordict"],
+    )
+    def test_from_h5_ignores_malformed_stored_metadata(
+        self, tmp_path, root_attr, nested_attr, nested, from_h5, kwargs
+    ):
+        # #3263: a "__tensordict__" attribute whose values have the wrong types
+        # is ignored for its own group: the file loads, and warns, as without it
+        def load(path, root_attr, nested_attr):
+            with h5py.File(path, "w") as file:
+                file["a"] = np.zeros((3, 4), dtype=np.float32)
+                group = file.create_group("nested")
+                if nested != "empty":
+                    group["b"] = np.zeros((3, 2), dtype=np.float32)
+                if nested == "non_tensor":
+                    group["s"] = "hello"
+                if root_attr is not None:
+                    file.attrs["__tensordict__"] = root_attr
+                if nested_attr is not None:
+                    group.attrs["__tensordict__"] = nested_attr
+            with warnings.catch_warnings(record=True) as record:
+                warnings.simplefilter("always")
+                td = from_h5(path, **kwargs)
+            record = [
+                w for w in record if self._STORED_METADATA_WARNING in str(w.message)
+            ]
+            result = (
+                td.batch_size,
+                td.names,
+                td["nested"].batch_size,
+                td["nested"].names,
+                set(td.keys(True, True)),
+                len(record),
+            )
+            td.close()
+            return result
+
+        result = load(tmp_path / "malformed.h5", root_attr, nested_attr)
+        if nested_attr is None:
+            # the root attribute is malformed: no stored metadata is left
+            expected = load(tmp_path / "plain.h5", None, None)
+            assert result[-1] == 0
+        else:
+            # the well-formed root attribute keeps its meaning
+            expected = load(tmp_path / "plain.h5", root_attr, None)
+        assert result == expected
 
     @pytest.mark.parametrize(
         "op_name,args,same_args",
@@ -1455,6 +1814,76 @@ def test_inplace_methods_keep_key_order(tmp_path):
         assert (data["nested", "d"] == -10).all()
 
 
+def _assert_nested_key_get_matches_chained_get(td):
+    # a tuple key reads every group and leaf as chained indexing does; the
+    # tuple keys are read first, as chained indexing fills the cache
+    keys = [key for key in td.keys(True) if isinstance(key, tuple)]
+    by_tuple = {key: (td.get(key), td[key]) for key in keys}
+    for key in keys:
+        chained_get, chained_getitem = td, td
+        for subkey in key:
+            chained_get = chained_get.get(subkey)
+            chained_getitem = chained_getitem[subkey]
+        for value, chained in zip(by_tuple[key], (chained_get, chained_getitem)):
+            assert type(value) is type(chained), key
+            if isinstance(value, torch.Tensor):
+                assert (value == chained).all(), key
+            elif not is_tensor_collection(value):
+                assert value == chained, key
+            else:
+                assert value.batch_size == chained.batch_size, key
+                assert value.names == chained.names, key
+                assert set(value.keys(True)) == set(chained.keys(True)), key
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+@pytest.mark.parametrize("reopen", [False, True])
+@pytest.mark.parametrize("source", ["tensordict", "dict"])
+def test_nested_key_get_matches_chained_get(tmp_path, source, reopen):
+    # #3410: a tuple key gave a nested group, and a non-tensor in it, the batch
+    # size of the root instead of the one chained indexing gives it
+    if source == "tensordict":
+        k = TensorDict(x=torch.zeros(3, 2, 4, 5), batch_size=[3, 2, 4])
+        m = TensorDict(k=k, s=NonTensorData("a", batch_size=[3, 2]), batch_size=[3, 2])
+        data = TensorDict(
+            n=TensorDict(m=m, batch_size=[3]), w=torch.ones(3), batch_size=[3]
+        )
+        data.names = ["b"]
+    else:
+        data = {"n": {"m": {"k": torch.ones(3, 2, 4), "q": torch.zeros(3, 2)}}}
+        data["w"] = torch.ones(3)
+    td = PersistentTensorDict.from_dict(data, filename=tmp_path / "file.h5")
+    if reopen:
+        td.close()
+        td = PersistentTensorDict.from_h5(tmp_path / "file.h5")
+    _assert_nested_key_get_matches_chained_get(td)
+    if source == "tensordict" and not reopen:
+        assert td.get(("n", "m", "k")).batch_size == (3, 2, 4)
+        assert td["n", "m"].names == ["b", None]
+        assert td.get(("n", "m", "s")).batch_size == (3, 2)
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_from_dict_stores_nested_batch_sizes_of_result(tmp_path):
+    # #3410: from_dict of a dict cached its nested groups at the root with the
+    # root's batch size, and stored that size, so from_h5 warned that the
+    # stored batch sizes differ from the ones it returns
+    data = {"n": {"m": {"k": torch.ones(3, 2, 4), "q": torch.zeros(3, 2)}}}
+    data["n"]["z"] = torch.zeros(3, 9)
+    data["w"] = torch.ones(3)
+    td = PersistentTensorDict.from_dict(data, filename=tmp_path / "file.h5")
+    fresh = td.to_tensordict()
+    td.close()
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", FutureWarning)
+        td = PersistentTensorDict.from_h5(tmp_path / "file.h5")
+    reopened = td.to_tensordict()
+    for key in fresh.keys(True):
+        if is_tensor_collection(fresh.get(key)):
+            assert reopened.get(key).batch_size == fresh.get(key).batch_size, key
+    assert reopened["n", "m"].batch_size == (3, 2)
+
+
 def _h5_with_nested(tmp_path):
     td = TensorDict(
         a=torch.arange(12.0).view(4, 3),
@@ -1667,6 +2096,22 @@ def test_from_h5_auto_batch_size(tmp_path):
     )
     assert type(h5td) is PersistentTensorDict
     assert h5td.batch_size == (4,)
+    h5td.close()
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_batch_size_change_pads_and_cuts_names(tmp_path):
+    # #3413: a new batch size kept the names as they were, fewer or more than
+    # the batch dims, where TensorDict pads them with None or cuts them
+    td = TensorDict(a=torch.zeros(2, 3, 4), batch_size=[2], names=["t"])
+    td.to_h5(tmp_path / "f.h5").close()
+    h5td = PersistentTensorDict.from_h5(tmp_path / "f.h5", batch_size=[2])
+    h5td.names = ["t"]
+    h5td.auto_batch_size_()
+    assert h5td.batch_size == (2, 3, 4)
+    assert h5td.names == td.clone().auto_batch_size_().names == ["t", None, None]
+    h5td.batch_size = [2, 3]
+    assert h5td.names == ["t", None]
     h5td.close()
 
 
