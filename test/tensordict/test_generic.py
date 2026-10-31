@@ -12072,6 +12072,65 @@ class TestGeneric:
         assert loaded.batch_size == expected.batch_size
         assert (loaded == expected).all()
 
+    @pytest.mark.parametrize("resave", ["dtype", "key", "memmap_like"])
+    def test_append_memmap_killed_then_saved_again(self, tmpdir, resave):
+        # An append killed after its first meta.json was replaced leaves a
+        # .meta.json.append.tmp in "nested". A save over the directory with
+        # the same number of rows keeps it, next to a new nested meta.json:
+        # the next append must not rename the stale file over the new one.
+        TensorDict(
+            a=torch.zeros(3), nested={"b": torch.zeros(3)}, batch_size=[3]
+        ).memmap(tmpdir)
+        code = (
+            "import os, torch\n"
+            "from tensordict import TensorDict, append_memmap\n"
+            "replace = os.replace\n"
+            "def replace_and_die(src, dst):\n"
+            "    replace(src, dst)\n"
+            "    os._exit(9)\n"
+            "os.replace = replace_and_die\n"
+            "rows = TensorDict(a=torch.ones(2), nested={'b': torch.ones(2)}, "
+            "batch_size=[2])\n"
+            f"append_memmap({str(tmpdir)!r}, rows)\n"
+        )
+        # The child imports the tensordict that this test imports.
+        package_root = os.path.dirname(os.path.dirname(tensordict.__file__))
+        pythonpath = os.pathsep.join(
+            filter(None, [package_root, os.environ.get("PYTHONPATH")])
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            env={**os.environ, "PYTHONPATH": pythonpath},
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        assert result.returncode == 9, result.stderr
+        assert len(list(Path(tmpdir).rglob(".meta.json.append.tmp"))) == 1
+
+        def rows(start, stop):
+            values = torch.arange(start, stop)
+            nested = {"b": values.to(torch.int32)}
+            if resave == "key":
+                nested = {"b": values.float(), "c": values.to(torch.int64)}
+            return TensorDict(
+                a=values.float(), nested=nested, batch_size=[stop - start]
+            )
+
+        if resave == "memmap_like":
+            rows(0, 5).memmap_like(tmpdir, existsok=True).update_(rows(0, 5))
+        else:
+            rows(0, 5).memmap(tmpdir, existsok=True)
+        tensordict.append_memmap(tmpdir, rows(5, 6))
+        assert not list(Path(tmpdir).rglob(".meta.json.append.tmp"))
+        loaded = tensordict.load_memmap(tmpdir)
+        expected = rows(0, 6)
+        assert set(loaded.keys(True, True)) == set(expected.keys(True, True))
+        for key in expected.keys(True, True):
+            assert loaded.get(key).dtype == expected.get(key).dtype
+        assert loaded.batch_size == expected.batch_size
+        assert (loaded == expected).all()
+
     def test_memmap_format_version(self, tmp_path):
         td = TensorDict(
             a=torch.zeros(3),
