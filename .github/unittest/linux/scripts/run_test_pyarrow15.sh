@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Run the tabular tests with pyarrow 15, the oldest release that from_arrow and
-# to_arrow support. run_test_min_deps.sh tests pyarrow 10, which the parquet and
+# to_arrow support. run_test_min_deps.sh tests pyarrow 14.0.1, which the parquet and
 # tabular extras accept, and so deselects the tests of from_arrow and to_arrow.
 # The test-pyarrow15-cpu job of test-linux.yml runs it after setup_env.sh and
 # install.sh, which install the newest releases.

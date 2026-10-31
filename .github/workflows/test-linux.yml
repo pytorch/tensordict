@@ -431,7 +431,7 @@ jobs:
 
   # pyarrow 15, the oldest release that from_arrow and to_arrow support, which
   # run_test_pyarrow15.sh pins, with the oldest torch. It runs the tabular tests,
-  # which test-min-deps-cpu runs with pyarrow 10 and without the Arrow tests.
+  # which test-min-deps-cpu runs with pyarrow 14.0.1 and without the Arrow tests.
   test-pyarrow15-cpu:
     strategy:
       matrix:

@@ -516,6 +516,47 @@ def test_wheel_is_pure_python(isolated_venv, tmp_path):
     assert top_level == {"tensordict", dist_info}, top_level
 
 
+@pytest.mark.slow
+def test_pyarrow_extra_wheel_metadata(isolated_venv):
+    """The Parquet security floor and its CI pin must agree in wheel metadata."""
+    python = isolated_venv["python"]
+    _run(
+        [str(python), "-m", "pip", "install", "--no-deps", str(_ROOT)],
+        cwd=_ROOT,
+    )
+    requirements = json.loads(
+        _run(
+            [
+                str(python),
+                "-c",
+                "import importlib.metadata as md, json; "
+                "print(json.dumps(md.requires('tensordict')))",
+            ],
+            cwd=isolated_venv["probe_dir"],
+            env={**os.environ, "PYTHONPATH": ""},
+        )
+    )
+    arrow_requirements = [
+        req for text in requirements if (req := Requirement(text)).name == "pyarrow"
+    ]
+    ci_recipe = (
+        _ROOT / ".github/unittest/linux/scripts/run_test_min_deps.sh"
+    ).read_text()
+    (ci_version,) = re.findall(r'"pyarrow==([^"\n]+)"', ci_recipe)
+    for extra in ("parquet", "tabular"):
+        (requirement,) = [
+            req
+            for req in arrow_requirements
+            if req.marker is not None and req.marker.evaluate({"extra": extra})
+        ]
+        assert str(requirement.specifier) == ">=14.0.1"
+        for old_version in ("10.0.0", "11.0.0", "12.0.1", "13.0.0", "14.0.0"):
+            assert old_version not in requirement.specifier
+        assert "14.0.1" in requirement.specifier
+        assert ci_version == "14.0.1"
+        assert ci_version in requirement.specifier
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
