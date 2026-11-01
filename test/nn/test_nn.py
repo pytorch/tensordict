@@ -6086,6 +6086,19 @@ class TestTensorDictParams:
         assert inner._parameters["w"] is inner["w"]
         assert set(dict(module.named_parameters())) == {"params.a", "params.sub.w"}
 
+    def test_load_state_dict_assign_parameter_to_buffer(self):
+        # #3425: as in torch, assign=True makes a buffer that gets an
+        # nn.Parameter a parameter, and leaves the checkpoint tensor as it is.
+        net = nn.BatchNorm1d(2)
+        module = self._parent(TensorDict.from_module(net, as_module=True))
+        sd = module.state_dict()
+        ckpt = nn.Parameter(torch.ones(2))
+        sd["params.running_mean"] = ckpt
+        module.load_state_dict(sd, assign=True)
+        assert ckpt.requires_grad
+        assert module.params["running_mean"] is ckpt
+        assert module.params._parameters["running_mean"] is ckpt
+
     def test_load_state_dict_pre_hook(self):
         # #3425: the load pre-hooks of the TensorDictParams run.
         module = self._parent(TensorDict.from_module(nn.Linear(2, 2), as_module=True))

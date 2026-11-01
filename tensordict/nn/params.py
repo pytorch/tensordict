@@ -1456,17 +1456,22 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             and not torch.__future__.get_swap_module_params_on_conversion()
         ):
             local_metadata = {**local_metadata, "assign_to_params_buffers": False}
-            keys = keys if keys is not None else self._leaf_keys()
+            if keys is None:
+                keys = self._leaf_keys()
+                state_dict = dict(state_dict)
             # The TensorDictParams on the path of each leaf register it again.
             owners = {self}
             for name, dest in local_state.items():
                 val = state_dict.get(prefix + name)
                 if val is None or val is dest:
                     continue
-                if isinstance(val, nn.Parameter):
-                    val.requires_grad_(dest.requires_grad)
-                elif isinstance(dest, nn.Parameter):
-                    val = nn.Parameter(val, requires_grad=dest.requires_grad)
+                if isinstance(dest, nn.Parameter):
+                    if isinstance(val, nn.Parameter):
+                        val.requires_grad_(dest.requires_grad)
+                    else:
+                        val = nn.Parameter(val, requires_grad=dest.requires_grad)
+                    # The base's copy_ of a tensor into itself is a no-op.
+                    state_dict[prefix + name] = val
                 *path, last = _unravel_key_to_tuple(keys[name])
                 parent = self
                 for part in path:
@@ -1479,7 +1484,8 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                     last,
                     val,
                     inplace=False,
-                    validated=False,
+                    # The shapes match: only a device may need a cast.
+                    validated=val.device == dest.device,
                     ignore_lock=True,
                     non_blocking=False,
                 )
