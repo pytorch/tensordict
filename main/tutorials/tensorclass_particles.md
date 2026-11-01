@@ -33,7 +33,7 @@ torch.manual_seed(0)
 ```
 
 ```
-<torch._C.Generator object at 0x7f7a78d7cc30>
+<torch._C.Generator object at 0x7f813e37cc30>
 ```
 
 ## The state of a system
@@ -266,7 +266,7 @@ step by step.
 - [Using tensorclasses for datasets](tensorclass_fashion.html#sphx-glr-tutorials-tensorclass-fashion-py) uses a tensorclass to
 load a dataset.
 
-**Total running time of the script:** (0 minutes 0.853 seconds)
+**Total running time of the script:** (0 minutes 0.886 seconds)
 
 [`Download Jupyter notebook: tensorclass_particles.ipynb`](../_downloads/5e4a1de83fdd13c95fcfa6bf4edda621/tensorclass_particles.ipynb)
 
