@@ -6021,6 +6021,140 @@ class TestTensorDictParams:
         with pytest.raises(RuntimeError, match="Missing key"):
             module.load_state_dict({}, strict=True)
 
+    @staticmethod
+    def _parent(params):
+        module = nn.Module()
+        module.params = params
+        return module
+
+    def test_load_state_dict_partial(self):
+        # #3425: strict=False loads the keys present and reports the others.
+        module = self._parent(TensorDict.from_module(nn.Linear(2, 2), as_module=True))
+        bias = module.params["bias"].detach().clone()
+        result = module.load_state_dict(
+            {"params.weight": torch.full((2, 2), 5.0), "params.extra": torch.ones(1)},
+            strict=False,
+        )
+        assert result.missing_keys == ["params.bias"]
+        assert result.unexpected_keys == ["params.extra"]
+        assert (module.params["weight"] == 5).all()
+        assert (module.params["bias"] == bias).all()
+
+    def test_load_state_dict_missing_nested_key(self):
+        # #3425: a missing nested key is reported, and raises with strict=True.
+        net = nn.Sequential(nn.Linear(2, 2), nn.BatchNorm1d(2))
+        module = self._parent(TensorDict.from_module(net, as_module=True))
+        sd = module.state_dict()
+        del sd["params.0.bias"]
+        with pytest.raises(RuntimeError, match='Missing key.*"params.0.bias"'):
+            module.load_state_dict(sd, strict=True)
+        result = module.load_state_dict(sd, strict=False)
+        assert result.missing_keys == ["params.0.bias"]
+        assert result.unexpected_keys == []
+        sd["params.0.extra"] = torch.ones(1)
+        result = module.load_state_dict(sd, strict=False)
+        assert result.unexpected_keys == ["params.0.extra"]
+
+    @pytest.mark.parametrize("locked", [True, False])
+    def test_load_state_dict_assign(self, locked):
+        # #3425: assign=True puts the tensors of the state dict in the leaves.
+        inner = TensorDictParams(TensorDict(w=torch.zeros(2)))
+        params = TensorDictParams(
+            TensorDict(a=nn.Parameter(torch.zeros(3)), sub=inner, buf=torch.zeros(2)),
+            no_convert=True,
+        )
+        if locked:
+            params.lock_()
+        else:
+            params.unlock_()
+        module = self._parent(params)
+        sd = {
+            "params.a": torch.ones(3, dtype=torch.float64),
+            "params.sub.w": torch.ones(2),
+            "params.buf": torch.ones(2),
+        }
+        module.load_state_dict(sd, assign=True)
+        for key, ckpt in sd.items():
+            leaf = params.get(tuple(key.split(".")[1:]))
+            assert leaf.data_ptr() == ckpt.data_ptr()
+        assert isinstance(params["a"], nn.Parameter)
+        assert params["a"].requires_grad and params["a"].dtype == torch.float64
+        assert not isinstance(params["buf"], nn.Parameter)
+        assert params.is_locked is locked
+        assert params._parameters["a"] is params["a"]
+        assert params._parameters["sub.w"] is inner["w"]
+        assert inner._parameters["w"] is inner["w"]
+        assert set(dict(module.named_parameters())) == {"params.a", "params.sub.w"}
+
+    def test_load_state_dict_assign_parameter_to_buffer(self):
+        # #3425: as in torch, assign=True makes a buffer that gets an
+        # nn.Parameter a parameter, and leaves the checkpoint tensor as it is.
+        net = nn.BatchNorm1d(2)
+        module = self._parent(TensorDict.from_module(net, as_module=True))
+        sd = module.state_dict()
+        ckpt = nn.Parameter(torch.ones(2))
+        sd["params.running_mean"] = ckpt
+        module.load_state_dict(sd, assign=True)
+        assert ckpt.requires_grad
+        assert module.params["running_mean"] is ckpt
+        assert module.params._parameters["running_mean"] is ckpt
+
+    def test_load_state_dict_pre_hook(self):
+        # #3425: the load pre-hooks of the TensorDictParams run.
+        module = self._parent(TensorDict.from_module(nn.Linear(2, 2), as_module=True))
+
+        def rename(state_dict, prefix, *args):
+            state_dict[prefix + "bias"] = state_dict.pop(prefix + "old_bias")
+
+        module.params._register_load_state_dict_pre_hook(rename)
+        module.load_state_dict(
+            {
+                "params.weight": torch.ones(2, 2),
+                "params.old_bias": torch.full((2,), 3.0),
+            }
+        )
+        assert (module.params["bias"] == 3).all()
+
+    @pytest.mark.parametrize("assign", [True, False])
+    @pytest.mark.parametrize("strict", [True, False])
+    @pytest.mark.parametrize(
+        "value", [7, 7.0, torch.tensor(7.0), torch.full((1,), 7.0)]
+    )
+    def test_load_state_dict_broadcast(self, value, strict, assign):
+        # A number or a broadcastable tensor is written into the leaf in place.
+        module = self._parent(TensorDict.from_module(nn.Linear(2, 2), as_module=True))
+        bias = module.params["bias"]
+        sd = {"params.weight": torch.ones(2, 2), "params.bias": value}
+        module.load_state_dict(sd, strict=strict, assign=assign)
+        assert module.params["bias"] is bias
+        assert (bias == 7).all()
+        assert (module.params["weight"] == 1).all()
+
+    @pytest.mark.parametrize("assign", [True, False])
+    @pytest.mark.parametrize("strict", [True, False])
+    @pytest.mark.parametrize("value", [torch.ones(3), "x"])
+    @pytest.mark.parametrize("error", [ValueError, RuntimeError])
+    def test_load_state_dict_mismatch(self, error, value, strict, assign):
+        # #3425: in a partial checkpoint too, a value of another size or a
+        # non-tensor raises an error that is both a ValueError and a
+        # RuntimeError.
+        module = self._parent(TensorDict.from_module(nn.Linear(2, 2), as_module=True))
+        with pytest.raises(error, match="Failed to update 'bias'"):
+            module.load_state_dict({"params.bias": value}, strict=strict, assign=assign)
+
+    def test_load_state_dict_dotted_and_non_tensor_keys(self):
+        # #3425: a key with a literal dot and a non-tensor leaf load too.
+        params = TensorDictParams(
+            TensorDict({"a.b": torch.zeros(3), "c": torch.zeros(2), "s": "text"})
+        )
+        module = self._parent(params)
+        sd = {key: torch.ones_like(val) for key, val in module.state_dict().items()}
+        assert set(sd) == {"params.a.b", "params.c"}
+        result = module.load_state_dict(sd)
+        assert result.missing_keys == result.unexpected_keys == []
+        assert (params["a.b"] == 1).all() and (params["c"] == 1).all()
+        assert params["s"] == "text"
+
     def test_inplace_ops(self):
         td = TensorDict(
             {
