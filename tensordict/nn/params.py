@@ -1430,29 +1430,84 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         unexpected_keys,
         error_msgs,
     ):
-        data = TensorDict(
-            {
-                key: val
-                for key, val in state_dict.items()
-                if key.startswith(prefix) and val is not None
-            },
-            [],
-        ).unflatten_keys(".")
-        nested_prefix = tuple(key for key in prefix.split(".") if key)
-        if nested_prefix:
-            data = data.get(nested_prefix)
-        if data is None:
-            return nn.Module._load_from_state_dict(
-                self,
-                state_dict,
-                prefix,
-                local_metadata,
-                strict,
-                missing_keys,
-                unexpected_keys,
-                error_msgs,
-            )
-        self.data.load_state_dict(data)
+        # Override: the leaves are registered under dotted names ("0.weight"),
+        # which the base reads as submodules: it reports them as unexpected
+        # keys, and its assign=True path cannot set them.
+        local_state = {**self._parameters, **self._buffers}
+        keys = None
+        # Where the base rejects an entry, keep the previous behaviour: None
+        # reads as a missing key, and a number or a tensor of another shape
+        # is written in place (broadcast, or _InplaceWriteError).
+        for name, dest in local_state.items():
+            val = state_dict.get(prefix + name, dest)
+            if isinstance(val, Tensor) and val.shape == dest.shape:
+                continue
+            if keys is None:
+                keys = self._leaf_keys()
+                data = self.data
+                state_dict = dict(state_dict)
+            if val is None:
+                del state_dict[prefix + name]
+            else:
+                data.set(keys[name], val, inplace=True)
+                state_dict[prefix + name] = dest
+        if (
+            local_metadata.get("assign_to_params_buffers", False)
+            and not torch.__future__.get_swap_module_params_on_conversion()
+        ):
+            local_metadata = {**local_metadata, "assign_to_params_buffers": False}
+            keys = keys if keys is not None else self._leaf_keys()
+            # The TensorDictParams on the path of each leaf register it again.
+            owners = {self}
+            for name, dest in local_state.items():
+                val = state_dict.get(prefix + name)
+                if val is None or val is dest:
+                    continue
+                if isinstance(val, nn.Parameter):
+                    val.requires_grad_(dest.requires_grad)
+                elif isinstance(dest, nn.Parameter):
+                    val = nn.Parameter(val, requires_grad=dest.requires_grad)
+                *path, last = _unravel_key_to_tuple(keys[name])
+                parent = self
+                for part in path:
+                    parent = parent._get_str(part, NO_DEFAULT)
+                    if isinstance(parent, TensorDictParams):
+                        owners.add(parent)
+                if isinstance(parent, TensorDictParams):
+                    parent = parent._param_td
+                parent._set_str(
+                    last,
+                    val,
+                    inplace=False,
+                    validated=False,
+                    ignore_lock=True,
+                    non_blocking=False,
+                )
+            for owner in owners:
+                owner._reset_params()
+        n = len(unexpected_keys)
+        # The base now copies each entry into the (assigned) leaf, and reports
+        # missing and unexpected keys.
+        nn.Module._load_from_state_dict(
+            self,
+            state_dict,
+            prefix,
+            local_metadata,
+            strict,
+            missing_keys,
+            unexpected_keys,
+            error_msgs,
+        )
+        unexpected_keys[n:] = [
+            key for key in unexpected_keys[n:] if key[len(prefix) :] not in local_state
+        ]
+
+    def _leaf_keys(self) -> dict[str, NestedKey]:
+        # Maps each registered name to the key of its leaf in _param_td.
+        return {
+            ".".join(key) if isinstance(key, tuple) else key: key
+            for key in self._param_td.keys(True, True)
+        }
 
     def items(
         self,
