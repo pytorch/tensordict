@@ -2,11 +2,99 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+# TensorDictParams._load_from_state_dict adapts torch.nn.Module._load_from_state_dict
+# from PyTorch 2.11.0. The following PyTorch notice applies to those portions.
+# From PyTorch:
+#
+# Copyright (c) 2016-     Facebook, Inc            (Adam Paszke)
+# Copyright (c) 2014-     Facebook, Inc            (Soumith Chintala)
+# Copyright (c) 2011-2014 Idiap Research Institute (Ronan Collobert)
+# Copyright (c) 2012-2014 Deepmind Technologies    (Koray Kavukcuoglu)
+# Copyright (c) 2011-2012 NEC Laboratories America (Koray Kavukcuoglu)
+# Copyright (c) 2011-2013 NYU                      (Clement Farabet)
+# Copyright (c) 2006-2010 NEC Laboratories America (Ronan Collobert, Leon Bottou, Iain Melvin, Jason Weston)
+# Copyright (c) 2006      Idiap Research Institute (Samy Bengio)
+# Copyright (c) 2001-2004 Idiap Research Institute (Ronan Collobert, Samy Bengio, Johnny Mariethoz)
+#
+# From Caffe2:
+#
+# Copyright (c) 2016-present, Facebook Inc. All rights reserved.
+#
+# All contributions by Facebook:
+# Copyright (c) 2016 Facebook Inc.
+#
+# All contributions by Google:
+# Copyright (c) 2015 Google Inc.
+# All rights reserved.
+#
+# All contributions by Yangqing Jia:
+# Copyright (c) 2015 Yangqing Jia
+# All rights reserved.
+#
+# All contributions by Kakao Brain:
+# Copyright 2019-2020 Kakao Brain
+#
+# All contributions by Cruise LLC:
+# Copyright (c) 2022 Cruise LLC.
+# All rights reserved.
+#
+# All contributions by Tri Dao:
+# Copyright (c) 2024 Tri Dao.
+# All rights reserved.
+#
+# All contributions by Arm:
+# Copyright (c) 2021, 2023-2025 Arm Limited and/or its affiliates
+#
+# All contributions from Caffe:
+# Copyright(c) 2013, 2014, 2015, the respective contributors
+# All rights reserved.
+#
+# All other contributions:
+# Copyright(c) 2015, 2016 the respective contributors
+# All rights reserved.
+#
+# Caffe2 uses a copyright model similar to Caffe: each contributor holds
+# copyright over their contributions to Caffe2. The project versioning records
+# all such contribution and copyright details. If a contributor wants to further
+# mark their specific copyright on a particular contribution, they should
+# indicate their copyright solely in the commit message of the change when it is
+# committed.
+#
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+#
+# 2. Redistributions in binary form must reproduce the above copyright
+#    notice, this list of conditions and the following disclaimer in the
+#    documentation and/or other materials provided with the distribution.
+#
+# 3. Neither the names of Facebook, Deepmind Technologies, NYU, NEC Laboratories America
+#    and IDIAP Research Institute nor the names of its contributors may be
+#    used to endorse or promote products derived from this software without
+#    specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+
 from __future__ import annotations
 
 import collections
 import functools
 import inspect
+import warnings
 import weakref
 from collections.abc import Mapping
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -1430,20 +1518,8 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         unexpected_keys,
         error_msgs,
     ):
-        data = TensorDict(
-            {
-                key: val
-                for key, val in state_dict.items()
-                if key.startswith(prefix) and val is not None
-            },
-            [],
-        ).unflatten_keys(".")
-        nested_prefix = tuple(key for key in prefix.split(".") if key)
-        if nested_prefix:
-            data = data.get(nested_prefix)
-        if data is None:
-            return nn.Module._load_from_state_dict(
-                self,
+        for hook in self._load_state_dict_pre_hooks.values():
+            hook(
                 state_dict,
                 prefix,
                 local_metadata,
@@ -1452,7 +1528,121 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                 unexpected_keys,
                 error_msgs,
             )
-        self.data.load_state_dict(data)
+
+        # Registration uses flat, possibly dotted names. nn.Module's loader
+        # treats a dot as a child module, but our leaves all live in _param_td.
+        local_state = {
+            **self._parameters,
+            **{
+                key: value
+                for key, value in self._buffers.items()
+                if key not in self._non_persistent_buffers_set
+            },
+        }
+        local_state = {
+            key: value for key, value in local_state.items() if value is not None
+        }
+        assign = local_metadata.get("assign_to_params_buffers", False)
+        use_swap_tensors = torch.__future__.get_swap_module_params_on_conversion()
+        original_keys = {}
+        if assign and not use_swap_tensors:
+            for original_key in self._param_td.keys(True, True):
+                original_key = (
+                    (original_key,) if isinstance(original_key, str) else original_key
+                )
+                name = ".".join(original_key)
+                if name in original_keys:
+                    error_msgs.append(
+                        f"Cannot assign {prefix + name}: ambiguous flattened parameter key."
+                    )
+                    return
+                original_keys[name] = original_key
+        for name, param in local_state.items():
+            key = prefix + name
+            if key not in state_dict:
+                if strict:
+                    missing_keys.append(key)
+                continue
+            value = state_dict[key]
+            if not torch.overrides.is_tensor_like(value):
+                error_msgs.append(
+                    f'While copying the parameter named "{key}", expected torch.Tensor '
+                    f"or Tensor-like object from checkpoint but received {type(value)}"
+                )
+                continue
+            is_lazy = torch.nn.parameter.is_lazy(param)
+            if (
+                not is_lazy
+                and param.ndim == 0
+                and value.ndim == 1
+                and value.shape[0] == 1
+            ):
+                value = value[0]
+            if not is_lazy and value.shape != param.shape:
+                error_msgs.append(
+                    f"size mismatch for {key}: copying a param with shape {value.shape} "
+                    f"from checkpoint, the shape in current model is {param.shape}."
+                )
+                continue
+            if param.is_meta and not value.is_meta and not assign:
+                warnings.warn(
+                    f"for {key}: copying from a non-meta parameter in the checkpoint "
+                    "to a meta parameter in the current model, which is a no-op. "
+                    "Pass assign=True to assign the checkpoint tensor instead.",
+                    stacklevel=3,
+                )
+            try:
+                with torch.no_grad():
+                    if use_swap_tensors:
+                        converted = param.module_load(value, assign=assign)
+                        if converted is param or converted is value:
+                            raise RuntimeError(
+                                "module_load returned one of self or other"
+                            )
+                        if isinstance(param, nn.Parameter):
+                            if not isinstance(converted, nn.Parameter):
+                                converted = nn.Parameter(
+                                    converted, requires_grad=param.requires_grad
+                                )
+                            else:
+                                converted.requires_grad_(param.requires_grad)
+                        torch.utils.swap_tensors(param, converted)
+                    elif assign:
+                        if isinstance(param, nn.Parameter):
+                            if not isinstance(value, nn.Parameter):
+                                value = nn.Parameter(
+                                    value, requires_grad=param.requires_grad
+                                )
+                            else:
+                                value.requires_grad_(param.requires_grad)
+                        with self._param_td.unlock_():
+                            self._param_td._set_tuple(
+                                original_keys[name],
+                                value,
+                                validated=True,
+                                inplace=False,
+                            )
+                        if isinstance(value, nn.Parameter):
+                            self._buffers.pop(name, None)
+                            self._non_persistent_buffers_set.discard(name)
+                            self._parameters[name] = value
+                        else:
+                            self._buffers[name] = value
+                    else:
+                        param.copy_(value)
+            except Exception as error:
+                error_msgs.append(f'While loading the parameter named "{key}": {error}')
+        if assign or use_swap_tensors:
+            if not self._param_td._check_device(raise_exception=False):
+                self._param_td.auto_device_()
+        # PyTorch passes strict=True to this hook even for a public
+        # strict=False load: collect diagnostics and let the caller decide.
+        if strict:
+            unexpected_keys.extend(
+                key
+                for key in state_dict
+                if key.startswith(prefix) and key[len(prefix) :] not in local_state
+            )
 
     def items(
         self,

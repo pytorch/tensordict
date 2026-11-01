@@ -22,6 +22,7 @@ from collections import OrderedDict
 from collections.abc import MutableSequence
 
 import functorch
+import numpy as np
 import pytest
 import tensordict.nn.common
 import tensordict.nn.distributions
@@ -6020,6 +6021,359 @@ class TestTensorDictParams:
         assert (params == before).all()
         with pytest.raises(RuntimeError, match="Missing key"):
             module.load_state_dict({}, strict=True)
+
+    @pytest.mark.parametrize("nested", [False, True])
+    @pytest.mark.parametrize("strict", [False, True])
+    @pytest.mark.parametrize("assign", [False, True])
+    @pytest.mark.parametrize("unexpected", [False, True])
+    @pytest.mark.parametrize("lock", [False, True])
+    def test_load_state_dict_partial(self, nested, strict, assign, unexpected, lock):
+        layer = nn.Linear(2, 2)
+        with torch.no_grad():
+            layer.weight.fill_(1)
+            layer.bias.fill_(3)
+        layer.weight.requires_grad_(False)
+        layer.register_buffer("running", torch.tensor([7.0, 8.0]))
+        params = TensorDict.from_module(
+            nn.Sequential(layer) if nested else layer, as_module=True
+        )
+        if lock:
+            params._param_td.lock_()
+        module = nn.Module()
+        module.model = nn.Module()
+        module.model.params = params
+        module.model.sibling = nn.Linear(2, 2)
+        checkpoint = module.state_dict()
+        prefix = "model.params." + ("0." if nested else "")
+        weight_key = ("0", "weight") if nested else "weight"
+        bias_key = ("0", "bias") if nested else "bias"
+        buffer_key = ("0", "running") if nested else "running"
+        old_weight = params[weight_key]
+        old_bias = params[bias_key]
+        old_buffer = params[buffer_key]
+        checkpoint[prefix + "weight"] = torch.full((2, 2), 5.0)
+        checkpoint[prefix + "running"] = torch.tensor([9.0, 10.0])
+        del checkpoint[prefix + "bias"]
+        if unexpected:
+            # An unexpected descendant of a tensor must not be unflattened
+            # into that tensor or added to the parameter tree.
+            checkpoint[prefix + "weight.extra"] = torch.tensor(99.0)
+        missing = [prefix + "bias"]
+        extra = [prefix + "weight.extra"] if unexpected else []
+        if strict:
+            with pytest.raises(RuntimeError, match="Missing key") as error:
+                module.load_state_dict(checkpoint, strict=True, assign=assign)
+            assert prefix + "bias" in str(error.value)
+            if unexpected:
+                assert prefix + "weight.extra" in str(error.value)
+        else:
+            result = module.load_state_dict(checkpoint, strict=False, assign=assign)
+            assert result.missing_keys == missing
+            assert result.unexpected_keys == extra
+        assert params[bias_key] is old_bias
+        assert params[weight_key].requires_grad is False
+        assert (
+            params[weight_key]
+            is dict(module.model.params.named_parameters())[
+                "0.weight" if nested else "weight"
+            ]
+        )
+        assert (
+            params[buffer_key]
+            is dict(module.model.params.named_buffers())[
+                "0.running" if nested else "running"
+            ]
+        )
+        assert params._param_td.is_locked == lock
+        assert len(params.keys(True, True)) == 3
+        if assign:
+            assert params[weight_key] is not old_weight
+            assert (
+                params[weight_key].data_ptr()
+                == checkpoint[prefix + "weight"].data_ptr()
+            )
+            assert params[buffer_key] is not old_buffer
+            assert (
+                params[buffer_key].data_ptr()
+                == checkpoint[prefix + "running"].data_ptr()
+            )
+            torch.testing.assert_close(old_weight, torch.ones(2, 2))
+        else:
+            assert params[weight_key] is old_weight
+            assert params[buffer_key] is old_buffer
+        x = torch.tensor([[1.0, 2.0]])
+        prediction = nn.functional.linear(x, params[weight_key], params[bias_key])
+        oracle = np.array([[1.0, 2.0]]) @ np.full((2, 2), 5.0).T + 3.0
+        np.testing.assert_array_equal(prediction.detach().numpy(), oracle)
+        np.testing.assert_array_equal(params[buffer_key].numpy(), [9.0, 10.0])
+
+    @pytest.mark.parametrize("assign", [False, True])
+    @pytest.mark.parametrize("value", [torch.ones(1, 2), torch.ones(3, 2), None])
+    def test_load_state_dict_partial_invalid_value(self, assign, value):
+        module = nn.Module()
+        module.params = TensorDict.from_module(nn.Linear(2, 2), as_module=True)
+        before = module.params["weight"].detach().clone()
+        with pytest.raises(RuntimeError, match="size mismatch|Tensor"):
+            module.load_state_dict(
+                {"params.weight": value}, strict=False, assign=assign
+            )
+        torch.testing.assert_close(module.params["weight"], before)
+
+    @pytest.mark.parametrize("assign", [False, True])
+    def test_load_state_dict_partial_dtype(self, assign):
+        module = nn.Module()
+        module.params = TensorDict.from_module(nn.Linear(2, 2), as_module=True)
+        old_weight = module.params["weight"]
+        checkpoint = {"params.weight": torch.full((2, 2), 5.0, dtype=torch.float64)}
+        result = module.load_state_dict(checkpoint, strict=False, assign=assign)
+        assert result.missing_keys == ["params.bias"]
+        weight = module.params["weight"]
+        assert weight.requires_grad == old_weight.requires_grad
+        assert weight.dtype == (torch.float64 if assign else torch.float32)
+        assert (weight is old_weight) is not assign
+        assert dict(module.named_parameters())["params.weight"] is weight
+
+    @pytest.mark.parametrize("assign", [False, True])
+    @pytest.mark.parametrize("swap", [False, True])
+    def test_load_state_dict_partial_matches_module(self, assign, swap):
+        layer = nn.Linear(2, 2)
+        layer.weight.requires_grad_(False)
+        layer.register_buffer("counter", torch.tensor(1, dtype=torch.int64))
+        native = nn.Module()
+        native.params = nn.Sequential(copy.deepcopy(layer))
+        wrapped = nn.Module()
+        wrapped.params = TensorDict.from_module(nn.Sequential(layer), as_module=True)
+        old_weight = wrapped.params["0", "weight"]
+        old_bias = wrapped.params["0", "bias"]
+        checkpoint = {
+            "params.0.weight": torch.full((2, 2), 7.0, dtype=torch.float64),
+            "params.0.counter": torch.tensor(9, dtype=torch.int32),
+            "params.unexpected": torch.tensor(99.0),
+        }
+        old_swap = torch.__future__.get_swap_module_params_on_conversion()
+        torch.__future__.set_swap_module_params_on_conversion(swap)
+        try:
+            expected = native.load_state_dict(checkpoint, strict=False, assign=assign)
+            actual = wrapped.load_state_dict(checkpoint, strict=False, assign=assign)
+        finally:
+            torch.__future__.set_swap_module_params_on_conversion(old_swap)
+        assert actual == expected
+        native_params = dict(native.named_parameters())
+        wrapped_params = dict(wrapped.named_parameters())
+        native_buffers = dict(native.named_buffers())
+        wrapped_buffers = dict(wrapped.named_buffers())
+        assert native_params.keys() == wrapped_params.keys()
+        assert native_buffers.keys() == wrapped_buffers.keys()
+        for name, value in native_params.items():
+            torch.testing.assert_close(wrapped_params[name], value)
+            assert wrapped_params[name].requires_grad == value.requires_grad
+        for name, value in native_buffers.items():
+            torch.testing.assert_close(wrapped_buffers[name], value)
+        assert wrapped.params["0", "weight"] is wrapped_params["params.0.weight"]
+        assert (wrapped.params["0", "weight"] is old_weight) == (swap or not assign)
+        assert wrapped.params["0", "bias"] is old_bias
+
+    def test_load_state_dict_partial_pre_hook(self):
+        module = nn.Module()
+        module.params = TensorDict.from_module(nn.Linear(2, 2), as_module=True)
+        calls = []
+
+        def pre_hook(params, state, prefix, metadata, strict, missing, extra, errors):
+            calls.append((params, prefix, strict))
+            state[prefix + "weight"] = state.pop(prefix + "old_weight")
+
+        module.params.register_load_state_dict_pre_hook(pre_hook)
+        result = module.load_state_dict(
+            {"params.old_weight": torch.full((2, 2), 5.0)}, strict=False
+        )
+        assert calls == [(module.params, "params.", True)]
+        assert result.missing_keys == ["params.bias"]
+        assert not result.unexpected_keys
+        torch.testing.assert_close(module.params["weight"], torch.full((2, 2), 5.0))
+
+    def test_load_state_dict_unexpected_only(self):
+        module = nn.Module()
+        module.params = TensorDict.from_module(
+            nn.Sequential(nn.Linear(2, 2)), as_module=True
+        )
+        before = module.params.detach().clone()
+        result = module.load_state_dict(
+            {"params.extra.weight": torch.ones(2, 2)}, strict=False
+        )
+        assert result.missing_keys == ["params.0.weight", "params.0.bias"]
+        assert result.unexpected_keys == ["params.extra.weight"]
+        assert (module.params == before).all()
+        with pytest.raises(RuntimeError, match="Missing key"):
+            module.load_state_dict({}, strict=True)
+
+    @pytest.mark.parametrize("variant", ["literal", "nested", "alias", "prehook"])
+    @pytest.mark.parametrize("assign", [False, True])
+    @pytest.mark.parametrize("swap", [False, True])
+    @pytest.mark.parametrize("lock", [False, True])
+    def test_load_state_dict_original_keys(self, variant, assign, swap, lock):
+        key = ("outer", "a.b") if variant in ("nested", "prehook") else "a.b"
+        alias = variant in ("alias", "prehook")
+        value = nn.Parameter(torch.ones(2))
+        leaves = {key: value}
+        if alias:
+            leaves[("other", "shared")] = value
+        wrapped = nn.Module()
+        wrapped.params = TensorDictParams(TensorDict(leaves, []), lock=lock)
+        native = nn.Module()
+        native.params = nn.Module()
+        native_value = nn.Parameter(torch.ones(2))
+        checkpoint = {}
+        names = {}
+        for original_key in leaves:
+            name = (
+                original_key
+                if isinstance(original_key, str)
+                else ".".join(original_key)
+            )
+            names[original_key] = name
+            parent = native.params
+            segments = name.split(".")
+            for segment in segments[:-1]:
+                if segment not in parent._modules:
+                    parent.add_module(segment, nn.Module())
+                parent = parent._modules[segment]
+            parent.register_parameter(segments[-1], native_value)
+            checkpoint["params." + name] = torch.full((2,), 5.0)
+        if variant == "prehook":
+            checkpoint["params.legacy"] = checkpoint.pop("params." + names[key])
+
+            def rewrite(
+                params, state, prefix, metadata, strict, missing, extra, errors
+            ):
+                state[prefix + names[key]] = state.pop(prefix + "legacy")
+
+            native.params.register_load_state_dict_pre_hook(rewrite)
+            wrapped.params.register_load_state_dict_pre_hook(rewrite)
+        before_keys = set(wrapped.params.keys(True, True))
+        old_swap = torch.__future__.get_swap_module_params_on_conversion()
+        torch.__future__.set_swap_module_params_on_conversion(swap)
+        try:
+            expected = native.load_state_dict(dict(checkpoint), assign=assign)
+            result = wrapped.load_state_dict(dict(checkpoint), assign=assign)
+        finally:
+            torch.__future__.set_swap_module_params_on_conversion(old_swap)
+        assert result == expected
+        assert set(wrapped.params.keys(True, True)) == before_keys
+        assert wrapped.params._param_td.is_locked == lock
+        registered = dict(wrapped.named_parameters(remove_duplicate=False))
+        native_registered = dict(native.named_parameters(remove_duplicate=False))
+        for original_key, name in names.items():
+            loaded = wrapped.params[original_key]
+            assert wrapped.params._parameters[name] is loaded
+            assert registered["params." + name] is loaded
+            torch.testing.assert_close(loaded, native_registered["params." + name])
+        assert (wrapped.params[key] is value) == (swap or not assign)
+        if alias:
+            native_alias = native.params.other.shared
+            native_original = dict(native.named_parameters(remove_duplicate=False))[
+                "params." + names[key]
+            ]
+            assert (wrapped.params[key] is wrapped.params["other", "shared"]) == (
+                native_original is native_alias
+            )
+        prediction = torch.dot(torch.tensor([1.0, 2.0]), wrapped.params[key])
+        oracle = np.array([1.0, 2.0]) @ np.array([5.0, 5.0])
+        assert prediction.item() == oracle
+        assert set(wrapped.state_dict()) == {
+            "params." + name for name in names.values()
+        }
+
+    def test_load_state_dict_original_keys_after_pre_hook(self):
+        module = nn.Module()
+        module.params = TensorDictParams(
+            TensorDict({"old.key": nn.Parameter(torch.ones(2))})
+        )
+
+        def rename(params, state, prefix, metadata, strict, missing, extra, errors):
+            params.rename_key_("old.key", ("outer", "new.key"))
+
+        module.params.register_load_state_dict_pre_hook(rename)
+        module.load_state_dict(
+            {"params.outer.new.key": torch.full((2,), 5.0)}, assign=True
+        )
+        assert list(module.params.keys(True, True)) == [("outer", "new.key")]
+        assert (
+            module.params["outer", "new.key"]
+            is module.params._parameters["outer.new.key"]
+        )
+        torch.testing.assert_close(
+            module.params["outer", "new.key"], torch.full((2,), 5.0)
+        )
+
+    def test_load_state_dict_ambiguous_original_keys(self):
+        module = nn.Module()
+        module.params = TensorDictParams(
+            TensorDict(
+                {
+                    "a.b": nn.Parameter(torch.ones(2)),
+                    ("a", "b"): nn.Parameter(torch.zeros(2)),
+                }
+            )
+        )
+        before = module.params.detach().clone()
+        registered = dict(module.params._parameters)
+        with pytest.raises(RuntimeError, match="ambiguous"):
+            module.load_state_dict({"params.a.b": torch.full((2,), 5.0)}, assign=True)
+        assert (module.params == before).all()
+        assert all(
+            module.params._parameters[name] is value
+            for name, value in registered.items()
+        )
+
+    @pytest.mark.parametrize("assign", [False, True])
+    @pytest.mark.parametrize("swap", [False, True])
+    def test_load_state_dict_parameter_valued_buffer(self, assign, swap):
+        layer = nn.Module()
+        layer.weight = nn.Parameter(torch.ones(2))
+        layer.register_buffer("running", torch.ones(2))
+        native = nn.Module()
+        native.params = copy.deepcopy(layer)
+        wrapped = nn.Module()
+        wrapped.params = TensorDict.from_module(layer, as_module=True)
+        checkpoint_source = nn.Module()
+        checkpoint_source.running = nn.Parameter(torch.full((2,), 5.0))
+        # keep_vars=True is an ordinary source of Parameter-valued checkpoint entries.
+        checkpoint = {
+            "params." + key: value
+            for key, value in checkpoint_source.state_dict(keep_vars=True).items()
+        }
+        old_swap = torch.__future__.get_swap_module_params_on_conversion()
+        torch.__future__.set_swap_module_params_on_conversion(swap)
+        try:
+            expected = native.load_state_dict(
+                dict(checkpoint), strict=False, assign=assign
+            )
+            actual = wrapped.load_state_dict(
+                dict(checkpoint), strict=False, assign=assign
+            )
+        finally:
+            torch.__future__.set_swap_module_params_on_conversion(old_swap)
+        assert actual == expected
+        native_parameters = dict(native.named_parameters())
+        native_buffers = dict(native.named_buffers())
+        wrapped_parameters = dict(wrapped.named_parameters())
+        wrapped_buffers = dict(wrapped.named_buffers())
+        assert wrapped_parameters.keys() == native_parameters.keys()
+        assert wrapped_buffers.keys() == native_buffers.keys()
+        for name, value in native_parameters.items():
+            torch.testing.assert_close(wrapped_parameters[name], value)
+        for name, value in native_buffers.items():
+            torch.testing.assert_close(wrapped_buffers[name], value)
+        registry = (
+            wrapped_parameters
+            if "params.running" in wrapped_parameters
+            else wrapped_buffers
+        )
+        assert wrapped.params["running"] is registry["params.running"]
+        optimizer = torch.optim.SGD(wrapped.parameters(), lr=0.1)
+        assert {
+            id(value) for group in optimizer.param_groups for value in group["params"]
+        } == {id(value) for value in wrapped_parameters.values()}
 
     def test_inplace_ops(self):
         td = TensorDict(
