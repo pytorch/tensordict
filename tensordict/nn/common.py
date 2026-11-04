@@ -32,7 +32,12 @@ from functorch import (
 )
 from tensordict._deprecation import deprecated, deprecated_attributes
 from tensordict._td import TensorDict
-from tensordict.base import is_tensor_collection, NO_DEFAULT, TensorDictBase
+from tensordict.base import (
+    _is_leaf_nontensor,
+    is_tensor_collection,
+    NO_DEFAULT,
+    TensorDictBase,
+)
 from tensordict.functional import make_tensordict
 from tensordict.nn.utils import _dispatch_td_nn_modules, _set_skip_existing_None
 from tensordict.utils import (
@@ -731,7 +736,9 @@ class TensorDictModuleBase(nn.Module):
         Returns:
             ``None`` without ``parameters``. Otherwise a new tensordict of
             tensors that share their storage with ``parameters``. The
-            floating-point and complex ones require gradients.
+            floating-point and complex ones require gradients. A tensor that
+            a custom ``reset_parameters`` assigns, instead of writing it in
+            place, is returned as assigned.
 
         Raises:
             RuntimeError: if ``parameters`` has batch dimensions.
@@ -775,11 +782,21 @@ class TensorDictModuleBase(nn.Module):
 
         has_non_float = False
 
+        @functools.cache
+        def keys_match():
+            module_keys = set(TensorDict.from_module(self).keys(True, True))
+            return module_keys.issuperset(
+                parameters.keys(True, True, is_leaf=_is_leaf_nontensor)
+            )
+
         def sanitize(x):
             nonlocal has_non_float
-            if x.is_floating_point() or x.is_complex():
-                return x.detach().requires_grad_()
             # Only floating-point and complex tensors can require gradients.
+            # Other leaves are only detached when every leaf of parameters is
+            # a parameter or buffer of the module; otherwise requires_grad_
+            # raises its dtype error before the module is touched.
+            if x.is_floating_point() or x.is_complex() or not keys_match():
+                return x.detach().requires_grad_()
             has_non_float = True
             return x.detach()
 
@@ -787,7 +804,8 @@ class TensorDictModuleBase(nn.Module):
 
         # Modules with non-float buffers, such as BatchNorm, reset their float
         # buffers in place, which autograd forbids on leaves that require
-        # gradients.
+        # gradients. Inputs with only floating-point and complex leaves keep
+        # grad mode as it is.
         with (
             sanitized_parameters.to_module(self, preserve_module_state=False),
             torch.no_grad() if has_non_float else contextlib.nullcontext(),

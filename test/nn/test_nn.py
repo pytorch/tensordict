@@ -970,6 +970,30 @@ class TestTDModule:
         # the module keeps its own values
         assert (module.module.w == 1).all()
 
+    @pytest.mark.parametrize("case", ["extra_int_key", "non_tensor_next_to_bn"])
+    def test_reset_functional_unknown_keys_unchanged(self, case):
+        # #3462: params with an entry the module lacks still raise the dtype
+        # error before the module is touched
+        if case == "extra_int_key":
+            net = nn.Linear(3, 2)
+            params = TensorDict.from_module(net).clone()
+            params["extra"] = torch.zeros(2, dtype=torch.long)
+        else:
+            net = nn.BatchNorm1d(3)
+            params = TensorDict.from_module(net).clone()
+            params.set_non_tensor("meta", "hi")
+        module = TensorDictModule(net, in_keys=["x"], out_keys=["y"])
+        params = TensorDict({"module": params})
+        state = {key: value.clone() for key, value in net.state_dict().items()}
+        with pytest.raises(
+            RuntimeError,
+            match="^only Tensors of floating point dtype can require gradients$",
+        ):
+            module.reset_parameters_recursive(params)
+        assert net.state_dict().keys() == state.keys()
+        for key, value in net.state_dict().items():
+            assert torch.equal(value, state[key]), key
+
     def test_reset_extra_dims(self):
         torch.manual_seed(0)
         net = nn.Sequential(nn.Linear(1, 1), nn.ReLU())
