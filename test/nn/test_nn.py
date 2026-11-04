@@ -892,6 +892,120 @@ class TestTDModule:
         tripled_nested.reset_parameters_recursive(params)
         lin.reset_parameters.assert_called_once()
 
+    def test_reset_functional_non_float_buffers(self):
+        # #3462: integer buffers and in-place buffer resets (BatchNorm) used to raise
+        torch.manual_seed(0)
+        net = nn.Sequential(nn.Linear(3, 4), nn.BatchNorm1d(4))
+        module = TensorDictModule(net, in_keys=["x"], out_keys=["y"])
+        params = TensorDict.from_module(module).clone()
+        params["module", "1", "running_mean"].fill_(5)
+        params["module", "1", "num_batches_tracked"].fill_(7)
+        old_weight = params["module", "0", "weight"].detach().clone()
+        out = module.reset_parameters_recursive(params)
+
+        assert (params["module", "1", "running_mean"] == 0).all()
+        assert (params["module", "1", "num_batches_tracked"] == 0).all()
+        assert (params["module", "0", "weight"] != old_weight).all()
+        # the module keeps its own values
+        assert net[1].num_batches_tracked == 0
+        assert (net[0].weight == old_weight).all()
+        assert out["module", "1", "num_batches_tracked"].dtype == torch.long
+        assert not out["module", "1", "num_batches_tracked"].requires_grad
+        # floating-point leaves, buffers included, require gradients as documented
+        for key in [
+            ("module", "0", "weight"),
+            ("module", "1", "weight"),
+            ("module", "1", "running_mean"),
+            ("module", "1", "running_var"),
+        ]:
+            assert out[key].requires_grad, key
+            assert out[key].data_ptr() == params[key].data_ptr(), key
+
+    def test_reset_functional_float_leaves_unchanged(self):
+        # #3462: modules with only floating-point leaves reset as before
+        net = nn.Sequential(nn.Linear(3, 4), nn.Linear(4, 2))
+        module = TensorDictModule(net, in_keys=["x"], out_keys=["y"])
+        params = TensorDict.from_module(module).clone()
+        torch.manual_seed(0)
+        out = module.reset_parameters_recursive(params)
+        torch.manual_seed(0)
+        expected = copy.deepcopy(net)
+        for layer in expected:
+            layer.reset_parameters()
+        expected = TensorDict.from_module(expected)
+        for key, value in out.items(True, True):
+            assert value.requires_grad, key
+            assert value.data_ptr() == params[key].data_ptr(), key
+            torch.testing.assert_close(value, expected[key[1:]])
+
+    def test_reset_functional_float_leaves_grad_mode(self):
+        # #3462: with only floating-point leaves, custom resets still run with
+        # grad enabled, so they can use autograd or derive buffers from parameters
+        class AutogradReset(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.w = nn.Parameter(torch.ones(3))
+                self.register_buffer("scale", torch.zeros(()))
+
+            def reset_parameters(self):
+                assert torch.is_grad_enabled()
+                (grad,) = torch.autograd.grad((self.w**2).sum(), self.w)
+                with torch.no_grad():
+                    self.w.sub_(0.25 * grad)
+                self.scale = self.w.norm()
+
+            def forward(self, x):
+                return x * self.w * self.scale
+
+        module = TensorDictModule(AutogradReset(), in_keys=["x"], out_keys=["y"])
+        params = TensorDict.from_module(module).clone()
+        out = module.reset_parameters_recursive(params)
+        torch.testing.assert_close(params["module", "w"], torch.full((3,), 0.5))
+        assert out["module", "w"].requires_grad
+        assert out["module", "w"].data_ptr() == params["module", "w"].data_ptr()
+        scale = out["module", "scale"]
+        assert scale.requires_grad
+        assert scale.grad_fn is not None
+        torch.testing.assert_close(scale.detach(), torch.tensor(0.75).sqrt())
+        # the module keeps its own values
+        assert (module.module.w == 1).all()
+
+    @pytest.mark.parametrize(
+        "case",
+        ["extra_int_key", "non_tensor_next_to_bn", "empty_sub_td", "weight_as_long"],
+    )
+    def test_reset_functional_unknown_keys_unchanged(self, case):
+        # #3462: params with an entry the module lacks still raise the dtype
+        # error before the module is touched
+        if case == "extra_int_key":
+            net = nn.Linear(3, 2)
+            params = TensorDict.from_module(net).clone()
+            params["extra"] = torch.zeros(2, dtype=torch.long)
+        elif case == "empty_sub_td":
+            net = nn.BatchNorm1d(3)
+            params = TensorDict.from_module(net).clone()
+            params["extra"] = TensorDict()
+        elif case == "weight_as_long":
+            # a float parameter stored as an integer tensor
+            net = nn.BatchNorm1d(3)
+            params = TensorDict.from_module(net).clone()
+            params["weight"] = params["weight"].long()
+        else:
+            net = nn.BatchNorm1d(3)
+            params = TensorDict.from_module(net).clone()
+            params.set_non_tensor("meta", "hi")
+        module = TensorDictModule(net, in_keys=["x"], out_keys=["y"])
+        params = TensorDict({"module": params})
+        state = {key: value.clone() for key, value in net.state_dict().items()}
+        with pytest.raises(
+            RuntimeError,
+            match="^only Tensors of floating point dtype can require gradients$",
+        ):
+            module.reset_parameters_recursive(params)
+        assert net.state_dict().keys() == state.keys()
+        for key, value in net.state_dict().items():
+            assert torch.equal(value, state[key]), key
+
     def test_reset_extra_dims(self):
         torch.manual_seed(0)
         net = nn.Sequential(nn.Linear(1, 1), nn.ReLU())
@@ -5291,6 +5405,33 @@ class TestEnsembleModule:
         assert lin.reset_parameters.call_count == 2, (
             f"Reset parameters called {lin.reset_parameters.call_count} times should be 2"
         )
+
+    @pytest.mark.skipif(PYTORCH_TEST_FBCODE, reason="vmap now working in fbcode")
+    def test_integer_buffer(self):
+        # #3462: building an ensemble of a module with an integer buffer used to raise
+        class Counter(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.lin = nn.Linear(3, 4)
+                self.register_buffer("steps", torch.zeros((), dtype=torch.long))
+
+            def forward(self, x):
+                return self.lin(x) + self.steps
+
+        torch.manual_seed(0)
+        module = TensorDictModule(Counter(), in_keys=["x"], out_keys=["y"])
+        ens = EnsembleModule(module, num_copies=3)
+        steps = ens.params_td["module", "steps"]
+        assert steps.dtype == torch.long
+        assert steps.shape == (3,)
+        assert not steps.requires_grad
+        weight = ens.params_td["module", "lin", "weight"]
+        assert weight.requires_grad
+        assert (weight[0] != weight[1:]).any(dim=(-2, -1)).all()
+        out = ens(TensorDict({"x": torch.randn(5, 3)}, batch_size=[5]))
+        assert out["y"].shape == (3, 5, 4)
+        out["y"].sum().backward()
+        assert weight.grad is not None
 
     def test_reset_parameters_recursive_warning(self):
         """Ensure we warn about child modules other than self.module, but not about params_td"""
