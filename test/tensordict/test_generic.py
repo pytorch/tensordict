@@ -74,6 +74,7 @@ from tensordict.tensorclass import MetaData, NonTensorData, NonTensorStack
 from tensordict.utils import (
     _getitem_batch_size,
     _LOCK_ERROR,
+    _NUMPY_TO_TORCH_DTYPE_DICT,
     _unravel_key_to_tuple,
     assert_allclose_td,
     expand_as_right,
@@ -3638,6 +3639,70 @@ class TestGeneric:
         assert type(out) is TensorDict
         assert out.batch_size == td.batch_size
         assert (out == td).all()
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "float8_e4m3fn",
+            "float8_e4m3fnuz",
+            "float8_e5m2",
+            "float8_e5m2fnuz",
+            "float8_e8m0fnu",
+            "float4_e2m1fn_x2",
+            "bits8",
+            "bits16",
+            "bits1x8",
+            "bits2x4",
+            "bits4x2",
+            "bcomplex32",
+        ],
+    )
+    def test_save_consolidate_low_precision_dtypes(self, name, tmp_path):
+        # #3432: these leaves were written by memmap but raised a KeyError
+        # on load_memmap and consolidate
+        dtype = getattr(torch, name, None)
+        if not isinstance(dtype, torch.dtype):
+            pytest.skip(f"torch.{name} is not available")
+        raw = torch.randint(0, 256, (3, 8), dtype=torch.uint8)
+        td = TensorDict(w=raw.view(dtype), nested={"b": torch.ones(3)}, batch_size=[3])
+
+        def check(out):
+            assert out["w"].dtype == dtype
+            assert out["w"].shape == td["w"].shape
+            assert torch.equal(out["w"].contiguous().view(torch.uint8), raw)
+            assert (out["nested", "b"] == 1).all()
+
+        with warnings.catch_warnings():
+            # torch warns that bcomplex32 is experimental
+            warnings.filterwarnings("ignore", "BComplex32 support is experimental")
+            td.memmap(tmp_path / "memmap")
+            check(TensorDict.load_memmap(tmp_path / "memmap"))
+            tensordict.save(td, tmp_path / "saved.tdz", archive=True)
+            check(tensordict.load(tmp_path / "saved.tdz"))
+            check(pickle.loads(pickle.dumps(td.consolidate())))
+            check(pickle.loads(pickle.dumps(td.consolidate(metadata=True))))
+            td.consolidate(filename=tmp_path / "td.consolidated")
+            check(tensordict.from_consolidated(tmp_path / "td.consolidated"))
+
+    def test_numpy_dtype_table_unchanged(self):
+        # #3432: the dtypes that only memmap and consolidate know by name do
+        # not enter the NumPy table
+        assert set(_NUMPY_TO_TORCH_DTYPE_DICT.values()) == {
+            torch.bool,
+            torch.complex128,
+            torch.complex64,
+            torch.float16,
+            torch.float32,
+            torch.float64,
+            torch.int16,
+            torch.int32,
+            torch.int64,
+            torch.int8,
+            torch.uint16,
+            torch.uint32,
+            torch.uint64,
+            torch.uint8,
+        }
 
     @pytest.mark.skipif(not _has_h5py, reason="h5py not installed")
     def test_module_level_from_h5(self, tmp_path):
