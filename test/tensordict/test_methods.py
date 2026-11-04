@@ -6943,6 +6943,22 @@ def test_flatten_keys_context_manager_keyword_separator(op, keyword, locked):
     assert td.is_locked is locked
 
 
+@pytest.mark.parametrize("locked", [False, True])
+def test_flatten_keys_context_manager_keyword_separator_in_key(locked):
+    # #3430 leaves this case as it was: a key holds the keyword separator
+    # before the block, and the with-block keeps it and its write.
+    td = TensorDict({"a/b": torch.ones(2), "z": torch.ones(2)}, batch_size=[2])
+    if locked:
+        td.lock_()
+    with td.flatten_keys(separator="/") as t:
+        for key in list(t.keys()):
+            t.set(key, t.get(key) + 10)
+    assert set(td.keys(True, True)) == {"a/b", "z"}
+    assert (td.get("a/b") == 11).all()
+    assert (td.get("z") == 11).all()
+    assert td.is_locked is locked
+
+
 @pytest.mark.parametrize("keyword", [False, True])
 def test_flatten_keys_context_manager_keyword_separator_inplace(keyword):
     # #3430 changes the non-inplace with-blocks only: with inplace=True, the
@@ -6970,6 +6986,9 @@ def test_flatten_keys_context_manager_keyword_separator_inplace(keyword):
         else:
             with td.unflatten_keys("/", inplace=True):
                 pass
+    # The flat key left next to the nested one is a separate bug of
+    # with-blocks around unflatten_keys(inplace=True); a fix for it changes
+    # this assert.
     stray = "b.c" if keyword else "b/c"
     assert set(td.keys(True, True)) == {"a", ("b", "c"), stray}
 
