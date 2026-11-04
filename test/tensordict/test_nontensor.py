@@ -2204,13 +2204,13 @@ class TestNonTensorData:
         )
 
     def test_update__stack_into_data_still_skipped(self):
-        # A NonTensorStack in the source stays skipped where the destination
-        # holds a NonTensorData
+        # A NonTensorStack in the source writes its rows where the destination
+        # holds a NonTensorData (#3501)
         td = TensorDict(x=torch.zeros(2), s=NonTensorData("hello"), batch_size=[2])
         source = TensorDict(x=torch.ones(2), s=NonTensorStack("a", "b"), batch_size=[2])
         td.update_(source)
         assert (td["x"] == 1).all()
-        assert td["s"] == "hello"
+        assert td.get("s").tolist() == ["a", "b"]
 
     @pytest.mark.parametrize("write", ["update_", "copy_", "update_at_", "dict"])
     @pytest.mark.parametrize("nested", [False, True])
