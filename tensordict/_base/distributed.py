@@ -626,7 +626,7 @@ class _Distributed:
         trust. See :meth:`~.init_remote` for an example, and :ref:`distributed`.
 
         Args:
-            src (int): the rank of the sender.
+            src (int): the global rank of the sender.
             group (torch.distributed.ProcessGroup, optional): the process group.
                 Defaults to ``None``, the default process group.
             device (torch.device, str or int, optional): the device of the result.
