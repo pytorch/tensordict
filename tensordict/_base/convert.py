@@ -1447,6 +1447,15 @@ class _Conversion:
         the second example). When the block exits, the original parameters are
         written back, also if the block raises an exception.
 
+        ``to_module`` registers the parameters and buffers that the
+        tensordict holds again, after the ones that it does not hold, in the
+        key order of the tensordict. After ``td.to_module(module)``, and after
+        a ``with`` block, ``module.parameters()`` follows that order. A
+        tensordict that :meth:`~.from_module` returns for a module of the same
+        structure keeps the order. An optimizer maps a saved state to its
+        parameters by position, so build the optimizer, and load its state,
+        with the parameters in the order they had when the state was saved.
+
         Args:
             module (nn.Module): a module to write the parameters into.
 
@@ -3482,6 +3491,11 @@ class _Conversion:
         ``h5py``. :meth:`~.from_h5` opens the file again, but infers the batch
         sizes until TensorDict 0.17. See :ref:`saving`.
 
+        For a lazy stack, only the keys that :meth:`~.keys` lists, the keys
+        that every stacked tensordict has, are written: the other keys are
+        dropped without a warning, as by :meth:`~.to_tensordict`.
+        :meth:`~.memmap` keeps them.
+
         Args:
             filename (str or path): the path of the HDF5 file.
             **kwargs: passed to :meth:`h5py.Group.create_dataset`, for example
@@ -3529,6 +3543,11 @@ class _Conversion:
         size and the names of the batch dimensions are saved in the store
         attributes, so that :meth:`~.from_zarr` restores them. Requires
         ``zarr>=3.1.1``. See :ref:`saving`.
+
+        For a lazy stack, only the keys that :meth:`~.keys` lists, the keys
+        that every stacked tensordict has, are written: the other keys are
+        dropped without a warning, as by :meth:`~.to_tensordict`.
+        :meth:`~.memmap` keeps them.
 
         Args:
             filename (str, path or zarr store): the path of the zarr store (a
