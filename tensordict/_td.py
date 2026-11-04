@@ -3512,6 +3512,9 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
             parent._set_str(
                 key[0], td, inplace=False, validated=True, non_blocking=non_blocking
             )
+            # a parent that is a view writes a copy of td into its source:
+            # write into the entry that the parent holds now
+            td = parent._get_str(key[0], NO_DEFAULT)
         _SubTensorDict(td, self.idx)._set_tuple(
             key[1:],
             value,
@@ -3685,7 +3688,14 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
             if firstkey in keys:
                 target_class = self.entry_class(firstkey)
                 if _is_tensor_collection(target_class):
-                    target = self._source.get(firstkey)._get_sub_tensordict(self.idx)
+                    source = self._source
+                    if isinstance(source, _SubTensorDict):
+                        # get() of a view returns a copy of a nested
+                        # tensordict, which would not keep new keys
+                        target = source._get_str(firstkey, NO_DEFAULT)
+                    else:
+                        target = source.get(firstkey)
+                    target = target._get_sub_tensordict(self.idx)
                     if len(subkey):
                         sub_keys_to_update = _prune_selected_keys(
                             keys_to_update, firstkey

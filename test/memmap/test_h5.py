@@ -2513,6 +2513,28 @@ class TestH5Indexing:
         for key in td.keys(True, True):
             assert (h5td.get(key) == td.get(key)).all(), key
 
+    def test_index_twice_set_new_nested(self, tmp_path):
+        # #3443: new nested entries written through h5td[i][j:k] were lost;
+        # they reach the file
+        td = TensorDict(
+            a=torch.zeros(2, 4),
+            n=TensorDict(b=torch.zeros(2, 4), batch_size=[2, 4]),
+            batch_size=[2, 4],
+        )
+        h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+        expected = [[0.0] * 4, [0.0, 7.0, 7.0, 0.0]]
+        sub = h5td[1][1:3]
+        sub.set(("p", "q"), torch.full((2,), 7.0))
+        assert h5td.get(("p", "q")).tolist() == expected
+        assert sub.get(("p", "q")).tolist() == [7.0, 7.0]
+        sub.update({"n": {"z": torch.full((2,), 7.0)}})
+        assert h5td.get(("n", "z")).tolist() == expected
+        sub.update({("r", "s"): torch.full((2,), 7.0)})
+        assert h5td.get(("r", "s")).tolist() == expected
+        # an existing nested leaf is still written in place
+        sub.set_(("n", "b"), torch.full((2,), 7.0))
+        assert h5td.get(("n", "b")).tolist() == expected
+
     def test_stack_items(self, data):
         # h5td[idx] is a lazy view of the file, not a lazy stack
         td, h5td = data

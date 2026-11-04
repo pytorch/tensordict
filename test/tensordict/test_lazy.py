@@ -3076,6 +3076,71 @@ class TestLazyStackedTensorDict:
         with pytest.raises(TypeError, match="as_lst"):
             lazy.get("x", as_lst=True)
 
+    @pytest.mark.parametrize("source", ["dense", "stack_dim0", "stack_dim1"])
+    @pytest.mark.parametrize("depth", [1, 2, 3])
+    def test_sub_of_sub_set_new_nested(self, source, depth):
+        # #3443: new nested entries written through a view of a view were
+        # lost; they reach the root as through one view
+        def make():
+            td = TensorDict(
+                a=torch.zeros(2, 4),
+                n=TensorDict(b=torch.zeros(2, 4), batch_size=[2, 4]),
+                batch_size=[2, 4],
+            )
+            if source == "stack_dim0":
+                return lazy_stack(list(td.unbind(0)))
+            if source == "stack_dim1":
+                return lazy_stack(list(td.unbind(1)), 1)
+            return td
+
+        def view(root):
+            if depth == 1:
+                return root._get_sub_tensordict((1, slice(1, 3)))
+            if depth == 2:
+                return root._get_sub_tensordict(1)._get_sub_tensordict(slice(1, 3))
+            return (
+                root._get_sub_tensordict(slice(None))
+                ._get_sub_tensordict(1)
+                ._get_sub_tensordict(slice(1, 3))
+            )
+
+        expected = [[0.0] * 4, [0.0, 7.0, 7.0, 0.0]]
+        root = make()
+        view(root).set(("p", "q"), torch.full((2,), 7.0))
+        assert root.get(("p", "q")).tolist() == expected
+        root = make()
+        view(root).set(("p", "q", "r"), torch.full((2,), 7.0))
+        assert root.get(("p", "q", "r")).tolist() == expected
+        root = make()
+        view(root).update({"n": {"z": torch.full((2,), 7.0)}})
+        assert root.get(("n", "z")).tolist() == expected
+        root = make()
+        view(root).update({("p", "q"): torch.full((2,), 7.0)})
+        assert root.get(("p", "q")).tolist() == expected
+        # set_ with a missing parent still raises and creates nothing (#3391)
+        root = make()
+        keys = set(root.keys(True))
+        with pytest.raises(KeyError, match='key "p" not found'):
+            view(root).set_(("p", "q"), torch.full((2,), 7.0))
+        assert set(root.keys(True)) == keys
+
+    @pytest.mark.parametrize("idx", [torch.tensor([1]), torch.tensor([False, True])])
+    def test_sub_of_sub_update_nested_tensor_index(self, idx):
+        # #3443: through a view of a view indexed by a tensor, update wrote an
+        # existing nested leaf into a copy; set_ and update_ write it
+        expected = [[0.0] * 4, [0.0, 7.0, 7.0, 0.0]]
+        for method in ("update", "update_", "set_"):
+            root = TensorDict(
+                n=TensorDict(b=torch.zeros(2, 4), batch_size=[2, 4]),
+                batch_size=[2, 4],
+            )
+            sub = root._get_sub_tensordict(idx)._get_sub_tensordict((0, slice(1, 3)))
+            if method == "set_":
+                sub.set_(("n", "b"), torch.full((2,), 7.0))
+            else:
+                getattr(sub, method)({"n": {"b": torch.full((2,), 7.0)}})
+            assert root.get(("n", "b")).tolist() == expected, method
+
     def test_lazy_stack_nested_get(self):
         td0 = TensorDict(a=torch.randn(3))
         td1 = TensorDict(a=torch.randn(4))
