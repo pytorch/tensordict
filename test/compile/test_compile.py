@@ -8,7 +8,9 @@ import dataclasses
 import importlib.util
 import inspect
 import platform
+import re
 import sys
+import textwrap
 import warnings
 import weakref
 from pathlib import Path
@@ -16,6 +18,7 @@ from typing import Any, Callable
 
 import numpy as np
 import pytest
+import tensordict.base
 import torch
 from _utils_internal import is_npu_available, legacy_lazy_mode
 from packaging import version
@@ -490,6 +493,97 @@ def test_construction_empty_then_full_source(device):
     assert (result["b", "c"] == x).all()
 
 
+def _index_tensordict_without_shortcut():
+    # TensorDictBase._index_tensordict with its eager shortcut cut out, which
+    # is the loop of the base branch
+    source = textwrap.dedent(inspect.getsource(TensorDictBase._index_tensordict))
+    gate = re.search(r"\n( *)eager = \(\n.*?\n *\)\n", source, re.S)
+    assert gate is not None
+    source = source.replace(gate.group(0), f"\n{gate.group(1)}eager = False\n")
+    namespace = {}
+    code = compile(source, tensordict.base.__file__, "exec")
+    exec(code, vars(tensordict.base), namespace)
+    return namespace["_index_tensordict"]
+
+
+def _index_compile_record():
+    def index(td, i):
+        return td[i]
+
+    mask = torch.tensor([True, False, True, False])
+    cases = {
+        "flat int": (
+            TensorDict(a=torch.zeros(4, 3), b=torch.zeros(4), batch_size=[4]),
+            1,
+        ),
+        "flat slice": (
+            TensorDict({f"x{j}": torch.zeros(4, 3) for j in range(20)}, [4]),
+            slice(1, 3),
+        ),
+        "nested int": (
+            TensorDict(a=torch.zeros(4, 3), s={"b": torch.zeros(4)}, batch_size=[4]),
+            1,
+        ),
+        "nested long": (
+            TensorDict(a=torch.zeros(4, 3), s={"b": torch.zeros(4)}, batch_size=[4]),
+            torch.tensor([0, 2]),
+        ),
+        "param mask": (
+            TensorDict(
+                a=torch.zeros(4, 3),
+                p=torch.nn.Parameter(torch.zeros(4, 2)),
+                batch_size=[4],
+            ),
+            mask,
+        ),
+    }
+    record = {}
+    for name, (td, i) in cases.items():
+        torch._dynamo.reset()
+        out = torch._dynamo.explain(index)(td, i)
+        guards = {
+            re.sub(r"___\d+|_c\d+", "", str(guard).splitlines()[0])
+            for guard in out.out_guards
+        }
+        record[name] = out.graph_count, out.graph_break_count, guards
+    # the bool mask breaks the graph and Dynamo runs _index_tensordict eagerly:
+    # Parameters of new shapes must not make it compile more frames. The
+    # first round in a process compiles one frame more: count the second.
+    for _ in range(2):
+        torch._dynamo.reset()
+        counters.clear()
+        compiled = torch.compile(index)
+        for k in range(1, 4):
+            td = TensorDict(
+                a=torch.zeros(4, 3),
+                p=torch.nn.Parameter(torch.zeros(4, k)),
+                batch_size=[4],
+            )
+            compiled(td, mask)
+    record["frames"] = dict(counters["frames"])
+    torch._dynamo.reset()
+    return record
+
+
+def test_td_index_exact_tensor_shortcut_compiles_as_base(monkeypatch):
+    # #3458: under torch.compile, indexing compiles the graphs, graph breaks,
+    # guards and frames of the loop without the eager shortcut. Reading
+    # is_compiling adds one identity guard where nothing else reads it.
+    shortcut = _index_compile_record()
+    monkeypatch.setattr(
+        TensorDictBase, "_index_tensordict", _index_tensordict_without_shortcut()
+    )
+    base = _index_compile_record()
+    assert shortcut["frames"] == base["frames"]
+    extra = "Name: \"G['__import_tensordict_dot_base'].is_compiling\""
+    for name in base:
+        if name == "frames":
+            continue
+        graphs, breaks, guards = shortcut[name]
+        assert (graphs, breaks) == base[name][:2], name
+        assert guards in (base[name][2], base[name][2] | {extra}), name
+
+
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestTD:
     def test_tensor_output(self, mode):
@@ -563,28 +657,6 @@ class TestTD:
             assert (add_one(data)["a", "b"] == torch.arange(1, 3)).all()
             assert (add_one_c(data)["a", "b"] == torch.arange(1, 3)).all()
             assert add_one_c(data).shape == torch.Size([2])
-
-    def test_td_index_exact_tensor_shortcut_guards(self, mode, monkeypatch):
-        # #3458: the eager shortcut for exact Tensor leaves adds no guard, no
-        # graph and no graph break to a compiled index
-        def index(td):
-            return td[1]
-
-        def explain():
-            torch._dynamo.reset()
-            data = TensorDict(
-                {
-                    "a": torch.zeros(3, 2),
-                    "n": {"b": torch.zeros(3), "c": torch.zeros(3)},
-                },
-                [3],
-            )
-            out = torch._dynamo.explain(index)(data)
-            return out.graph_count, out.graph_break_count, len(out.out_guards)
-
-        shortcut = explain()
-        monkeypatch.setattr("tensordict.base._INDEX_EXACT_TENSOR_SHORTCUT", False)
-        assert explain() == shortcut
 
     def test_td_index_empty_slice(self, mode):
         def index(td):

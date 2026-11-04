@@ -183,8 +183,15 @@ NO_DEFAULT = _NoDefault.ZERO
 # Unlike NO_DEFAULT (which triggers KeyError in get()), _UNSET can be returned by get()
 # to indicate a missing key. This makes pop() compatible with torch.compile.
 _UNSET = object()
-# Tests turn this off to compare _index_tensordict with its generic path.
-_INDEX_EXACT_TENSOR_SHORTCUT = True
+# Dynamo's frame callback, set in a torch.compile region, also in the frames
+# that Dynamo runs eagerly (torch's set_stance makes the same check).
+# _index_tensordict takes its eager shortcut only when this is available.
+try:
+    from torch._C._dynamo.eval_frame import (
+        get_eval_frame_callback as _get_eval_frame_callback,
+    )
+except ImportError:
+    _get_eval_frame_callback = None
 
 T = TypeVar("T", bound="TensorCollection")
 
@@ -12171,9 +12178,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         source = {}
         # perf: in eager mode an exact Tensor, which is neither unbatched nor a
-        # TensorDict, goes straight to _get_item. is_compiling() is read once,
-        # and first, so that a compiled call gets no guards on the leaf types.
-        eager = not is_compiling() and _INDEX_EXACT_TENSOR_SHORTCUT
+        # TensorDict, goes straight to _get_item. Under torch.compile, also in
+        # a frame that Dynamo runs eagerly, the loop takes the generic path, so
+        # that the frames Dynamo compiles do not change.
+        eager = (
+            not is_compiling()
+            and _get_eval_frame_callback is not None
+            and _get_eval_frame_callback() is None
+        )
         for key, item in self.items():
             if eager and type(item) is Tensor:
                 source[key] = _get_item(item, index)

@@ -429,7 +429,9 @@ def _shortcut_outcomes(make, indices):
 
 def _check_shortcut_matches_generic(make, indices, monkeypatch):
     shortcut = _shortcut_outcomes(make, indices)
-    monkeypatch.setattr(tensordict.base, "_INDEX_EXACT_TENSOR_SHORTCUT", False)
+    # without Dynamo's frame callback, as on a torch that lacks it, indexing
+    # takes the generic path
+    monkeypatch.setattr(tensordict.base, "_get_eval_frame_callback", None)
     generic = _shortcut_outcomes(make, indices)
     differ = [case for case in indices if shortcut[case] != generic[case]]
     assert not differ, differ
@@ -556,6 +558,11 @@ class TestContainersMatchDense:
         assert torch.nn.Parameter in calls
         assert result.batch_size == torch.Size([])
         assert set(result.keys(True, True)) == {"a", "p", ("n", "b")}
+        # a torch without the frame callback getter takes the generic path
+        calls.clear()
+        monkeypatch.setattr(tensordict.base, "_get_eval_frame_callback", None)
+        assert (td[1] == result).all()
+        assert calls.count(torch.Tensor) == 2
 
 
 @functools.cache
