@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**01:29.194** total execution time for 15 files **from tutorials**:
+**01:24.215** total execution time for 15 files **from tutorials**:
 
 .. container::
 
@@ -33,22 +33,22 @@ Computation times
      - Time
      - Mem (MB)
    * - :ref:`sphx_glr_tutorials_serialization_speed.py` (``serialization_speed.py``)
-     - 00:44.190
+     - 00:37.380
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensordict_module.py` (``tensordict_module.py``)
-     - 00:17.105
+     - 00:17.134
      - 0.0
    * - :ref:`sphx_glr_tutorials_data_fashion.py` (``data_fashion.py``)
-     - 00:14.892
+     - 00:16.660
      - 0.0
    * - :ref:`sphx_glr_tutorials_streamed_tensordict.py` (``streamed_tensordict.py``)
-     - 00:06.018
+     - 00:06.019
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensorclass_fashion.py` (``tensorclass_fashion.py``)
-     - 00:04.231
+     - 00:04.326
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensorclass_imagenet.py` (``tensorclass_imagenet.py``)
-     - 00:01.566
+     - 00:01.508
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensorclass_particles.py` (``tensorclass_particles.py``)
      - 00:00.908
@@ -57,10 +57,10 @@ Computation times
      - 00:00.130
      - 0.0
    * - :ref:`sphx_glr_tutorials_zarr_storage.py` (``zarr_storage.py``)
-     - 00:00.114
+     - 00:00.110
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensordict_shapes.py` (``tensordict_shapes.py``)
-     - 00:00.009
+     - 00:00.010
      - 0.0
    * - :ref:`sphx_glr_tutorials_functional.py` (``functional.py``)
      - 00:00.009
@@ -69,7 +69,7 @@ Computation times
      - 00:00.008
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensordict_memory.py` (``tensordict_memory.py``)
-     - 00:00.006
+     - 00:00.005
      - 0.0
    * - :ref:`sphx_glr_tutorials_tensordict_slicing.py` (``tensordict_slicing.py``)
      - 00:00.005
