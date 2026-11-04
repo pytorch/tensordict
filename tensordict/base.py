@@ -7699,7 +7699,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 self._write_back(new_keys, vals, "update_")
             if not has_non_tensor:
                 return
-            from tensordict import NonTensorStack
+            from tensordict import NonTensorData, NonTensorStack
 
             # _items_list leaves out the non-tensor leaves: copy them here.
             # Like the tensor leaves, keys missing in self are skipped.
@@ -7716,11 +7716,29 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     dest, NonTensorStack
                 ):
                     key = _unravel_key_to_tuple(name)
+                    if not _is_dense_path(self, key):
+                        return
+                    inner = dest._tensordict
                     if (
-                        source.batch_size == dest.batch_size
-                        and not (dest._is_shared or dest._is_memmap)
-                        and _is_dense_path(self, key)
-                        and _rows_differ(source, dest.data)
+                        type(dest) is NonTensorData
+                        and type(inner) is _TENSORDICT_TYPE
+                        and not inner._tensordict
+                    ):
+                        # dest._is_shared, dest._is_memmap and dest.data
+                        # without the getters
+                        if inner._is_shared or inner._is_memmap:
+                            return
+                        value = dest._non_tensordict.get("data", _UNSET)
+                        if value is _UNSET:
+                            value = dest.data
+                    else:
+                        if dest._is_shared or dest._is_memmap:
+                            return
+                        value = dest.data
+                    if (
+                        type(value) in _ROW_FAMILY
+                        and source.batch_size == dest.batch_size
+                        and _rows_differ(source, value)
                     ):
                         self._set_at_tuple(
                             key,
