@@ -2523,6 +2523,9 @@ class TestLazyStackedTensorDict:
                     None
                     if value.is_nested
                     else value.untyped_storage().data_ptr() in ptrs,
+                    None
+                    if value.is_nested
+                    else (value._is_view(), value._base is None),
                     None if value.is_nested else value.detach().tolist(),
                 )
             if is_non_tensor(value):
@@ -2748,6 +2751,19 @@ class TestLazyStackedTensorDict:
         ),
         "permuted members": lambda: lazy_stack(
             [TensorDict(a=torch.zeros(2, 3), batch_size=[2, 3]).permute(1, 0)] * 2
+        ),
+        # members built in inference mode, stacked outside it
+        "inference members": torch.inference_mode()(
+            lambda: lazy_stack(
+                [
+                    TensorDict(
+                        a=torch.randn(3, 2),
+                        n=TensorDict(b=torch.ones(3)),
+                        batch_size=[3],
+                    )
+                    for _ in range(2)
+                ]
+            )
         ),
     }
 

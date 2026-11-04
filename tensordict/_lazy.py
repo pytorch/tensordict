@@ -908,8 +908,10 @@ def _dense_stack_collect(tds):
         if type(v0) is Tensor:
             # The general path clones the stacked leaf, which gives it a
             # CloneBackward0 grad_fn: keep that path for leaves with grad.
+            # Outside inference mode, torch.stack of inference tensors returns
+            # a view, where the clone of the general path does not.
             for v in vals:
-                if v.requires_grad:
+                if v.requires_grad or v.is_inference():
                     return None
             out[key] = vals
         elif type(v0) is TensorDict:
