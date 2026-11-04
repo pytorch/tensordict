@@ -3618,22 +3618,38 @@ def _rows_differ(stack, value) -> bool:
     if family is None:
         return False
     differ = False
-    members = list(stack.tensordicts)
-    while members:
-        member = members.pop()
-        if isinstance(member, NonTensorStack):
-            members.extend(member.tensordicts)
-            continue
-        if not isinstance(member, NonTensorData):
-            return False
-        row = member.data
-        row_family = _ROW_FAMILY.get(type(row))
-        if row_family is None:
-            return False
-        if row_family != family or (
-            row != value and not (row != row and value != value)
-        ):
-            differ = True
+    stacks = [stack]
+    while stacks:
+        for member in stacks.pop().tensordicts:
+            if type(member) is NonTensorData:
+                # member.data without the field getter: for the types of
+                # _ROW_FAMILY, its shared and memmap conversions return the
+                # stored value, and an empty TensorDict holds no "data" entry
+                # that it would read instead
+                row = member._non_tensordict.get("data", _UNSET)
+                row_family = _ROW_FAMILY.get(type(row))
+                inner = member._tensordict
+                if (
+                    row_family is None
+                    or type(inner) is not _TENSORDICT_TYPE
+                    or inner._tensordict
+                ):
+                    row = member.data
+                    row_family = _ROW_FAMILY.get(type(row))
+            elif isinstance(member, NonTensorStack):
+                stacks.append(member)
+                continue
+            elif isinstance(member, NonTensorData):
+                row = member.data
+                row_family = _ROW_FAMILY.get(type(row))
+            else:
+                return False
+            if row_family is None:
+                return False
+            if row_family != family or (
+                row != value and not (row != row and value != value)
+            ):
+                differ = True
     return differ
 
 
