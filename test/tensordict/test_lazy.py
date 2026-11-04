@@ -4474,6 +4474,83 @@ class TestLazyStackedTensorDict:
         stack[1:] = stack[:3]
         assert stack.tolist() == ["a", "a", "b", "c"]
 
+    @pytest.mark.parametrize("op", ["copy_", "update_"])
+    @pytest.mark.parametrize(
+        "index", [[3, 2, 1, 0], [0, 0, 1, 1], "list", "explicit_reversed"]
+    )
+    def test_update_from_reordered_read(self, op, index):
+        # #3444: copy_/update_ from a read of the same stack that holds its
+        # members in another order write the values of the read
+        t = lazy_stack([TensorDict(a=torch.full((2,), float(i))) for i in range(4)])
+        ptrs = [m["a"].data_ptr() for m in t.tensordicts]
+        if index == "list":
+            source = t[[3, 2, 1, 0]]
+            expected = [3.0, 2.0, 1.0, 0.0]
+        elif index == "explicit_reversed":
+            source = lazy_stack(t.tensordicts[::-1])
+            expected = [3.0, 2.0, 1.0, 0.0]
+        else:
+            source = t[torch.tensor(index)]
+            expected = [float(i) for i in index]
+        getattr(t, op)(source)
+        assert t["a"][:, 0].tolist() == expected
+        # the members keep their storage
+        assert [m["a"].data_ptr() for m in t.tensordicts] == ptrs
+
+    @pytest.mark.parametrize("op", ["copy_", "update_"])
+    @pytest.mark.parametrize("index", [[1, 2, 3, 3], [1, 1, 2, 3], [3, 2, 1, 0]])
+    def test_update_from_reordered_read_non_tensor(self, op, index):
+        # #3444: the non-tensor data of a reordered read is written by
+        # reference, and data that cannot be deep-copied does not raise
+        objs = [(i for i in range(j)) for j in range(4)]
+        t = lazy_stack(
+            [
+                TensorDict(a=torch.full((2,), float(i)), o=NonTensorData(objs[i]))
+                for i in range(4)
+            ]
+        )
+        getattr(t, op)(t[torch.tensor(index)])
+        assert t["a"][:, 0].tolist() == [float(i) for i in index]
+        assert all(m["o"] is objs[i] for m, i in zip(t.tensordicts, index))
+
+    @pytest.mark.parametrize("op", ["copy_", "update_"])
+    @pytest.mark.parametrize("source", ["self", "slice", "flip", "fresh"])
+    def test_update_from_same_order_read(self, op, source):
+        # #3444: sources that are not reordered reads of the stack are
+        # written as before
+        t = lazy_stack([TensorDict(a=torch.full((2,), float(i))) for i in range(4)])
+        ptrs = [m["a"].data_ptr() for m in t.tensordicts]
+        if source == "self":
+            value, expected = t, [0.0, 1.0, 2.0, 3.0]
+        elif source == "slice":
+            value, expected = t[:], [0.0, 1.0, 2.0, 3.0]
+        elif source == "flip":
+            value, expected = t.flip(0), [3.0, 2.0, 1.0, 0.0]
+        else:
+            value = lazy_stack(
+                [TensorDict(a=torch.full((2,), float(10 + i))) for i in range(4)]
+            )
+            expected = [10.0, 11.0, 12.0, 13.0]
+        getattr(t, op)(value)
+        assert t["a"][:, 0].tolist() == expected
+        assert [m["a"].data_ptr() for m in t.tensordicts] == ptrs
+
+    @pytest.mark.parametrize("keys_to_update", [None, ["a"]])
+    def test_update_from_reordered_read_member_into_itself(self, keys_to_update):
+        # #3444: a member that is its own piece of a reordered read is written
+        # as before: with keys_to_update, its leaf is not copied into itself,
+        # so a graph that saved the leaf still runs backward
+        w = torch.ones(2, requires_grad=True)
+        t = lazy_stack([TensorDict(a=torch.full((2,), float(i)) * w) for i in range(4)])
+        leaf = t.tensordicts[3]["a"]
+        version = leaf._version
+        y = (leaf * w).sum()
+        t.update_(t[torch.tensor([1, 2, 3, 3])], keys_to_update=keys_to_update)
+        assert t["a"][:, 0].tolist() == [1.0, 2.0, 3.0, 3.0]
+        if keys_to_update is not None:
+            assert leaf._version == version
+            y.backward()
+
     @pytest.mark.parametrize("stack_dim", [0, 1, 2])
     @pytest.mark.parametrize(
         "index", [(..., 0), (0, ..., 1), (..., [1, 0]), (..., None)]
