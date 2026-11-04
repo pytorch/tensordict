@@ -121,10 +121,8 @@ class TestH5Serialization:
             src = TensorDict(data, batch_size=[3])
             if source == "lazy":
                 src = lazy_stack([src, src.clone()])
-        path = tmp_path / "x.h5"
-        with pytest.raises(ValueError, match="would"):
-            PersistentTensorDict.from_dict(src, path, backend="h5")
-        assert not path.exists()
+        with pytest.raises(ValueError, match="replaced"):
+            PersistentTensorDict.from_dict(src, tmp_path / "x.h5", backend="h5")
 
     def test_slash_key_without_collision(self, tmp_path):
         # #3435: a "/" key alone, or next to a disjoint group, keeps loading
@@ -143,6 +141,23 @@ class TestH5Serialization:
         assert (out["c", "e"] == o).all()
         with pytest.raises(TypeError, match="already exists"):
             TensorDict({"c": o, "c/d": z}, batch_size=[3]).to_h5(tmp_path / "c.h5")
+
+    @pytest.mark.parametrize(
+        "data,error",
+        [
+            ({"a": torch.ones(3), "a/": torch.zeros(3)}, TypeError),
+            ({"": torch.zeros(3), "/": torch.ones(3)}, TypeError),
+            ({"/": torch.ones(3), "": torch.zeros(3)}, KeyError),
+            ({"a/": torch.zeros(3), "a": torch.ones(3)}, ValueError),
+            ({"a/b": torch.zeros(3), "a": [{"c": torch.ones(3)}] * 3}, TypeError),
+        ],
+    )
+    def test_slash_key_clash_keeps_h5_error(self, tmp_path, data, error):
+        # #3435: a clash that h5py rejects itself keeps its error
+        with pytest.raises(error) as excinfo:
+            PersistentTensorDict.from_dict(data, tmp_path / "x.h5", backend="h5")
+        assert type(excinfo.value) is error
+        assert "replaced" not in str(excinfo.value)
 
     def test_h5_nontensor(self, tmpdir):
         file = Path(tmpdir) / "file.h5"
