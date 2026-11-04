@@ -8654,6 +8654,27 @@ class TestToModule:
         assert module.weight.requires_grad is False
         assert module.bias.requires_grad is True
 
+    @pytest.mark.parametrize("source", ["from_module", "clone", "detach", "params"])
+    def test_to_module_state_dict_context_manager_keeps_frozen_parameter(
+        self, as_module, source
+    ):
+        # A use_state_dict=True block leaves a frozen weight frozen (unchanged
+        # by #3461)
+        module = nn.Linear(3, 4)
+        module.weight.requires_grad_(False)
+        params = TensorDict.from_module(module, as_module=as_module)
+        if source == "clone":
+            params = params.clone()
+        elif source == "detach":
+            params = params.detach().clone()
+        elif source == "params":
+            params = TensorDictParams(params.data.clone())
+        with params.to_module(module, use_state_dict=True):
+            pass
+        assert module.weight.requires_grad is False
+        assert module.bias.requires_grad is True
+        assert {name for name, _ in module.named_parameters()} == {"weight", "bias"}
+
     def test_to_module_nested_context_manager_keeps_parameter_slots(self, as_module):
         # Leaving an inner block gives back the outer block's tensors that
         # require grad as registered parameters (unchanged by #3461)

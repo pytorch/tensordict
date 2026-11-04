@@ -17,11 +17,6 @@ from torch.compiler import is_compiling
 # TD cm functions
 LAST_OP_MAPS = {}
 
-# The ``preserve_module_state`` value with which a ``with ... to_module(...)``
-# block exits (#3461): the module's original parameters are written back as
-# they are, and its other original tensors as with ``True``.
-_RESTORE_MODULE_STATE = "restore"
-
 
 def _changed_in_place(self, out):
     # With inplace=True, the op changes the tensordict it was called on and
@@ -354,9 +349,9 @@ LAST_OP_MAPS["squeeze"] = _reverse_squeeze
 
 
 def _reverse_to_module(self, args, kwargs, out):
-    if out is not None and not is_compiling():
-        from tensordict._base.convert import _restore_module
+    from tensordict._base.convert import _restore_memo, _restore_module
 
+    if out is not None and not is_compiling():
         return _restore_module(self, args, kwargs, out)
     try:
         with (
@@ -364,16 +359,8 @@ def _reverse_to_module(self, args, kwargs, out):
             if not is_compiling() and out is not None
             else contextlib.nullcontext()
         ):
-            # Write back what the module held, as _restore_module does.
-            preserve = kwargs.get("preserve_module_state", True)
-            return self.to_module(
-                *args,
-                **{
-                    **kwargs,
-                    "preserve_module_state": preserve and _RESTORE_MODULE_STATE,
-                },
-                swap_dest=out,
-            )
+            memo = _restore_memo(kwargs)
+            return self._to_module(*args, **{**kwargs, "memo": memo}, swap_dest=out)
     except AttributeError:
         # This is a bit unsafe but we assume that out won't have an unlock_() if it's not a TD
         raise RuntimeError(

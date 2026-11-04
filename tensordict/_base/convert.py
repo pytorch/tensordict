@@ -26,7 +26,6 @@ from typing import Any, List, Literal, Sequence, Type, TYPE_CHECKING
 import numpy as np
 import tensordict.base as _td_base
 import torch
-from tensordict._contextlib import _RESTORE_MODULE_STATE
 from tensordict._datasets import to_mds
 from tensordict._nestedkey import NestedKey
 from tensordict._tabular import (
@@ -204,6 +203,7 @@ def _swap_into_module(td, module, memo, non_blocking, preserve_module_state):
     _parameters = __dict__["_parameters"]
     _buffers = __dict__["_buffers"]
     _modules = __dict__["_modules"]
+    restore = "restore" in memo
     swap = memo[weakref.ref(module)] = {}
     for key, value in td.items():
         if key == _EXTRA_STATE_KEY_SUFFIX:
@@ -219,7 +219,9 @@ def _swap_into_module(td, module, memo, non_blocking, preserve_module_state):
                 value,
                 False,
                 return_swap=True,
-                preserve_module_state=preserve_module_state,
+                preserve_module_state=False
+                if restore and isinstance(value, nn.Parameter)
+                else preserve_module_state,
             )
         else:
             child = _modules[key]
@@ -314,6 +316,24 @@ def _replaced_entries(
     return entries
 
 
+def _restore_memo(kwargs):
+    """The ``memo`` with which a ``with ... to_module(...)`` block writes back what the module held.
+
+    ``memo["restore"]`` makes ``_to_module`` write the original parameters
+    back as they are (#3461): preserving the state of their slots would wrap
+    them in new parameters when a slot holds a vmap slice or a tensor that
+    requires gradients, whose ``requires_grad`` is not the module's. The
+    other originals are written back as on entry. With ``use_state_dict``,
+    the originals are rebuilt as new parameters anyway, and the exit keeps
+    preserving the state of the slots.
+    """
+    hooks = torch.nn.modules.module._global_parameter_registration_hooks
+    memo = {"hooks": tuple(hooks.values())}
+    if not kwargs.get("use_state_dict", False):
+        memo["restore"] = True
+    return memo
+
+
 def _restore_module(swap, args, kwargs, out):
     """Writes ``swap`` back into the module when ``with out.to_module(...)`` exits.
 
@@ -324,23 +344,8 @@ def _restore_module(swap, args, kwargs, out):
     ``out`` is unlocked only if there are any, as unlocking and relocking it
     costs more than the swap.
     """
-    hooks = torch.nn.modules.module._global_parameter_registration_hooks
-    memo = {"hooks": tuple(hooks.values())}
-    # ``swap`` holds what the module held before the block. Preserving the
-    # state of the slots would wrap an original parameter in a new one when
-    # its slot holds a vmap slice or a tensor that requires gradients, whose
-    # ``requires_grad`` is not the module's: write the parameters back as
-    # they are.
-    preserve = kwargs.get("preserve_module_state", True)
-    current = swap._to_module(
-        *args,
-        **{
-            **kwargs,
-            "memo": memo,
-            "preserve_module_state": preserve and _RESTORE_MODULE_STATE,
-        },
-        swap_dest={},
-    )
+    memo = _restore_memo(kwargs)
+    current = swap._to_module(*args, **{**kwargs, "memo": memo}, swap_dest={})
     if not isinstance(current, dict):
         return current
     seen = {} if "shared" in memo else None
@@ -1658,10 +1663,17 @@ class _Conversion:
         else:
             __dict__ = None
 
+        restore = "restore" in memo
         for key, value in input.items():
             if key == _EXTRA_STATE_KEY_SUFFIX:
                 local_out = _swap_extra_state(module, value, return_swap)
             elif isinstance(value, (Tensor, ftdim.Tensor)):
+                # See _restore_memo.
+                preserve = (
+                    False
+                    if restore and isinstance(value, nn.Parameter)
+                    else preserve_module_state
+                )
                 # For Dynamo, we use regular set/delattr as we're not
                 #  much afraid by overhead (and dynamo doesn't like those
                 #  hacks we're doing).
@@ -1677,7 +1689,7 @@ class _Conversion:
                         value,
                         inplace,
                         return_swap=return_swap,
-                        preserve_module_state=preserve_module_state,
+                        preserve_module_state=preserve,
                     )
                 else:
                     if not inplace:
@@ -1685,7 +1697,7 @@ class _Conversion:
                             module,
                             key,
                             value,
-                            preserve_module_state=preserve_module_state,
+                            preserve_module_state=preserve,
                         )
                         local_out = swap_tensor(module, key, value)
                     else:
