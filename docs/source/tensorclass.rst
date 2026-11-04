@@ -267,6 +267,21 @@ return a tensorclass. It runs as well on the data that
 bring in. Do little work in it, and make sure that a second run gives the
 same result. In the example above, the second run finds a mask and keeps it.
 
+``update()`` with a dict or keyword arguments, and ``update_()``, also run
+``__post_init__``, on an instance built from the new values alone. The fields
+that they do not name are missing there, so ``__post_init__`` fills them with
+their defaults, which then overwrite the values of the instance, or it
+raises, for example when it reads one of them. With the ``Batch`` class
+above, ``b.update({"obs": obs})`` raises a ``RuntimeError``, because the
+default mask has no batch dimension, and ``b.update_({"obs": obs})`` sets the
+mask back to all ``True``. Set the fields as attributes instead, which does
+not run ``__post_init__``:
+
+  >>> b.mask[0] = False
+  >>> b.obs = torch.ones(3, 2)
+  >>> b.mask
+  tensor([False,  True,  True])
+
 On a lazy stack (:func:`~tensordict.lazy_stack`, and the operations that
 return one), ``__post_init__`` runs on each stacked instance, not on the
 stack, so it sees fields of the shape of that instance, even when the
