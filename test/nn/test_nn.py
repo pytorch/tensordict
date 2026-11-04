@@ -2805,6 +2805,121 @@ class TestTDSequence:
             lp["sample0_log_prob"], Normal(out["loc0"], 1.0).log_prob(out["sample0"])
         )
 
+    @pytest.mark.parametrize("nested", [False, True])
+    @pytest.mark.parametrize("lazy", [False, True])
+    @pytest.mark.parametrize("interaction", [None, "random"])
+    @set_composite_lp_aggregate(False)
+    def test_probtdseq_log_prob_stored_samples(self, nested, lazy, interaction):
+        # #3447: log_prob conditions the later heads on the samples stored in
+        # its input, not on values drawn again. It still draws as get_dist
+        # does, so the random stream is the same as before.
+        torch.manual_seed(0)
+        head1 = ProbabilisticTensorDictModule(
+            ["loc", "scale"], ["cont"], distribution_class=Normal
+        )
+        if nested:
+            to_loc2 = TensorDictModule(nn.Linear(1, 1), ["cont"], ["loc2"])
+            head1b = ProbabilisticTensorDictModule(
+                {"loc": "loc2", "scale": "scale"}, ["cont2"], distribution_class=Normal
+            )
+            prefix = [
+                ProbabilisticTensorDictSequential(
+                    head1, to_loc2, head1b, return_composite=True
+                )
+            ]
+            last_cont = "cont2"
+        else:
+            prefix = [head1]
+            last_cont = "cont"
+        to_logits = TensorDictModule(nn.Linear(1, 3), [last_cont], ["logits"])
+        head2 = ProbabilisticTensorDictModule(
+            ["logits"], ["disc"], distribution_class=Categorical
+        )
+        seq = ProbabilisticTensorDictSequential(
+            *prefix, to_logits, head2, return_composite=True
+        )
+        td = TensorDict(loc=torch.zeros(4, 1), scale=torch.ones(4, 1), batch_size=[4])
+        with set_interaction_type("random"):
+            data = seq(td)
+        if lazy:
+            data = lazy_stack(list(data.unbind(0)))
+
+        with torch.no_grad():
+            expected = {
+                "cont_log_prob": Normal(data["loc"], data["scale"]).log_prob(
+                    data["cont"]
+                ),
+                "disc_log_prob": Categorical(
+                    logits=to_logits.module(data[last_cont])
+                ).log_prob(data["disc"]),
+            }
+            if nested:
+                expected["cont2_log_prob"] = Normal(
+                    to_loc2.module(data["cont"]), data["scale"]
+                ).log_prob(data["cont2"])
+            with set_interaction_type(interaction):
+                torch.manual_seed(1)
+                seq.get_dist(data)
+                rng_expected = torch.get_rng_state()
+                torch.manual_seed(1)
+                lp = seq.log_prob(data)
+                rng = torch.get_rng_state()
+        assert set(lp.keys()) == set(expected)
+        for key, value in expected.items():
+            torch.testing.assert_close(lp[key], value)
+        torch.testing.assert_close(rng, rng_expected)
+
+    @pytest.mark.parametrize("interaction", [None, "random"])
+    @set_composite_lp_aggregate(False)
+    def test_probtdseq_log_prob_stored_samples_unchanged(self, interaction):
+        # #3447: with heads that do not read each other's samples, log_prob
+        # gives the same values and draws the same random numbers as before.
+        # get_dist keeps conditioning the later heads on its own draw.
+        torch.manual_seed(0)
+        head1 = ProbabilisticTensorDictModule(
+            ["loc", "scale"], ["cont"], distribution_class=Normal
+        )
+        to_logits = TensorDictModule(nn.Linear(1, 3), ["loc"], ["logits"])
+        head2 = ProbabilisticTensorDictModule(
+            ["logits"], ["disc"], distribution_class=Categorical
+        )
+        seq = ProbabilisticTensorDictSequential(
+            head1, to_logits, head2, return_composite=True
+        )
+        td = TensorDict(loc=torch.zeros(4, 1), scale=torch.ones(4, 1), batch_size=[4])
+        with set_interaction_type("random"):
+            data = seq(td)
+        with torch.no_grad(), set_interaction_type(interaction):
+            torch.manual_seed(1)
+            if interaction == "random":
+                # The one draw of get_dist: a sample of the first head.
+                head1.get_dist(data).sample()
+            rng_expected = torch.get_rng_state()
+            torch.manual_seed(1)
+            lp = seq.log_prob(data)
+            rng = torch.get_rng_state()
+        torch.testing.assert_close(
+            lp["cont_log_prob"],
+            Normal(data["loc"], data["scale"]).log_prob(data["cont"]),
+        )
+        torch.testing.assert_close(
+            lp["disc_log_prob"],
+            Categorical(logits=to_logits.module(data["loc"])).log_prob(data["disc"]),
+        )
+        torch.testing.assert_close(rng, rng_expected)
+
+        # An autoregressive get_dist reads the mean of the first head by default.
+        to_logits_ar = TensorDictModule(to_logits.module, ["cont"], ["logits"])
+        seq_ar = ProbabilisticTensorDictSequential(
+            head1, to_logits_ar, head2, return_composite=True
+        )
+        with torch.no_grad():
+            dist = seq_ar.get_dist(data)
+            torch.testing.assert_close(
+                dist["disc"].logits,
+                Categorical(logits=to_logits.module(data["loc"])).logits,
+            )
+
     @pytest.mark.parametrize("aggregate", [True, False])
     @pytest.mark.parametrize("inner_return_composite", [None, True, False])
     def test_probtdseq_log_prob_custom_keys(self, aggregate, inner_return_composite):

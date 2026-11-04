@@ -1960,15 +1960,36 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
         if not self.return_composite:
             tensordict_out = self.get_dist_params(tensordict, tensordict_out, **kwargs)
             return self.build_dist_from_params(tensordict_out)
+        return self._composite_dist(tensordict, keep_samples=False)
 
+    def _composite_dist(
+        self, tensordict: TensorDictBase, keep_samples: bool
+    ) -> D.Distribution:
+        # The composite distribution of get_dist. With keep_samples, the
+        # modules after a probabilistic module whose samples are all in
+        # tensordict read the stored values, as log_prob needs to score them.
+        # The module still draws, so the random stream is the same as in
+        # get_dist.
         td_copy = tensordict.copy()
         dists = {}
         for i, tdm in enumerate(self._module_iter()):
             if isinstance(
                 tdm, (ProbabilisticTensorDictModule, ProbabilisticTensorDictSequential)
             ):
-                dist = tdm.get_dist(td_copy)
+                if (
+                    keep_samples
+                    and isinstance(tdm, ProbabilisticTensorDictSequential)
+                    and tdm.return_composite
+                    and type(tdm).get_dist is ProbabilisticTensorDictSequential.get_dist
+                ):
+                    dist = tdm._composite_dist(td_copy, keep_samples=True)
+                else:
+                    dist = tdm.get_dist(td_copy)
                 if i < len(self.module) - 1:
+                    keep = keep_samples and tdm.num_samples in ((), None)
+                    if keep:
+                        keys = td_copy.keys(True, True)
+                        keep = all(key in keys for key in tdm.dist_sample_keys)
                     if isinstance(tdm, ProbabilisticTensorDictModule):
                         gen, writeback = tdm._resolve_generator(td_copy)
                     else:
@@ -1980,7 +2001,10 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                         writeback(gen)
                     if tdm.num_samples not in ((), None):
                         td_copy = td_copy.expand(tdm.num_samples + td_copy.shape)
-                    if isinstance(tdm, ProbabilisticTensorDictModule):
+                    if keep:
+                        # The later modules read the stored samples
+                        pass
+                    elif isinstance(tdm, ProbabilisticTensorDictModule):
                         if isinstance(sample, torch.Tensor):
                             sample = [sample]
                         td_copy.update(dict(_zip_strict(tdm.dist_sample_keys, sample)))
@@ -2088,6 +2112,12 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
             if reroute:
                 dist = self.get_dist(tensordict_inp, **kwargs)
                 kwargs = {}
+            elif (
+                return_composite
+                and type(self).get_dist is ProbabilisticTensorDictSequential.get_dist
+            ):
+                # Condition the later modules on the stored samples.
+                dist = self._composite_dist(tensordict_inp, keep_samples=True)
             else:
                 dist = self.get_dist(tensordict_inp)
         if return_composite and isinstance(dist, CompositeDistribution):
