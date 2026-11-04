@@ -163,6 +163,29 @@ _TORCH_DTYPES = (
     torch.uint64,
 )
 _STR_DTYPE_TO_DTYPE = {str(dtype): dtype for dtype in _TORCH_DTYPES}
+# Dtypes that memmap and consolidate store by name too. They are not in
+# _TORCH_DTYPES, which also builds the NumPy table, and older torch versions
+# lack some of them.
+_STR_DTYPE_TO_DTYPE.update(
+    {
+        f"torch.{name}": getattr(torch, name)
+        for name in (
+            "float8_e4m3fn",
+            "float8_e4m3fnuz",
+            "float8_e5m2",
+            "float8_e5m2fnuz",
+            "float8_e8m0fnu",
+            "float4_e2m1fn_x2",
+            "bits8",
+            "bits16",
+            "bits1x8",
+            "bits2x4",
+            "bits4x2",
+            "bcomplex32",
+        )
+        if isinstance(getattr(torch, name, None), torch.dtype)
+    }
+)
 _DTYPE_TO_STR_DTYPE = {
     dtype: str_dtype for str_dtype, dtype in _STR_DTYPE_TO_DTYPE.items()
 }
