@@ -1,9 +1,9 @@
 {
-  "generated_at": "2026-11-03T06:20:55.128340+00:00",
+  "generated_at": "2026-11-04T06:21:10.250792+00:00",
   "repository": "pytorch/tensordict",
   "analysis_period": {
     "start": "2026-10-25",
-    "end": "2026-11-01",
+    "end": "2026-11-04",
     "runs_analyzed": 30
   },
   "summary": {
