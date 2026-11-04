@@ -63,6 +63,17 @@ def _prepare_memmap_file(
         os.close(fd)
 
 
+def _maps_file(tensor: torch.Tensor, filename: Path | str) -> bool:
+    """Returns whether ``tensor`` is a view of a mapping of the file ``filename``."""
+    if isinstance(tensor, MemoryMappedTensor) and tensor._filename is not None:
+        source = tensor._filename
+    elif type(tensor) is torch.Tensor:
+        source = getattr(tensor.untyped_storage(), "filename", None)
+    else:
+        return False
+    return source is not None and Path(source).absolute() == Path(filename).absolute()
+
+
 def _index_elements(index, ndim: int) -> list:
     """Read an index that makes a view of a tensor with ``ndim`` dims.
 
@@ -358,8 +369,9 @@ class MemoryMappedTensor(torch.Tensor):
         If ``input`` is a MemoryMappedTensor, it is returned unchanged in two
         cases: ``filename`` is ``None`` and ``input`` has no file, or
         ``filename`` is the file of ``input`` (and ``input`` was not opened
-        with ``mode="r"``). A file-backed ``input`` with ``filename=None`` is
-        copied to anonymous shared memory. In all other cases, a new
+        with ``mode="r"``, and is contiguous and starts at the start of its
+        file). A file-backed ``input`` with ``filename=None`` is copied to
+        anonymous shared memory. In all other cases, a new
         :class:`MemoryMappedTensor` is produced.
 
         Args:
@@ -417,6 +429,12 @@ class MemoryMappedTensor(torch.Tensor):
                 and Path(filename).absolute() == Path(input.filename).absolute()
                 # a copy-on-write mapping can hold writes that its file lacks
                 and input._mode != "r"
+                # a view that does not start the file is written back below
+                and (
+                    not copy_data
+                    or input.is_nested
+                    or (input.is_contiguous() and not input.storage_offset())
+                )
             ):
                 # either location was not specified, or memmap is already in the
                 # correct location, so just return the MemmapTensor unmodified
@@ -440,6 +458,18 @@ class MemoryMappedTensor(torch.Tensor):
                 "MemoryMappedTensor.from_tensor is incompatible with tensor.requires_grad."
             )
         _raise_if_jagged(input)
+        if (
+            copy_data
+            and filename is not None
+            and not input.is_nested
+            and input.layout is torch.strided
+            and input.device.type == "cpu"
+            and not (input.is_contiguous() and not input.storage_offset())
+            and _maps_file(input, filename)
+        ):
+            # input views the file that it is written to, elsewhere than
+            # where it lands: copying would read what it already wrote
+            input = input.clone()
         if shape is None:
             shape = _shape(input, nested_shape=True)
         if isinstance(shape, torch.Tensor):
