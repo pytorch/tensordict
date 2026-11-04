@@ -947,9 +947,10 @@ apply:
   :class:`~tensordict.TensorDictParams` instead.
 - A :class:`~tensordict.TensorDictParams` reads its entries from the
   tensordict that it wraps, not from the ``_parameters`` of the module.
-  :func:`torch.func.functional_call`, :func:`torch.export.export`, and FSDP2
-  swap parameters by writing ``_parameters``, so they silently use the
-  stored values. To call a module with other values, use ``from_module`` and
+  :func:`torch.func.functional_call` and FSDP2 swap parameters by writing
+  ``_parameters``, so they silently use the stored values, and
+  :func:`torch.export.export` captures the top-level entries that the
+  forward reads by key as constants. To call a module with other values, use ``from_module`` and
   ``to_module`` (see :ref:`modules-parameters`).
 
 In this example, only the ``float32`` entry becomes a parameter:

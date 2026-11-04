@@ -403,7 +403,8 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         and silently use the stored values:
         :func:`torch.func.functional_call` (and :func:`torch.func.grad`
         through it), :func:`torch.export.export`, which captures the
-        entries as constants, and FSDP2
+        top-level entries that the forward reads by key (``params["w"]``)
+        as constants, and FSDP2
         (:func:`torch.distributed.fsdp.fully_shard`), where the forward
         reads the original entries, so the sharded parameters get no
         gradient and the optimizer does not train them. To call a module

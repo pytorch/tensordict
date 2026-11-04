@@ -286,7 +286,9 @@ These do not work on DTensor leaves:
   reads its entries from the tensordict that it wraps. The forward then reads
   the original entries, the sharded parameters get no gradient, and the
   optimizer does not train them, without an error. The same holds for
-  :func:`torch.func.functional_call` and :func:`torch.export.export`. Shard a
+  :func:`torch.func.functional_call`, and :func:`torch.export.export`
+  captures the top-level entries that the forward reads by key as
+  constants. Shard a
   module that holds plain parameters instead.
 
 To work on the local shards, apply ``to_local()``. The shards have a shape

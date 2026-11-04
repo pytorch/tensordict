@@ -7135,8 +7135,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         locked tensordict. Without ``keys_to_update``, a key of the input that
         the tensordict lacks is skipped, not copied, when a tensor of the
         input matches a tensor entry of the tensordict; otherwise it raises a
-        ``KeyError``, as a key in ``keys_to_update`` that the tensordict lacks
-        does.
+        ``KeyError``, as a key in ``keys_to_update`` that the input has and
+        the tensordict lacks does. A sub-tensordict view raises a ``KeyError``
+        for every missing key, and a tensorclass raises a ``ValueError`` for
+        a key that is not one of its fields.
         Keyword arguments are top-level entries, and win over an entry of the
         input with the same key. A key named like an argument of ``update_``
         must go in the input dictionary. See :ref:`inplace-conventions`.
@@ -7938,7 +7940,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         :meth:`torch.Tensor.copy_`: the existing tensors keep their storage.
         A key of ``tensordict`` that the tensordict lacks is skipped, not
         copied, when a tensor of ``tensordict`` matches a tensor entry of the
-        tensordict; otherwise it raises a ``KeyError``.
+        tensordict; otherwise it raises a ``KeyError``. A sub-tensordict view
+        raises a ``KeyError`` for every missing key.
 
         Args:
             tensordict (TensorDictBase or dict): the entries to copy.
