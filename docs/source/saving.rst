@@ -480,10 +480,11 @@ tensordict that holds these views, is not consolidated, and has leaves of more
 than one dtype: an index, a ``select``, a sub-tensordict, ``clone(False)``, an
 unlocked copy, or the archive load itself. It raises
 ``RuntimeError: Cannot save multiple tensors or storages that view the same
-data as different types``. When the leaves of a ``.tdz`` archive have one
-dtype, ``torch.save`` of its load, or of a tensordict made from its views,
-writes a file that :func:`torch.load` rejects with ``record size ... does not
-match expected size``. Both are limits of ``torch.save``. Call ``.clone()``
+data as different types``. When the leaves that are saved have one dtype,
+``torch.save`` of a ``.tdz`` load, or of a tensordict made from its views (a
+``select`` of one entry of a mixed archive, for example), writes a file that
+:func:`torch.load` rejects with ``record size ... does not match expected
+size``. Both are limits of ``torch.save``. Call ``.clone()``
 or ``.consolidate()`` first. Pickle and
 :meth:`~tensordict.TensorDictBase.memmap` save these tensordicts as they are:
 
