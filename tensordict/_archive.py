@@ -169,7 +169,12 @@ def _tensor_chunks(tensor: torch.Tensor):
         tensor = tensor.cpu()
     if not tensor.is_contiguous():
         tensor = tensor.contiguous()
-    array = tensor.view(-1).view(torch.uint8).numpy()
+    tensor = tensor.view(-1)
+    if tensor.stride(-1) != 1:
+        # A tensor with one element counts as contiguous whatever its stride,
+        # and view(torch.uint8) needs a stride of 1 (#2541)
+        tensor = tensor.clone(memory_format=torch.contiguous_format)
+    array = tensor.view(torch.uint8).numpy()
     view = memoryview(array)
     for i in range(0, len(view), _COPY_CHUNK_SIZE):
         yield view[i : i + _COPY_CHUNK_SIZE]

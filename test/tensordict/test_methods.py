@@ -7715,6 +7715,34 @@ class TestMemmapArchive:
         loaded = TensorDict({"x": tensor}, batch_size=[]).save(archive)
         torch.testing.assert_close(loaded["x"], expected)
 
+    @pytest.mark.parametrize(
+        "make",
+        [
+            # #3433: one element with a stride other than 1
+            lambda: torch.arange(4.0).view(2, 2)[:1, 0],
+            lambda: torch.arange(10, dtype=torch.int64).view(1, 10)[:, 3],
+            # unchanged: a non-contiguous leaf and a one-byte dtype
+            lambda: torch.arange(12.0).view(3, 4)[:, 1:3],
+            lambda: torch.arange(4, dtype=torch.uint8).view(2, 2)[:1, 0],
+        ],
+    )
+    def test_archive_strided_leaf(self, tmp_path, make):
+        x = make()
+        archive = tmp_path / "a.tdz"
+        TensorDict(x=x, batch_size=x.shape[:1]).memmap(archive)
+        loaded = TensorDict.load_memmap(archive)
+        assert loaded["x"].dtype == x.dtype
+        assert torch.equal(loaded["x"], x)
+
+    def test_archive_tensor_chunks_no_copy(self):
+        # #3433: a contiguous leaf with more than one element is written from
+        # its own storage, without a copy
+        x = torch.arange(6.0).view(2, 3)
+        chunks = list(tensordict_archive._tensor_chunks(x))
+        assert len(chunks) == 1
+        assert np.asarray(chunks[0]).ctypes.data == x.data_ptr()
+        assert bytes(chunks[0]) == x.numpy().tobytes()
+
     def test_archive_explicit_flag(self, tmp_path):
         # archive mode can target any file name when requested explicitly
         td = self._nested_td()

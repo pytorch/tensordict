@@ -11735,6 +11735,13 @@ class TestGeneric:
         with pytest.raises(ValueError, match="same value"):
             tensordict.append_memmap(tmpdir, rows)
 
+    def test_append_memmap_strided_row(self, tmpdir):
+        # #3433: a one-row leaf sliced from a column has a stride other than 1
+        TensorDict(x=torch.zeros(2), batch_size=[2]).memmap(tmpdir)
+        x = torch.arange(1.0, 5.0).view(2, 2)[:1, 0]
+        tensordict.append_memmap(tmpdir, TensorDict(x=x, batch_size=[1]))
+        assert tensordict.load_memmap(tmpdir)["x"].tolist() == [0.0, 0.0, 1.0]
+
     def test_append_memmap_archive(self, tmpdir):
         archive = Path(tmpdir) / "data.tdz"
         TensorDict(a=torch.zeros(3), batch_size=[3]).save(archive)
