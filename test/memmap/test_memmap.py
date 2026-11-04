@@ -1299,6 +1299,34 @@ class TestReadWrite:
             is view
         )
 
+    # #3431: with the default existsok=False, a view saved onto its own file is
+    # still returned unchanged, without writing
+    @pytest.mark.parametrize(
+        "make",
+        [
+            lambda m: m[1:],
+            lambda m: m[:, 0],
+            lambda m: m[::2],
+            lambda m: m[4:],
+        ],
+        ids=["slice", "col", "step", "empty"],
+    )
+    def test_view_saved_onto_own_file_existsok_false(self, tmp_path, make):
+        file_path = tmp_path / "x.memmap"
+        mmap = MemoryMappedTensor.from_tensor(
+            torch.arange(16.0).view(4, 4), filename=file_path
+        )
+        view = make(mmap)
+        assert MemoryMappedTensor.from_tensor(view, filename=file_path) is view
+        assert MemoryMappedTensor(view, filename=file_path) is view
+        # a plain-tensor view of the mapping raises, as it always did
+        with pytest.raises(RuntimeError, match="already exists"):
+            MemoryMappedTensor.from_tensor(mmap.t(), filename=file_path)
+        reloaded = MemoryMappedTensor.from_filename(
+            file_path, dtype=torch.float32, shape=torch.Size([4, 4])
+        )
+        assert torch.equal(reloaded, torch.arange(16.0).view(4, 4))
+
     # #3431: re-saving a loaded tensordict in place keeps every leaf
     def test_memmap_inplace_keeps_leaves(self, tmp_path):
         TensorDict(

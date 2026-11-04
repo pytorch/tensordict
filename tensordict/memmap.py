@@ -369,8 +369,9 @@ class MemoryMappedTensor(torch.Tensor):
         If ``input`` is a MemoryMappedTensor, it is returned unchanged in two
         cases: ``filename`` is ``None`` and ``input`` has no file, or
         ``filename`` is the file of ``input`` (and ``input`` was not opened
-        with ``mode="r"``, and is contiguous and starts at the start of its
-        file). A file-backed ``input`` with ``filename=None`` is copied to
+        with ``mode="r"``; with ``existsok=True`` and ``copy_data=True``,
+        a non-nested ``input`` must also be contiguous and start at the start
+        of its file). A file-backed ``input`` with ``filename=None`` is copied to
         anonymous shared memory. In all other cases, a new
         :class:`MemoryMappedTensor` is produced.
 
@@ -431,7 +432,8 @@ class MemoryMappedTensor(torch.Tensor):
                 and input._mode != "r"
                 # a view that does not start the file is written back below
                 and (
-                    not copy_data
+                    not existsok
+                    or not copy_data
                     or input.is_nested
                     or (input.is_contiguous() and not input.storage_offset())
                 )
@@ -460,6 +462,7 @@ class MemoryMappedTensor(torch.Tensor):
         _raise_if_jagged(input)
         if (
             copy_data
+            and existsok
             and filename is not None
             and not input.is_nested
             and input.layout is torch.strided
