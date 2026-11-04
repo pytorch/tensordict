@@ -7075,6 +7075,29 @@ class TestGeneric:
         assert torch.equal(m[1].running_mean, src[1].running_mean)
         assert m[1].num_batches_tracked == 1
 
+    @pytest.mark.parametrize(
+        "source", ["module", "tensordict", "detached"], ids=["module", "td", "detach"]
+    )
+    def test_load_state_dict_from_module_self_load(self, source):
+        # #3439: loading a module's own state into TensorDict.from_module
+        # leaves the parameters as they are: their versions do not move, and
+        # a graph built before the load still backpropagates
+        module = nn.Linear(3, 3)
+        params = TensorDict.from_module(module)
+        x = torch.randn(2, 3, requires_grad=True)
+        out = (module(x) ** 2).sum()
+        versions = [p._version for p in module.parameters()]
+        if source == "module":
+            state_dict = module.state_dict()
+        elif source == "tensordict":
+            state_dict = params.state_dict()
+        else:
+            state_dict = params.detach().state_dict()
+        params.load_state_dict(state_dict)
+        assert [p._version for p in module.parameters()] == versions
+        out.backward()
+        assert all(p.grad is not None for p in module.parameters())
+
     def test_load_state_dict_non_leaf_keeps_autograd(self):
         # #3439: an entry that requires grad but is not a leaf is still copied
         # into with autograd
