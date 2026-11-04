@@ -444,7 +444,9 @@ def _nested_leaves(
     # sub-tensordicts that such a stack rejects (devices or numbers of batch
     # dims that differ, fewer batch dims than stack_dim) or warns about (names,
     # when the stack dim has a name).
-    if not tensordicts or type(tensordicts[0]) is not TensorDict:
+    if not tensordicts or stack_dim < 0 or type(tensordicts[0]) is not TensorDict:
+        # a negative stack_dim (from_dict keeps one outside the batch dims)
+        # is normalized per sub-tensordict by the general path
         return None
     rest = key[1:]
     # member 0's sub-tensordicts, which the other members' are compared with

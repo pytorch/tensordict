@@ -148,6 +148,15 @@ _NESTED_GET_STACKS = {
     "dim0": lambda: lazy_stack([_nested_get_member(i) for i in range(3)]),
     "dim1": lambda: lazy_stack([_nested_get_member(i) for i in range(3)], 1),
     "dim-1": lambda: lazy_stack([_nested_get_member(i) for i in range(3)], -1),
+    # from_dict keeps a negative stack_dim outside the batch dims as it is
+    "from_dict_dim-3": lambda: LazyStackedTensorDict.from_dict(
+        {
+            "0": {"n": TensorDict(c=torch.zeros(2), batch_size=[2])},
+            "1": {"n": TensorDict(c=torch.ones(2), batch_size=[2])},
+        },
+        batch_size=[2],
+        stack_dim=-3,
+    ),
     "2d members, dim 2": lambda: lazy_stack(
         [
             _nested_td([2, 3], n=_nested_td([2, 3], c=torch.arange(24.0).view(2, 3, 4)))
