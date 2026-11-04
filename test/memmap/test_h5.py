@@ -2534,6 +2534,16 @@ class TestH5Indexing:
         # an existing nested leaf is still written in place
         sub.set_(("n", "b"), torch.full((2,), 7.0))
         assert h5td.get(("n", "b")).tolist() == expected
+        for key in (("p", "q"), ("n", "z"), ("r", "s")):
+            assert h5td.get(key).dtype == torch.float32, key
+        # update under "n" gives what one view gives
+        one = PersistentTensorDict.from_dict(td, filename=tmp_path / "one.h5")
+        value = {"n": {"z": torch.full((2,), 7.0), "y": torch.full((2,), 7)}}
+        one._get_sub_tensordict((1, slice(1, 3))).update(value)
+        sub.update(value)
+        for key in (("n", "z"), ("n", "y")):
+            assert h5td.get(key).dtype == one.get(key).dtype, key
+            assert h5td.get(key).tolist() == one.get(key).tolist(), key
 
     def test_stack_items(self, data):
         # h5td[idx] is a lazy view of the file, not a lazy stack

@@ -667,6 +667,36 @@ class TestZarrIndexing:
         assert (ztd.get_at("a", 0) == 0).all()
         assert (ztd.get_at(("b", "c"), 0) == 0).all()
 
+    def test_index_twice_set_new_nested(self, tmp_path):
+        # #3443: new nested entries written through ztd[i][j:k] were lost;
+        # they reach the store
+        pytest.importorskip("zarr", minversion="3")
+        td = TensorDict(
+            a=torch.zeros(2, 4),
+            n=TensorDict(b=torch.zeros(2, 4), batch_size=[2, 4]),
+            batch_size=[2, 4],
+        )
+        ztd = PersistentTensorDict.from_dict(
+            td, filename=tmp_path / "s.zarr", backend="zarr"
+        )
+        expected = [[0.0] * 4, [0.0, 7.0, 7.0, 0.0]]
+        sub = ztd[1][1:3]
+        sub.set(("p", "q"), torch.full((2,), 7.0))
+        assert ztd.get(("p", "q")).tolist() == expected
+        assert ztd.get(("p", "q")).dtype == torch.float32
+        sub.update({("r", "s"): torch.full((2,), 7.0)})
+        assert ztd.get(("r", "s")).tolist() == expected
+        # update under "n" gives what one view gives
+        one = PersistentTensorDict.from_dict(
+            td, filename=tmp_path / "one.zarr", backend="zarr"
+        )
+        value = {"n": {"z": torch.full((2,), 7.0), "y": torch.full((2,), 7)}}
+        one._get_sub_tensordict((1, slice(1, 3))).update(value)
+        sub.update(value)
+        for key in (("n", "z"), ("n", "y")):
+            assert ztd.get(key).dtype == one.get(key).dtype, key
+            assert ztd.get(key).tolist() == one.get(key).tolist(), key
+
     @pytest.mark.parametrize(
         "index",
         [0, (slice(None), 1), torch.tensor([0, 2])],

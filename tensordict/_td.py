@@ -3293,6 +3293,13 @@ def _set_memmap_entry(
     return memmap_tensor
 
 
+def _view_root(td):
+    # the tensordict under a chain of _SubTensorDict views
+    while isinstance(td, _SubTensorDict):
+        td = td._source
+    return td
+
+
 class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
     """A TensorDict that only sees an index of the stored tensors."""
 
@@ -3513,9 +3520,12 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
                 key[0], td, inplace=False, validated=True, non_blocking=non_blocking
             )
             if isinstance(parent, _SubTensorDict):
-                # a parent that is a view writes a copy of td into its
-                # source: write into the entry that the parent holds now
-                td = parent._get_str(key[0], NO_DEFAULT)
+                from tensordict.nn.params import TensorDictParams
+
+                if not isinstance(_view_root(parent), TensorDictParams):
+                    # a parent that is a view writes a copy of td into its
+                    # source: write into the entry that the parent holds now
+                    td = parent._get_str(key[0], NO_DEFAULT)
         _SubTensorDict(td, self.idx)._set_tuple(
             key[1:],
             value,
@@ -3690,14 +3700,25 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
                 target_class = self.entry_class(firstkey)
                 if _is_tensor_collection(target_class):
                     source = self._source
-                    target = source.get(firstkey)
-                    if isinstance(source, _SubTensorDict) and not is_tensorclass(
-                        target
-                    ):
-                        # get() of a view returns a copy of a nested
-                        # tensordict, which would not keep new keys (a
-                        # tensorclass keeps get(), which checks its fields)
-                        target = source._get_str(firstkey, NO_DEFAULT)
+                    target = None
+                    if isinstance(source, _SubTensorDict):
+                        from tensordict.nn.params import TensorDictParams
+                        from tensordict.persistent import PersistentTensorDict
+
+                        if not isinstance(_view_root(source), TensorDictParams):
+                            # get() of a view returns a copy of a nested
+                            # tensordict, which would not keep new keys: take
+                            # the view of a TensorDict entry (a lazy stack
+                            # keeps its exclusive-keys guard, a tensorclass
+                            # its field check)
+                            view = source._get_str(firstkey, NO_DEFAULT)
+                            if type(_view_root(view)) in (
+                                TensorDict,
+                                PersistentTensorDict,
+                            ):
+                                target = view
+                    if target is None:
+                        target = source.get(firstkey)
                     target = target._get_sub_tensordict(self.idx)
                     if len(subkey):
                         sub_keys_to_update = _prune_selected_keys(
