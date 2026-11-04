@@ -2964,6 +2964,45 @@ def _leaf_keys(value, prefix=()):
             yield key
 
 
+def _leaf_value(value, key: tuple):
+    """The value of the leaf ``key`` that :func:`_leaf_keys` yields for ``value``."""
+    if is_tensor_collection(value):
+        return value.get(key)
+    for name, item in value.items():
+        name = name if isinstance(name, tuple) else (name,)
+        if key[: len(name)] != name:
+            continue
+        rest = key[len(name) :]
+        if not rest:
+            return item
+        if isinstance(item, dict) or (
+            is_tensor_collection(item) and not is_non_tensor(item)
+        ):
+            return _leaf_value(item, rest)
+    raise KeyError(key)
+
+
+def _same_leaf_value(input_dict, key0: tuple, key1: tuple) -> bool:
+    """Whether the leaves ``key0`` and ``key1`` hold the same value (#3435)."""
+    try:
+        first = _leaf_value(input_dict, key0)
+        second = _leaf_value(input_dict, key1)
+        if first is second:
+            return True
+        if isinstance(first, torch.Tensor) and isinstance(second, torch.Tensor):
+            return (
+                first.shape == second.shape
+                and first.dtype == second.dtype
+                and first.device == second.device
+                and bool(torch.equal(first, second))
+            )
+        if is_non_tensor(first) and is_non_tensor(second):
+            return bool(first.tolist() == second.tolist())
+    except Exception:
+        return False
+    return False
+
+
 def _path_collision(input_dict, backend) -> str | None:
     """Describes an entry that replaces another one in the file, if any (#3435).
 
@@ -2984,6 +3023,11 @@ def _path_collision(input_dict, backend) -> str | None:
     for idx, key in enumerate(keys):
         path = tuple(part for subkey in key for part in subkey.split("/") if part)
         if path in paths:
+            if _same_leaf_value(input_dict, paths[path][1], key):
+                # Both entries hold the same value, as after
+                # td.update(td.flatten_keys("/")): the file keeps it, under
+                # the nested key that "/" stands for.
+                continue
             return (
                 f"The entries {paths[path][1]} and {key} were both written "
                 f"at {'/'.join(path)!r} in the {backend} file, and the second "

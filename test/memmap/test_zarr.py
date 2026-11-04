@@ -100,6 +100,21 @@ class TestZarrRoundTrip:
         with pytest.raises(ValueError, match="replaced"):
             PersistentTensorDict.from_dict(src, tmp_path / "x.zarr", backend="zarr")
 
+    def test_slash_key_alias_keeps_returning(self, tmp_path):
+        # #3435: a "/" key that holds the same value as the nested key it maps
+        # to, as after td.update(td.flatten_keys("/")), loses nothing: the
+        # call returns, and the file reads back the nested key
+        pytest.importorskip("zarr", minversion="3")
+        td = TensorDict(
+            {"obs": {"pos": torch.arange(3.0)}, "r": torch.ones(3)}, batch_size=[3]
+        )
+        td.update(td.flatten_keys("/"))
+        out = td.to_zarr(tmp_path / "a.zarr")
+        out.close()
+        loaded = TensorDict.from_zarr(tmp_path / "a.zarr")
+        assert set(loaded.keys(True, True)) == {("obs", "pos"), "r"}
+        assert (loaded["obs", "pos"] == torch.arange(3.0)).all()
+
     def test_slash_key_without_collision(self, tmp_path):
         # #3435: a "/" key alone, or next to a disjoint group, keeps loading
         # as a nested key; a leaf before a "/" key under it keeps raising
