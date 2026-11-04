@@ -9025,6 +9025,120 @@ class TestToModule:
         for target in grad_targets:
             assert target.grad is not None
 
+    def test_to_module_context_manager_keeps_parameter_buffer(self, as_module):
+        # #3461 leaves a Parameter registered as a buffer as it was: it comes
+        # back as a buffer when the block exits
+        module = nn.Linear(3, 3)
+        module.register_buffer("pe", nn.Parameter(torch.zeros(3), requires_grad=False))
+        with TensorDict.from_module(module).to_module(module):
+            pass
+        assert [name for name, _ in module.named_buffers()] == ["pe"]
+        assert [name for name, _ in module.named_parameters()] == ["weight", "bias"]
+
+    @pytest.mark.parametrize("preserve_module_state", [True, False])
+    def test_to_module_vmap_restores_parameters(self, as_module, preserve_module_state):
+        # #3461: leaving the block under vmap gives the module back its own
+        # parameters, which still require grad
+        module = nn.Linear(3, 4)
+        weight, bias = module.weight, module.bias
+        params = TensorDict.from_modules(
+            nn.Linear(3, 4), nn.Linear(3, 4), as_module=as_module
+        )
+
+        def call(p, x):
+            with p.to_module(module, preserve_module_state=preserve_module_state):
+                return module(x)
+
+        torch.vmap(call, (0, None))(params, torch.randn(3))
+        assert module.weight is weight
+        assert module.bias is bias
+        assert module.weight.requires_grad is True
+        assert module.bias.requires_grad is True
+
+    def test_to_module_context_manager_keeps_frozen_parameter(self, as_module):
+        # #3461: tensors that require grad do not unfreeze a frozen weight
+        # when the block exits
+        module = nn.Linear(3, 4)
+        module.weight.requires_grad_(False)
+        weight, bias = module.weight, module.bias
+        params = TensorDict.from_module(module, as_module=as_module)
+        params = params.apply(lambda p: p.detach().requires_grad_() * 1)
+        with params.to_module(module):
+            module(torch.randn(3)).sum().backward()
+        assert module.weight is weight
+        assert module.bias is bias
+        assert module.weight.requires_grad is False
+        assert module.bias.requires_grad is True
+
+    def test_to_module_context_manager_parameter_source_restores(self, as_module):
+        # Parameters that require grad, swapped into a frozen layer, are
+        # wrapped on entry and the originals come back on exit (unchanged by #3461)
+        module = nn.Linear(3, 4)
+        module.weight.requires_grad_(False)
+        weight, bias = module.weight, module.bias
+        params = TensorDictParams(
+            TensorDict.from_module(module, as_module=as_module).data.clone()
+        )
+        with params.to_module(module):
+            assert isinstance(module.weight, nn.Parameter)
+            assert module.weight.requires_grad is False
+            assert module.bias is params["bias"]
+        assert module.weight is weight
+        assert module.bias is bias
+        assert module.weight.requires_grad is False
+        assert module.bias.requires_grad is True
+
+    @pytest.mark.parametrize("source", ["from_module", "clone", "detach", "params"])
+    def test_to_module_state_dict_context_manager_keeps_frozen_parameter(
+        self, as_module, source
+    ):
+        # A use_state_dict=True block leaves a frozen weight frozen (unchanged
+        # by #3461)
+        module = nn.Linear(3, 4)
+        module.weight.requires_grad_(False)
+        params = TensorDict.from_module(module, as_module=as_module)
+        if source == "clone":
+            params = params.clone()
+        elif source == "detach":
+            params = params.detach().clone()
+        elif source == "params":
+            params = TensorDictParams(params.data.clone())
+        with params.to_module(module, use_state_dict=True):
+            pass
+        assert module.weight.requires_grad is False
+        assert module.bias.requires_grad is True
+        assert {name for name, _ in module.named_parameters()} == {"weight", "bias"}
+
+    def test_to_module_nested_context_manager_keeps_parameter_slots(self, as_module):
+        # Leaving an inner block gives back the outer block's tensors that
+        # require grad as registered parameters (unchanged by #3461)
+        module = nn.Linear(3, 4)
+        outer = TensorDict.from_module(module).clone()
+        inner = TensorDict.from_module(module, as_module=as_module).detach().clone()
+        with outer.to_module(module):
+            with inner.to_module(module):
+                pass
+            assert module.weight is outer["weight"]
+            assert module.bias is outer["bias"]
+            assert {name for name, _ in module.named_parameters()} == {
+                "weight",
+                "bias",
+            }
+            assert set(module.state_dict()) == {"weight", "bias"}
+
+    def test_to_module_context_manager_keeps_nonleaf_parameter_slot(self, as_module):
+        # A tensor that requires grad, written into a parameter slot for good,
+        # is still registered there after a block (unchanged by #3461)
+        module = nn.Linear(3, 4)
+        weight = torch.randn(4, 3, requires_grad=True) * 1
+        TensorDict(weight=weight).to_module(module)
+        params = TensorDict.from_module(module, as_module=as_module).detach().clone()
+        with params.to_module(module):
+            pass
+        assert module.weight is weight
+        assert module._parameters["weight"] is weight
+        assert {name for name, _ in module.named_parameters()} == {"weight", "bias"}
+
     def test_to_module_context_manager_restores_on_error(self, as_module):
         # The module gets its original parameters back also when the body raises
         module = nn.Linear(4, 2)
