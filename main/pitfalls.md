@@ -140,7 +140,9 @@ torch._dynamo.exc.Unsupported: ...
 `td[key] = value` and [`set()`](reference/generated/tensordict.TensorDictBase.set.html#tensordict.TensorDictBase.set) replace the
 tensor under the key. [`set_()`](reference/generated/tensordict.TensorDictBase.set_.html#tensordict.TensorDictBase.set_) and
 [`update_()`](reference/generated/tensordict.TensorDictBase.update_.html#tensordict.TensorDictBase.update_) copy the values into the existing
-tensor, and raise a `KeyError` for a missing key:
+tensor. `set_` raises a `KeyError` for a missing key. `update_` raises
+one when no tensor of the input matches an entry, and skips the missing keys
+otherwise:
 
 ```
 >>> td = TensorDict({"pos": torch.zeros(3)}, batch_size=[3])

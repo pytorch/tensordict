@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6715+g14c8cc55e.d20261104)">
+<meta name="llm:version" content="main (0.15.0.dev6720+g78d8475ca.d20261104)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6715+g14c8cc55e.d20261104)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6720+g78d8475ca.d20261104)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1765,7 +1765,13 @@ document.write(`
 <dd><p>Copies the entries of a dictionary or tensordict into the existing entries, and returns <code class="docutils literal notranslate"><span class="pre">self</span></code>.</p>
 <p>Each value is copied into the existing tensor, which keeps its
 storage, as with <a class="reference internal" href="tensordict.TensorDictBase.set_.html#tensordict.TensorDictBase.set_" title="tensordict.TensorDictBase.set_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">set_()</span></code></a>. <code class="docutils literal notranslate"><span class="pre">update_</span></code> therefore works on a
-locked tensordict. Every key of the input must exist in the tensordict.
+locked tensordict. Without <code class="docutils literal notranslate"><span class="pre">keys_to_update</span></code>, a key of the input that
+the tensordict lacks is skipped, not copied, when a tensor of the
+input matches a tensor entry of the tensordict; otherwise it raises a
+<code class="docutils literal notranslate"><span class="pre">KeyError</span></code>, as a key in <code class="docutils literal notranslate"><span class="pre">keys_to_update</span></code> that the input has and
+the tensordict lacks does. A sub-tensordict view raises a <code class="docutils literal notranslate"><span class="pre">KeyError</span></code>
+for every missing key, and a tensorclass raises a <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> for
+a key that is not one of its fields.
 Keyword arguments are top-level entries, and win over an entry of the
 input with the same key. A key named like an argument of <code class="docutils literal notranslate"><span class="pre">update_</span></code>
 must go in the input dictionary. See <a class="reference internal" href="../../concepts/operations.html#inplace-conventions"><span class="std std-ref">In-place operations</span></a>.</p>
@@ -1810,7 +1816,8 @@ TensorDict 0.18, the default will change to raising a
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#KeyError" title="(in Python v3.15)"><strong>KeyError</strong></a> – if a key of the input is missing from the tensordict.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#KeyError" title="(in Python v3.15)"><strong>KeyError</strong></a> – if a key of the input is missing from the tensordict
+    and is not skipped as described above.</p></li>
 <li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#RuntimeError" title="(in Python v3.15)"><strong>RuntimeError</strong></a> – if a value does not fit the shape of its entry.</p></li>
 </ul>
 </dd>
@@ -1826,6 +1833,9 @@ TensorDict 0.18, the default will change to raising a
 <span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="n">a</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>  <span class="c1"># keyword form</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">a</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
 <span class="go">tensor(3.)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">_</span> <span class="o">=</span> <span class="n">td</span><span class="o">.</span><span class="n">update_</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="s2">"extra"</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="s2">"extra"</span> <span class="ow">in</span> <span class="n">td</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>  <span class="c1"># skipped, since "a" matches</span>
+<span class="go">False</span>
 </pre></div>
 </div>
 </dd></dl>
@@ -2188,7 +2198,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.update",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.update",
        "url": "/reference/generated/tensordict.TensorDictBase.update_.html",
-       "articleBody": "TensorDictBase.update# TensorDictBase.update_(input_dict_or_td: dict[str, Tensor | TensorCollection] | T | None = None, clone: bool = False, *, non_blocking: bool = False, keys_to_update: Sequence[NestedKey] | None = None, **kwargs) \u2192 Self# Copies the entries of a dictionary or tensordict into the existing entries, and returns self. Each value is copied into the existing tensor, which keeps its storage, as with set_(). update_ therefore works on a locked tensordict. Every key of the input must exist in the tensordict. Keyword arguments are top-level entries, and win over an entry of the input with the same key. A key named like an argument of update_ must go in the input dictionary. See In-place operations. On a shared or memory-mapped tensordict, a non-tensor value that its shared buffer cannot store (for example None, or an int where a string is shared) is skipped, with a UserWarning that names its key. Parameters: input_dict_or_td (TensorDictBase or dict, optional) \u2013 the entries to copy. If None, only the keyword arguments are copied. Defaults to None. clone (bool, optional) \u2013 if True, clones the tensors of the input before copying them. Defaults to False. Keyword Arguments: non_blocking (bool, optional) \u2013 if True, copies between devices can run asynchronously with respect to the host. Defaults to False. keys_to_update (sequence of NestedKey, optional) \u2013 if passed, only these keys are copied, without the cost of td.update_(other.select(*keys_to_update)). Defaults to None, which copies every entry. If it lists a sub-tensordict key and a key under it, the whole sub-tensordict is copied and the call warns, while select keeps only the deeper keys; starting with TensorDict 0.17, the default will change to copying only the deeper keys, as select does. An entry that is not a key, such as None, an int or bytes, selects every entry, and the call warns (a tensordict that holds a lazy stack, a sub-tensordict view or a file raises a RuntimeError instead, as before); starting with TensorDict 0.18, the default will change to raising a RuntimeError, as update() does. **kwargs \u2013 entries to copy at the top level, by key. Returns: self. Raises: KeyError \u2013 if a key of the input is missing from the tensordict. RuntimeError \u2013 if a value does not fit the shape of its entry. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e a = torch.ones(3) \u003e\u003e\u003e td = TensorDict(a=a, b=torch.ones(3, 4), batch_size=[3]) \u003e\u003e\u003e _ = td.update_(TensorDict(a=torch.zeros(3), b=torch.zeros(3, 4), batch_size=[3])) \u003e\u003e\u003e td[\"a\"] is a, a.sum() (True, tensor(0.)) \u003e\u003e\u003e _ = td.update_(a=torch.ones(3)) # keyword form \u003e\u003e\u003e a.sum() tensor(3.) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.update# TensorDictBase.update_(input_dict_or_td: dict[str, Tensor | TensorCollection] | T | None = None, clone: bool = False, *, non_blocking: bool = False, keys_to_update: Sequence[NestedKey] | None = None, **kwargs) \u2192 Self# Copies the entries of a dictionary or tensordict into the existing entries, and returns self. Each value is copied into the existing tensor, which keeps its storage, as with set_(). update_ therefore works on a locked tensordict. Without keys_to_update, a key of the input that the tensordict lacks is skipped, not copied, when a tensor of the input matches a tensor entry of the tensordict; otherwise it raises a KeyError, as a key in keys_to_update that the input has and the tensordict lacks does. A sub-tensordict view raises a KeyError for every missing key, and a tensorclass raises a ValueError for a key that is not one of its fields. Keyword arguments are top-level entries, and win over an entry of the input with the same key. A key named like an argument of update_ must go in the input dictionary. See In-place operations. On a shared or memory-mapped tensordict, a non-tensor value that its shared buffer cannot store (for example None, or an int where a string is shared) is skipped, with a UserWarning that names its key. Parameters: input_dict_or_td (TensorDictBase or dict, optional) \u2013 the entries to copy. If None, only the keyword arguments are copied. Defaults to None. clone (bool, optional) \u2013 if True, clones the tensors of the input before copying them. Defaults to False. Keyword Arguments: non_blocking (bool, optional) \u2013 if True, copies between devices can run asynchronously with respect to the host. Defaults to False. keys_to_update (sequence of NestedKey, optional) \u2013 if passed, only these keys are copied, without the cost of td.update_(other.select(*keys_to_update)). Defaults to None, which copies every entry. If it lists a sub-tensordict key and a key under it, the whole sub-tensordict is copied and the call warns, while select keeps only the deeper keys; starting with TensorDict 0.17, the default will change to copying only the deeper keys, as select does. An entry that is not a key, such as None, an int or bytes, selects every entry, and the call warns (a tensordict that holds a lazy stack, a sub-tensordict view or a file raises a RuntimeError instead, as before); starting with TensorDict 0.18, the default will change to raising a RuntimeError, as update() does. **kwargs \u2013 entries to copy at the top level, by key. Returns: self. Raises: KeyError \u2013 if a key of the input is missing from the tensordict and is not skipped as described above. RuntimeError \u2013 if a value does not fit the shape of its entry. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e a = torch.ones(3) \u003e\u003e\u003e td = TensorDict(a=a, b=torch.ones(3, 4), batch_size=[3]) \u003e\u003e\u003e _ = td.update_(TensorDict(a=torch.zeros(3), b=torch.zeros(3, 4), batch_size=[3])) \u003e\u003e\u003e td[\"a\"] is a, a.sum() (True, tensor(0.)) \u003e\u003e\u003e _ = td.update_(a=torch.ones(3)) # keyword form \u003e\u003e\u003e a.sum() tensor(3.) \u003e\u003e\u003e _ = td.update_({\"a\": torch.zeros(3), \"extra\": torch.zeros(3)}) \u003e\u003e\u003e \"extra\" in td.keys() # skipped, since \"a\" matches False Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

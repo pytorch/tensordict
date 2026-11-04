@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6715+g14c8cc55e.d20261104)">
+<meta name="llm:version" content="main (0.15.0.dev6720+g78d8475ca.d20261104)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6715+g14c8cc55e.d20261104)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6720+g78d8475ca.d20261104)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1764,8 +1764,11 @@ document.write(`
 <span class="sig-prename descclassname"><span class="pre">TensorDictBase.</span></span><span class="sig-name descname"><span class="pre">copy_</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tensordict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">T</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">non_blocking</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Self</span></span></span><a class="headerlink" href="#tensordict.TensorDictBase.copy_" title="Link to this definition">#</a></dt>
 <dd><p>Copies the entries of <code class="docutils literal notranslate"><span class="pre">tensordict</span></code> into the existing entries, and returns <code class="docutils literal notranslate"><span class="pre">self</span></code>.</p>
 <p>The same as <a class="reference internal" href="tensordict.TensorDictBase.update_.html#tensordict.TensorDictBase.update_" title="tensordict.TensorDictBase.update_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update_()</span></code></a>, under the name of
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.copy_.html#torch.Tensor.copy_" title="(in PyTorch v2.15)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.Tensor.copy_()</span></code></a>: the existing tensors keep their storage,
-and every key of <code class="docutils literal notranslate"><span class="pre">tensordict</span></code> must exist in the tensordict.</p>
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.copy_.html#torch.Tensor.copy_" title="(in PyTorch v2.15)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">torch.Tensor.copy_()</span></code></a>: the existing tensors keep their storage.
+A key of <code class="docutils literal notranslate"><span class="pre">tensordict</span></code> that the tensordict lacks is skipped, not
+copied, when a tensor of <code class="docutils literal notranslate"><span class="pre">tensordict</span></code> matches a tensor entry of the
+tensordict; otherwise it raises a <code class="docutils literal notranslate"><span class="pre">KeyError</span></code>. A sub-tensordict view
+raises a <code class="docutils literal notranslate"><span class="pre">KeyError</span></code> for every missing key.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -1778,7 +1781,7 @@ can run asynchronously with respect to the host. Defaults to
 <dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
 <li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#KeyError" title="(in Python v3.15)"><strong>KeyError</strong></a> – if a key of <code class="docutils literal notranslate"><span class="pre">tensordict</span></code> is missing from the
-    tensordict.</p></li>
+    tensordict and is not skipped as described above.</p></li>
 <li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#RuntimeError" title="(in Python v3.15)"><strong>RuntimeError</strong></a> – if a value does not fit the shape of its entry.</p></li>
 </ul>
 </dd>
@@ -2153,7 +2156,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.copy",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.copy",
        "url": "/reference/generated/tensordict.TensorDictBase.copy_.html",
-       "articleBody": "TensorDictBase.copy# TensorDictBase.copy_(tensordict: T, non_blocking: bool = False) \u2192 Self# Copies the entries of tensordict into the existing entries, and returns self. The same as update_(), under the name of torch.Tensor.copy_(): the existing tensors keep their storage, and every key of tensordict must exist in the tensordict. Parameters: tensordict (TensorDictBase or dict) \u2013 the entries to copy. non_blocking (bool, optional) \u2013 if True, copies between devices can run asynchronously with respect to the host. Defaults to False. Raises: KeyError \u2013 if a key of tensordict is missing from the tensordict. RuntimeError \u2013 if a value does not fit the shape of its entry. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e x = torch.zeros(3) \u003e\u003e\u003e td = TensorDict(x=x, batch_size=[3]) \u003e\u003e\u003e _ = td.copy_(TensorDict(x=torch.ones(3), batch_size=[3])) \u003e\u003e\u003e x tensor([1., 1., 1.]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.copy# TensorDictBase.copy_(tensordict: T, non_blocking: bool = False) \u2192 Self# Copies the entries of tensordict into the existing entries, and returns self. The same as update_(), under the name of torch.Tensor.copy_(): the existing tensors keep their storage. A key of tensordict that the tensordict lacks is skipped, not copied, when a tensor of tensordict matches a tensor entry of the tensordict; otherwise it raises a KeyError. A sub-tensordict view raises a KeyError for every missing key. Parameters: tensordict (TensorDictBase or dict) \u2013 the entries to copy. non_blocking (bool, optional) \u2013 if True, copies between devices can run asynchronously with respect to the host. Defaults to False. Raises: KeyError \u2013 if a key of tensordict is missing from the tensordict and is not skipped as described above. RuntimeError \u2013 if a value does not fit the shape of its entry. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e x = torch.zeros(3) \u003e\u003e\u003e td = TensorDict(x=x, batch_size=[3]) \u003e\u003e\u003e _ = td.copy_(TensorDict(x=torch.ones(3), batch_size=[3])) \u003e\u003e\u003e x tensor([1., 1., 1.]) Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

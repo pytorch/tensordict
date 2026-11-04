@@ -8,7 +8,9 @@ As [`send()`](tensordict.TensorDictBase.send.html#tensordict.TensorDictBase.send
 time. By default, the call waits until they are done. With
 `return_early=True`, it returns at once: call `wait()` on each
 returned `Work` object before you change the tensordict. The receiver
-calls [`irecv()`](tensordict.TensorDictBase.irecv.html#tensordict.TensorDictBase.irecv) or [`recv()`](tensordict.TensorDictBase.recv.html#tensordict.TensorDictBase.recv). See [Distributed tensordicts](../../distributed.html#distributed).
+calls [`irecv()`](tensordict.TensorDictBase.irecv.html#tensordict.TensorDictBase.irecv) or [`recv()`](tensordict.TensorDictBase.recv.html#tensordict.TensorDictBase.recv). As with [`send()`](tensordict.TensorDictBase.send.html#tensordict.TensorDictBase.send), only
+the tensors move: the non-tensor entries keep the receiver's values.
+See [Distributed tensordicts](../../distributed.html#distributed).
 
 Parameters:
 

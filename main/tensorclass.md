@@ -712,6 +712,25 @@ a field, or `set_()`, writes into the existing tensor:
 tensor(1)
 ```
 
+In `__post_init__` of a frozen class, fill a field with
+`self.set(name, value)`. `object.__setattr__(self, name, value)` stores
+the value outside the tensordict of the instance: the attribute reads back,
+but pickle, [`torch.save()`](https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save) and `to_dict()` drop it. `__post_init__`
+also runs when tensordict rebuilds an instance, which can be locked, so call
+`set` only when the field is missing, or set `skip_post_init_on_rebuild`
+(see __post_init__):
+
+```
+>>> class Doubled(TensorClass["frozen"]):
+... x: torch.Tensor
+... twice: torch.Tensor | None = None
+... def __post_init__(self):
+... if self.twice is None:
+... self.set("twice", self.x * 2)
+>>> Doubled(x=torch.ones(2)).to_dict()["twice"]
+tensor([2., 2.])
+```
+
 A subclass of a frozen tensorclass is frozen, with or without the flag. A
 frozen class cannot subclass a tensorclass that is not frozen: this raises
 `TypeError: cannot inherit frozen dataclass from a non-frozen one`. Type

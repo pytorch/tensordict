@@ -5,7 +5,8 @@ TensorDictBase.recv(*src: [int](https://docs.python.org/3/builtins/functions.htm
 Receives the leaves that [`send()`](tensordict.TensorDictBase.send.html#tensordict.TensorDictBase.send) sends, and writes them into the tensordict in place.
 
 The tensordict must have the keys, shapes and dtypes of the tensordict
-that the sender sends. See [`send()`](tensordict.TensorDictBase.send.html#tensordict.TensorDictBase.send) for an example, and
+that the sender sends. Only the tensors are written: the non-tensor
+entries keep their values. See [`send()`](tensordict.TensorDictBase.send.html#tensordict.TensorDictBase.send) for an example, and
 [Distributed tensordicts](../../distributed.html#distributed).
 
 Parameters:

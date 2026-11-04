@@ -200,11 +200,12 @@ of each element in one row.
 - **index** (*index**,**optional*) - an index applied to the result, as in
 `tensor[index]`. Defaults to `None`.
 - **mode** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**optional*) - `"r"` maps the file copy-on-write:
-in-place writes stay in memory. `"r+"` maps it shared:
-in-place writes reach the file, and a [`PermissionError`](https://docs.python.org/3/builtins/exceptions.html#PermissionError)
-is raised if the file is not writable. Defaults to `None`,
-which maps the file shared if it is writable and copy-on-write
-otherwise.
+in-place writes stay in the memory of this process, and a
+pickled copy reads the file, without them. `"r+"` maps it
+shared: in-place writes reach the file, and a
+[`PermissionError`](https://docs.python.org/3/builtins/exceptions.html#PermissionError) is raised if the file is not
+writable. Defaults to `None`, which maps the file shared if
+it is writable and copy-on-write otherwise.
 
 Raises:
 

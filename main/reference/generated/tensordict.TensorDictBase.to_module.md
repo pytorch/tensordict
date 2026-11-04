@@ -13,6 +13,15 @@ module with other parameters for the duration of a `with` block (see
 the second example). When the block exits, the original parameters are
 written back, also if the block raises an exception.
 
+`to_module` registers the parameters and buffers that the
+tensordict holds again, after the ones that it does not hold, in the
+key order of the tensordict. After `td.to_module(module)`, and after
+a `with` block, `module.parameters()` follows that order. A
+tensordict that [`from_module()`](tensordict.TensorDictBase.from_module.html#tensordict.TensorDictBase.from_module) returns for a module of the same
+structure keeps the order. An optimizer maps a saved state to its
+parameters by position, so build the optimizer, and load its state,
+with the parameters in the order they had when the state was saved.
+
 Parameters:
 
 **module** (*nn.Module*) - a module to write the parameters into.

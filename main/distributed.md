@@ -181,6 +181,15 @@ def cold_start_broadcast(rank, world_size):
  print(td["obs"].shape) # torch.Size([2, 84])
 ```
 
+`send`, `recv`, `isend`, and `irecv` move tensors only. A non-tensor
+entry, such as a string (see [Non-tensor data and unbatched entries](concepts/non_tensor.html#non-tensor-data)), keeps the value that the
+receiver holds, even when the sender holds another one. With
+`send(consolidated=True)`, the non-tensor values travel only in the
+metadata that [`init_remote()`](reference/generated/tensordict.TensorDictBase.init_remote.html#tensordict.TensorDictBase.init_remote) sends, so the
+later sends refresh the tensors only. To send changing non-tensor values,
+send them separately, for example with
+[`torch.distributed.send_object_list()`](https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.send_object_list).
+
 ## Collectives
 
 Every rank of the group must call a collective. The methods that send the

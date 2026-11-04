@@ -10,6 +10,11 @@ size and the names of the batch dimensions are saved in the store
 attributes, so that [`from_zarr()`](tensordict.TensorDictBase.from_zarr.html#tensordict.TensorDictBase.from_zarr) restores them. Requires
 `zarr>=3.1.1`. See [Save and load tensordicts](../../saving.html#saving).
 
+For a lazy stack, only the keys that [`keys()`](tensordict.TensorDictBase.keys.html#tensordict.TensorDictBase.keys) lists, the keys
+that every stacked tensordict has, are written: the other keys are
+dropped without a warning, as by [`to_tensordict()`](tensordict.TensorDictBase.to_tensordict.html#tensordict.TensorDictBase.to_tensordict).
+[`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap) keeps them.
+
 Parameters:
 
 - **filename** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*,**path**or**zarr store*) - the path of the zarr store (a

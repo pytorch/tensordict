@@ -196,6 +196,24 @@ MemoryMappedTensor([0., 0., 0.])
 MemoryMappedTensor([1., 1., 1.])
 ```
 
+In-place writes into a directory loaded with `mode="r"` stay in the memory
+of the process that made them. Pickling it, as [`multiprocessing`](https://docs.python.org/3/library/multiprocessing.html#module-multiprocessing) queues
+and spawned `DataLoader` workers do, and [`torch.save()`](https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save) record the file
+names, so the copy reads the files and does not have these writes. To send or
+save the changed values, send `td.clone()` or `td.consolidate()`, or save
+to a new directory with `td.memmap(path, copy_existing=True)`:
+
+```
+>>> import pickle
+>>> _ = TensorDict({"a": torch.zeros(3)}, batch_size=[3]).save(root / "cow")
+>>> reader = TensorDict.load_memmap(root / "cow", mode="r")
+>>> _ = reader["a"].add_(1)
+>>> pickle.loads(pickle.dumps(reader))["a"] # reads the file
+MemoryMappedTensor([0., 0., 0.])
+>>> pickle.loads(pickle.dumps(reader.clone()))["a"]
+tensor([1., 1., 1.])
+```
+
 If many nodes read the same files on a network file system, load with
 `mode="r"`. On some of these file systems (for example Lustre), a page
 fault on a shared writable mapping takes a write lock. Readers on
@@ -419,6 +437,34 @@ The file keeps the batch sizes and names that the tensordict had when
 False
 ```
 
+The leaves of a consolidated tensordict are views of one storage of bytes, and
+so are the leaves of a tensordict that `load_memmap` reads from a `.tdz`
+archive. [`torch.save()`](https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save) saves a consolidated tensordict, but not a
+tensordict that holds these views, is not consolidated, and has leaves of more
+than one dtype: an index, a `select`, a sub-tensordict, `clone(False)`, an
+unlocked copy, or the archive load itself. It raises
+`RuntimeError: Cannot save multiple tensors or storages that view the same
+data as different types`. When the leaves that are saved have one dtype,
+`torch.save` of a `.tdz` load, or of a tensordict made from its views (a
+`select` of one entry of a mixed archive, for example), writes a file that
+[`torch.load()`](https://docs.pytorch.org/docs/stable/generated/torch.load.html#torch.load) rejects with `record size ... does not match expected
+size`. Both are limits of `torch.save`. Call `.clone()`
+or `.consolidate()` first. Pickle and
+[`memmap()`](reference/generated/tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap) save these tensordicts as they are:
+
+```
+>>> batch_c = TensorDict(
+... {"obs": torch.zeros(3, 4), "action": torch.zeros(3, dtype=torch.long)}, batch_size=[3]
+... ).consolidate()
+>>> torch.save(batch_c[:2], root / "rows.pt") 
+Traceback (most recent call last):
+...
+RuntimeError: Cannot save multiple tensors or storages that view the same data as different types...
+>>> torch.save(batch_c[:2].clone(), root / "rows.pt")
+>>> torch.load(root / "rows.pt", weights_only=True).batch_size
+torch.Size([2])
+```
+
 A consolidated tensordict also pickles faster, because pickle gets one
 storage instead of one tensor for each leaf. In one measurement, pickling a
 tensordict with 1000 small leaves took 34 ms, and 0.3 ms once consolidated
@@ -528,10 +574,32 @@ tensorclass, allowlist the tensorclass:
 datetime.date(2024, 1, 1)
 ```
 
+To save a tensordict derived from a consolidated one, or loaded from a
+`.tdz` archive, call `.clone()` or `.consolidate()` on it first (see
+Consolidated files).
+
 `weights_only=True` cannot load a tensordict with
 [`MemoryMappedTensor`](reference/generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor) leaves. Save it with
 [`save()`](reference/generated/tensordict.TensorDictBase.save.html#tensordict.TensorDictBase.save) and load it with
 [`load_memmap()`](reference/generated/tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap) instead.
+
+From PyTorch 2.15, `weights_only=True` does not load nested tensors by
+default either. A tensordict with jagged leaves (`layout=torch.jagged`)
+that [`torch.save()`](https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save) wrote, and a file of its `state_dict()`, stop with
+`Unsupported global: GLOBAL torch.nested._internal.nested_tensor._rebuild_njt`.
+A consolidated tensordict (see [`consolidate()`](reference/generated/tensordict.TensorDictBase.consolidate.html#tensordict.TensorDictBase.consolidate))
+with jagged leaves still loads. If the file comes from a source that you
+trust, allowlist the two names that the error messages give:
+
+```
+from torch.nested._internal.nested_tensor import NestedTensor, _rebuild_njt
+
+with torch.serialization.safe_globals([_rebuild_njt, NestedTensor]):
+ td = torch.load(path, weights_only=True)
+```
+
+For a nested tensor with the default `torch.strided` layout, allowlist
+`torch._utils._rebuild_nested_tensor` instead.
 
 ## state_dict and load_state_dict
 
