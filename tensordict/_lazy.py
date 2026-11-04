@@ -375,11 +375,12 @@ def _pad_tensors(
     # pad_sequence pads only dim 0: it copies every tensor into an output
     # shaped like the first one, which broadcasts the other dims where they
     # have size 1. Tensors of one ndim and dtype whose other dims differ skip
-    # it; mixed dtypes keep its cast to the first dtype.
+    # it; mixed dtypes keep its cast to the first dtype. The shape check comes
+    # first, so that tensors with equal trailing dims pay one pass only.
     if not (
         ndim > 1
-        and all(t.ndim == ndim and t.dtype == dtype for t in tensors)
         and any(t.shape[1:] != trailing for t in tensors)
+        and all(t.ndim == ndim and t.dtype == dtype for t in tensors)
     ):
         try:
             return pad_sequence(
