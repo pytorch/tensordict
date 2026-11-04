@@ -2145,7 +2145,33 @@ class TensorDict(TensorDictBase):
                 out=dest,
             )
             if new_dest is not dest:
-                self._set_str(key, new_dest, inplace=False, validated=True)
+                # torch.stack ignores out= for a non-tensor or tensorclass
+                # entry and returns a new stack: replace the entry, also in a
+                # locked tensordict, but not in a shared or memory-mapped one,
+                # which could not hold the new entry. A tensor or a
+                # tensordict entry stays locked: it is not replaced by
+                # non-tensor values
+                replace_locked = (
+                    self._is_locked
+                    and not (self._is_shared or self._is_memmap)
+                    and (
+                        is_non_tensor(dest)
+                        or (is_tensorclass(dest) and type(new_dest) is type(dest))
+                    )
+                )
+                self._set_str(
+                    key,
+                    new_dest,
+                    inplace=False,
+                    validated=True,
+                    ignore_lock=replace_locked,
+                )
+                if replace_locked:
+                    # lock the new entry, as lock_() locks the entries of self
+                    new_dest._propagate_lock(
+                        [*self._lock_parents_weakrefs, weakref.ref(self)],
+                        is_compiling=is_compiling(),
+                    )
         return self
 
     def entry_class(self, key: NestedKey) -> type:
