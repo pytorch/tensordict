@@ -434,6 +434,52 @@ def _shared_keys(tensordicts: list[TensorDict]) -> list[str]:
     return list(first)
 
 
+def _nested_leaves(
+    tensordicts: list, key: tuple, stack_dim: int, stack_dim_name: str | None
+) -> list[Tensor] | None:
+    # The leaves at key (two parts or more) of members that are TensorDict
+    # instances down to a plain tensor, for _get_tuple to stack. None when the
+    # general path, which builds a lazy stack of the sub-tensordicts at each
+    # level, could give another result: another type at some level, or
+    # sub-tensordicts that such a stack rejects (devices or numbers of batch
+    # dims that differ, fewer batch dims than stack_dim) or warns about (names,
+    # when the stack dim has a name).
+    if not tensordicts or type(tensordicts[0]) is not TensorDict:
+        return None
+    rest = key[1:]
+    # member 0's sub-tensordicts, which the other members' are compared with
+    value = tensordicts[0]._tensordict.get(key[0])
+    subs = []
+    for subkey in rest:
+        if (
+            type(value) is not TensorDict
+            or len(value._batch_size) < stack_dim
+            or (stack_dim_name is not None and value._td_dim_names is not None)
+        ):
+            return None
+        subs.append(value)
+        value = value._tensordict.get(subkey)
+    if type(value) is not Tensor:
+        return None
+    leaves = [value]
+    for td in islice(tensordicts, 1, None):
+        if type(td) is not TensorDict:
+            return None
+        value = td._tensordict.get(key[0])
+        for subkey, sub in zip(rest, subs):
+            if (
+                type(value) is not TensorDict
+                or value._device != sub._device
+                or len(value._batch_size) != len(sub._batch_size)
+            ):
+                return None
+            value = value._tensordict.get(subkey)
+        if type(value) is not Tensor:
+            return None
+        leaves.append(value)
+    return leaves
+
+
 def _is_grad_leaf(tensor: Tensor) -> bool:
     return tensor.requires_grad and tensor.is_leaf
 
@@ -2685,6 +2731,33 @@ class LazyStackedTensorDict(TensorDictBase):
                 raise err
 
     def _get_tuple(self, key, default, **kwargs):
+        # a subclass may read the first key with its own _get_str
+        if len(key) > 1 and not kwargs and type(self) is LazyStackedTensorDict:
+            # A nested leaf: stack the members' leaves, without building a
+            # lazy stack per key level. The general path ends in this call.
+            # Member 0 first: most keys that do not qualify stop there.
+            tensordicts = self.tensordicts
+            value = tensordicts[0] if tensordicts else None
+            for subkey in key:
+                if type(value) is not TensorDict:
+                    break
+                value = value._tensordict.get(subkey)
+            else:
+                if (
+                    type(value) is Tensor
+                    and self._hook_out is None
+                    and not self._is_vmapped
+                ):
+                    leaves = _nested_leaves(
+                        tensordicts, key, self.stack_dim, self._td_dim_name
+                    )
+                    if leaves is not None:
+                        try:
+                            return torch.stack(leaves, self.stack_dim)
+                        except RuntimeError:
+                            # e.g. leaves of different shapes: the general
+                            # path raises its error
+                            pass
         first = self._get_str(key[0], None, **kwargs)
         if first is None:
             return self._default_get(key[0], default)

@@ -115,6 +115,258 @@ elif is_npu_available():
     cur_device = "npu"
 
 
+class _NestedGetTC(TensorClass):
+    a: torch.Tensor
+
+
+def _nested_get_member(i, batch=4):
+    g = torch.Generator().manual_seed(i)
+    return TensorDict(
+        a=torch.randn(batch, 3, generator=g),
+        n=TensorDict(
+            c=torch.randn(batch, 2, generator=g),
+            d=TensorDict(e=torch.randn(batch, generator=g), batch_size=[batch]),
+            s=NonTensorData("x", batch_size=[batch]),
+            batch_size=[batch],
+        ),
+        batch_size=[batch],
+    )
+
+
+def _nested_get_with(members, *ops):
+    for member, op in zip(members, ops):
+        op(member)
+    return members
+
+
+def _nested_td(batch_size, device=None, names=None, **entries):
+    return TensorDict(entries, batch_size=batch_size, device=device, names=names)
+
+
+# #3452: lazy stacks for the equivalence test of the nested get fast path
+_NESTED_GET_STACKS = {
+    "dim0": lambda: lazy_stack([_nested_get_member(i) for i in range(3)]),
+    "dim1": lambda: lazy_stack([_nested_get_member(i) for i in range(3)], 1),
+    "dim-1": lambda: lazy_stack([_nested_get_member(i) for i in range(3)], -1),
+    "2d members, dim 2": lambda: lazy_stack(
+        [
+            _nested_td([2, 3], n=_nested_td([2, 3], c=torch.arange(24.0).view(2, 3, 4)))
+            for _ in range(2)
+        ],
+        2,
+    ),
+    "named members": lambda: lazy_stack(
+        [_nested_get_member(i).refine_names("b") for i in range(3)],
+        stack_dim_name="s",
+    ),
+    "stack dim name only": lambda: lazy_stack(
+        [_nested_get_member(i) for i in range(3)], stack_dim_name="s"
+    ),
+    "stack dim name taken": lambda: lazy_stack(
+        [_nested_td([2], names=["s"], n=_nested_td([2], c=torch.zeros(2)))] * 2,
+        stack_dim_name="s",
+    ),
+    "exclusive top key": lambda: lazy_stack(
+        _nested_get_with(
+            [_nested_get_member(i) for i in range(3)],
+            lambda td: None,
+            lambda td: td.set("z", torch.ones(4)),
+        )
+    ),
+    "exclusive nested key": lambda: lazy_stack(
+        _nested_get_with(
+            [_nested_get_member(i) for i in range(3)],
+            lambda td: None,
+            lambda td: td.set(("n", "z"), torch.ones(4)),
+        )
+    ),
+    "nested key missing in a member": lambda: lazy_stack(
+        _nested_get_with(
+            [_nested_get_member(i) for i in range(3)],
+            lambda td: None,
+            lambda td: td.del_(("n", "c")),
+        )
+    ),
+    "top key missing in a member": lambda: lazy_stack(
+        _nested_get_with(
+            [_nested_get_member(i) for i in range(3)],
+            lambda td: None,
+            lambda td: td.del_("n"),
+        )
+    ),
+    "leaf in a member, tensordict in another": lambda: lazy_stack(
+        [
+            _nested_td([2], n=_nested_td([2], c=torch.zeros(2))),
+            _nested_td([2], n=torch.zeros(2, 1)),
+        ]
+    ),
+    "heterogeneous shapes": lambda: lazy_stack(
+        [_nested_td([2], n=_nested_td([2], c=torch.zeros(2, i + 1))) for i in range(3)]
+    ),
+    "dtypes": lambda: lazy_stack(
+        [
+            _nested_td([2], n=_nested_td([2], c=torch.zeros(2, dtype=dtype)))
+            for dtype in (torch.float32, torch.float64)
+        ]
+    ),
+    "nested devices differ": lambda: lazy_stack(
+        [
+            _nested_td([2], n=_nested_td([2], device="cpu", c=torch.zeros(2))),
+            _nested_td([2], n=_nested_td([2], c=torch.zeros(2))),
+        ]
+    ),
+    "nested devices differ, deeper": lambda: lazy_stack(
+        [
+            _nested_td(
+                [2],
+                n=_nested_td([2], d=_nested_td([2], device="cpu", e=torch.zeros(2))),
+            ),
+            _nested_td([2], n=_nested_td([2], d=_nested_td([2], e=torch.zeros(2)))),
+        ]
+    ),
+    "nested batch dims differ": lambda: lazy_stack(
+        [
+            _nested_td([2], n=_nested_td([2, 3], c=torch.zeros(2, 3))),
+            _nested_td([2], n=_nested_td([2], c=torch.zeros(2, 3))),
+        ]
+    ),
+    "nested batch dims differ, deeper": lambda: lazy_stack(
+        [
+            _nested_td([2], n=_nested_td([2], d=_nested_td([2], e=torch.zeros(2, 3)))),
+            _nested_td(
+                [2], n=_nested_td([2], d=_nested_td([2, 3], e=torch.zeros(2, 3)))
+            ),
+        ]
+    ),
+    "tensorclass entry": lambda: lazy_stack(
+        [
+            _nested_td([2], n=_NestedGetTC(a=torch.zeros(2) + i, batch_size=[2]))
+            for i in range(2)
+        ]
+    ),
+    "tensorclass members": lambda: lazy_stack(
+        [_NestedGetTC(a=torch.zeros(2) + i, batch_size=[2]) for i in range(2)]
+    ),
+    "lazy stack entry": lambda: lazy_stack(
+        [
+            _nested_td(
+                [],
+                n=lazy_stack(
+                    [_nested_get_member(i, 2), _nested_get_member(i + 1, 2)], 1
+                ),
+            )
+            for i in range(2)
+        ]
+    ),
+    "lazy stack members": lambda: lazy_stack(
+        [
+            lazy_stack([_nested_get_member(i), _nested_get_member(i + 1)])
+            for i in range(2)
+        ]
+    ),
+    "unbatched leaf": lambda: lazy_stack(
+        [
+            _nested_td([2], n=_nested_td([2], u=UnbatchedTensor(torch.ones(5))))
+            for _ in range(2)
+        ]
+    ),
+    "requires grad": lambda: lazy_stack(
+        [
+            _nested_td([2], n=_nested_td([2], c=torch.ones(2, requires_grad=True) * 2))
+            for _ in range(2)
+        ]
+    ),
+    "parameter leaf": lambda: lazy_stack(
+        [
+            _nested_td([2], n=_nested_td([2], c=torch.nn.Parameter(torch.ones(2))))
+            for _ in range(2)
+        ]
+    ),
+    "0-d members": lambda: lazy_stack(
+        [_nested_td([], n=_nested_td([], c=torch.tensor(1.0))) for _ in range(2)]
+    ),
+    "locked": lambda: lazy_stack([_nested_get_member(i) for i in range(3)]).lock_(),
+    "memmap members": lambda: lazy_stack(
+        [_nested_get_member(i).memmap_like() for i in range(2)]
+    ),
+    "single member": lambda: lazy_stack([_nested_get_member(0)]),
+    "same member twice": lambda: lazy_stack([_nested_get_member(0)] * 2),
+    "empty stack": lambda: LazyStackedTensorDict(batch_size=[0]),
+    "indexed stack": lambda: lazy_stack([_nested_get_member(i) for i in range(3)])[
+        :, 1:3
+    ],
+}
+
+
+def _describe_nested_get(value, storages):
+    # what a nested get returned, for the equivalence test of #3452
+    if isinstance(value, list):
+        return [_describe_nested_get(item, storages) for item in value]
+    if isinstance(value, torch.Tensor):
+        return (
+            type(value),
+            value.shape,
+            value.stride(),
+            value.dtype,
+            value.device,
+            value.requires_grad,
+            type(value.grad_fn),
+            value.untyped_storage().data_ptr() in storages,
+            value.detach().tolist(),
+        )
+    if isinstance(value, (TensorDictBase, TensorClass)):
+        try:
+            names = value.names
+        except Exception as err:
+            names = (type(err), str(err))
+        leaves = []
+        for key in value.keys(True, True):
+            try:
+                leaf = _describe_nested_get(value.get(key), storages)
+            except Exception as err:
+                leaf = (type(err), str(err))
+            leaves.append((key, leaf))
+        return (
+            type(value),
+            value.batch_size,
+            names,
+            value.device,
+            value.is_locked,
+            leaves,
+        )
+    return (type(value), repr(value))
+
+
+def _nested_get_outcome(stack, key, call, fast):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        td = _NESTED_GET_STACKS[stack]()
+    # held until the end, so that no storage address is reused
+    alive = [
+        leaf
+        for member in td.tensordicts
+        if type(member) is TensorDict
+        for leaf in member.values(True, True)
+        if isinstance(leaf, torch.Tensor)
+    ]
+    storages = {leaf.untyped_storage().data_ptr() for leaf in alive}
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        try:
+            if fast:
+                result = call(td, key)
+            else:
+                # the general path
+                with mock.patch("tensordict._lazy._nested_leaves", return_value=None):
+                    result = call(td, key)
+            outcome = ("ok", _describe_nested_get(result, storages))
+        except Exception as err:
+            outcome = ("error", type(err), str(err))
+    warned = [(w.category, str(w.message)) for w in caught]
+    del alive
+    return outcome, warned
+
+
 class TestLazyStackedTensorDict:
     @property
     def _idx_list(self):
@@ -3087,6 +3339,112 @@ class TestLazyStackedTensorDict:
         assert isinstance(td.get("a", as_list=True), list)
 
         assert isinstance(td.get("a", as_padded_tensor=True), torch.Tensor)
+
+    def test_nested_get_stacks_members_leaves(self):
+        # #3452: a nested leaf of members that are TensorDict instances is
+        # stacked from the members, without a lazy stack per key level
+        members = [_nested_get_member(i) for i in range(3)]
+        for stack_dim in (0, 1):
+            td = lazy_stack(members, stack_dim)
+            expected = {
+                key: torch.stack([member[key] for member in members], stack_dim)
+                for key in [("n", "c"), ("n", "d", "e")]
+            }
+            with mock.patch.object(
+                LazyStackedTensorDict,
+                "_get_str",
+                side_effect=AssertionError("built a lazy sub-stack"),
+            ):
+                for key, value in expected.items():
+                    assert torch.equal(td.get(key), value)
+                    assert torch.equal(td[key], value)
+                    assert torch.equal(td.get(key, None), value)
+
+    @pytest.mark.parametrize("stack", list(_NESTED_GET_STACKS))
+    def test_nested_get_same_as_general_path(self, stack):
+        # #3452: the nested get that stacks the members' leaves returns,
+        # raises and warns as the general path does
+        keys = [
+            ("n", "c"),
+            ("n", "d", "e"),
+            ("n", "d", "e", "f"),
+            ("n", "d"),
+            ("n", "s"),
+            ("n", "u"),
+            ("n", "a"),
+            ("n", "z"),
+            ("n", "zz"),
+            ("zz", "c"),
+            ("a", "b"),
+            ("n", "c", "x"),
+            ("n",),
+            "a",
+        ]
+        calls = {
+            "get": lambda td, key: td.get(key),
+            "getitem": lambda td, key: td[key],
+            "default": lambda td, key: td.get(key, "default"),
+            "as_list": lambda td, key: td.get(key, as_list=True),
+        }
+        for key in keys:
+            for name, call in calls.items():
+                fast = _nested_get_outcome(stack, key, call, fast=True)
+                general = _nested_get_outcome(stack, key, call, fast=False)
+                assert fast == general, (key, name)
+
+    def test_nested_get_keeps_lazy_stack_checks(self):
+        # #3452: sub-tensordicts that a lazy stack of them rejects, or warns
+        # about, still raise or warn on a nested get
+        td = lazy_stack(
+            [
+                TensorDict(
+                    n=TensorDict(c=torch.zeros(2), batch_size=[2], device="cpu")
+                ),
+                TensorDict(n=TensorDict(c=torch.zeros(2), batch_size=[2])),
+            ]
+        )
+        with pytest.raises(RuntimeError, match="devices differ"):
+            td.get(("n", "c"))
+        td = lazy_stack(
+            [
+                TensorDict(n=TensorDict(c=torch.zeros(2, 3), batch_size=[2, 3])),
+                TensorDict(n=TensorDict(c=torch.zeros(2, 3), batch_size=[2])),
+            ]
+        )
+        with pytest.raises(RuntimeError, match="batch sizes in tensordicts differs"):
+            td.get(("n", "c"))
+        member = TensorDict(
+            n=TensorDict(c=torch.zeros(2), batch_size=[2]), batch_size=[2], names=["s"]
+        )
+        with pytest.warns(FutureWarning, match="The stack dim name 's' is also"):
+            td = lazy_stack([member, member.clone()], stack_dim_name="s")
+        with pytest.warns(FutureWarning, match="The stack dim name 's' is also"):
+            assert td.get(("n", "c")).shape == (2, 2)
+        td = lazy_stack(
+            [
+                TensorDict(n=TensorDict(c=torch.zeros(2, i + 1), batch_size=[2]))
+                for i in range(2)
+            ]
+        )
+        with pytest.raises(RuntimeError, match="under the key 'c': their shapes are"):
+            td.get(("n", "c"))
+
+    def test_nested_get_subclass_reads_with_its_get_str(self):
+        # #3452: a subclass that overrides _get_str still reads the first part
+        # of a nested key with it
+        read = []
+
+        class MyStack(LazyStackedTensorDict):
+            def _get_str(self, key, *args, **kwargs):
+                read.append(key)
+                return super()._get_str(key, *args, **kwargs)
+
+        members = [
+            TensorDict(n=TensorDict(c=torch.zeros(2), batch_size=[2]), batch_size=[2])
+            for _ in range(2)
+        ]
+        assert MyStack(*members).get(("n", "c")).shape == (2, 2)
+        assert read == ["n"]
 
     @pytest.mark.parametrize("padding_side", ["right", "left"])
     def test_lazy_stack_nested_get_padded_ragged(self, padding_side):
