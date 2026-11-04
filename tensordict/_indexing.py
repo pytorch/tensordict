@@ -278,8 +278,11 @@ def _read_index(index, ndim, sizes=None):
             # the conditions are checked here, and the message is only built
             # for an element that fails them
             if kind == _INT:
+                # a ragged dim of a lazy stack has the size -1: its members
+                # check the int
                 if isinstance(element, (int, np.integer)) and not (
-                    dim < ndim and -sizes[dim] <= element < sizes[dim]
+                    dim < ndim
+                    and (sizes[dim] == -1 or -sizes[dim] <= element < sizes[dim])
                 ):
                     error = _element_error(kind, element, dim, num_dims, sizes)
             elif kind == _MASK and element.shape != sizes[dim : dim + num_dims]:

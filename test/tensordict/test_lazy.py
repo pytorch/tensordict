@@ -658,6 +658,82 @@ class TestLazyStackedTensorDict:
         assert isinstance(batch, LazyStackedTensorDict)
         assert [len(td["x"]) for td in batch] == indices
 
+    def test_ragged_write_int_ragged_dim(self):
+        # #3441: writes with an int on the ragged dim raised IndexError since 0.15.0
+        def make():
+            return lazy_stack(
+                [TensorDict(a=torch.zeros(k, 1), batch_size=[k]) for k in (2, 3, 1)]
+            )
+
+        def rows(ls):
+            return [t.flatten().tolist() for t in ls.get("a", as_list=True)]
+
+        ls = make()
+        ls[:, 0] = TensorDict(a=torch.ones(3, 1), batch_size=[3])
+        assert rows(ls) == [[1.0, 0.0], [1.0, 0.0, 0.0], [1.0]]
+        ls = make()
+        ls[1, 0] = TensorDict(a=torch.ones(1))
+        assert rows(ls) == [[0.0, 0.0], [1.0, 0.0, 0.0], [0.0]]
+        ls = make()
+        ls[1, -1] = TensorDict(a=torch.ones(1))
+        assert rows(ls) == [[0.0, 0.0], [0.0, 0.0, 1.0], [0.0]]
+        ls = make()
+        ls.set_at_("a", torch.ones(1), (1, 0))
+        assert rows(ls) == [[0.0, 0.0], [1.0, 0.0, 0.0], [0.0]]
+        ls = make()
+        ls.set_at_("a", torch.ones(1), (1, 2))
+        assert rows(ls) == [[0.0, 0.0], [0.0, 0.0, 1.0], [0.0]]
+        # update_at_ raised another error in 0.14.3
+        ls = make()
+        ls.update_at_({"a": torch.ones(1)}, (1, 0))
+        assert rows(ls) == [[0.0, 0.0], [1.0, 0.0, 0.0], [0.0]]
+        ls = make()
+        ls.update_at_({"a": torch.ones(3, 1)}, (slice(None), 0))
+        assert rows(ls) == [[1.0, 0.0], [1.0, 0.0, 0.0], [1.0]]
+        # an int out of range for a later member only: the earlier members are
+        # written before the IndexError, as in 0.14.3 and as number writes do
+        ls = make()
+        with pytest.raises(IndexError, match="with size 1"):
+            ls[:, 1] = TensorDict(a=torch.ones(3, 1), batch_size=[3])
+        assert rows(ls) == [[0.0, 1.0], [0.0, 1.0, 0.0], [0.0]]
+        ls = make()
+        with pytest.raises(IndexError, match="with size 1"):
+            ls.set_at_("a", torch.ones(3, 1), (slice(None), 1))
+        assert rows(ls) == [[0.0, 1.0], [0.0, 1.0, 0.0], [0.0]]
+
+    def test_ragged_write_int_ragged_dim_unchanged(self):
+        # #3441: out-of-range ints on the ragged dim still raise IndexError,
+        # and reads and number writes are unchanged
+        ls = lazy_stack(
+            [TensorDict(a=torch.zeros(k, 1), batch_size=[k]) for k in (2, 3, 1)]
+        )
+        with pytest.raises(IndexError):
+            ls[0, 2] = TensorDict(a=torch.ones(1))
+        with pytest.raises(IndexError):
+            ls[1, 5] = TensorDict(a=torch.ones(1))
+        with pytest.raises(IndexError):
+            ls[:, 2] = TensorDict(a=torch.ones(3, 1), batch_size=[3])
+        with pytest.raises(IndexError):
+            ls.set_at_("a", torch.ones(1), (0, 2))
+        with pytest.raises(IndexError):
+            ls[1, 5]
+        assert ls.get("a", as_list=True)[0].flatten().tolist() == [0.0, 0.0]
+        assert ls[1, 0]["a"].tolist() == [0.0]
+        assert ls[:, 0]["a"].tolist() == [[0.0], [0.0], [0.0]]
+        ls[1, 0] = 1.0
+        assert ls[1]["a"].flatten().tolist() == [1.0, 0.0, 0.0]
+        # number writes already write the members before the one that fails
+        ls = lazy_stack(
+            [TensorDict(a=torch.zeros(k, 1), batch_size=[k]) for k in (2, 3, 1)]
+        )
+        with pytest.raises(IndexError, match="with size 1"):
+            ls[:, 1] = 1.0
+        assert [t.flatten().tolist() for t in ls.get("a", as_list=True)] == [
+            [0.0, 1.0],
+            [0.0, 1.0, 0.0],
+            [0.0],
+        ]
+
     def test_to_dict_state_dict_exclusive_keys_raise(self):
         # to_dict and state_dict would silently drop the keys that are not in
         # every member, so they raise
