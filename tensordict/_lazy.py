@@ -376,10 +376,11 @@ def _pad_tensors(
     # shaped like the first one, which broadcasts the other dims where they
     # have size 1. Tensors of one ndim and dtype whose other dims differ skip
     # it; mixed dtypes keep its cast to the first dtype. The shape check comes
-    # first, so that tensors with equal trailing dims pay one pass only.
+    # first, so that tensors with equal trailing dims pay one pass only; it
+    # reads the ndim first, as pad_sequence reports tensors of other ndims.
     if not (
         ndim > 1
-        and any(t.shape[1:] != trailing for t in tensors)
+        and any(t.ndim != ndim or t.shape[1:] != trailing for t in tensors)
         and all(t.ndim == ndim and t.dtype == dtype for t in tensors)
     ):
         try:
