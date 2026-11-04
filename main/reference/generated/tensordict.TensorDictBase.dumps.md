@@ -9,6 +9,10 @@ Saves the tensordict to disk, and returns a memory-mapped copy of it.
 The tensordict is not changed. Read the files back with [`load()`](tensordict.TensorDictBase.load.html#tensordict.TensorDictBase.load).
 See [Save and load tensordicts](../../saving.html#saving).
 
+An entry named `"shape"`, `"device"` or `"_type"`, at any depth,
+is not restored by [`load()`](tensordict.TensorDictBase.load.html#tensordict.TensorDictBase.load), and saving it warns (see
+[`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap)).
+
 Parameters:
 
 - **prefix** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**Path**,**optional*) - the directory where the tensordict

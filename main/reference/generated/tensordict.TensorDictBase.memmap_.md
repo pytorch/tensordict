@@ -13,6 +13,10 @@ The tensordict is then locked (see [Locking and temporary changes](../../concept
 into its leaves in place, but you cannot add, remove or replace an
 entry. Once it is unlocked, [`is_memmap()`](tensordict.TensorDictBase.is_memmap.html#tensordict.TensorDictBase.is_memmap) returns `False`.
 
+An entry named `"shape"`, `"device"` or `"_type"`, at any depth,
+is not restored by [`load_memmap()`](tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap), and writing it to a
+directory warns (see [`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap)).
+
 Parameters:
 
 - **prefix** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**Path**,**optional*) - the directory to write to.
