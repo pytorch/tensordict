@@ -7132,7 +7132,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         Each value is copied into the existing tensor, which keeps its
         storage, as with :meth:`~.set_`. ``update_`` therefore works on a
-        locked tensordict. Every key of the input must exist in the tensordict.
+        locked tensordict. Without ``keys_to_update``, a key of the input that
+        the tensordict lacks is skipped, not copied, when a tensor of the
+        input matches a tensor entry of the tensordict; otherwise it raises a
+        ``KeyError``, as a key in ``keys_to_update`` that the tensordict lacks
+        does.
         Keyword arguments are top-level entries, and win over an entry of the
         input with the same key. A key named like an argument of ``update_``
         must go in the input dictionary. See :ref:`inplace-conventions`.
@@ -7173,7 +7177,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             ``self``.
 
         Raises:
-            KeyError: if a key of the input is missing from the tensordict.
+            KeyError: if a key of the input is missing from the tensordict
+                and is not skipped as described above.
             RuntimeError: if a value does not fit the shape of its entry.
 
         Examples:
@@ -7187,6 +7192,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             >>> _ = td.update_(a=torch.ones(3))  # keyword form
             >>> a.sum()
             tensor(3.)
+            >>> _ = td.update_({"a": torch.zeros(3), "extra": torch.zeros(3)})
+            >>> "extra" in td.keys()  # skipped, since "a" matches
+            False
 
         """
         if (
@@ -7927,8 +7935,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """Copies the entries of ``tensordict`` into the existing entries, and returns ``self``.
 
         The same as :meth:`~.update_`, under the name of
-        :meth:`torch.Tensor.copy_`: the existing tensors keep their storage,
-        and every key of ``tensordict`` must exist in the tensordict.
+        :meth:`torch.Tensor.copy_`: the existing tensors keep their storage.
+        A key of ``tensordict`` that the tensordict lacks is skipped, not
+        copied, when a tensor of ``tensordict`` matches a tensor entry of the
+        tensordict; otherwise it raises a ``KeyError``.
 
         Args:
             tensordict (TensorDictBase or dict): the entries to copy.
@@ -7938,7 +7948,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         Raises:
             KeyError: if a key of ``tensordict`` is missing from the
-                tensordict.
+                tensordict and is not skipped as described above.
             RuntimeError: if a value does not fit the shape of its entry.
 
         Examples:

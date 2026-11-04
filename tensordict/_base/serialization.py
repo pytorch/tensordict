@@ -840,6 +840,10 @@ class _Serialization:
         :mod:`pickle`, :meth:`~.send` and :meth:`~.broadcast` move that block
         in one copy. The result is locked (see :ref:`keys-locking`): you can
         write into its leaves in place, but you cannot add or remove entries.
+        :func:`torch.save` saves the result, but not a tensordict made from
+        its views that is not consolidated (an index, a ``select``, an
+        unlocked copy): call ``clone()`` or ``consolidate()`` on it first
+        (see :ref:`Consolidated files <saving-torch-save-views>`).
 
         If the tensordict is already consolidated, ``self`` is returned and
         the other arguments are ignored, except ``pin_memory=True``: a
@@ -2154,8 +2158,12 @@ class _Serialization:
                 Defaults to ``None``, which loads the whole tensordict.
             mode (str, optional): how the files are mapped. With ``"r"``, the
                 mapping is copy-on-write: in-place writes into the leaves stay
-                in memory, and the files do not change. With ``"r+"``, in-place
-                writes reach the files, and a file that the process cannot
+                in the memory of this process, and the files do not change.
+                For a directory, a pickled copy (a :mod:`multiprocessing`
+                queue, a spawned worker) or a :func:`torch.save` of the result
+                reads the files, without these writes: send or save
+                ``clone()`` to keep them. With ``"r+"``, in-place writes
+                reach the files, and a file that the process cannot
                 write raises a ``PermissionError``. Defaults to ``None``, which
                 maps an archive as with ``"r"``, and each file of a directory
                 as with ``"r+"`` if the process can write it, and as with

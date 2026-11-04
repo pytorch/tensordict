@@ -887,7 +887,12 @@ class LazyStackedTensorDict(TensorDictBase):
     A lazy stack behaves as follows:
 
     - Indexing along the stack dimension returns the input objects:
-      ``td_stack[i] is tds[i]``.
+      ``td_stack[i] is tds[i]``. A list, a tensor or a slice along the stack
+      dimension, :func:`torch.cat` and :meth:`repeat_interleave` return a lazy
+      stack that holds the same input objects, so writes into its rows reach
+      ``td_stack``. An input that the result holds twice is one tensordict,
+      and a write into one of its rows writes the other. Call ``clone()`` on
+      the result to get independent rows.
     - Reading a key (``td_stack["a"]``) stacks the entries into a new tensor.
       In-place changes to that tensor do not reach the inputs. Writes through
       the lazy stack (``td_stack["a"] = value``, :meth:`~tensordict.TensorDictBase.apply_`)

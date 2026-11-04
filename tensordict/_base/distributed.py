@@ -226,6 +226,12 @@ class _Distributed:
         each leaf is one message, marked with a tag. To send to a rank that does
         not know the structure, use :meth:`~.init_remote`. See :ref:`distributed`.
 
+        Only the tensors move. A non-tensor entry, such as a string, keeps the
+        value that the receiver holds. With ``consolidated=True``, the
+        non-tensor values travel only in the metadata that
+        :meth:`~.init_remote` sends, so the later sends refresh the tensors
+        only.
+
         Args:
             dst (int or TensorDictPipe, optional): the global rank of the
                 receiver, or a :class:`~tensordict._ucxx.TensorDictPipe` to send
@@ -356,7 +362,8 @@ class _Distributed:
         """Receives the leaves that :meth:`~.send` sends, and writes them into the tensordict in place.
 
         The tensordict must have the keys, shapes and dtypes of the tensordict
-        that the sender sends. See :meth:`~.send` for an example, and
+        that the sender sends. Only the tensors are written: the non-tensor
+        entries keep their values. See :meth:`~.send` for an example, and
         :ref:`distributed`.
 
         Args:
@@ -678,7 +685,9 @@ class _Distributed:
         time. By default, the call waits until they are done. With
         ``return_early=True``, it returns at once: call ``wait()`` on each
         returned ``Work`` object before you change the tensordict. The receiver
-        calls :meth:`~.irecv` or :meth:`~.recv`. See :ref:`distributed`.
+        calls :meth:`~.irecv` or :meth:`~.recv`. As with :meth:`~.send`, only
+        the tensors move: the non-tensor entries keep the receiver's values.
+        See :ref:`distributed`.
 
         Args:
             dst (int, optional): the global rank of the receiver. Exclusive with
@@ -826,8 +835,9 @@ class _Distributed:
         """Receives the leaves that :meth:`~.isend` or :meth:`~.send` sends, one asynchronous transfer per leaf.
 
         The tensordict must have the keys, shapes and dtypes of the tensordict
-        that the sender sends; the values are written into its tensors in place.
-        By default, the call waits until all the transfers are done. With
+        that the sender sends; the values are written into its tensors in place,
+        and the non-tensor entries keep their values. By default, the call
+        waits until all the transfers are done. With
         ``return_premature=True``, it returns at once: call ``wait()`` on each
         returned ``Work`` object before you read the tensordict. See
         :meth:`~.isend` for an example, and :ref:`distributed`.
