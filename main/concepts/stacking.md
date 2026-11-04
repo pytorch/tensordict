@@ -216,6 +216,15 @@ torch.Size([2, -1])
 torch.Size([4])
 ```
 
+`numel()` of such a stack returns 1, whatever its members hold. To count
+the elements of the batch, add up the counts of the members (at each level,
+for a stack of lazy stacks):
+
+```
+>>> sum(member.numel() for member in ragged.tensordicts)
+6
+```
+
 ## Which function to use
 
 The table gives the type that each function returns, for a list of two
@@ -291,6 +300,15 @@ True
 >>> graphs[1]["nodes"].shape
 torch.Size([3, 2])
 ```
+
+`as_padded_tensor=True` puts the stack dimension of each lazy stack first,
+the outer one and, in a lazy stack of lazy stacks, the inner ones. For a stack
+built along another dimension than 0, the padded tensor is therefore laid out
+differently from the dense entry. If the inner stacks were built along
+different dimensions, some members come out transposed and padded with
+`padding_value`, although their entries have the same shape. Build the lazy
+stacks along dimension 0, or call `contiguous()` on each inner stack whose
+entries have the same shape.
 
 [`densify()`](../reference/generated/tensordict.TensorDictBase.densify.html#tensordict.TensorDictBase.densify) turns the whole lazy stack
 into a regular TensorDict. The entries with different shapes become nested

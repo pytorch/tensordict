@@ -28,7 +28,8 @@ Use it only with ranks you trust. See [Collectives](../../distributed.html#distr
 
 Parameters:
 
-- **dst** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - the rank that receives the stack.
+- **dst** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - the global rank that receives the stack, as in
+[`torch.distributed.gather()`](https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.gather).
 - **group** (*torch.distributed.ProcessGroup**,**optional*) - the process group.
 Defaults to `None`, the default process group.
 

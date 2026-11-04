@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6769+g176a6de41.d20261104)">
+<meta name="llm:version" content="main (0.15.0.dev6772+g18ec3b3b2.d20261104)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6769+g176a6de41.d20261104)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6772+g18ec3b3b2.d20261104)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1772,7 +1772,8 @@ the method is called on is not used. See <a class="reference internal" href="../
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>src</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – the rank of the source process.</p></li>
+<li><p><strong>src</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – the global rank of the source process, as in
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.scatter" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.scatter()</span></code></a>.</p></li>
 <li><p><strong>tensordicts</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><em>list</em></a><em> of </em><a class="reference internal" href="tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase"><em>TensorDictBase</em></a><em>, </em><em>optional</em>) – on the source rank,
 the tensordicts to scatter, one per rank. Ignored on the other
 ranks. Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
@@ -2151,7 +2152,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.scatter",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.scatter",
        "url": "/reference/generated/tensordict.TensorDictBase.scatter.html",
-       "articleBody": "TensorDictBase.scatter# TensorDictBase.scatter(src: int, tensordicts: list | None = None, *, group: \u0027torch.distributed.ProcessGroup\u0027 | None = None, device: device | str | None = None) \u2192 Self# Scatters a list of tensordicts from src to all ranks. Every rank of the process group calls it, in an initialized torch.distributed process group. On the source rank, tensordicts holds one tensordict per rank; each is consolidated (see consolidate()) and sent as one buffer. The other ranks rebuild their tensordict from the buffer they receive. The tensordict the method is called on is not used. See Distributed tensordicts. Parameters: src (int) \u2013 the rank of the source process. tensordicts (list of TensorDictBase, optional) \u2013 on the source rank, the tensordicts to scatter, one per rank. Ignored on the other ranks. Defaults to None. Keyword Arguments: group (torch.distributed.ProcessGroup, optional) \u2013 the process group. Defaults to None, which uses the default group. device (device or str, optional) \u2013 on the receiving ranks, the device of the receive buffer. Defaults to None, which uses the device of the consolidated storage of the source. Returns: The tensordict that this rank receives. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.scatter# TensorDictBase.scatter(src: int, tensordicts: list | None = None, *, group: \u0027torch.distributed.ProcessGroup\u0027 | None = None, device: device | str | None = None) \u2192 Self# Scatters a list of tensordicts from src to all ranks. Every rank of the process group calls it, in an initialized torch.distributed process group. On the source rank, tensordicts holds one tensordict per rank; each is consolidated (see consolidate()) and sent as one buffer. The other ranks rebuild their tensordict from the buffer they receive. The tensordict the method is called on is not used. See Distributed tensordicts. Parameters: src (int) \u2013 the global rank of the source process, as in torch.distributed.scatter(). tensordicts (list of TensorDictBase, optional) \u2013 on the source rank, the tensordicts to scatter, one per rank. Ignored on the other ranks. Defaults to None. Keyword Arguments: group (torch.distributed.ProcessGroup, optional) \u2013 the process group. Defaults to None, which uses the default group. device (device or str, optional) \u2013 on the receiving ranks, the device of the receive buffer. Defaults to None, which uses the device of the consolidated storage of the source. Returns: The tensordict that this rank receives. Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

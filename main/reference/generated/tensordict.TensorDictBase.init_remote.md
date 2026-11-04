@@ -18,7 +18,7 @@ every rank of the group must take part: the others call
 
 Parameters:
 
-- **dst** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the rank of the receiver. Required unless
+- **dst** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the global rank of the receiver. Required unless
 `use_broadcast=True`, which ignores it. Defaults to `None`.
 - **group** (*torch.distributed.ProcessGroup**,**optional*) - the process group.
 Defaults to `None`, the default process group.

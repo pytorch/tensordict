@@ -145,6 +145,15 @@ ValueError: Invalid indexing arguments: 'count'. A tensorclass is indexed along 
 torch.Size([3, 4, 1])
 ```
 
+`"count" in data` iterates over the rows of the batch, not over the
+fields: it returns `False` for a field that is set, and raises a
+`TypeError` when the batch size is empty. Test the keys instead:
+
+```
+>>> "count" in data.keys()
+True
+```
+
 Assigning a name that is not a field, as an attribute or with `set()`,
 raises `AttributeError`. `set_non_tensor()`, `setdefault()`,
 `create_nested()`, `rename_key_()`, `update()` with a `TensorDict`
@@ -258,6 +267,23 @@ return a tensorclass. It runs as well on the data that
 `from_tensordict`, `from_dict` and a load (`load_memmap`, `load`)
 bring in. Do little work in it, and make sure that a second run gives the
 same result. In the example above, the second run finds a mask and keeps it.
+
+`update()` with a dict or keyword arguments, and `update_()`, also run
+`__post_init__`, on an instance built from the new values alone. The fields
+that they do not name are missing there, so `__post_init__` fills them with
+their defaults, which then overwrite the values of the instance, or it
+raises, for example when it reads one of them. With the `Batch` class
+above, `b.update({"obs": obs})` raises a `RuntimeError`, because the
+default mask has no batch dimension, and `b.update_({"obs": obs})` sets the
+mask back to all `True`. Set the fields as attributes instead, which does
+not run `__post_init__`:
+
+```
+>>> b.mask[0] = False
+>>> b.obs = torch.ones(3, 2)
+>>> b.mask
+tensor([False, True, True])
+```
 
 On a lazy stack ([`lazy_stack()`](reference/generated/tensordict.lazy_stack.html#tensordict.lazy_stack), and the operations that
 return one), `__post_init__` runs on each stacked instance, not on the

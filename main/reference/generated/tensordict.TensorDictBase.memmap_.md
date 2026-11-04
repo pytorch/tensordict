@@ -17,6 +17,12 @@ An entry named `"shape"`, `"device"` or `"_type"`, at any depth,
 is not restored by [`load_memmap()`](tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap), and writing it to a
 directory warns (see [`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap)).
 
+A view of a memory-mapped tensordict, such as a slice or a transpose,
+written back to the directory that it maps can leave wrong data in
+that directory, without an error. Pass `atomic=True` and
+`copy_existing=True`, which write a new directory first (not on
+Windows), or write to another directory (see [`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap)).
+
 Parameters:
 
 - **prefix** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**Path**,**optional*) - the directory to write to.

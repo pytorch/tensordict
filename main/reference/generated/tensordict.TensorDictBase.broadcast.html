@@ -79,7 +79,7 @@
 
 <meta name="llm:navigation-file" content="https://docs.pytorch.org/tensordict/stable/llms.txt">
 <meta name="llm:sitemap" content="https://docs.pytorch.org/tensordict/stable/sitemap.xml">
-<meta name="llm:version" content="main (0.15.0.dev6769+g176a6de41.d20261104)">
+<meta name="llm:version" content="main (0.15.0.dev6772+g18ec3b3b2.d20261104)">
 <meta name="llm:project" content="tensordict">
 <meta name="llm:page-type" content="api">
 <link rel="alternate" type="text/plain" href="https://docs.pytorch.org/tensordict/stable/llms.txt" title="LLM Navigation Guide">
@@ -185,7 +185,7 @@
   fbq('track', 'PageView');
 </script>
 <script>
-  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6769+g176a6de41.d20261104)');
+  document.documentElement.setAttribute('data-version', 'main (0.15.0.dev6772+g18ec3b3b2.d20261104)');
 </script>
 <noscript>
   <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
@@ -1772,7 +1772,8 @@ tensordict from them. Use it only with ranks you trust. See
 <a class="reference internal" href="../../distributed.html#distributed-collectives"><span class="std std-ref">Collectives</span></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>src</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – the rank that sends its tensordict.</p>
+<dd class="field-odd"><p><strong>src</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – the global rank that sends its tensordict, as in
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.broadcast" title="(in PyTorch v2.15)"><code class="xref py py-func docutils literal notranslate"><span class="pre">torch.distributed.broadcast()</span></code></a>.</p>
 </dd>
 <dt class="field-even">Keyword Arguments<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
@@ -2163,7 +2164,7 @@ other methods, see <a class="reference internal" href="../td.html#api-tensordict
        "headline": "TensorDictBase.broadcast",
        "description": "A dict[str, torch.Tensor] that behaves like one tensor. - TensorDictBase.broadcast",
        "url": "/reference/generated/tensordict.TensorDictBase.broadcast.html",
-       "articleBody": "TensorDictBase.broadcast# TensorDictBase.broadcast(src: int, *, group: \u0027torch.distributed.ProcessGroup\u0027 | None = None, device: device | str | None = None, _tensorclass_type: str | None = None) \u2192 Self# Sends the tensordict of rank src to every rank of the group, and returns it on each rank. Every rank of the group must call it. The other ranks do not need to know the structure: they can call it on an empty tensordict. Rank src consolidates its tensordict (see consolidate()), and broadcasts the metadata with torch.distributed.broadcast_object_list(), which pickles it, then the storage as one tensor. The other ranks build a new tensordict from them. Use it only with ranks you trust. See Collectives. Parameters: src (int) \u2013 the rank that sends its tensordict. Keyword Arguments: group (torch.distributed.ProcessGroup, optional) \u2013 the process group. Defaults to None, the default process group. device (device, str or int, optional) \u2013 on rank src, the device of the consolidated storage, if the tensordict is not consolidated yet. On the other ranks, the device of the result. With nccl, pass a CUDA device. Defaults to None, which keeps the device of the tensordict on rank src, and uses the same device on the other ranks. Returns: The consolidated tensordict of rank src. On rank src, it is the tensordict itself if it is consolidated already, and a consolidated copy otherwise. On the other ranks, it is a new tensordict. Examples This example runs in two processes: add it to the runner script of the distributed guide and pass it to run. def broadcast(rank, world_size): td = TensorDict(a=torch.arange(3.0), batch_size=[3]) if rank == 0 else TensorDict() td = td.broadcast(src=0) print(rank, td[\"a\"]) # tensor([0., 1., 2.]) on every rank Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
+       "articleBody": "TensorDictBase.broadcast# TensorDictBase.broadcast(src: int, *, group: \u0027torch.distributed.ProcessGroup\u0027 | None = None, device: device | str | None = None, _tensorclass_type: str | None = None) \u2192 Self# Sends the tensordict of rank src to every rank of the group, and returns it on each rank. Every rank of the group must call it. The other ranks do not need to know the structure: they can call it on an empty tensordict. Rank src consolidates its tensordict (see consolidate()), and broadcasts the metadata with torch.distributed.broadcast_object_list(), which pickles it, then the storage as one tensor. The other ranks build a new tensordict from them. Use it only with ranks you trust. See Collectives. Parameters: src (int) \u2013 the global rank that sends its tensordict, as in torch.distributed.broadcast(). Keyword Arguments: group (torch.distributed.ProcessGroup, optional) \u2013 the process group. Defaults to None, the default process group. device (device, str or int, optional) \u2013 on rank src, the device of the consolidated storage, if the tensordict is not consolidated yet. On the other ranks, the device of the result. With nccl, pass a CUDA device. Defaults to None, which keeps the device of the tensordict on rank src, and uses the same device on the other ranks. Returns: The consolidated tensordict of rank src. On rank src, it is the tensordict itself if it is consolidated already, and a consolidated copy otherwise. On the other ranks, it is a new tensordict. Examples This example runs in two processes: add it to the runner script of the distributed guide and pass it to run. def broadcast(rank, world_size): td = TensorDict(a=torch.arange(3.0), batch_size=[3]) if rank == 0 else TensorDict() td = td.broadcast(src=0) print(rank, td[\"a\"]) # tensor([0., 1., 2.]) on every rank Every tensordict class and every tensorclass has this method. For the other methods, see Methods by task.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

@@ -191,6 +191,18 @@ a large file by accident. To copy the file, pass ``copy_existing=True``:
   >>> TensorDict.load_memmap(root / "second")["a"]
   MemoryMappedTensor(1)
 
+A view of a loaded tensordict, such as ``td[1:]`` or a transpose, written
+back to the directory that it maps with ``memmap``, ``memmap_`` or ``save``
+can leave wrong data in that directory, without an error. Pass
+``atomic=True`` and ``copy_existing=True``, which write a new directory
+first (not on Windows), or write to another directory:
+
+  >>> _ = TensorDict({"a": torch.arange(4.0)}, batch_size=[4]).save(root / "trim")
+  >>> td = TensorDict.load_memmap(root / "trim")
+  >>> _ = td[1:].save(root / "trim", copy_existing=True, atomic=True)
+  >>> TensorDict.load_memmap(root / "trim")["a"]
+  MemoryMappedTensor([1., 2., 3.])
+
 Write to the files after you load them
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

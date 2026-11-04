@@ -128,6 +128,14 @@ For a directory, the tensordict returned here still holds the
 entry, but an archive, which is read back, does not. Rename the
 entry before saving to keep it.
 
+Note
+
+A view of a memory-mapped tensordict, such as `td[1:]` or a
+transpose, written back to the directory that it maps can leave
+wrong data in that directory, without an error. Pass
+`atomic=True` and `copy_existing=True`, which write a new
+directory first (not on Windows), or write to another directory.
+
 Examples
 
 ```

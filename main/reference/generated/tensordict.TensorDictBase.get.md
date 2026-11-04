@@ -37,8 +37,16 @@ Defaults to `False`.
 - **as_padded_tensor** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, a lazy stack pads
 the entries to the largest size of each dimension, also across
 the levels of a lazy stack of lazy stacks, and stacks them
-into one tensor. Exclusive with `as_list` and
-`as_nested_tensor`. Defaults to `False`.
+into one tensor. That tensor has the stack dimension of each
+lazy stack, outer or inner, first: for a stack built along
+another dimension than 0, its layout differs from the one of
+`get(key)`, and inner stacks built along different
+dimensions give members that are transposed and padded with
+`padding_value`. Build the lazy stacks along dimension 0, or
+call `contiguous()` on the inner stacks whose entries have
+the same shape. See [Variable-size data](../../concepts/stacking.html#stacking-variable-size). Exclusive
+with `as_list` and `as_nested_tensor`. Defaults to
+`False`.
 - **as_nested_tensor** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, a lazy stack returns
 the entries as a nested tensor ([`torch.nested`](https://docs.pytorch.org/docs/stable/nested.html#module-torch.nested)). A lazy
 stack of lazy stacks raises a `ValueError`, as a nested

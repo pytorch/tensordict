@@ -14,7 +14,8 @@ tensordict from them. Use it only with ranks you trust. See
 
 Parameters:
 
-**src** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - the rank that sends its tensordict.
+**src** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - the global rank that sends its tensordict, as in
+[`torch.distributed.broadcast()`](https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.broadcast).
 
 Keyword Arguments:
 

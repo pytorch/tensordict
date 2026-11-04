@@ -260,6 +260,17 @@ to 7 times slower. Non-contiguous and sparse leaves, such as those of
 leaves, so every rank must hold the same keys, shapes and dtypes; if the
 layouts differ, the call can hang.
 
+On a lazy stack whose members have different keys, `reduce` reduces only
+the keys that every member holds: rank `dst` keeps its own values for the
+others. `all_reduce` reduces every key. To reduce every key on rank
+`dst` only, call `reduce` on each member (a member that is itself a lazy
+stack has the same limit):
+
+```
+for member in td.tensordicts:
+ member.reduce(dst=0)
+```
+
 ### all_gather, scatter, and gather_and_stack
 
 [`all_gather()`](reference/generated/tensordict.TensorDictBase.all_gather.html#tensordict.TensorDictBase.all_gather) returns a list with the

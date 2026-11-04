@@ -29,6 +29,14 @@ bfloat16, complex and bool) become buffers. An optimizer built from
 `parameters()` therefore does not see bfloat16 entries. Pass
 `no_convert=True` to register all tensors as buffers.
 
+[`update()`](tensordict.TensorDictBase.update.html#tensordict.TensorDictBase.update) with a nested dict or a nested tensordict of plain
+tensors under an existing key, such as `params.update({"n": {"b": t}})`
+where `params["n"]` exists, skips this conversion: these values become
+buffers, and leave `parameters()`. Values that are already parameters
+stay parameters. Pass the nested keys as tuples instead, for example
+`params.update(dict(other.items(True, True)))`, or write into the
+existing entries with [`update_()`](tensordict.TensorDictBase.update_.html#tensordict.TensorDictBase.update_).
+
 Warning
 
 TensorDictParams wraps the TensorDict that you pass,

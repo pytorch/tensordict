@@ -951,6 +951,13 @@ become [`Parameter`](https://docs.pytorch.org/docs/stable/generated/torch.nn.par
 `bfloat16`, complex, and `bool`, become buffers. An optimizer does not see
 a buffer. With `no_convert=True`, all tensors that are not already
 parameters become buffers.
+- `update()` with a nested dict or a nested tensordict of plain tensors
+under an existing key, such as `params.update({"n": {"b": t}})` where
+`params["n"]` exists, skips this conversion: these values become buffers,
+and leave `parameters()`. Values that are already parameters stay
+parameters. Pass the nested keys as tuples instead, for example
+`params.update(dict(other.items(True, True)))`, or write into the
+existing entries with `update_()`.
 - `named_parameters()` names each entry by its nested key, joined with
 `"."`, for example `"0.weight"`.
 - The constructor does not copy the tensordict that you pass. It turns the

@@ -9,6 +9,17 @@ locked, even if the tensordict is: a clone is usually made to be
 modified. To get a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict) from any other type,
 call [`to_tensordict()`](tensordict.TensorDictBase.to_tensordict.html#tensordict.TensorDictBase.to_tensordict) instead.
 
+With `recurse=True`, a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict) or a
+tensorclass copies each leaf on its own, so two keys that hold the
+same tensor hold two different tensors in the copy.
+[`copy.deepcopy()`](https://docs.python.org/3/library/copy.html#copy.deepcopy) of a [`TensorDict`](tensordict.TensorDict.html#tensordict.TensorDict) or a
+tensorclass does the same, so it does not keep these ties either,
+unlike [`copy.deepcopy()`](https://docs.python.org/3/library/copy.html#copy.deepcopy) of a [`dict`](https://docs.python.org/3/builtins/stdtypes.html#dict) or of a
+[`Module`](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module). A
+`TensorDictParams` keeps them. To copy the tied
+parameters of a module, deep-copy the module and call
+[`from_module()`](tensordict.TensorDictBase.from_module.html#tensordict.TensorDictBase.from_module) on the copy.
+
 Parameters:
 
 - **recurse** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, the leaves are copied too.
