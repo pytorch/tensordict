@@ -1933,6 +1933,70 @@ class TestNonTensorData:
         assert tdc[key] == ["a string", "another string"]
         assert tdc.is_locked and tdc.is_consolidated()
 
+    @staticmethod
+    def _stack_out_items(strings, data_cls):
+        return [
+            TensorDict(
+                obs=torch.full((4,), float(i)),
+                text=string,
+                nested={"text": string},
+                data=data_cls(x=torch.full((4,), float(i)), batch_size=[4]),
+                batch_size=[4],
+            )
+            for i, string in enumerate(strings)
+        ]
+
+    @pytest.mark.parametrize("same", [True, False])
+    @pytest.mark.parametrize("dim", [0, 1, -1])
+    def test_stack_out_locked(self, same, dim):
+        # #3429: torch.stack(tds, dim, out=locked) raised when the tensordicts
+        # held non-tensor or tensorclass entries, after writing the tensors.
+        # It now gives the result of unlocking out around the call.
+        @tensorclass
+        class Data:
+            x: torch.Tensor
+
+        strings = ["x"] * 3 if same else [f"s{i}" for i in range(3)]
+        items = self._stack_out_items(strings, Data)
+        out = torch.stack(self._stack_out_items(["o"] * 3, Data), dim).clone()
+        expected = out.clone().lock_()
+        with expected.unlock_():
+            torch.stack(self._stack_out_items(strings, Data), dim, out=expected)
+        out.lock_()
+        obs = out["obs"]
+        assert torch.stack(items, dim, out=out) is out
+        assert out["obs"] is obs
+        assert (out["obs"] == expected["obs"]).all()
+        assert (out["data"].x == expected["data"].x).all()
+        for key in ("text", ("nested", "text")):
+            assert out[key] == expected[key]
+        for key in ("text", ("nested", "text"), "nested", "data"):
+            assert type(out.get(key)) is type(expected.get(key))
+            assert out.get(key).is_locked and expected.get(key).is_locked
+        assert out.is_locked
+        # the new entries unlock and relock with out
+        out.unlock_()
+        assert not out.get("text").is_locked
+        out.lock_()
+        assert out.get("text").is_locked
+
+    @pytest.mark.parametrize("kind", ["shared", "memmap"])
+    def test_stack_out_locked_shared_or_memmap_raises(self, kind, tmp_path):
+        # #3429: a shared or memory-mapped out cannot hold a new non-tensor
+        # entry, so stacking new strings into it keeps raising
+        @tensorclass
+        class Data:
+            x: torch.Tensor
+
+        items = self._stack_out_items([f"s{i}" for i in range(3)], Data)
+        out = torch.stack(self._stack_out_items(["o"] * 3, Data), 0).clone()
+        if kind == "shared":
+            out.share_memory_()
+        else:
+            out.memmap_(tmp_path)
+        with pytest.raises(RuntimeError):
+            torch.stack(items, 0, out=out)
+
     def test_assign_non_tensor(self):
         data = TensorDict({}, [1, 10])
 
