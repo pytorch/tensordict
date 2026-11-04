@@ -430,7 +430,7 @@ class MemoryMappedTensor(torch.Tensor):
                 and Path(filename).absolute() == Path(input.filename).absolute()
                 # a copy-on-write mapping can hold writes that its file lacks
                 and input._mode != "r"
-                # a view that does not start the file is written back below
+                # a view that is not a prefix of the file is written back below
                 and (
                     not existsok
                     or not copy_data
