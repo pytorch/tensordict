@@ -4188,6 +4188,8 @@ def _wrap_td_method(
         return result
 
     if not is_property:
+        # help(tc.to) shows the docstring of TensorDict.to
+        doc = getattr(TensorDict, funcname).__doc__
 
         def wrapped_func(self, *args, **kwargs):
             if not is_compiling():
@@ -4229,6 +4231,7 @@ def _wrap_td_method(
                         kwargs["cast_filter"] = cast_filter
                 return uncast_func(self, *args, **kwargs)
 
+            wrapped_func.__doc__ = doc
             return wrapped_func
         if funcname == "where":
             unfiltered_func = wrapped_func
@@ -4249,8 +4252,10 @@ def _wrap_td_method(
                     other = other.select(*type(self).__expected_keys__, strict=False)
                 return unfiltered_func(self, condition, other, **kwargs)
 
+            wrapped_func.__doc__ = doc
             return wrapped_func
         if funcname not in _FIELD_KEY_ARGUMENT:
+            wrapped_func.__doc__ = doc
             return wrapped_func
         position, name = _FIELD_KEY_ARGUMENT[funcname]
         unchecked_func = wrapped_func
@@ -4265,6 +4270,7 @@ def _wrap_td_method(
                     _warn_non_field_keys(self, unknown, funcname)
             return result
 
+        wrapped_func.__doc__ = doc
         return wrapped_func
 
     def wrapped_func(self):
