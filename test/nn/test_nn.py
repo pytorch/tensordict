@@ -8601,6 +8601,16 @@ class TestToModule:
         for target in grad_targets:
             assert target.grad is not None
 
+    def test_to_module_context_manager_keeps_parameter_buffer(self, as_module):
+        # #3461 leaves a Parameter registered as a buffer as it was: it comes
+        # back as a buffer when the block exits
+        module = nn.Linear(3, 3)
+        module.register_buffer("pe", nn.Parameter(torch.zeros(3), requires_grad=False))
+        with TensorDict.from_module(module).to_module(module):
+            pass
+        assert [name for name, _ in module.named_buffers()] == ["pe"]
+        assert [name for name, _ in module.named_parameters()] == ["weight", "bias"]
+
     @pytest.mark.parametrize("preserve_module_state", [True, False])
     def test_to_module_vmap_restores_parameters(self, as_module, preserve_module_state):
         # #3461: leaving the block under vmap gives the module back its own

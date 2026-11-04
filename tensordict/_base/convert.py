@@ -220,7 +220,7 @@ def _swap_into_module(td, module, memo, non_blocking, preserve_module_state):
                 False,
                 return_swap=True,
                 preserve_module_state=False
-                if restore and isinstance(value, nn.Parameter)
+                if restore and isinstance(value, nn.Parameter) and key not in _buffers
                 else preserve_module_state,
             )
         else:
@@ -1671,7 +1671,9 @@ class _Conversion:
                 # See _restore_memo.
                 preserve = (
                     False
-                    if restore and isinstance(value, nn.Parameter)
+                    if restore
+                    and isinstance(value, nn.Parameter)
+                    and key not in module._buffers
                     else preserve_module_state
                 )
                 # For Dynamo, we use regular set/delattr as we're not
