@@ -6425,8 +6425,16 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             as_padded_tensor (bool, optional): if ``True``, a lazy stack pads
                 the entries to the largest size of each dimension, also across
                 the levels of a lazy stack of lazy stacks, and stacks them
-                into one tensor. Exclusive with ``as_list`` and
-                ``as_nested_tensor``. Defaults to ``False``.
+                into one tensor. That tensor has the stack dimension of each
+                lazy stack, outer or inner, first: for a stack built along
+                another dimension than 0, its layout differs from the one of
+                ``get(key)``, and inner stacks built along different
+                dimensions give members that are transposed and padded with
+                ``padding_value``. Build the lazy stacks along dimension 0, or
+                call ``contiguous()`` on the inner stacks whose entries have
+                the same shape. See :ref:`stacking-variable-size`. Exclusive
+                with ``as_list`` and ``as_nested_tensor``. Defaults to
+                ``False``.
             as_nested_tensor (bool, optional): if ``True``, a lazy stack returns
                 the entries as a nested tensor (:mod:`torch.nested`). A lazy
                 stack of lazy stacks raises a ``ValueError``, as a nested
@@ -11272,6 +11280,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         locked, even if the tensordict is: a clone is usually made to be
         modified. To get a :class:`~tensordict.TensorDict` from any other type,
         call :meth:`~.to_tensordict` instead.
+
+        With ``recurse=True``, a :class:`~tensordict.TensorDict` or a
+        tensorclass copies each leaf on its own, so two keys that hold the
+        same tensor hold two different tensors in the copy.
+        :func:`copy.deepcopy` of a :class:`~tensordict.TensorDict` or a
+        tensorclass does the same, so it does not keep these ties either,
+        unlike :func:`copy.deepcopy` of a :class:`dict` or of a
+        :class:`~torch.nn.Module`. A
+        :class:`~tensordict.nn.TensorDictParams` keeps them. To copy the tied
+        parameters of a module, deep-copy the module and call
+        :meth:`~.from_module` on the copy.
 
         Args:
             recurse (bool, optional): if ``True``, the leaves are copied too.
