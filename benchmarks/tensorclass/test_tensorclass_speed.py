@@ -194,6 +194,42 @@ def test_tc_first_layer_tensor_set(benchmark):
     benchmark(set)
 
 
+# An RL step: 10 tensor fields and a nested instance with 10 more
+RLStepTC = tensorclass(
+    make_dataclass(
+        "RLStepTC",
+        [(f"f{i}", torch.Tensor) for i in range(10)] + [("next", "RLStepTC", None)],
+    )
+)
+
+
+@pytest.mark.parametrize(
+    "batch_size,shape", [(32, (32, 4)), (4096, (4096, 64))], ids=["rl_step", "large"]
+)
+@pytest.mark.parametrize("target", ["root", "nested", "none"])
+def test_tc_tensor_setattr(benchmark, batch_size, shape, target):
+    fields = {f"f{i}": torch.zeros(shape) for i in range(10)}
+    nested = RLStepTC(**fields, batch_size=[batch_size])
+    d = RLStepTC(**fields, next=nested, batch_size=[batch_size])
+    t = torch.ones(shape)
+    if target == "root":
+
+        def set(d=d, t=t):
+            d.f0 = t
+
+    elif target == "nested":
+
+        def set(d=d.next, t=t):
+            d.f0 = t
+
+    else:
+
+        def set(d=d):
+            d.f0 = None
+
+    benchmark(set)
+
+
 def test_tc_first_layer_tensor_only_set(benchmark):
     z = torch.zeros(())
     o = torch.ones(())
