@@ -9236,6 +9236,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             and batch_size is None
             and names is NO_DEFAULT
             and not call_on_nested
+            # a device that _new_unsafe would parse could raise before fn runs
+            and (device is NO_DEFAULT or device is None or type(device) is torch.device)
             and (
                 is_leaf is None
                 or is_leaf is _default_is_leaf

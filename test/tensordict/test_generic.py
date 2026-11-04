@@ -17009,6 +17009,8 @@ class TestGeneric:
         {"device": "cpu"},
         {"device": None},
         {"device": "meta"},
+        {"device": torch.device("meta")},
+        {"device": "foo"},
         {"propagate_lock": True},
         {"is_leaf": is_leaf_nontensor},
         {"is_leaf": _NESTED_TENSORS_AS_LISTS},
@@ -17126,6 +17128,8 @@ class TestGeneric:
         assert td.apply(lambda x: None if x.ndim == 2 else x, filter_empty=True)[
             "n", "d"
         ].batch_size == torch.Size([3])
+        result = td.apply(lambda x: x.to("meta"), device=torch.device("meta"))
+        assert result["n", "d", "e"].device == torch.device("meta")
 
     def test_apply_dense_path_validates(self):
         # #3460: on the dense path of apply, the results of fn are validated as
@@ -17154,6 +17158,10 @@ class TestGeneric:
         with pytest.raises(ValueError, match="third call"):
             self._apply_nested().apply(fn)
         assert len(calls) == 3
+        # a device given as a string is parsed only when a result is built
+        calls.clear()
+        assert self._apply_nested().apply(calls.append, device="foo") is None
+        assert len(calls) == len(self._apply_nested().keys(True, True))
 
     def test_norm_out(self):
         td = TensorDict(a=torch.ones(3), b={"c": torch.ones(3, 2)}, batch_size=[3])
