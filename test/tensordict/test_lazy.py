@@ -873,6 +873,58 @@ class TestLazyStackedTensorDict:
             b = [[0.0, 0.0], [1.0, 1.0, 0.0], [0.0]]
         assert state() == ([[0.0] * k for k in sizes], b)
 
+    def test_ragged_update_at_nested_broadcast_slice_ragged_dim(self):
+        # #3500: a value with a nested tensordict that the members would
+        # broadcast over a sliced ragged dim either raises and leaves every
+        # leaf of every member unchanged, or writes every leaf of the selected
+        # rows; never a part of a member
+        sizes = (2, 3, 1)
+
+        def make():
+            return lazy_stack(
+                [
+                    TensorDict(
+                        a=torch.zeros(k, 2),
+                        n=TensorDict(b=torch.zeros(k), batch_size=[k]),
+                        batch_size=[k],
+                    )
+                    for k in sizes
+                ]
+            )
+
+        def value(*batch_size):
+            return TensorDict(
+                a=torch.ones(*batch_size, 2),
+                n=TensorDict(b=torch.ones(batch_size), batch_size=batch_size),
+                batch_size=batch_size,
+            )
+
+        first_two = {i: range(min(2, k)) for i, k in enumerate(sizes)}
+        for batch_size, index, rows in (
+            ((1,), (0, slice(0, 2)), {0: range(2)}),
+            ((1,), (slice(None), slice(0, 2)), first_two),
+            ((1, 1), (slice(None), slice(0, 2)), first_two),
+            ((3, 1), (slice(None), slice(0, 2)), first_two),
+            (
+                (1, 1),
+                (slice(None), slice(1, None)),
+                {i: range(1, k) for i, k in enumerate(sizes)},
+            ),
+        ):
+            ls = make()
+            try:
+                ls.update_at_(value(*batch_size), index)
+            except Exception:
+                rows = {}
+            expected = [
+                [1.0 if row in rows.get(i, ()) else 0.0 for row in range(k)]
+                for i, k in enumerate(sizes)
+            ]
+            assert [t.tolist() for t in ls.get("a", as_list=True)] == [
+                [[x, x] for x in member] for member in expected
+            ]
+            assert [t.tolist() for t in ls.get(("n", "b"), as_list=True)] == expected
+
     def test_to_dict_state_dict_exclusive_keys_raise(self):
         # to_dict and state_dict would silently drop the keys that are not in
         # every member, so they raise

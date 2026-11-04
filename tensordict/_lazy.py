@@ -5341,20 +5341,28 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         elif input_dict_or_td.batch_size != indexed_bs:
             lead = len(indexed_bs) - input_dict_or_td.batch_dims
-            if ragged_error is not None and lead > 0 and -1 in indexed_bs[:lead]:
-                # expand cannot add a leading dim of size -1: a ragged dim that
-                # the value does not have gets size 1, which each member
-                # broadcasts. A member does not broadcast a nested tensordict
-                # of the value, so such a value still raises.
+            if ragged_error is not None and lead >= 0:
+                # each member broadcasts the value over a sliced ragged dim
+                # that the value lacks or has with size 1. A member does not
+                # broadcast a nested tensordict of the value, and it would
+                # write the other leaves before it raises, so such a value
+                # still raises.
+                value_bs = (1,) * lead + tuple(input_dict_or_td.batch_size)
                 if any(
+                    size == -1 and value_size == 1
+                    for size, value_size in zip(indexed_bs, value_bs)
+                ) and any(
                     _is_tensor_collection(type(value))
                     for value in input_dict_or_td.values()
                 ):
                     raise ragged_error
-                indexed_bs = torch.Size(
-                    1 if size == -1 and dim < lead else size
-                    for dim, size in enumerate(indexed_bs)
-                )
+                if -1 in indexed_bs[:lead]:
+                    # expand cannot add a leading dim of size -1: a ragged
+                    # dim that the value does not have gets size 1
+                    indexed_bs = torch.Size(
+                        1 if size == -1 and dim < lead else size
+                        for dim, size in enumerate(indexed_bs)
+                    )
             # a value for one element may have leading dims of size 1, as
             # in TensorDict.update_at_
             while (
