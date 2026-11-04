@@ -3141,6 +3141,24 @@ class TestLazyStackedTensorDict:
                 getattr(sub, method)({"n": {"b": torch.full((2,), 7.0)}})
             assert root.get(("n", "b")).tolist() == expected, method
 
+    @pytest.mark.parametrize("depth", [1, 2])
+    def test_sub_of_sub_update_tensorclass_field_check(self, depth):
+        # #3443: update through a view of a view still checks the fields of a
+        # tensorclass entry, as through one view
+        class MC(TensorClass):
+            x: torch.Tensor
+
+        root = TensorDict(
+            c=MC(x=torch.zeros(2, 4), batch_size=[2, 4]), batch_size=[2, 4]
+        )
+        if depth == 1:
+            sub = root._get_sub_tensordict((1, slice(1, 3)))
+        else:
+            sub = root._get_sub_tensordict(1)._get_sub_tensordict(slice(1, 3))
+        with pytest.raises(ValueError, match="must correspond to the class"):
+            sub.update({"c": {"y": torch.full((2,), 7.0)}})
+        assert set(root["c"].keys()) == {"x"}
+
     def test_lazy_stack_nested_get(self):
         td0 = TensorDict(a=torch.randn(3))
         td1 = TensorDict(a=torch.randn(4))
