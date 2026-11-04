@@ -7059,6 +7059,48 @@ class TestGeneric:
         data.load_state_dict(sd, strict=True)
         assert data["d"] == 1
 
+    @pytest.mark.parametrize("td_sd", [False, True])
+    def test_load_state_dict_from_module_params(self, td_sd):
+        # #3439: copying into the parameters of from_module raised
+        src = nn.Sequential(nn.Linear(4, 3), nn.BatchNorm1d(3))
+        src(torch.randn(5, 4))
+        m = nn.Sequential(nn.Linear(4, 3), nn.BatchNorm1d(3))
+        td = TensorDict.from_module(m)
+        sd = TensorDict.from_module(src).state_dict() if td_sd else src.state_dict()
+        td.load_state_dict(sd)
+        for (name, p), p_src in zip(m.named_parameters(), src.parameters()):
+            assert torch.equal(p, p_src)
+            assert td.get(tuple(name.split("."))) is p
+            assert p.requires_grad and p.is_leaf
+        assert torch.equal(m[1].running_mean, src[1].running_mean)
+        assert m[1].num_batches_tracked == 1
+
+    def test_load_state_dict_non_leaf_keeps_autograd(self):
+        # #3439: an entry that requires grad but is not a leaf is still copied
+        # into with autograd
+        x = torch.ones(3, requires_grad=True)
+        td = TensorDict(a=x * 2)
+        v = torch.full((3,), 5.0, requires_grad=True)
+        td.load_state_dict({"a": v})
+        assert type(td["a"].grad_fn).__name__ == "CopyBackwards"
+        td["a"].sum().backward()
+        assert (v.grad == 1).all()
+
+    def test_load_state_dict_from_module_assign(self):
+        # #3439: assign=True still replaces the parameters
+        src, m = nn.Linear(4, 3), nn.Linear(4, 3)
+        td = TensorDict.from_module(m)
+        sd = src.state_dict()
+        td.load_state_dict(sd, assign=True)
+        assert td["weight"] is sd["weight"]
+        assert not torch.equal(m.weight, src.weight)
+
+    def test_load_state_dict_from_module_bad_shape(self):
+        # #3439: an incompatible shape still raises
+        td = TensorDict.from_module(nn.Linear(4, 3))
+        with pytest.raises(RuntimeError, match="Failed to update 'weight'"):
+            td.load_state_dict({"weight": torch.zeros(5, 5), "bias": torch.zeros(3)})
+
     def test_state_dict_flat_roundtrip(self):
         td = TensorDict({"a": 1, "b": {"c": 2, "d": {"e": 3}}}, [])
         sd = td.state_dict()
