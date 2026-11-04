@@ -673,6 +673,32 @@ def test_getitem(benchmark, td, c, index):
     benchmark(exec_getitem)
 
 
+@pytest.mark.parametrize("size", ["small", "large"])
+@pytest.mark.parametrize("index", ["int", "slice", "tensor"])
+def test_getitem_rl_step(benchmark, index, size):
+    # 20 leaves in 4 nested nodes, as an RL step: per-env access, minibatches
+    # and replay-buffer samples
+    batch, features = (32, 4) if size == "small" else (4096, 64)
+    r = torch.randn
+    td = TensorDict(
+        {
+            **{f"x{i}": r(batch, features) for i in range(9)},
+            "next": {f"y{i}": r(batch, features) for i in range(6)},
+            "stats": {
+                **{f"z{i}": r(batch, 1) for i in range(4)},
+                "deep": {"w": r(batch, features)},
+            },
+        },
+        batch_size=[batch],
+    )
+    index = {
+        "int": 3,
+        "slice": slice(2, 10),
+        "tensor": torch.randint(0, batch, (batch // 2,)),
+    }[index]
+    benchmark(td.__getitem__, index)
+
+
 @pytest.mark.parametrize(
     "device", [None, "cpu"] + (["cuda"] if torch.cuda.is_available() else [])
 )

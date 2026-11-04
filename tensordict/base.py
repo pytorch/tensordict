@@ -183,6 +183,15 @@ NO_DEFAULT = _NoDefault.ZERO
 # Unlike NO_DEFAULT (which triggers KeyError in get()), _UNSET can be returned by get()
 # to indicate a missing key. This makes pop() compatible with torch.compile.
 _UNSET = object()
+# Dynamo's frame callback, set in a torch.compile region, also in the frames
+# that Dynamo runs eagerly (torch's set_stance makes the same check).
+# _index_tensordict takes its eager shortcut only when this is available.
+try:
+    from torch._C._dynamo.eval_frame import (
+        get_eval_frame_callback as _get_eval_frame_callback,
+    )
+except ImportError:
+    _get_eval_frame_callback = None
 
 T = TypeVar("T", bound="TensorCollection")
 
@@ -12202,8 +12211,19 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             names = self._get_names_idx(index)
 
         source = {}
+        # perf: in eager mode an exact Tensor, which is neither unbatched nor a
+        # TensorDict, goes straight to _get_item. Under torch.compile, also in
+        # a frame that Dynamo runs eagerly, the loop takes the generic path, so
+        # that the frames Dynamo compiles do not change.
+        eager = (
+            not is_compiling()
+            and _get_eval_frame_callback is not None
+            and _get_eval_frame_callback() is None
+        )
         for key, item in self.items():
-            if _is_unbatched(item):
+            if eager and type(item) is Tensor:
+                source[key] = _get_item(item, index)
+            elif _is_unbatched(item):
                 source[key] = _unbatched_with_batch_size(item, batch_size)
             elif isinstance(item, TensorDict):
                 # this is the simplest case, we can pre-compute the batch size easily
