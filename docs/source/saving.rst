@@ -476,13 +476,15 @@ The file keeps the batch sizes and names that the tensordict had when
 The leaves of a consolidated tensordict are views of one storage of bytes, and
 so are the leaves of a tensordict that ``load_memmap`` reads from a ``.tdz``
 archive. :func:`torch.save` saves a consolidated tensordict, but not a
-tensordict that holds these views and is not consolidated: an index, a
-``select``, a sub-tensordict, ``clone(False)``, an unlocked copy, or the
-archive load itself. It raises ``RuntimeError: Cannot save multiple tensors or
-storages that view the same data as different types``, or, when the leaves
-have one dtype, it can write a file that :func:`torch.load` rejects with
-``record size ... does not match expected size``. Both are limits of
-``torch.save``. Call ``.clone()`` or ``.consolidate()`` first. Pickle and
+tensordict that holds these views, is not consolidated, and has leaves of more
+than one dtype: an index, a ``select``, a sub-tensordict, ``clone(False)``, an
+unlocked copy, or the archive load itself. It raises
+``RuntimeError: Cannot save multiple tensors or storages that view the same
+data as different types``. When the leaves of a ``.tdz`` archive have one
+dtype, ``torch.save`` of its load, or of a tensordict made from its views,
+writes a file that :func:`torch.load` rejects with ``record size ... does not
+match expected size``. Both are limits of ``torch.save``. Call ``.clone()``
+or ``.consolidate()`` first. Pickle and
 :meth:`~tensordict.TensorDictBase.memmap` save these tensordicts as they are:
 
   >>> batch_c = TensorDict(

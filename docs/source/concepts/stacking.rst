@@ -91,7 +91,8 @@ For example:
   >>> tds[0]["battery"].sum()
   tensor(10.)
 
-A list, a tensor or a slice along the stack dimension, :func:`torch.cat`, and
+Along the stack dimension, indexing with a list, a tensor or a slice,
+:func:`torch.cat`, and
 :meth:`~tensordict.LazyStackedTensorDict.repeat_interleave` return a lazy
 stack that holds the same tensordicts, not copies. A write into the result
 goes to the original tensordicts. A tensordict that the result holds twice,

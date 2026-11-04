@@ -841,8 +841,9 @@ class _Serialization:
         in one copy. The result is locked (see :ref:`keys-locking`): you can
         write into its leaves in place, but you cannot add or remove entries.
         :func:`torch.save` saves the result, but not a tensordict made from
-        its views that is not consolidated (an index, a ``select``, an
-        unlocked copy): call ``clone()`` or ``consolidate()`` on it first
+        its views that is not consolidated and has leaves of more than one
+        dtype (an index, a ``select``, an unlocked copy): call ``clone()`` or
+        ``consolidate()`` on it first
         (see :ref:`Consolidated files <saving-torch-save-views>`).
 
         If the tensordict is already consolidated, ``self`` is returned and

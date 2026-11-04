@@ -124,15 +124,6 @@ The ``send_recv`` example above sends each leaf as one message. The receiver
 must hold a tensordict with the same keys, shapes, and dtypes. ``recv`` writes
 the received values into its tensors.
 
-``send``, ``recv``, ``isend``, and ``irecv`` move tensors only. A non-tensor
-entry, such as a string (see :ref:`non-tensor-data`), keeps the value that the
-receiver holds, even when the sender holds another one. With
-``send(consolidated=True)``, the non-tensor values travel only in the
-metadata that :meth:`~tensordict.TensorDictBase.init_remote` sends, so the
-later sends refresh the tensors only. To send changing non-tensor values,
-send them separately, for example with
-:func:`torch.distributed.send_object_list`.
-
 With ``consolidated=True``, ``send`` sends all the leaves as one message
 instead. It first calls :meth:`~tensordict.TensorDictBase.consolidate`, which
 copies the leaves into one storage (see :ref:`saving`), unless the tensordict
@@ -230,6 +221,15 @@ the group must call them:
        else:
            td = TensorDict.from_remote_init(src=0, use_broadcast=True)
            print(td["obs"].shape)  # torch.Size([2, 84])
+
+``send``, ``recv``, ``isend``, and ``irecv`` move tensors only. A non-tensor
+entry, such as a string (see :ref:`non-tensor-data`), keeps the value that the
+receiver holds, even when the sender holds another one. With
+``send(consolidated=True)``, the non-tensor values travel only in the
+metadata that :meth:`~tensordict.TensorDictBase.init_remote` sends, so the
+later sends refresh the tensors only. To send changing non-tensor values,
+send them separately, for example with
+:func:`torch.distributed.send_object_list`.
 
 .. _distributed-collectives:
 
