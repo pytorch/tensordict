@@ -866,6 +866,10 @@ def _dense_stack_members(tds, dim):
     if not tds or is_compiling():
         # compiled code keeps the general path, its graphs and its guards
         return None
+    if not _dense_stack_first_ok(tds[0]):
+        # most stacks that this path does not take stop at member 0, before
+        # the other members are read
+        return None
     vals_by_key = _dense_stack_collect(tds)
     if vals_by_key is None:
         return None
@@ -874,6 +878,24 @@ def _dense_stack_members(tds, dim):
     except RuntimeError:
         # e.g. leaves of different shapes: the general path raises its error
         return None
+
+
+def _dense_stack_first_ok(td) -> bool:
+    # Whether td, member 0, holds only what _dense_stack_collect takes: plain
+    # TensorDicts without names, down to plain tensors that do not require
+    # grad. Its leaves must not be inference tensors either: outside inference
+    # mode, torch.stack of inference tensors only returns a view, where the
+    # clone of the general path does not; one other tensor among the inputs
+    # is enough for torch.stack to return a non-view.
+    if type(td) is not TensorDict or td._td_dim_names is not None:
+        return False
+    for value in td._tensordict.values():
+        if type(value) is Tensor:
+            if value.requires_grad or value.is_inference():
+                return False
+        elif not _dense_stack_first_ok(value):
+            return False
+    return True
 
 
 def _dense_stack_collect(tds):
@@ -908,10 +930,8 @@ def _dense_stack_collect(tds):
         if type(v0) is Tensor:
             # The general path clones the stacked leaf, which gives it a
             # CloneBackward0 grad_fn: keep that path for leaves with grad.
-            # Outside inference mode, torch.stack of inference tensors returns
-            # a view, where the clone of the general path does not.
             for v in vals:
-                if v.requires_grad or v.is_inference():
+                if v.requires_grad:
                     return None
             out[key] = vals
         elif type(v0) is TensorDict:

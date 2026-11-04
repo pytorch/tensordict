@@ -2752,6 +2752,23 @@ class TestLazyStackedTensorDict:
         "permuted members": lambda: lazy_stack(
             [TensorDict(a=torch.zeros(2, 3), batch_size=[2, 3]).permute(1, 0)] * 2
         ),
+        # one member built in inference mode, first or last
+        "inference member first": lambda: lazy_stack(
+            [
+                torch.inference_mode()(
+                    lambda: TensorDict(a=torch.randn(3, 2), batch_size=[3])
+                )(),
+                TensorDict(a=torch.randn(3, 2), batch_size=[3]),
+            ]
+        ),
+        "inference member last": lambda: lazy_stack(
+            [
+                TensorDict(a=torch.randn(3, 2), batch_size=[3]),
+                torch.inference_mode()(
+                    lambda: TensorDict(a=torch.randn(3, 2), batch_size=[3])
+                )(),
+            ]
+        ),
         # members built in inference mode, stacked outside it
         "inference members": torch.inference_mode()(
             lambda: lazy_stack(
