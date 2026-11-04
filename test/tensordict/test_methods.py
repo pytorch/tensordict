@@ -6959,6 +6959,18 @@ def test_flatten_keys_context_manager_keyword_separator_in_key(locked):
     assert td.is_locked is locked
 
 
+def test_flatten_keys_context_manager_keyword_separator_overlap():
+    # #3430 leaves this case as it was: "a_" + "__" + "b" splits back into
+    # "a" and "_b", so unflatten_keys would not undo the op.
+    td = TensorDict({"a_": {"b": torch.ones(2)}}, batch_size=[2])
+    with td.flatten_keys(separator="__") as t:
+        assert set(t.keys()) == {"a___b"}
+        t.set("a___b", t.get("a___b") + 10)
+    assert set(td.keys(True, True)) == {("a_", "b"), "a___b"}
+    assert (td.get(("a_", "b")) == 1).all()
+    assert (td.get("a___b") == 11).all()
+
+
 @pytest.mark.parametrize("keyword", [False, True])
 def test_flatten_keys_context_manager_keyword_separator_inplace(keyword):
     # #3430 changes the non-inplace with-blocks only: with inplace=True, the

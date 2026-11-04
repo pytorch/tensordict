@@ -83,12 +83,18 @@ def _reverse_flatten_keys(self, args, kwargs, out):
         # A key held the separator before the block, so unflatten_keys
         # cannot tell it from a flattened nested key: keep main's result.
     separator = kwargs.get("separator", sep)
-    if separator != sep and not any(
-        separator in part
-        for key in out.keys(True)
-        for part in ((key,) if isinstance(key, str) else key)
+    if (
+        separator != sep
+        and separator
+        and all(
+            separator.join(parts).split(separator) == list(parts)
+            for parts in (
+                (key,) if isinstance(key, str) else key for key in out.keys(True)
+            )
+        )
     ):
-        # unflatten_keys undoes the op exactly: no key held the separator
+        # unflatten_keys undoes the op exactly: every key splits back into
+        # its own parts
         sep = separator
     if not out.is_locked:
         return out.update(self.unflatten_keys(sep), inplace=False)
