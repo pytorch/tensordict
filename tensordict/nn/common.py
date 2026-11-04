@@ -791,7 +791,20 @@ class TensorDictModuleBase(nn.Module):
             nodes = set(module_td.keys(True)) - leaves
             p_leaves = set(parameters.keys(True, True, is_leaf=_is_leaf_nontensor))
             p_nodes = set(parameters.keys(True, is_leaf=_is_leaf_nontensor)) - p_leaves
-            return p_leaves <= leaves and p_nodes <= nodes
+            if not (p_leaves <= leaves and p_nodes <= nodes):
+                return False
+            # A non-float leaf must stand for a non-float entry of the module:
+            # a float parameter stored as an integer tensor is malformed too
+            for key, value in parameters.items(True, True, is_leaf=_is_leaf_nontensor):
+                if isinstance(value, torch.Tensor) and not (
+                    value.is_floating_point() or value.is_complex()
+                ):
+                    entry = module_td.get(key)
+                    if not isinstance(entry, torch.Tensor) or (
+                        entry.is_floating_point() or entry.is_complex()
+                    ):
+                        return False
+            return True
 
         def sanitize(x):
             nonlocal has_non_float

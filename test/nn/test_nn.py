@@ -971,7 +971,8 @@ class TestTDModule:
         assert (module.module.w == 1).all()
 
     @pytest.mark.parametrize(
-        "case", ["extra_int_key", "non_tensor_next_to_bn", "empty_sub_td"]
+        "case",
+        ["extra_int_key", "non_tensor_next_to_bn", "empty_sub_td", "weight_as_long"],
     )
     def test_reset_functional_unknown_keys_unchanged(self, case):
         # #3462: params with an entry the module lacks still raise the dtype
@@ -984,6 +985,11 @@ class TestTDModule:
             net = nn.BatchNorm1d(3)
             params = TensorDict.from_module(net).clone()
             params["extra"] = TensorDict()
+        elif case == "weight_as_long":
+            # a float parameter stored as an integer tensor
+            net = nn.BatchNorm1d(3)
+            params = TensorDict.from_module(net).clone()
+            params["weight"] = params["weight"].long()
         else:
             net = nn.BatchNorm1d(3)
             params = TensorDict.from_module(net).clone()
