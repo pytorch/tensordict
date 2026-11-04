@@ -79,6 +79,7 @@ from tensordict.base import (
     _get_defaults_to_none,
     _set_get_defaults_to_none,
 )
+from tensordict.nn import TensorDictParams
 from tensordict.tensorclass import _TensorClassMeta, from_dataclass
 from tensordict.utils import _check_recursive_properties
 from torch import Tensor
@@ -2773,6 +2774,92 @@ class MyDataFrozen:
 @tensorclass(tensor_only=True)
 class MyDataTensorOnly:
     X: torch.Tensor
+
+
+# The classes of TestTensorClass.test_setattr_tensor_same_as_set (#3453), at
+# module level so that they pickle
+class _SetattrPlain(TensorClass):
+    x: torch.Tensor
+    y: Any = None
+    n: Any = None
+
+
+class _SetattrAuto(TensorClass, autocast=True):
+    x: torch.Tensor
+
+
+# shadow=True classes with a field named after a TensorDict method or
+# attribute. A field named "set" breaks the constructor.
+_SETATTR_SHADOW = {
+    name: type(
+        f"_SetattrShadow_{name}",
+        (TensorClass,),
+        {"__annotations__": {"x": torch.Tensor, name: Any}},
+        shadow=True,
+    )
+    for name in [
+        "to",
+        "copy",
+        "clone",
+        "update",
+        "get",
+        "batch_size",
+        "device",
+        "names",
+    ]
+}
+
+
+class _SetattrUserSet(TensorClass):
+    x: torch.Tensor
+
+    def set(self, key, value, *args, **kwargs):
+        return super().set(key, value * 2, *args, **kwargs)
+
+
+class _SetattrUserSetattr(TensorClass):
+    x: torch.Tensor
+
+    def __setattr__(self, key, value):
+        if key == "x":
+            value = value + 1
+        super().__setattr__(key, value)
+
+
+class _SetattrUserSetattrType(TensorClass):
+    x: torch.Tensor
+
+    def __setattr__(self, key, value):
+        if key == "x":
+            if isinstance(value, torch.Tensor):
+                value = torch.nn.Parameter(value)
+            else:
+                value = torch.as_tensor(value)
+        super().__setattr__(key, value)
+
+
+class _SetattrUserSetattrNoSuper(TensorClass):
+    x: torch.Tensor
+
+    def __setattr__(self, key, value):
+        if key == "x":
+            self.set(key, value * 3)
+        else:
+            object.__setattr__(self, key, value)
+
+
+class _SetattrPropertyBase(TensorClass):
+    x: torch.Tensor
+
+
+class _SetattrProperty(_SetattrPropertyBase):
+    @property
+    def x(self):
+        return self._tensordict.get("x") * 2
+
+    @x.setter
+    def x(self, value):
+        self.set("x", value * 2)
 
 
 @pytest.mark.parametrize("form", ["subclass", "decorator"])
@@ -6512,6 +6599,250 @@ class TestTensorClass:
 
         # ensure optional fields are writable
         data.k = torch.zeros(3, 4, 5)
+
+    @staticmethod
+    def _setattr_scenario(name):
+        # An instance, a field and a value, built afresh on every call
+        def plain(**kwargs):
+            kwargs.setdefault("x", torch.zeros(3, 4))
+            kwargs.setdefault("batch_size", [3])
+            return _SetattrPlain(**kwargs)
+
+        t = torch.arange(12.0).reshape(3, 4)
+        if name == "existing":
+            return plain(), "x", t
+        if name == "none_default":
+            return plain(), "y", t
+        if name == "none_then_tensor":
+            tc = plain()
+            tc.x = None
+            return tc, "x", t
+        if name == "over_str":
+            return plain(y="a string"), "y", t
+        if name == "over_nested_tc":
+            return plain(n=plain()), "n", t
+        if name == "other_trailing_dims":
+            return plain(), "x", torch.ones(3, 5)
+        if name == "wrong_batch_size":
+            return plain(), "x", torch.ones(4, 4)
+        if name == "zero_dim_batched":
+            return plain(), "x", torch.tensor(1.0)
+        if name == "zero_dim_unbatched":
+            return plain(batch_size=[]), "x", torch.tensor(1.0)
+        if name == "int_and_bool":
+            return plain(), "y", torch.ones(3, dtype=torch.bool)
+        if name == "locked":
+            return plain().lock_(), "x", t
+        if name == "names":
+            return plain(batch_size=[3, 4], names=["a", "b"]), "x", t
+        if name == "device":
+            return plain(device="cpu"), "x", t
+        if name == "device_mismatch":
+            return plain(x=torch.zeros(3, device="meta"), device="meta"), "x", t
+        if name == "requires_grad":
+            return plain(), "x", torch.ones(3, 4, requires_grad=True) * 2
+        if name.startswith("nested_tensor"):
+            with warnings.catch_warnings():
+                # the strided layout is a prototype
+                warnings.simplefilter("ignore", UserWarning)
+                nt = torch.nested.nested_tensor([torch.zeros(2), torch.zeros(3)])
+            if name == "nested_tensor":
+                return plain(x=torch.zeros(2), batch_size=[2]), "x", nt
+            return plain(batch_size=[]), "x", nt
+        if name == "consolidated":
+            return plain(y="a string").consolidate(), "x", t
+        if name == "unpickled_consolidated":
+            tc = pickle.loads(pickle.dumps(plain(y="a string").consolidate()))
+            return tc, "x", t
+        if name == "dense_stacked":
+            return torch.stack([plain(), plain()]), "x", torch.ones(2, 3, 4)
+        if name == "lazy_stacked":
+            return lazy_stack([plain(), plain()]), "x", torch.ones(2, 3, 4)
+        if name == "params":
+            params = TensorDictParams(TensorDict(x=torch.zeros(3, 4), batch_size=[3]))
+            return _SetattrPlain.from_tensordict(params), "x", t
+        if name == "parameter":
+            return plain(), "x", torch.nn.Parameter(t)
+        if name == "memmap":
+            return plain(), "x", MemoryMappedTensor.from_tensor(t)
+        if name == "autocast":
+            return _SetattrAuto(x=torch.zeros(3), batch_size=[3]), "x", torch.ones(3)
+        if name.startswith("shadow_"):
+            field_name = name[len("shadow_") :]
+            cls = _SETATTR_SHADOW[field_name]
+            tc = cls(x=torch.zeros(3), **{field_name: torch.zeros(3)})
+            return tc, field_name, torch.ones(3)
+        if name == "user_set":
+            tc = _SetattrUserSet(x=torch.zeros(3), batch_size=[3])
+            return tc, "x", torch.ones(3)
+        if name == "user_setattr":
+            tc = _SetattrUserSetattr(x=torch.zeros(3), batch_size=[3])
+            return tc, "x", torch.ones(3)
+        if name.startswith("user_setattr_type"):
+            tc = _SetattrUserSetattrType(x=torch.zeros(3), batch_size=[3])
+            if name == "user_setattr_type_list":
+                return tc, "x", [1.0, 2.0, 3.0]
+            return tc, "x", torch.ones(3)
+        if name == "user_setattr_no_super":
+            tc = _SetattrUserSetattrNoSuper(x=torch.zeros(3), batch_size=[3])
+            return tc, "x", torch.ones(3)
+        if name == "property":
+            tc = _SetattrProperty(x=torch.zeros(3), batch_size=[3])
+            return tc, "x", torch.ones(3)
+        raise ValueError(name)
+
+    @staticmethod
+    def _setattr_outcome(tc, key, value, write):
+        # What a write leaves behind: the instance, the leaves, the error and
+        # the warnings
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            try:
+                write(tc, key, value)
+                error = None
+            except Exception as err:
+                error = (type(err), str(err))
+        td = tc._tensordict
+        leaves = []
+        for leaf_key, leaf in td.items(include_nested=True, leaves_only=True):
+            if leaf.is_nested:
+                data = [part.tolist() for part in leaf.unbind()]
+            elif leaf.is_meta:
+                data = list(leaf.shape)
+            else:
+                data = leaf.tolist()
+            leaves.append(
+                (
+                    leaf_key,
+                    type(leaf),
+                    leaf.dtype,
+                    leaf.device,
+                    data,
+                    leaf.requires_grad,
+                    type(leaf.grad_fn),
+                    leaf is value,
+                )
+            )
+        return (
+            type(tc).__qualname__,
+            type(td),
+            list(td.keys(include_nested=True)),
+            td.batch_size,
+            td.names if td._has_names() else None,
+            td.device,
+            td.is_locked,
+            leaves,
+            {k: repr(v) for k, v in tc._non_tensordict.items()},
+            sorted(tc.__dict__),
+            sorted(td.__dict__),
+            error,
+            [(w.category, str(w.message)) for w in caught],
+        )
+
+    @pytest.mark.parametrize(
+        "scenario",
+        [
+            "existing",
+            "none_default",
+            "none_then_tensor",
+            "over_str",
+            "over_nested_tc",
+            "other_trailing_dims",
+            "wrong_batch_size",
+            "zero_dim_batched",
+            "zero_dim_unbatched",
+            "int_and_bool",
+            "locked",
+            "names",
+            "device",
+            "device_mismatch",
+            "requires_grad",
+            "nested_tensor",
+            "nested_tensor_unbatched",
+            "consolidated",
+            "unpickled_consolidated",
+            "dense_stacked",
+            "lazy_stacked",
+            "params",
+            "parameter",
+            "memmap",
+            "autocast",
+            "shadow_to",
+            "shadow_copy",
+            "shadow_clone",
+            "shadow_update",
+            "shadow_get",
+            "shadow_batch_size",
+            "shadow_device",
+            "shadow_names",
+            "user_set",
+            "user_setattr",
+            "user_setattr_type",
+            "user_setattr_type_list",
+            "user_setattr_no_super",
+            "property",
+        ],
+    )
+    def test_setattr_tensor_same_as_set(self, scenario, monkeypatch):
+        # #3453: tc.x = tensor skips set() for a plain tensor; it must leave
+        # the same state, error and warnings as the set() it used to call
+        def via_setattr(tc, key, value):
+            setattr(tc, key, value)
+
+        def via_set(tc, key, value):
+            # A set() of the class's own turns the shortcut off, and setattr
+            # calls set() as it did before
+            cls = type(tc)
+            original_set = cls.set
+
+            def set(self, *args, **kwargs):
+                return original_set(self, *args, **kwargs)
+
+            monkeypatch.setattr(cls, "set", set)
+            setattr(tc, key, value)
+
+        new = self._setattr_outcome(
+            *self._setattr_scenario(scenario), write=via_setattr
+        )
+        old = self._setattr_outcome(*self._setattr_scenario(scenario), write=via_set)
+        assert new == old
+
+    @pytest.mark.parametrize(
+        "scenario,calls_set",
+        [
+            ("existing", False),
+            ("over_str", False),
+            ("locked", False),
+            ("parameter", True),
+            ("memmap", True),
+            ("lazy_stacked", True),
+            ("params", True),
+            ("autocast", True),
+            ("shadow_to", False),
+            ("shadow_batch_size", False),
+            ("user_set", True),
+            ("user_setattr", False),
+            ("user_setattr_type", True),
+            ("user_setattr_type_list", False),
+        ],
+    )
+    def test_setattr_tensor_path(self, scenario, calls_set, monkeypatch):
+        # #3453: only a plain tensor written to a plain TensorDict skips
+        # TensorDict.set; every other value and class keeps the path of set()
+        calls = []
+        td_set = TensorDictBase.set
+
+        def counting_set(self, *args, **kwargs):
+            calls.append(args[0])
+            return td_set(self, *args, **kwargs)
+
+        tc, key, value = self._setattr_scenario(scenario)
+        monkeypatch.setattr(TensorDictBase, "set", counting_set)
+        try:
+            setattr(tc, key, value)
+        except RuntimeError:
+            assert scenario == "locked"
+        assert calls == ([key] if calls_set else [])
 
     @pytest.mark.parametrize("list_to_stack", [True, False])
     def test_setitem(self, list_to_stack):

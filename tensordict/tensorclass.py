@@ -3962,6 +3962,24 @@ def _setattr(self, key: str, value: Any) -> None:
             f"field. Its fields are {sorted(self.__expected_keys__)}."
             f"{_did_you_mean(key, self.__expected_keys__)}"
         )
+    if type(value) is torch.Tensor:
+        # The steps of _set and TensorDict.set for a plain tensor, inlined:
+        # keep them in sync with _set (#3453)
+        cls = type(self)
+        td = __dict__["_tensordict"]
+        if (
+            type(td) is TensorDict
+            and not cls._autocast
+            and cls._is_non_tensor is not True
+            and getattr(cls, "set", None) is _set
+        ):
+            if td._is_locked:
+                raise RuntimeError(_LOCK_ERROR)
+            non_tensordict = __dict__["_non_tensordict"]
+            if key in non_tensordict:
+                del non_tensordict[key]
+            td._set_str(key, value, inplace=False, validated=False)
+            return
     out = self.set(key, value)
     if out is not self:
         raise RuntimeError(
