@@ -2768,7 +2768,10 @@ def _init_wrapper(
                             value, check_shape=True, non_blocking=False, key=key
                         )
             else:
-                set_value = type(self).set
+                # A shadow field named set hides the method
+                set_value = (
+                    _set if "set" in type(self).__expected_keys__ else type(self).set
+                )
                 for key, value in kwargs.items():
                     set_value(self, key, value)
             if hasattr(type(self), "__post_init__"):
@@ -3710,11 +3713,17 @@ def _non_tensor_keys(self):
 
 def _copy(self) -> Any:
     """Copies the tensorclass without cloning its tensors, like ``self.copy()``."""
+    if "copy" in type(self).__expected_keys__:
+        # A shadow field named copy hides the method
+        return _wrap_td_method("copy", copy_non_tensor=True)(self)
     return self.copy()
 
 
 def _deepcopy(self, memo: dict[int, Any]) -> Any:
     """Copies the tensorclass and clones its tensors, like ``self.clone()``."""
+    if "clone" in type(self).__expected_keys__:
+        # A shadow field named clone hides the method
+        return _wrap_td_method("clone", copy_non_tensor=True)(self)
     return self.clone()
 
 

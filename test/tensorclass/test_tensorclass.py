@@ -9832,6 +9832,108 @@ class TestShadow:
     is_shared=False)"""
         )
 
+    @pytest.mark.parametrize("subclass", [False, True])
+    def test_shadow_field_set(self, subclass):
+        # #3438: a shadow field named set hid the setter of __init__
+        if subclass:
+
+            class MyClass(TensorClass["shadow"]):
+                x: torch.Tensor
+                set: torch.Tensor
+
+        else:
+
+            @tensorclass(shadow=True)
+            class MyClass:
+                x: torch.Tensor
+                set: torch.Tensor
+
+        c = MyClass(x=torch.zeros(3), set=torch.ones(3), batch_size=[3])
+        assert (c.x == 0).all()
+        assert (c.set == 1).all()
+        c = MyClass(torch.zeros(3), torch.ones(3), batch_size=[3])
+        assert (c.x == 0).all()
+        assert (c.set == 1).all()
+
+    @pytest.mark.parametrize("subclass", [False, True])
+    def test_shadow_field_clone_deepcopy(self, subclass):
+        # #3438: copy.deepcopy called the shadow field named clone
+        if subclass:
+
+            class MyClass(TensorClass["shadow"]):
+                x: torch.Tensor
+                clone: torch.Tensor
+                name: str
+
+        else:
+
+            @tensorclass(shadow=True)
+            class MyClass:
+                x: torch.Tensor
+                clone: torch.Tensor
+                name: str
+
+        c = MyClass(x=torch.zeros(3), clone=torch.ones(3), name="graph", batch_size=[3])
+        c2 = copy.deepcopy(c)
+        assert type(c2) is MyClass
+        assert (c2.x == 0).all()
+        assert (c2.clone == 1).all()
+        assert c2.name == "graph"
+        assert c2.batch_size == torch.Size([3])
+        assert c2.x.data_ptr() != c.x.data_ptr()
+        assert c2.clone.data_ptr() != c.clone.data_ptr()
+
+    @pytest.mark.parametrize("subclass", [False, True])
+    def test_shadow_field_copy_copy(self, subclass):
+        # #3438: copy.copy called the shadow field named copy
+        if subclass:
+
+            class MyClass(TensorClass["shadow"]):
+                x: torch.Tensor
+                copy: torch.Tensor
+                name: str
+
+        else:
+
+            @tensorclass(shadow=True)
+            class MyClass:
+                x: torch.Tensor
+                copy: torch.Tensor
+                name: str
+
+        c = MyClass(x=torch.zeros(3), copy=torch.ones(3), name="graph", batch_size=[3])
+        c2 = copy.copy(c)
+        assert type(c2) is MyClass
+        assert c2 is not c
+        assert c2._tensordict is not c._tensordict
+        assert (c2.copy == 1).all()
+        assert c2.name == "graph"
+        assert c2.batch_size == torch.Size([3])
+        assert c2.x.data_ptr() == c.x.data_ptr()
+        assert c2.copy.data_ptr() == c.copy.data_ptr()
+
+    def test_clone_copy_override_used_by_copy_module(self):
+        # #3438: copy.copy and copy.deepcopy still call the class's own copy and
+        # clone methods when no field shadows them
+        calls = []
+
+        @tensorclass
+        class MyClass:
+            x: torch.Tensor
+
+            def clone(self, recurse: bool = True):
+                calls.append("clone")
+                return self._tensordict.clone(recurse).to_tensordict()
+
+            def copy(self):
+                calls.append("copy")
+                return self._tensordict.copy().to_tensordict()
+
+        c = MyClass(x=torch.zeros(3), batch_size=[3])
+        assert isinstance(copy.deepcopy(c), TensorDict)
+        assert isinstance(copy.copy(c), TensorDict)
+        assert calls == ["clone", "copy"]
+
     # A TensorClass subclass inherits TensorClass methods and properties, which
     # dataclass() used to take as the defaults of fields with the same name.
     @pytest.mark.parametrize("subclass", [False, True])
