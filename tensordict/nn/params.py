@@ -1630,6 +1630,10 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             # each leaf register it again.
             owners = {self}
             for key, new in replaced.items():
+                if key not in keys:
+                    # a registration that no leaf has any more (a leaf deleted
+                    # or renamed after registration): nothing to write back
+                    continue
                 *path, last = _unravel_key_to_tuple(keys[key])
                 parent = self
                 for part in path:
