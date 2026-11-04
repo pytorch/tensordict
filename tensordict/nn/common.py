@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import inspect
 import warnings
@@ -772,18 +773,24 @@ class TensorDictModuleBase(nn.Module):
                 "reset_parameters_recursive does not support batched TensorDicts, ensure `batch_size` is empty and the parameters shape match their original shape."
             )
 
-        sanitized_parameters = parameters.apply(
-            lambda x: x.detach().requires_grad_(
-                x.is_floating_point() or x.is_complex()
-            ),
-            inplace=False,
-        )
+        has_non_float = False
 
-        # Some resets write into buffers in place (BatchNorm's running
-        # stats), which autograd forbids on leaves that require gradients.
+        def sanitize(x):
+            nonlocal has_non_float
+            if x.is_floating_point() or x.is_complex():
+                return x.detach().requires_grad_()
+            # Only floating-point and complex tensors can require gradients.
+            has_non_float = True
+            return x.detach()
+
+        sanitized_parameters = parameters.apply(sanitize, inplace=False)
+
+        # Modules with non-float buffers, such as BatchNorm, reset their float
+        # buffers in place, which autograd forbids on leaves that require
+        # gradients.
         with (
             sanitized_parameters.to_module(self, preserve_module_state=False),
-            torch.no_grad(),
+            torch.no_grad() if has_non_float else contextlib.nullcontext(),
         ):
             self._reset_parameters(self)
         return sanitized_parameters

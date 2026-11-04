@@ -938,6 +938,38 @@ class TestTDModule:
             assert value.data_ptr() == params[key].data_ptr(), key
             torch.testing.assert_close(value, expected[key[1:]])
 
+    def test_reset_functional_float_leaves_grad_mode(self):
+        # #3462: with only floating-point leaves, custom resets still run with
+        # grad enabled, so they can use autograd or derive buffers from parameters
+        class AutogradReset(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.w = nn.Parameter(torch.ones(3))
+                self.register_buffer("scale", torch.zeros(()))
+
+            def reset_parameters(self):
+                assert torch.is_grad_enabled()
+                (grad,) = torch.autograd.grad((self.w**2).sum(), self.w)
+                with torch.no_grad():
+                    self.w.sub_(0.25 * grad)
+                self.scale = self.w.norm()
+
+            def forward(self, x):
+                return x * self.w * self.scale
+
+        module = TensorDictModule(AutogradReset(), in_keys=["x"], out_keys=["y"])
+        params = TensorDict.from_module(module).clone()
+        out = module.reset_parameters_recursive(params)
+        torch.testing.assert_close(params["module", "w"], torch.full((3,), 0.5))
+        assert out["module", "w"].requires_grad
+        assert out["module", "w"].data_ptr() == params["module", "w"].data_ptr()
+        scale = out["module", "scale"]
+        assert scale.requires_grad
+        assert scale.grad_fn is not None
+        torch.testing.assert_close(scale.detach(), torch.tensor(0.75).sqrt())
+        # the module keeps its own values
+        assert (module.module.w == 1).all()
+
     def test_reset_extra_dims(self):
         torch.manual_seed(0)
         net = nn.Sequential(nn.Linear(1, 1), nn.ReLU())
