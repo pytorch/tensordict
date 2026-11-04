@@ -6914,6 +6914,111 @@ def test_flatten_keys_context_manager_inplace_separator_in_key():
     assert set(td.keys(True, True)) == {"a", ("c", "d")}
 
 
+@pytest.mark.parametrize("op", ["flatten_keys", "unflatten_keys"])
+@pytest.mark.parametrize("keyword", [False, True])
+@pytest.mark.parametrize("locked", [False, True])
+def test_flatten_keys_context_manager_keyword_separator(op, keyword, locked):
+    # #3430: a with-block around flatten_keys(separator=...) or
+    # unflatten_keys(separator=...) undid the op with ".", so its writes were
+    # lost and a stray key appeared. The keyword form now gives the same
+    # result as the positional one.
+    td = TensorDict(a=torch.ones(2), b={"c": torch.ones(2)}, batch_size=[2])
+    if op == "unflatten_keys":
+        td = td.flatten_keys("/")
+    if locked:
+        td.lock_()
+    cm = getattr(td, op)(separator="/") if keyword else getattr(td, op)("/")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        with cm as t:
+            for key in list(t.keys(True, True)):
+                t.set(key, t.get(key) + 10)
+    if op == "flatten_keys":
+        assert set(td.keys(True, True)) == {"a", ("b", "c")}
+        assert (td.get(("b", "c")) == 11).all()
+    else:
+        assert set(td.keys(True, True)) == {"a", "b/c"}
+        assert (td.get("b/c") == 11).all()
+    assert (td.get("a") == 11).all()
+    assert td.is_locked is locked
+
+
+@pytest.mark.parametrize("locked", [False, True])
+def test_flatten_keys_context_manager_keyword_separator_in_key(locked):
+    # #3430 leaves this case as it was: a key holds the keyword separator
+    # before the block, and the with-block keeps it and its write.
+    td = TensorDict({"a/b": torch.ones(2), "z": torch.ones(2)}, batch_size=[2])
+    if locked:
+        td.lock_()
+    with td.flatten_keys(separator="/") as t:
+        for key in list(t.keys()):
+            t.set(key, t.get(key) + 10)
+    assert set(td.keys(True, True)) == {"a/b", "z"}
+    assert (td.get("a/b") == 11).all()
+    assert (td.get("z") == 11).all()
+    assert td.is_locked is locked
+
+
+def test_flatten_keys_context_manager_keyword_separator_flat():
+    # #3430 leaves flat tensordicts as they were: there the op changes nothing
+    # and the exit restores the keys exactly, also for keys added in the block
+    td = TensorDict(a=torch.ones(2), batch_size=[2])
+    with td.flatten_keys(separator="/") as t:
+        t["a/x"] = torch.zeros(2)
+        t["n.m"] = torch.zeros(2)
+    assert set(td.keys(True, True)) == {"a", "a/x", ("n", "m")}
+    td = TensorDict(a=torch.ones(2), batch_size=[2])
+    with td.unflatten_keys(separator="/") as t:
+        t["n", "m"] = torch.zeros(2)
+    assert set(td.keys(True, True)) == {"a", "n.m"}
+
+
+def test_flatten_keys_context_manager_keyword_separator_overlap():
+    # #3430 leaves this case as it was: "a_" + "__" + "b" splits back into
+    # "a" and "_b", so unflatten_keys would not undo the op.
+    td = TensorDict({"a_": {"b": torch.ones(2)}}, batch_size=[2])
+    with td.flatten_keys(separator="__") as t:
+        assert set(t.keys()) == {"a___b"}
+        t.set("a___b", t.get("a___b") + 10)
+    assert set(td.keys(True, True)) == {("a_", "b"), "a___b"}
+    assert (td.get(("a_", "b")) == 1).all()
+    assert (td.get("a___b") == 11).all()
+
+
+@pytest.mark.parametrize("keyword", [False, True])
+def test_flatten_keys_context_manager_keyword_separator_inplace(keyword):
+    # #3430 changes the non-inplace with-blocks only: with inplace=True, the
+    # keyword separator keeps the keys flat with a FutureWarning (gh-2700),
+    # and unflatten_keys leaves the keys that it left before.
+    td = TensorDict(a=torch.ones(2), b={"c": torch.ones(2)}, batch_size=[2])
+    if keyword:
+        with pytest.warns(FutureWarning, match="keys flat"):
+            with td.flatten_keys(separator="/", inplace=True):
+                pass
+        assert set(td.keys(True, True)) == {"a", "b/c"}
+    else:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            with td.flatten_keys("/", inplace=True):
+                pass
+        assert set(td.keys(True, True)) == {"a", ("b", "c")}
+
+    td = TensorDict({"a": torch.ones(2), "b/c": torch.ones(2)}, batch_size=[2])
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        if keyword:
+            with td.unflatten_keys(separator="/", inplace=True):
+                pass
+        else:
+            with td.unflatten_keys("/", inplace=True):
+                pass
+    # The flat key left next to the nested one is a separate bug of
+    # with-blocks around unflatten_keys(inplace=True); a fix for it changes
+    # this assert.
+    stray = "b.c" if keyword else "b/c"
+    assert set(td.keys(True, True)) == {"a", ("b", "c"), stray}
+
+
 @pytest.mark.parametrize("device", get_available_devices())
 def test_cat_tensors_shape_mismatch_preserves_entries(device):
     # Last dims differ, and dim=1 is not that dim, so cat raises.

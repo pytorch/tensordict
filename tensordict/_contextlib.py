@@ -82,6 +82,24 @@ def _reverse_flatten_keys(self, args, kwargs, out):
             return out.unflatten_keys(sep, inplace=True)
         # A key held the separator before the block, so unflatten_keys
         # cannot tell it from a flattened nested key: keep main's result.
+    separator = kwargs.get("separator", sep)
+    if (
+        isinstance(separator, str)
+        and separator
+        and separator != sep
+        # unflatten_keys(sep) restores a flat tensordict whose keys hold no
+        # sep exactly: keep it there
+        and any(not isinstance(key, str) or sep in key for key in out.keys(True))
+        and all(
+            separator.join(parts).split(separator) == list(parts)
+            for parts in (
+                (key,) if isinstance(key, str) else key for key in out.keys(True)
+            )
+        )
+    ):
+        # unflatten_keys undoes the op exactly: every key splits back into
+        # its own parts
+        sep = separator
     if not out.is_locked:
         return out.update(self.unflatten_keys(sep), inplace=False)
     else:
@@ -93,6 +111,19 @@ LAST_OP_MAPS["flatten_keys"] = _reverse_flatten_keys
 
 def _reverse_unflatten_keys(self, args, kwargs, out):
     sep = args[0] if args else KEY_SEPARATOR
+    separator = kwargs.get("separator", sep)
+    if (
+        isinstance(separator, str)
+        and separator
+        and separator != sep
+        and not _changed_in_place(self, out)
+        and all(isinstance(key, str) for key in out.keys(True))
+        # with no key that holds the separator, the op changed nothing and
+        # flatten_keys(sep) restores the keys exactly: keep it there
+        and any(separator in key for key in out.keys(True))
+    ):
+        # flatten_keys undoes the op exactly: no key was nested before it
+        sep = separator
     if not out.is_locked:
         return out.update(self.flatten_keys(sep), inplace=False)
     else:
