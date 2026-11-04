@@ -111,7 +111,7 @@ def _encode_level(td, prefix: tuple, tensors: dict) -> dict:
                 raise ValueError(
                     f"Two keys of the tensordict have the safetensors name {name!r}."
                 )
-            tensors[name] = value.detach().contiguous()
+            tensors[name] = value.detach().resolve_conj().resolve_neg().contiguous()
             entries[key] = {"tensor": name}
             if unbatched:
                 entries[key]["unbatched"] = True
