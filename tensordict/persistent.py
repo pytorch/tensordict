@@ -1501,6 +1501,12 @@ class PersistentTensorDict(
             out.names = names
         out._write_attrs_metadata()
         out._backend.finalize(out.file)
+        # checked once the file is written, so that a call that fails in the
+        # storage library keeps its error
+        collision = _path_collision(input_dict, backend)
+        if collision is not None:
+            out.close()
+            raise ValueError(collision)
         return out
 
     def _write_attrs_metadata(self):
@@ -2939,6 +2945,107 @@ def _set_max_batch_size(source: PersistentTensorDict):
                 return
         batch_size.append(curr_dim_size)
         curr_dim += 1
+
+
+def _leaf_keys(value, prefix=()):
+    """Yields the nested key of each leaf of a dict or a tensordict, as a tuple."""
+    if is_tensor_collection(value):
+        # keys only: items() of a lazy stack would stack every leaf
+        for key in value.keys(True, True, is_leaf=_is_leaf_nontensor):
+            yield prefix + (key if isinstance(key, tuple) else (key,))
+        return
+    for key, item in value.items():
+        key = prefix + (key if isinstance(key, tuple) else (key,))
+        if isinstance(item, dict) or (
+            is_tensor_collection(item) and not is_non_tensor(item)
+        ):
+            yield from _leaf_keys(item, key)
+        else:
+            yield key
+
+
+def _leaf_value(value, key: tuple):
+    """The value of the leaf ``key`` that :func:`_leaf_keys` yields for ``value``."""
+    if is_tensor_collection(value):
+        return value.get(key)
+    for name, item in value.items():
+        name = name if isinstance(name, tuple) else (name,)
+        if key[: len(name)] != name:
+            continue
+        rest = key[len(name) :]
+        if not rest:
+            return item
+        if isinstance(item, dict) or (
+            is_tensor_collection(item) and not is_non_tensor(item)
+        ):
+            return _leaf_value(item, rest)
+    raise KeyError(key)
+
+
+def _same_leaf_value(input_dict, key0: tuple, key1: tuple) -> bool:
+    """Whether the leaves ``key0`` and ``key1`` hold the same value (#3435)."""
+    try:
+        first = _leaf_value(input_dict, key0)
+        second = _leaf_value(input_dict, key1)
+        if first is second:
+            return True
+        if isinstance(first, torch.Tensor) and isinstance(second, torch.Tensor):
+            return (
+                first.shape == second.shape
+                and first.dtype == second.dtype
+                and first.device == second.device
+                and bool(torch.equal(first, second))
+            )
+        if is_non_tensor(first) and is_non_tensor(second):
+            return bool(first.tolist() == second.tolist())
+    except Exception:
+        return False
+    return False
+
+
+def _path_collision(input_dict, backend) -> str | None:
+    """Describes an entry that replaces another one in the file, if any (#3435).
+
+    "/" separates the groups of h5 and zarr, so the key ``"c/d"`` is written
+    where the nested key ``("c", "d")`` is. A leaf written where an earlier
+    leaf's group is replaces that group; the opposite order raises in the
+    storage library already, and is left to it.
+    """
+    if not (is_tensor_collection(input_dict) or isinstance(input_dict, dict)):
+        return None
+    keys = list(_leaf_keys(input_dict))
+    if not any(
+        isinstance(part, str) and "/" in part for key in keys for part in key
+    ) or not all(isinstance(part, str) for key in keys for part in key):
+        # no "/" in the keys, or keys that the writer rejects itself
+        return None
+    paths = {}
+    for idx, key in enumerate(keys):
+        path = tuple(part for subkey in key for part in subkey.split("/") if part)
+        if path in paths:
+            if _same_leaf_value(input_dict, paths[path][1], key):
+                # Both entries hold the same value, as after
+                # td.update(td.flatten_keys("/")): the file keeps it, under
+                # the nested key that "/" stands for.
+                continue
+            return (
+                f"The entries {paths[path][1]} and {key} were both written "
+                f"at {'/'.join(path)!r} in the {backend} file, and the second "
+                "replaced the first: '/' separates groups there. Rename one "
+                "of them."
+            )
+        paths[path] = (idx, key)
+    for path, (idx, key) in paths.items():
+        for i in range(1, len(path)):
+            prefix = paths.get(path[:i])
+            if prefix is not None and prefix[0] > idx:
+                return (
+                    f"The entry {prefix[1]} was written at "
+                    f"{'/'.join(path[:i])!r} in the {backend} file, and "
+                    f"replaced the group that holds {key}: '/' separates "
+                    "groups there. Rename one of them."
+                )
+    return None
 
 
 def _source_names(value, names=None):
