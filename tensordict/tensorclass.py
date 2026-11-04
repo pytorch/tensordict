@@ -4402,6 +4402,12 @@ def _update_nocast_fields(self, input_dict: dict, keys_to_update) -> dict:
     Python number or a NumPy scalar a 0-d tensor that does not fit the batch
     size. Returns the other entries.
     """
+    for value in input_dict.values():
+        if isinstance(value, (int, float, np.number, np.bool_)):
+            break
+    else:
+        # no number: the common case, which takes the dict path as it is
+        return input_dict
     expected_keys = type(self).__expected_keys__
     selected = (
         None
