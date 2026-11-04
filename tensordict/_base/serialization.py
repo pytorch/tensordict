@@ -578,7 +578,27 @@ class _Serialization:
                     inplace=not assign,
                 )
             else:
-                self.set(key, item, inplace=not assign)
+                retry = False
+                try:
+                    self.set(key, item, inplace=not assign)
+                except RuntimeError:
+                    # A leaf that requires grad (a parameter of from_module)
+                    # refuses the in-place copy under autograd, before
+                    # anything is written: copy into it without autograd, as
+                    # nn.Module does. Only the dict of a TensorDict is read,
+                    # as other tensordicts would read from disk or stack.
+                    leaves = getattr(self, "_tensordict", None)
+                    if (
+                        assign
+                        or not torch.is_grad_enabled()
+                        or not isinstance(leaves, dict)
+                        or not _is_leaf_requiring_grad(leaves.get(key))
+                    ):
+                        raise
+                    retry = True
+                if retry:
+                    with torch.no_grad():
+                        self.set(key, item, inplace=True)
         return self
 
     def is_memmap(self) -> bool:
@@ -2739,3 +2759,7 @@ def _update_consolidated_metadata(td, metadata: dict) -> None:
         ):
             continue
         _update_consolidated_metadata(get(key), value)
+
+
+def _is_leaf_requiring_grad(value) -> bool:
+    return isinstance(value, torch.Tensor) and value.requires_grad and value.is_leaf
