@@ -11,6 +11,7 @@ import pickle
 import socket
 import warnings
 from datetime import timedelta
+from queue import Empty
 
 import pytest
 import torch
@@ -345,6 +346,69 @@ class TestDCPDTensor:
         torch.testing.assert_close(restored["nested", "bias"], torch.arange(8.0))
 
 
+def _group_case_worker(fn, rank, port, backend, ranks, root, queue):
+    # Three ranks; fn runs on the members of new_group(ranks), or of the
+    # default group if ranks is None
+    dist.init_process_group(
+        backend,
+        rank=rank,
+        world_size=3,
+        init_method=f"tcp://localhost:{port}",
+        timeout=timedelta(seconds=TIMEOUT),
+    )
+    group = dist.new_group(ranks) if ranks is not None else None
+    members = ranks if ranks is not None else [0, 1, 2]
+    try:
+        if rank in members:
+            try:
+                queue.put((rank, fn(rank, root, members, group)))
+            except Exception as err:
+                queue.put((rank, repr(err)))
+        dist.barrier()
+    finally:
+        dist.destroy_process_group()
+
+
+def _run_group_case(fn, ranks, root, backend="gloo"):
+    """Runs fn on three ranks, on a free port, and returns {rank: result} of the members."""
+    with socket.socket() as sock:
+        sock.bind(("localhost", 0))
+        port = sock.getsockname()[1]
+    queue = mp.Queue()
+    procs = [
+        mp.Process(
+            target=_group_case_worker,
+            args=(fn, rank, port, backend, ranks, root, queue),
+        )
+        for rank in range(3)
+    ]
+    for proc in procs:
+        proc.start()
+    results = {}
+    try:
+        for _ in range(3 if ranks is None else len(ranks)):
+            rank, out = queue.get(timeout=TIMEOUT)
+            results[rank] = out
+    except Empty:
+        pass  # a rank hangs: the results miss it
+    finally:
+        for proc in procs:
+            proc.join(TIMEOUT if len(results) == len(ranks or range(3)) else 0)
+            if proc.is_alive():
+                proc.kill()
+    return results
+
+
+# (ranks of the group, global rank of the root): the default group, a group
+# whose ranks match the global ones, and a group whose ranks don't (#3463)
+_GROUP_CASES = [
+    pytest.param(None, 2, id="default-root2"),
+    pytest.param([0, 2], 0, id="group02-root0"),
+    pytest.param([1, 2], 1, id="group12-root1"),
+    pytest.param([1, 2], 2, id="group12-root2"),
+]
+
+
 class TestGather:
     @staticmethod
     def client(memmap_filename):
@@ -469,6 +533,29 @@ class TestGather:
         finally:
             for worker in workers:
                 worker.join(timeout=TIMEOUT)
+
+    @staticmethod
+    def group_case(rank, root, members, group):
+        if rank == root:
+            out = TensorDict(
+                a=torch.zeros(len(members) - 1, 2), batch_size=[len(members) - 1]
+            )
+            assert out.gather_and_stack(dst=root, group=group) is out
+            return out["a"].tolist()
+        td = TensorDict(a=torch.full((2,), float(rank)), batch_size=[2])
+        return td.gather_and_stack(dst=root, group=group)
+
+    # #3463: dst is a global rank, in a group too. With "cpu:gloo", the
+    # tensordicts go through gather_object.
+    @pytest.mark.timeout(2 * TIMEOUT)
+    @pytest.mark.parametrize("backend", ["gloo", "cpu:gloo"])
+    @pytest.mark.parametrize("ranks,root", _GROUP_CASES)
+    def test_gather_and_stack_group(self, set_context, backend, ranks, root):
+        results = _run_group_case(type(self).group_case, ranks, root, backend)
+        members = ranks if ranks is not None else [0, 1, 2]
+        expected = {rank: None for rank in members}
+        expected[root] = [[float(rank)] * 2 for rank in members if rank != root]
+        assert results == expected
 
     @staticmethod
     def not_in_memory_worker(queue, rank, source, port, path):
@@ -1456,6 +1543,24 @@ class TestInitRemoteBroadcast:
             secondary_worker.join(timeout=TIMEOUT)
             assert out == "yuppie"
 
+    @staticmethod
+    def group_case(rank, root, members, group):
+        if rank == root:
+            td = TensorDict(a=torch.full((2,), float(root)))
+            return td.init_remote(group=group, use_broadcast=True)
+        td = TensorDict.from_remote_init(src=root, group=group, use_broadcast=True)
+        return td["a"].tolist()
+
+    # #3463: the sender broadcasts from its global rank, in a group too
+    @pytest.mark.timeout(2 * TIMEOUT)
+    @pytest.mark.parametrize("ranks,root", _GROUP_CASES)
+    def test_init_remote_broadcast_group(self, set_context, ranks, root):
+        results = _run_group_case(type(self).group_case, ranks, root)
+        members = ranks if ranks is not None else [0, 1, 2]
+        expected = {rank: [float(root)] * 2 for rank in members}
+        expected[root] = None
+        assert results == expected
+
 
 class TestAllGather:
     port = "29510"
@@ -1872,6 +1977,25 @@ class TestBroadcast:
             secondary_worker.join(timeout=TIMEOUT)
             assert out == "yuppie"
 
+    @staticmethod
+    def group_case(rank, root, members, group):
+        td = (
+            TensorDict(a=torch.full((2,), float(root)))
+            if rank == root
+            else TensorDict()
+        )
+        result = td.broadcast(src=root, group=group)
+        assert result.is_consolidated()
+        return result["a"].tolist()
+
+    # #3463: src is a global rank, in a group too
+    @pytest.mark.timeout(2 * TIMEOUT)
+    @pytest.mark.parametrize("ranks,root", _GROUP_CASES)
+    def test_broadcast_group(self, set_context, ranks, root):
+        results = _run_group_case(type(self).group_case, ranks, root)
+        members = ranks if ranks is not None else [0, 1, 2]
+        assert results == {rank: [float(root)] * 2 for rank in members}
+
 
 class TestScatter:
     port = "29511"
@@ -1913,6 +2037,24 @@ class TestScatter:
             main_worker.join(timeout=TIMEOUT)
             secondary_worker.join(timeout=TIMEOUT)
             assert out == "yuppie"
+
+    @staticmethod
+    def group_case(rank, root, members, group):
+        tds = None
+        if rank == root:
+            tds = [TensorDict(a=torch.full((2,), float(r))) for r in members]
+        return (
+            TensorDict().scatter(src=root, tensordicts=tds, group=group)["a"].tolist()
+        )
+
+    # #3463: src is a global rank, in a group too; tensordicts are in the
+    # order of the group ranks
+    @pytest.mark.timeout(2 * TIMEOUT)
+    @pytest.mark.parametrize("ranks,root", _GROUP_CASES)
+    def test_scatter_group(self, set_context, ranks, root):
+        results = _run_group_case(type(self).group_case, ranks, root)
+        members = ranks if ranks is not None else [0, 1, 2]
+        assert results == {rank: [float(rank)] * 2 for rank in members}
 
 
 class TestSendConsolidated:

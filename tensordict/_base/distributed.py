@@ -103,7 +103,8 @@ class _Distributed:
         Use it only with ranks you trust. See :ref:`distributed-collectives`.
 
         Args:
-            dst (int): the rank that receives the stack.
+            dst (int): the global rank that receives the stack, as in
+                :func:`torch.distributed.gather`.
             group (torch.distributed.ProcessGroup, optional): the process group.
                 Defaults to ``None``, the default process group.
 
@@ -130,13 +131,15 @@ class _Distributed:
         from torch import distributed as dist
 
         world_size = dist.get_world_size(group=group)
-        rank = dist.get_rank(group=group)
+        # dst is a global rank, as in torch.distributed
+        rank = dist.get_rank()
         if dist.get_backend(group) != dist.Backend.GLOO:
             output = [None for _ in range(world_size)] if dst == rank else None
             dist.gather_object(self, output, dst=dst, group=group)
             if dst == rank:
                 # remove self from output
-                output = [item for i, item in enumerate(output) if i != dst]
+                group_dst = dist.get_group_rank(group or dist.group.WORLD, dst)
+                output = [item for i, item in enumerate(output) if i != group_dst]
         else:
             # Gloo gathers CPU tensors. As gather_object does, gather the size of
             # a byte buffer from every rank, then the buffers padded to the
@@ -191,9 +194,10 @@ class _Distributed:
             )
             dist.gather(buffer, gathered, dst=dst, group=group)
             if rank == dst:
+                group_dst = dist.get_group_rank(group or dist.group.WORLD, dst)
                 output = []
                 for i, (h, received) in enumerate(zip(headers, gathered)):
-                    if i == dst:
+                    if i == group_dst:
                         continue
                     kind, storage_size, size = h.tolist()
                     if kind == _GATHER_STORAGE:
@@ -557,7 +561,7 @@ class _Distributed:
         ``from_remote_init(src=..., use_broadcast=True)``.
 
         Args:
-            dst (int, optional): the rank of the receiver. Required unless
+            dst (int, optional): the global rank of the receiver. Required unless
                 ``use_broadcast=True``, which ignores it. Defaults to ``None``.
             group (torch.distributed.ProcessGroup, optional): the process group.
                 Defaults to ``None``, the default process group.
@@ -590,7 +594,7 @@ class _Distributed:
                         print(td["obs"][0, 0])  # tensor(2.)
         """
         if use_broadcast:
-            rank = torch.distributed.get_rank(group=group)
+            rank = torch.distributed.get_rank()
             self.broadcast(
                 src=rank,
                 group=group,
@@ -630,7 +634,7 @@ class _Distributed:
         trust. See :meth:`~.init_remote` for an example, and :ref:`distributed`.
 
         Args:
-            src (int): the rank of the sender.
+            src (int): the global rank of the sender.
             group (torch.distributed.ProcessGroup, optional): the process group.
                 Defaults to ``None``, the default process group.
             device (torch.device, str or int, optional): the device of the result.
@@ -1152,7 +1156,8 @@ class _Distributed:
         :ref:`distributed-collectives`.
 
         Args:
-            src (int): the rank that sends its tensordict.
+            src (int): the global rank that sends its tensordict, as in
+                :func:`torch.distributed.broadcast`.
 
         Keyword Args:
             group (torch.distributed.ProcessGroup, optional): the process group.
@@ -1185,7 +1190,8 @@ class _Distributed:
         from tensordict._reductions import _rebuild_tensordict_files_consolidated
         from torch import distributed as dist
 
-        rank = dist.get_rank(group=group)
+        # src is a global rank, as in torch.distributed
+        rank = dist.get_rank()
         if rank == src:
             kwargs = {"metadata": True}
             if device is not None:

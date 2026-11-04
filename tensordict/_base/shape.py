@@ -3162,7 +3162,8 @@ class _ShapeOps:
         the method is called on is not used. See :ref:`distributed`.
 
         Args:
-            src (int): the rank of the source process.
+            src (int): the global rank of the source process, as in
+                :func:`torch.distributed.scatter`.
             tensordicts (list of TensorDictBase, optional): on the source rank,
                 the tensordicts to scatter, one per rank. Ignored on the other
                 ranks. Defaults to ``None``.
@@ -3180,7 +3181,8 @@ class _ShapeOps:
         from tensordict._reductions import _rebuild_tensordict_files_consolidated
         from torch import distributed as dist
 
-        rank = dist.get_rank(group=group)
+        # src is a global rank, as in torch.distributed
+        rank = dist.get_rank()
         world_size = dist.get_world_size(group=group)
 
         if rank == src:
