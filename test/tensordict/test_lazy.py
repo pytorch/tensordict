@@ -4017,6 +4017,22 @@ class TestLazyStackedTensorDict:
         assert t["a"][:, 0].tolist() == expected
         assert [m["a"].data_ptr() for m in t.tensordicts] == ptrs
 
+    @pytest.mark.parametrize("keys_to_update", [None, ["a"]])
+    def test_update_from_reordered_read_member_into_itself(self, keys_to_update):
+        # #3444: a member that is its own piece of a reordered read is written
+        # as before: with keys_to_update, its leaf is not copied into itself,
+        # so a graph that saved the leaf still runs backward
+        w = torch.ones(2, requires_grad=True)
+        t = lazy_stack([TensorDict(a=torch.full((2,), float(i)) * w) for i in range(4)])
+        leaf = t.tensordicts[3]["a"]
+        version = leaf._version
+        y = (leaf * w).sum()
+        t.update_(t[torch.tensor([1, 2, 3, 3])], keys_to_update=keys_to_update)
+        assert t["a"][:, 0].tolist() == [1.0, 2.0, 3.0, 3.0]
+        if keys_to_update is not None:
+            assert leaf._version == version
+            y.backward()
+
     @pytest.mark.parametrize("stack_dim", [0, 1, 2])
     @pytest.mark.parametrize(
         "index", [(..., 0), (0, ..., 1), (..., [1, 0]), (..., None)]

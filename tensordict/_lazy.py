@@ -5019,16 +5019,29 @@ class LazyStackedTensorDict(TensorDictBase):
             input_dict_or_td = TensorDict.from_dict(
                 input_dict_or_td, batch_dims=self.batch_dims
             )
-        elif isinstance(input_dict_or_td, LazyStackedTensorDict) and _reorders_members(
-            input_dict_or_td.tensordicts, self.tensordicts
-        ):
+        reorders = isinstance(
+            input_dict_or_td, LazyStackedTensorDict
+        ) and _reorders_members(input_dict_or_td.tensordicts, self.tensordicts)
+        pieces = self._update_pieces(input_dict_or_td)
+        if reorders:
             # The members are written one after another. A source that holds
             # the members in another order, as a read of this stack such as
             # td[perm] does, would give a later member a value that an
-            # earlier one overwrote (#3444). Only the tensors are copied: the
-            # non-tensor data is written by reference, as for other sources.
-            input_dict_or_td = input_dict_or_td.apply(lambda x: x.clone())
-        pieces = self._update_pieces(input_dict_or_td)
+            # earlier one overwrote (#3444): copy the pieces first. A member
+            # that is its own piece is not copied, so that it is written as
+            # before. Only the tensors are copied: the non-tensor data is
+            # written by reference, as for other sources.
+            if len(pieces) == len(input_dict_or_td.tensordicts) and all(
+                map(operator.is_, pieces, input_dict_or_td.tensordicts)
+            ):
+                pieces = [
+                    piece if piece is dest else piece.apply(lambda x: x.clone())
+                    for piece, dest in zip(pieces, self.tensordicts)
+                ]
+            else:
+                pieces = self._update_pieces(
+                    input_dict_or_td.apply(lambda x: x.clone())
+                )
         if keys_to_update is None:
             plans = self._member_plans(pieces, non_blocking)
         else:
