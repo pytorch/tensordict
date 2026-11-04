@@ -7851,6 +7851,82 @@ class TestLazyStackedTensorDict:
         assert lazy.update_at_({"a": torch.full((3,), 6.0)}, (1, Ellipsis)) is lazy
         assert (lazy[1]["a"] == 6).all()
 
+    @pytest.mark.parametrize(
+        "layout", ["dim0", "dim1", "ragged", "nested", "nested_dim1"]
+    )
+    @pytest.mark.parametrize("lead", [[1], [1, 1]])
+    @pytest.mark.parametrize(
+        "kwargs", [{}, {"keys_to_update": [("n", "b")]}, {"clone": True}]
+    )
+    def test_lazy_update_at_element_leading_ones(self, layout, lead, kwargs):
+        # #3498: a value for one element with leading dims of size 1 raised
+        # RuntimeError, while TensorDict.update_at_ and 0.14.3 write it
+        def member(n):
+            return TensorDict(
+                a=torch.zeros(n, 1),
+                n=TensorDict(b=torch.zeros(n, 2), batch_size=[n]),
+                batch_size=[n],
+            )
+
+        if layout == "dim0":
+            lazy, index = lazy_stack([member(3), member(3)]), (1, 2)
+        elif layout == "dim1":
+            lazy, index = lazy_stack([member(3), member(3)], 1), (2, 1)
+        elif layout == "ragged":
+            lazy, index = lazy_stack([member(n) for n in (2, 3, 1)]), (1, 2)
+        elif layout == "nested":
+            lazy = lazy_stack([lazy_stack([member(3), member(3)]) for _ in range(2)])
+            index = (1, 0, 2)
+        else:
+            lazy = lazy_stack([lazy_stack([member(3), member(3)], 1) for _ in range(2)])
+            index = (1, 2, 0)
+        value = TensorDict(
+            a=torch.full((*lead, 1), 5.0),
+            n=TensorDict(b=torch.full((*lead, 2), 7.0), batch_size=lead),
+            batch_size=lead,
+        )
+        if layout == "ragged":
+            dense = member(3)
+            dense.update_at_(value, index[1], **kwargs)
+            assert lazy.update_at_(value, index, **kwargs) is lazy
+            assert (lazy.tensordicts[1] == dense).all()
+            assert (lazy.tensordicts[0] == 0).all()
+            assert (lazy.tensordicts[2] == 0).all()
+        else:
+            dense = lazy.to_tensordict()
+            dense.update_at_(value, index, **kwargs)
+            assert lazy.update_at_(value, index, **kwargs) is lazy
+            assert (lazy.to_tensordict() == dense).all()
+
+    def test_lazy_update_at_element_leading_ones_unchanged(self):
+        # #3498: only leading dims of size 1 are dropped, and only for a value
+        # for one element
+        lazy = lazy_stack(
+            [TensorDict(a=torch.zeros(3, 1), batch_size=[3]) for _ in range(2)]
+        )
+        # a value with the batch size of the element writes as before
+        lazy.update_at_(TensorDict(a=torch.ones(1)), (1, 0))
+        assert lazy["a"][:, :, 0].tolist() == [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]
+        # and a value that does not broadcast to it still raises
+        with pytest.raises(RuntimeError):
+            lazy.update_at_(TensorDict(a=torch.ones(2, 1), batch_size=[2]), (1, 0))
+        with pytest.raises(RuntimeError):
+            lazy.update_at_(
+                TensorDict(a=torch.ones(1, 2, 1), batch_size=[1, 2]), (1, 0)
+            )
+
+    def test_lazy_update_at_element_leading_ones_non_tensor(self):
+        # #3498: an element of a NonTensorStack takes a NonTensorData with a
+        # leading dim of size 1 without the FutureWarning of an internal expand
+        stack = NonTensorStack(
+            NonTensorStack(*[NonTensorData("x") for _ in range(3)]),
+            NonTensorStack(*[NonTensorData("y") for _ in range(3)]),
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            stack.update_at_(NonTensorData("z", batch_size=[1]), (1, 0))
+        assert stack.tolist() == [["x", "x", "x"], ["z", "y", "y"]]
+
     def test_lazy_update_longer_source(self):
         # A source with more members along the stack dim: with
         # update_batch_size=True, the members of self are updated and copies
