@@ -1546,6 +1546,151 @@ class TestAllReduce:
                 w.join(timeout=TIMEOUT)
             assert out == "yuppie"
 
+    @staticmethod
+    def make_keyed(scale, reverse):
+        # Each leaf holds its own number times scale; with reverse, every
+        # tensordict sets its keys in the reverse order.
+        def build(spec):
+            items = reversed(spec) if reverse else spec
+            return TensorDict(
+                {
+                    key: build(value)
+                    if isinstance(value, list)
+                    else value * scale
+                    if isinstance(value, torch.Tensor)
+                    else value
+                    for key, value in items
+                },
+                batch_size=[2],
+            )
+
+        def member(i, het):
+            spec = [("a", torch.full((2,), i + 1.0)), ("n", [("q", torch.ones(2))])]
+            if het:
+                spec.append(("b" if i % 2 else "c", torch.full((2,), 100.0 + i)))
+            return build(spec)
+
+        def stack(n, het, stack_dim=0):
+            return LazyStackedTensorDict(
+                *(member(i, het) for i in range(n)), stack_dim=stack_dim
+            )
+
+        dense = build(
+            [
+                ("a", torch.ones(2)),
+                ("b", torch.full((2,), 10.0)),
+                ("n", [("x", torch.full((2,), 1000.0)), ("y", torch.full((2,), 1e4))]),
+                ("c", torch.full((2,), 100.0)),
+            ]
+        )
+        return {
+            "dense": dense,
+            # 11 members, so that "10" sorts before "2"; exclusive keys
+            "lazy": stack(11, het=True),
+            "lazy_stack_dim_1": stack(3, het=True, stack_dim=1),
+            "lazy_of_lazy": LazyStackedTensorDict(
+                stack(2, het=True), stack(2, het=False)
+            ),
+            "dense_of_lazy": build([("z", torch.ones(2)), ("s", stack(2, het=True))]),
+        }
+
+    @staticmethod
+    def assert_same(td, expected, path=()):
+        # Compares the members of lazy stacks one by one, and the keys of
+        # every tensordict whatever their order.
+        assert type(td) is type(expected), path
+        if isinstance(td, LazyStackedTensorDict):
+            assert td.stack_dim == expected.stack_dim, path
+            assert len(td.tensordicts) == len(expected.tensordicts), path
+            for i, (sub, sub_expected) in enumerate(
+                zip(td.tensordicts, expected.tensordicts)
+            ):
+                TestAllReduce.assert_same(sub, sub_expected, path + (i,))
+            return
+        assert set(td.keys()) == set(expected.keys()), path
+        for key, value in expected.items():
+            if isinstance(value, torch.Tensor):
+                assert torch.equal(td.get(key), value), path + (key,)
+            else:
+                TestAllReduce.assert_same(td.get(key), value, path + (key,))
+
+    @staticmethod
+    def key_order_worker(queue, rank, port):
+        dist.init_process_group(
+            "gloo",
+            rank=rank,
+            world_size=2,
+            init_method=f"tcp://localhost:{port}",
+            timeout=timedelta(seconds=TIMEOUT),
+        )
+        errors = []
+        try:
+            # Rank 1 sets the keys in the reverse order ("reorder"), or in the
+            # same order as rank 0 ("same"). The sum over the two ranks has
+            # the values of scale 3 on both ranks.
+            for order in ("same", "reorder"):
+                reverse = order == "reorder" and rank == 1
+                expected = TestAllReduce.make_keyed(3, reverse=False)
+                for bucket_bytes in (None, 64, 2**20):
+                    for async_op in (False, True):
+                        tds = TestAllReduce.make_keyed(rank + 1, reverse)
+                        for name, td in tds.items():
+                            case = (order, name, bucket_bytes, async_op)
+                            try:
+                                works = td.all_reduce(
+                                    async_op=async_op, bucket_bytes=bucket_bytes
+                                )
+                                for work in works or ():
+                                    work.wait()
+                                TestAllReduce.assert_same(td, expected[name])
+                            except Exception as err:
+                                errors.append((case, repr(err)))
+            # After a broadcast, the receivers hold the keys in another order
+            # than the sender: a, n.b, c on rank 0 and a, c, n.b on rank 1.
+            if rank == 0:
+                td = TensorDict(
+                    a=torch.zeros(2), n=TensorDict(b=torch.zeros(2)), c=torch.zeros(2)
+                )
+            else:
+                td = TensorDict()
+            td = td.broadcast(src=0)
+            td["a"].fill_(1.0 * (rank + 1))
+            td["n", "b"].fill_(10.0 * (rank + 1))
+            td["c"].fill_(100.0 * (rank + 1))
+            td.all_reduce()
+            values = {key: td[key].tolist() for key in ("a", ("n", "b"), "c")}
+            if values != {"a": [3.0] * 2, ("n", "b"): [30.0] * 2, "c": [300.0] * 2}:
+                errors.append(("broadcast", values))
+        except Exception as err:
+            errors.append(repr(err))
+        finally:
+            queue.put(errors)
+            dist.destroy_process_group()
+
+    # #3464: all_reduce pairs the leaves of the ranks by key, whatever the
+    # order in which each rank set them. Same-order inputs and lazy stacks
+    # (11 members, stack_dim=1, nested) keep their results.
+    def test_all_reduce_key_order(self, set_context):
+        with socket.socket() as sock:
+            sock.bind(("localhost", 0))
+            port = sock.getsockname()[1]
+        queue = mp.Queue(2)
+        workers = [
+            mp.Process(target=type(self).key_order_worker, args=(queue, rank, port))
+            for rank in range(2)
+        ]
+        for w in workers:
+            w.start()
+        try:
+            out = [queue.get(timeout=TIMEOUT) for _ in workers]
+        finally:
+            queue.close()
+            for w in workers:
+                w.join(timeout=TIMEOUT)
+                if w.is_alive():
+                    w.kill()
+        assert out == [[], []]
+
 
 class TestBucketedReduce:
     @staticmethod

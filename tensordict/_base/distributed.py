@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import functools
 import io
+import operator
 import pickle
 from typing import List, TYPE_CHECKING
 
@@ -1287,21 +1288,28 @@ class _Distributed:
                 dist.all_reduce(value, op=op, group=group, async_op=async_op)
             )
 
+        # Pair the leaves of the ranks by key, not by insertion order, which can
+        # differ between ranks (for example after a broadcast). The keys are
+        # tuples of str (a lazy stack names its members "0", "1", ...), so
+        # sorting them never compares the leaves.
+        leaves = []
+        self._fast_apply(
+            lambda key, value: leaves.append(
+                (key if type(key) is tuple else (key,), value)
+            ),
+            named=True,
+            nested_keys=True,
+            is_leaf=_NESTED_TENSORS_AS_LISTS,
+        )
+        leaves.sort(key=operator.itemgetter(0))
         if bucket_bytes is None:
-            self._fast_apply(
-                _all_reduce,
-                is_leaf=_NESTED_TENSORS_AS_LISTS,
-            )
+            for _, value in leaves:
+                _all_reduce(value)
             if async_op:
                 return futures
             return
-        leaves = []
-        self._fast_apply(
-            lambda value: leaves.append((value, None)),
-            is_leaf=_NESTED_TENSORS_AS_LISTS,
-        )
         futures = _bucketed_collective(
-            leaves,
+            [(value, None) for _, value in leaves],
             bucket_bytes,
             lambda flat: dist.all_reduce(flat, op=op, group=group, async_op=async_op),
             async_op,
