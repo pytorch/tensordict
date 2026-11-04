@@ -2326,6 +2326,36 @@ class TestNonTensorData:
         old = torch.utils._pytree.tree_map(lambda v: "old", rows)
         assert values in (old, rows)
 
+    @pytest.mark.parametrize("write", ["update_", "copy_", "update_at_"])
+    @pytest.mark.parametrize("kind", ["metadata", "typed_metadata", "subclass"])
+    def test_update__stack_into_data_subclass(self, kind, write):
+        # #3501: a MetaData, typed or not, or an entry of another subclass of
+        # NonTensorData either keeps its type and its value or holds the rows
+        # of the source, and the tensors are written without an error
+        class NonTensorDataSubclass(NonTensorData):
+            pass
+
+        cls = {
+            "metadata": MetaData,
+            "typed_metadata": MetaData[str],
+            "subclass": NonTensorDataSubclass,
+        }[kind]
+        td = TensorDict(x=torch.zeros(3), batch_size=[3])
+        td.set("s", cls("old", batch_size=[3]))
+        source = TensorDict(
+            x=torch.ones(3), s=NonTensorStack("a", "b", "c"), batch_size=[3]
+        )
+        if write == "update_at_":
+            td.update_at_(source, ())
+        else:
+            getattr(td, write)(source)
+        assert (td["x"] == 1).all()
+        entry = td.get("s")
+        if type(entry) is cls:
+            assert entry.tolist() == ["old"] * 3
+        else:
+            assert entry.tolist() == ["a", "b", "c"]
+
     @pytest.mark.parametrize(
         "value",
         [

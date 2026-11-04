@@ -7704,9 +7704,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             # _items_list leaves out the non-tensor leaves: copy them here.
             # Like the tensor leaves, keys missing in self are skipped.
             # copy_ raises for a NonTensorStack into a NonTensorData: these
-            # leaves are skipped, except that a row which differs from the
-            # value of a TensorDict in memory is written as
-            # update_at_(value, slice(None)) writes it (#3501).
+            # leaves are skipped, except that the rows are written as
+            # update_at_(value, slice(None)) writes them when one differs from
+            # the value of a plain NonTensorData in a TensorDict in memory
+            # (#3501).
             skipped = []
 
             def inplace_update(name, source, dest):
@@ -7720,20 +7721,18 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                         return
                     inner = dest._tensordict
                     if (
-                        type(dest) is NonTensorData
-                        and type(inner) is _TENSORDICT_TYPE
-                        and not inner._tensordict
+                        type(dest) is not NonTensorData
+                        or type(inner) is not _TENSORDICT_TYPE
+                        or inner._tensordict
+                        or inner._is_shared
+                        or inner._is_memmap
                     ):
-                        # dest._is_shared, dest._is_memmap and dest.data
-                        # without the getters
-                        if inner._is_shared or inner._is_memmap:
-                            return
-                        value = dest._non_tensordict.get("data", _UNSET)
-                        if value is _UNSET:
-                            value = dest.data
-                    else:
-                        if dest._is_shared or dest._is_memmap:
-                            return
+                        # a MetaData or another subclass keeps its type, and a
+                        # shared or memory-mapped entry its storage
+                        return
+                    # what dest.data returns, without the field getter
+                    value = dest._non_tensordict.get("data", _UNSET)
+                    if value is _UNSET:
                         value = dest.data
                     if (
                         type(value) in _ROW_FAMILY
