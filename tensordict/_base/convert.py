@@ -325,7 +325,15 @@ def _restore_module(swap, args, kwargs, out):
     """
     hooks = torch.nn.modules.module._global_parameter_registration_hooks
     memo = {"hooks": tuple(hooks.values())}
-    current = swap._to_module(*args, **{**kwargs, "memo": memo}, swap_dest={})
+    # ``swap`` holds what the module held before the block: write it back as
+    # it is. Preserving the state of the slots would wrap an original
+    # parameter in a new one when its slot holds a vmap slice or a tensor
+    # that requires gradients, whose ``requires_grad`` is not the module's.
+    current = swap._to_module(
+        *args,
+        **{**kwargs, "memo": memo, "preserve_module_state": False},
+        swap_dest={},
+    )
     if not isinstance(current, dict):
         return current
     seen = {} if "shared" in memo else None

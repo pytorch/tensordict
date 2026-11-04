@@ -8601,6 +8601,59 @@ class TestToModule:
         for target in grad_targets:
             assert target.grad is not None
 
+    @pytest.mark.parametrize("preserve_module_state", [True, False])
+    def test_to_module_vmap_restores_parameters(self, as_module, preserve_module_state):
+        # #3461: leaving the block under vmap gives the module back its own
+        # parameters, which still require grad
+        module = nn.Linear(3, 4)
+        weight, bias = module.weight, module.bias
+        params = TensorDict.from_modules(
+            nn.Linear(3, 4), nn.Linear(3, 4), as_module=as_module
+        )
+
+        def call(p, x):
+            with p.to_module(module, preserve_module_state=preserve_module_state):
+                return module(x)
+
+        torch.vmap(call, (0, None))(params, torch.randn(3))
+        assert module.weight is weight
+        assert module.bias is bias
+        assert module.weight.requires_grad is True
+        assert module.bias.requires_grad is True
+
+    def test_to_module_context_manager_keeps_frozen_parameter(self, as_module):
+        # #3461: tensors that require grad do not unfreeze a frozen weight
+        # when the block exits
+        module = nn.Linear(3, 4)
+        module.weight.requires_grad_(False)
+        weight, bias = module.weight, module.bias
+        params = TensorDict.from_module(module, as_module=as_module)
+        params = params.apply(lambda p: p.detach().requires_grad_() * 1)
+        with params.to_module(module):
+            module(torch.randn(3)).sum().backward()
+        assert module.weight is weight
+        assert module.bias is bias
+        assert module.weight.requires_grad is False
+        assert module.bias.requires_grad is True
+
+    def test_to_module_context_manager_parameter_source_restores(self, as_module):
+        # Parameters that require grad, swapped into a frozen layer, are
+        # wrapped on entry and the originals come back on exit (unchanged by #3461)
+        module = nn.Linear(3, 4)
+        module.weight.requires_grad_(False)
+        weight, bias = module.weight, module.bias
+        params = TensorDictParams(
+            TensorDict.from_module(module, as_module=as_module).data.clone()
+        )
+        with params.to_module(module):
+            assert isinstance(module.weight, nn.Parameter)
+            assert module.weight.requires_grad is False
+            assert module.bias is params["bias"]
+        assert module.weight is weight
+        assert module.bias is bias
+        assert module.weight.requires_grad is False
+        assert module.bias.requires_grad is True
+
     def test_to_module_context_manager_restores_on_error(self, as_module):
         # The module gets its original parameters back also when the body raises
         module = nn.Linear(4, 2)

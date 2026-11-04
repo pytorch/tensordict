@@ -359,7 +359,12 @@ def _reverse_to_module(self, args, kwargs, out):
             if not is_compiling() and out is not None
             else contextlib.nullcontext()
         ):
-            return self.to_module(*args, **kwargs, swap_dest=out)
+            # Write back what the module held, as _restore_module does.
+            return self.to_module(
+                *args,
+                **{**kwargs, "preserve_module_state": False},
+                swap_dest=out,
+            )
     except AttributeError:
         # This is a bit unsafe but we assume that out won't have an unlock_() if it's not a TD
         raise RuntimeError(
