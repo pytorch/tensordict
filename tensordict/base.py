@@ -183,6 +183,8 @@ NO_DEFAULT = _NoDefault.ZERO
 # Unlike NO_DEFAULT (which triggers KeyError in get()), _UNSET can be returned by get()
 # to indicate a missing key. This makes pop() compatible with torch.compile.
 _UNSET = object()
+# Tests turn this off to compare _index_tensordict with its generic path.
+_INDEX_EXACT_TENSOR_SHORTCUT = True
 
 T = TypeVar("T", bound="TensorCollection")
 
@@ -12168,8 +12170,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             names = self._get_names_idx(index)
 
         source = {}
+        # perf: in eager mode an exact Tensor, which is neither unbatched nor a
+        # TensorDict, goes straight to _get_item. is_compiling() is read once,
+        # and first, so that a compiled call gets no guards on the leaf types.
+        eager = not is_compiling() and _INDEX_EXACT_TENSOR_SHORTCUT
         for key, item in self.items():
-            if _is_unbatched(item):
+            if eager and type(item) is Tensor:
+                source[key] = _get_item(item, index)
+            elif _is_unbatched(item):
                 source[key] = _unbatched_with_batch_size(item, batch_size)
             elif isinstance(item, TensorDict):
                 # this is the simplest case, we can pre-compute the batch size easily

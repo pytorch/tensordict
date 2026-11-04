@@ -27,14 +27,21 @@ import functools
 import itertools
 import json
 import pathlib
+import re
+import warnings
 
 import numpy as np
 import pytest
+import tensordict.base
 import torch
 from _utils_internal import _describe, check_known_failures, TestTensorDictsBase
 from tensordict import lazy_stack, TensorDict, UnbatchedTensor
+from tensordict._lazy import LazyStackedTensorDict
+from tensordict.base import is_tensor_collection
+from tensordict.nn import TensorDictParams
 from tensordict.store import LazyStackedTensorDictStore, TensorDictStore
 from tensordict.store._store import _has_redis
+from tensordict.tensorclass import NonTensorData, NonTensorStack, tensorclass
 
 _KNOWN_FAILURES_FILE = pathlib.Path(__file__).with_name("indexing_known_failures.json")
 _KNOWN_FAILURES = json.loads(_KNOWN_FAILURES_FILE.read_text())
@@ -273,6 +280,161 @@ class TestTensorDictMatchesTorch:
         _check_known_failures(f"TensorDict names {batch_size}", failures)
 
 
+@tensorclass
+class _ShortcutTC:
+    x: torch.Tensor
+
+
+def _shortcut_nested():
+    r = torch.randn
+    return TensorDict(
+        {
+            "a": r(4, 3, 2),
+            "b": torch.randint(5, (4, 3)),
+            "n": {"c": r(4, 3, 2, 2), "d": {"e": r(4, 3)}},
+            "z": r(4, 3, 1),
+        },
+        [4, 3],
+    )
+
+
+# tensordicts with each type of entry, for the exact-Tensor shortcut of #3458
+_SHORTCUT_TDS = {
+    "nested": _shortcut_nested,
+    "1-d": lambda: TensorDict(a=torch.randn(4), b=torch.randn(4, 2), batch_size=[4]),
+    "0-d": lambda: TensorDict(a=torch.randn(2)),
+    "names": lambda: TensorDict(
+        {"a": torch.randn(4, 3), "n": {"c": torch.randn(4, 3)}},
+        [4, 3],
+        names=["x", "y"],
+    ),
+    "device": lambda: TensorDict(
+        {"a": torch.randn(4, 3), "n": {"c": torch.randn(4, 3)}}, [4, 3], device="cpu"
+    ),
+    "non-tensor": lambda: TensorDict(
+        {
+            "a": torch.randn(4, 3),
+            "s": NonTensorData("x", batch_size=[4, 3]),
+            "t": NonTensorStack(*[NonTensorStack(*"abc") for _ in range(4)]),
+        },
+        [4, 3],
+    ),
+    "unbatched": lambda: TensorDict(
+        a=torch.randn(4, 3), u=UnbatchedTensor(torch.randn(5)), batch_size=[4, 3]
+    ),
+    "parameter": lambda: TensorDict(
+        a=torch.nn.Parameter(torch.randn(4, 3)), b=torch.randn(4, 3), batch_size=[4, 3]
+    ),
+    "requires grad": lambda: TensorDict(
+        a=torch.randn(4, 3, requires_grad=True) * 2,
+        b=torch.randn(4, 3),
+        batch_size=[4, 3],
+    ),
+    "lazy stack": lambda: TensorDict(
+        a=torch.randn(4, 3),
+        l=lazy_stack(
+            [TensorDict(x=torch.randn(3, 2), batch_size=[3]) for _ in range(4)]
+        ),
+        batch_size=[4, 3],
+    ),
+    "tensorclass": lambda: TensorDict(
+        a=torch.randn(4, 3),
+        t=_ShortcutTC(x=torch.randn(4, 3, 2), batch_size=[4, 3]),
+        batch_size=[4, 3],
+    ),
+    "jagged": lambda: TensorDict(
+        j=torch.nested.nested_tensor(
+            [torch.randn(2), torch.randn(3), torch.randn(1), torch.randn(4)],
+            layout=torch.jagged,
+        ),
+        a=torch.randn(4),
+        batch_size=[4],
+    ),
+    "locked": lambda: _shortcut_nested().lock_(),
+    "shared": lambda: _shortcut_nested().share_memory_(),
+    "TensorDictParams": lambda: TensorDictParams(_shortcut_nested()),
+}
+# indices that raise or warn, next to the pools of indices that torch takes
+_SHORTCUT_EXTRA_INDICES = {
+    "out of range": 10,
+    "past the batch dims": (0, 0, 0, 0, 0),
+    "slices past the batch dims": (slice(None),) * 4 + (0,),
+    "nested list of bools": [[True, False, True], [False] * 3, [True] * 3, [False] * 3],
+    "np.int64": np.int64(1),
+    "()": (),
+}
+
+
+def _shortcut_describe(x, storages):
+    """A comparable description of the result ``x`` of an index."""
+    if isinstance(x, torch.Tensor):
+        desc = [type(x), x.dtype, x.device, x.requires_grad, x.is_nested]
+        desc.append(type(x.grad_fn))
+        if x.is_nested:
+            return desc + [[t.tolist() for t in x.unbind()]]
+        desc += [x.shape, x.stride()]
+        if x.device.type == "meta":
+            return desc
+        return desc + [
+            x.untyped_storage().data_ptr() in storages,
+            x.detach().tolist(),
+        ]
+    if not is_tensor_collection(x):
+        return [type(x), repr(x)]
+    desc = [type(x), x.batch_size, x.device, x.is_locked]
+    desc += [getattr(x, "_is_shared", None), getattr(x, "_is_memmap", None)]
+    desc.append(x.names if x._has_names() else None)
+    if isinstance(x, LazyStackedTensorDict):
+        return desc + [
+            x.stack_dim,
+            [_shortcut_describe(td, storages) for td in x.tensordicts],
+        ]
+    entries = getattr(x, "_tensordict", None)
+    if not isinstance(entries, dict):
+        entries = dict(x.items())
+    return desc + [
+        [(key, _shortcut_describe(value, storages)) for key, value in entries.items()]
+    ]
+
+
+def _shortcut_leaves(td):
+    # the caller keeps the leaves alive: the leaves of a lazy stack are new
+    # tensors, whose storage a result could reuse once they are freed
+    return [
+        value
+        for value in td.values(True, True)
+        if isinstance(value, torch.Tensor)
+        and not value.is_nested
+        and value.device.type != "meta"
+    ]
+
+
+def _shortcut_outcomes(make, indices):
+    outcomes = {}
+    for case, index in indices.items():
+        torch.manual_seed(0)
+        td = make()
+        leaves = _shortcut_leaves(td)
+        storages = {leaf.untyped_storage().data_ptr() for leaf in leaves}
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            try:
+                outcome = _shortcut_describe(td[index], storages)
+            except Exception as err:
+                # the ragged dims of jagged tensors are numbered per process
+                outcome = (type(err), re.sub(r"\bj\d+\b", "j", str(err)))
+        outcomes[case] = outcome, [(w.category, str(w.message)) for w in caught]
+    return outcomes
+
+
+def _check_shortcut_matches_generic(make, indices, monkeypatch):
+    shortcut = _shortcut_outcomes(make, indices)
+    monkeypatch.setattr(tensordict.base, "_INDEX_EXACT_TENSOR_SHORTCUT", False)
+    generic = _shortcut_outcomes(make, indices)
+    differ = [case for case in indices if shortcut[case] != generic[case]]
+    assert not differ, differ
+
+
 _CONTAINERS = list(
     dict.fromkeys(
         name
@@ -351,6 +513,49 @@ class TestContainersMatchDense:
                 except Exception as err:
                     failures[case] = _describe(err)
         _check_known_failures(f"{td_name} setitem", failures)
+
+    @pytest.mark.parametrize("td_name", _CONTAINERS)
+    def test_getitem_exact_tensor_shortcut(self, td_name, monkeypatch):
+        # #3458: indexing sends exact Tensor leaves straight to _get_item; the
+        # results, errors and warnings are those of the generic path
+        make = functools.partial(getattr(TestTensorDictsBase, td_name), "cpu")
+        indices = {**index_pool(self.BATCH_SIZE), **_SHORTCUT_EXTRA_INDICES}
+        _check_shortcut_matches_generic(make, indices, monkeypatch)
+
+    @pytest.mark.parametrize("td_name", list(_SHORTCUT_TDS))
+    def test_getitem_exact_tensor_shortcut_entries(self, td_name, monkeypatch):
+        # #3458: the same, for each type of entry next to exact Tensors
+        make = _SHORTCUT_TDS[td_name]
+        batch_size = make().batch_size
+        indices = dict(_SHORTCUT_EXTRA_INDICES)
+        if batch_size:
+            indices.update(index_pool(batch_size))
+        else:
+            indices.update(_SCALARS)
+        _check_shortcut_matches_generic(make, indices, monkeypatch)
+
+    def test_getitem_exact_tensor_shortcut_taken(self, monkeypatch):
+        # #3458: exact Tensor leaves skip the _is_unbatched test, other leaves
+        # take it
+        calls = []
+        is_unbatched = tensordict.base._is_unbatched
+
+        def counting(item):
+            calls.append(type(item))
+            return is_unbatched(item)
+
+        monkeypatch.setattr(tensordict.base, "_is_unbatched", counting)
+        td = TensorDict(
+            a=torch.zeros(4, 3),
+            p=torch.nn.Parameter(torch.zeros(4)),
+            n={"b": torch.zeros(4)},
+            batch_size=[4],
+        )
+        result = td[1]
+        assert torch.Tensor not in calls
+        assert torch.nn.Parameter in calls
+        assert result.batch_size == torch.Size([])
+        assert set(result.keys(True, True)) == {"a", "p", ("n", "b")}
 
 
 @functools.cache

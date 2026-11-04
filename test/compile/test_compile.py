@@ -564,6 +564,28 @@ class TestTD:
             assert (add_one_c(data)["a", "b"] == torch.arange(1, 3)).all()
             assert add_one_c(data).shape == torch.Size([2])
 
+    def test_td_index_exact_tensor_shortcut_guards(self, mode, monkeypatch):
+        # #3458: the eager shortcut for exact Tensor leaves adds no guard, no
+        # graph and no graph break to a compiled index
+        def index(td):
+            return td[1]
+
+        def explain():
+            torch._dynamo.reset()
+            data = TensorDict(
+                {
+                    "a": torch.zeros(3, 2),
+                    "n": {"b": torch.zeros(3), "c": torch.zeros(3)},
+                },
+                [3],
+            )
+            out = torch._dynamo.explain(index)(data)
+            return out.graph_count, out.graph_break_count, len(out.out_guards)
+
+        shortcut = explain()
+        monkeypatch.setattr("tensordict.base._INDEX_EXACT_TENSOR_SHORTCUT", False)
+        assert explain() == shortcut
+
     def test_td_index_empty_slice(self, mode):
         def index(td):
             return td[:0]
