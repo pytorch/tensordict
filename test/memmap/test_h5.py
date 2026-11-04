@@ -101,6 +101,49 @@ class TestH5Serialization:
         finally:
             p.join()
 
+    @pytest.mark.parametrize(
+        "data",
+        [
+            {"c/d": torch.zeros(3), "c": {"d": torch.ones(3)}},
+            {"c": {"d": torch.ones(3)}, "c/d": torch.zeros(3)},
+            {"c/d": torch.zeros(3), "c": torch.ones(3)},
+            {"/a": torch.zeros(3), "a": torch.ones(3)},
+            {"n": {"a/b": torch.zeros(3), "a": {"b": torch.ones(3)}}},
+            {"s/t": "x", "s": {"t": "y"}},
+        ],
+    )
+    @pytest.mark.parametrize("source", ["td", "lazy", "dict"])
+    def test_slash_key_collision_raises(self, tmp_path, data, source):
+        # #3435: a key with "/" silently replaced the entry at the same h5 path
+        if source == "dict":
+            src = data
+        else:
+            src = TensorDict(data, batch_size=[3])
+            if source == "lazy":
+                src = lazy_stack([src, src.clone()])
+        path = tmp_path / "x.h5"
+        with pytest.raises(ValueError, match="would"):
+            PersistentTensorDict.from_dict(src, path, backend="h5")
+        assert not path.exists()
+
+    def test_slash_key_without_collision(self, tmp_path):
+        # #3435: a "/" key alone, or next to a disjoint group, keeps loading
+        # as a nested key; a leaf before a "/" key under it keeps raising
+        # h5py's error
+        z, o = torch.zeros(3), torch.ones(3)
+        TensorDict({"c/d": z}, batch_size=[3]).to_h5(tmp_path / "a.h5")
+        out = TensorDict.from_h5(tmp_path / "a.h5")
+        assert set(out.keys(True, True)) == {("c", "d")}
+        assert (out["c", "d"] == z).all()
+        td = TensorDict({"c/d": z, "c": {"e": o}}, batch_size=[3])
+        td.to_h5(tmp_path / "b.h5")
+        out = TensorDict.from_h5(tmp_path / "b.h5")
+        assert set(out.keys(True, True)) == {("c", "d"), ("c", "e")}
+        assert (out["c", "d"] == z).all()
+        assert (out["c", "e"] == o).all()
+        with pytest.raises(TypeError, match="already exists"):
+            TensorDict({"c": o, "c/d": z}, batch_size=[3]).to_h5(tmp_path / "c.h5")
+
     def test_h5_nontensor(self, tmpdir):
         file = Path(tmpdir) / "file.h5"
         td = TensorDict(

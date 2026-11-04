@@ -1458,6 +1458,7 @@ class PersistentTensorDict(
             raise NotImplementedError(
                 f"Unknown backend {backend!r}. Supported backends are {sorted(_BACKENDS)}."
             )
+        _check_path_collisions(input_dict, backend)
         _has_batch_size = True
         if batch_size is None:
             if is_tensor_collection(input_dict):
@@ -2939,6 +2940,62 @@ def _set_max_batch_size(source: PersistentTensorDict):
                 return
         batch_size.append(curr_dim_size)
         curr_dim += 1
+
+
+def _leaf_keys(value, prefix=()):
+    """Yields the nested key of each leaf of a dict or a tensordict, as a tuple."""
+    if is_tensor_collection(value):
+        # keys only: items() of a lazy stack would stack every leaf
+        for key in value.keys(True, True, is_leaf=_is_leaf_nontensor):
+            yield prefix + (key if isinstance(key, tuple) else (key,))
+        return
+    for key, item in value.items():
+        key = prefix + (key if isinstance(key, tuple) else (key,))
+        if isinstance(item, dict) or (
+            is_tensor_collection(item) and not is_non_tensor(item)
+        ):
+            yield from _leaf_keys(item, key)
+        else:
+            yield key
+
+
+def _check_path_collisions(input_dict, backend) -> None:
+    """Raises if an entry would silently replace another one in the file (#3435).
+
+    "/" separates the groups of h5 and zarr, so the key ``"c/d"`` is written
+    where the nested key ``("c", "d")`` is. A leaf written where an earlier
+    leaf's group is replaces that group; the opposite order raises in the
+    storage library already, and is left to it.
+    """
+    if not (is_tensor_collection(input_dict) or isinstance(input_dict, dict)):
+        return
+    keys = list(_leaf_keys(input_dict))
+    if not any(
+        isinstance(part, str) and "/" in part for key in keys for part in key
+    ) or not all(isinstance(part, str) for key in keys for part in key):
+        # no "/" in the keys, or keys that the writer rejects itself
+        return
+    paths = {}
+    for idx, key in enumerate(keys):
+        path = tuple(part for subkey in key for part in subkey.split("/") if part)
+        if path in paths:
+            raise ValueError(
+                f"The entries {paths[path][1]} and {key} would both be written "
+                f"at {'/'.join(path)!r} in the {backend} file, and the second "
+                "would replace the first: '/' separates groups there. Rename "
+                "one of them."
+            )
+        paths[path] = (idx, key)
+    for path, (idx, key) in paths.items():
+        for i in range(1, len(path)):
+            prefix = paths.get(path[:i])
+            if prefix is not None and prefix[0] > idx:
+                raise ValueError(
+                    f"The entry {prefix[1]} would be written at "
+                    f"{'/'.join(path[:i])!r} in the {backend} file, and would "
+                    f"replace the group that holds {key}: '/' separates groups "
+                    "there. Rename one of them."
+                )
 
 
 def _source_names(value, names=None):
