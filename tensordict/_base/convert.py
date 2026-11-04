@@ -1822,8 +1822,8 @@ class _Conversion:
         and tensorclass with its own :meth:`to_tensordict`. A store overrides
         it to read all the leaves in one round trip; a lazy stack of plain
         TensorDicts with the same entries stacks their leaves directly; a
-        ``NonTensorStack``,
-        which is already the dense form of its data, returns itself.
+        ``NonTensorStack``, which is already the dense form of its data,
+        returns itself.
         """
         from tensordict import TensorDict
 

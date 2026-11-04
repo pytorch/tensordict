@@ -2499,12 +2499,16 @@ class TestLazyStackedTensorDict:
         with torch.random.fork_rng():
             torch.manual_seed(0)
             stack = make()
-        ptrs = {
-            leaf.untyped_storage().data_ptr()
+        # Keep the leaves alive until the call is described: the leaves of a
+        # nested lazy stack are temporaries, whose freed storage the result
+        # could reuse
+        leaves = [
+            leaf
             for td in stack.tensordicts
             for leaf in td.values(True, True)
             if isinstance(leaf, torch.Tensor) and not leaf.is_nested
-        }
+        ]
+        ptrs = {leaf.untyped_storage().data_ptr() for leaf in leaves}
 
         def describe(value):
             if isinstance(value, torch.Tensor):
@@ -2542,6 +2546,7 @@ class TestLazyStackedTensorDict:
             except Exception as err:
                 # the symbolic sizes of jagged tensors are numbered per tensor
                 out = ("err", type(err), re.sub(r"j\d+", "j", str(err)))
+        del leaves
         return out, [(w.category, str(w.message)) for w in caught]
 
     _TO_TENSORDICT_STACKS = {
