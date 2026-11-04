@@ -3584,6 +3584,59 @@ def _stored_value(source, dest):
     return _stored_non_tensor(dest, source)
 
 
+def _is_dense_path(td, key) -> bool:
+    """Whether ``td`` and each node on ``key`` down to the parent of the leaf is an unconsolidated ``TensorDict``."""
+    for k in (None, *key[:-1]):
+        if k is not None:
+            td = td._tensordict.get(k)
+        if type(td) is not _TENSORDICT_TYPE or hasattr(td, "_consolidated"):
+            return False
+    return True
+
+
+_ROW_FAMILY = {
+    type(None): "none",
+    str: "str",
+    bytes: "bytes",
+    bool: "number",
+    int: "number",
+    float: "number",
+    complex: "number",
+}
+
+
+def _rows_differ(stack, value) -> bool:
+    """Whether a row of the NonTensorStack ``stack`` provably differs from ``value``.
+
+    ``value`` and every row must have one of the exact types of ``_ROW_FAMILY``;
+    otherwise returns ``False``, since ``==`` cannot prove that other values
+    differ. A row of another family differs; two NaNs count as equal.
+    """
+    from tensordict.tensorclass import NonTensorData, NonTensorStack
+
+    family = _ROW_FAMILY.get(type(value))
+    if family is None:
+        return False
+    differ = False
+    members = list(stack.tensordicts)
+    while members:
+        member = members.pop()
+        if isinstance(member, NonTensorStack):
+            members.extend(member.tensordicts)
+            continue
+        if not isinstance(member, NonTensorData):
+            return False
+        row = member.data
+        row_family = _ROW_FAMILY.get(type(row))
+        if row_family is None:
+            return False
+        if row_family != family or (
+            row != value and not (row != row and value != value)
+        ):
+            differ = True
+    return differ
+
+
 def _update_at_aliases(update_at_: Callable) -> Callable:
     """Accepts the argument names that the overrides of ``update_at_`` took before 0.15.
 
@@ -7634,19 +7687,33 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
             # _items_list leaves out the non-tensor leaves: copy them here.
             # Like the tensor leaves, keys missing in self are skipped.
-            # copy_ raises for a NonTensorStack into a NonTensorData:
-            # these leaves are skipped too.
+            # copy_ raises for a NonTensorStack into a NonTensorData: these
+            # leaves are skipped, except that a row which differs from the
+            # value of a TensorDict in memory is written as
+            # update_at_(value, slice(None)) writes it (#3501).
             skipped = []
 
             def inplace_update(name, source, dest):
-                if (
-                    _is_non_tensor(type(source))
-                    and _is_non_tensor(type(dest))
-                    and (
-                        not isinstance(source, NonTensorStack)
-                        or isinstance(dest, NonTensorStack)
-                    )
+                if not (_is_non_tensor(type(source)) and _is_non_tensor(type(dest))):
+                    return
+                if isinstance(source, NonTensorStack) and not isinstance(
+                    dest, NonTensorStack
                 ):
+                    key = _unravel_key_to_tuple(name)
+                    if (
+                        source.batch_size == dest.batch_size
+                        and not (dest._is_shared or dest._is_memmap)
+                        and _is_dense_path(self, key)
+                        and _rows_differ(source, dest.data)
+                    ):
+                        self._set_at_tuple(
+                            key,
+                            source,
+                            slice(None),
+                            validated=False,
+                            non_blocking=non_blocking,
+                        )
+                else:
                     source = _stored_value(source, dest)
                     if source is None:
                         skipped.append(name)
