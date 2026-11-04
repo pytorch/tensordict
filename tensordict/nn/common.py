@@ -729,8 +729,8 @@ class TensorDictModuleBase(nn.Module):
 
         Returns:
             ``None`` without ``parameters``. Otherwise a new tensordict of
-            tensors that share their storage with ``parameters`` and require
-            gradients.
+            tensors that share their storage with ``parameters``. The
+            floating-point and complex ones require gradients.
 
         Raises:
             RuntimeError: if ``parameters`` has batch dimensions.
@@ -773,10 +773,18 @@ class TensorDictModuleBase(nn.Module):
             )
 
         sanitized_parameters = parameters.apply(
-            lambda x: x.detach().requires_grad_(), inplace=False
+            lambda x: x.detach().requires_grad_(
+                x.is_floating_point() or x.is_complex()
+            ),
+            inplace=False,
         )
 
-        with sanitized_parameters.to_module(self, preserve_module_state=False):
+        # Some resets write into buffers in place (BatchNorm's running
+        # stats), which autograd forbids on leaves that require gradients.
+        with (
+            sanitized_parameters.to_module(self, preserve_module_state=False),
+            torch.no_grad(),
+        ):
             self._reset_parameters(self)
         return sanitized_parameters
 

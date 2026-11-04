@@ -892,6 +892,52 @@ class TestTDModule:
         tripled_nested.reset_parameters_recursive(params)
         lin.reset_parameters.assert_called_once()
 
+    def test_reset_functional_non_float_buffers(self):
+        # #3462: integer buffers and in-place buffer resets (BatchNorm) used to raise
+        torch.manual_seed(0)
+        net = nn.Sequential(nn.Linear(3, 4), nn.BatchNorm1d(4))
+        module = TensorDictModule(net, in_keys=["x"], out_keys=["y"])
+        params = TensorDict.from_module(module).clone()
+        params["module", "1", "running_mean"].fill_(5)
+        params["module", "1", "num_batches_tracked"].fill_(7)
+        old_weight = params["module", "0", "weight"].detach().clone()
+        out = module.reset_parameters_recursive(params)
+
+        assert (params["module", "1", "running_mean"] == 0).all()
+        assert (params["module", "1", "num_batches_tracked"] == 0).all()
+        assert (params["module", "0", "weight"] != old_weight).all()
+        # the module keeps its own values
+        assert net[1].num_batches_tracked == 0
+        assert (net[0].weight == old_weight).all()
+        assert out["module", "1", "num_batches_tracked"].dtype == torch.long
+        assert not out["module", "1", "num_batches_tracked"].requires_grad
+        # floating-point leaves, buffers included, require gradients as documented
+        for key in [
+            ("module", "0", "weight"),
+            ("module", "1", "weight"),
+            ("module", "1", "running_mean"),
+            ("module", "1", "running_var"),
+        ]:
+            assert out[key].requires_grad, key
+            assert out[key].data_ptr() == params[key].data_ptr(), key
+
+    def test_reset_functional_float_leaves_unchanged(self):
+        # #3462: modules with only floating-point leaves reset as before
+        net = nn.Sequential(nn.Linear(3, 4), nn.Linear(4, 2))
+        module = TensorDictModule(net, in_keys=["x"], out_keys=["y"])
+        params = TensorDict.from_module(module).clone()
+        torch.manual_seed(0)
+        out = module.reset_parameters_recursive(params)
+        torch.manual_seed(0)
+        expected = copy.deepcopy(net)
+        for layer in expected:
+            layer.reset_parameters()
+        expected = TensorDict.from_module(expected)
+        for key, value in out.items(True, True):
+            assert value.requires_grad, key
+            assert value.data_ptr() == params[key].data_ptr(), key
+            torch.testing.assert_close(value, expected[key[1:]])
+
     def test_reset_extra_dims(self):
         torch.manual_seed(0)
         net = nn.Sequential(nn.Linear(1, 1), nn.ReLU())
@@ -5291,6 +5337,33 @@ class TestEnsembleModule:
         assert lin.reset_parameters.call_count == 2, (
             f"Reset parameters called {lin.reset_parameters.call_count} times should be 2"
         )
+
+    @pytest.mark.skipif(PYTORCH_TEST_FBCODE, reason="vmap now working in fbcode")
+    def test_integer_buffer(self):
+        # #3462: building an ensemble of a module with an integer buffer used to raise
+        class Counter(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.lin = nn.Linear(3, 4)
+                self.register_buffer("steps", torch.zeros((), dtype=torch.long))
+
+            def forward(self, x):
+                return self.lin(x) + self.steps
+
+        torch.manual_seed(0)
+        module = TensorDictModule(Counter(), in_keys=["x"], out_keys=["y"])
+        ens = EnsembleModule(module, num_copies=3)
+        steps = ens.params_td["module", "steps"]
+        assert steps.dtype == torch.long
+        assert steps.shape == (3,)
+        assert not steps.requires_grad
+        weight = ens.params_td["module", "lin", "weight"]
+        assert weight.requires_grad
+        assert (weight[0] != weight[1:]).any(dim=(-2, -1)).all()
+        out = ens(TensorDict({"x": torch.randn(5, 3)}, batch_size=[5]))
+        assert out["y"].shape == (3, 5, 4)
+        out["y"].sum().backward()
+        assert weight.grad is not None
 
     def test_reset_parameters_recursive_warning(self):
         """Ensure we warn about child modules other than self.module, but not about params_td"""
