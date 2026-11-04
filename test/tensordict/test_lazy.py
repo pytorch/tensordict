@@ -22,8 +22,10 @@ import pytest
 import torch
 from tensordict import (
     is_leaf_nontensor,
+    is_non_tensor,
     lazy_stack,
     LazyStackedTensorDict,
+    MemoryMappedTensor,
     NonTensorData,
     NonTensorStack,
     PersistentTensorDict,
@@ -113,6 +115,15 @@ if torch.cuda.is_available():
     cur_device = "cuda"
 elif is_npu_available():
     cur_device = "npu"
+
+
+class _Pair(TensorClass):
+    x: torch.Tensor
+    y: torch.Tensor
+
+
+class _SubTensor(torch.Tensor):
+    pass
 
 
 class TestLazyStackedTensorDict:
@@ -2454,6 +2465,319 @@ class TestLazyStackedTensorDict:
         assert td.to_tensordict().names == refined
         td.names = None
         assert td.names == [None, None]
+
+    # #3451: to_tensordict of a lazy stack of plain TensorDicts stacks each
+    # leaf of the members once, without lazy sub-stacks or a clone.
+    @pytest.mark.parametrize("stack_dim", [0, 1, -1])
+    def test_to_tensordict_stacks_members_leaves(self, stack_dim):
+        tds = [
+            TensorDict(
+                a=torch.full((3, 2), float(i)),
+                n=TensorDict(b=torch.full((3, 2, 4), i), batch_size=[3, 2]),
+                batch_size=[3],
+            )
+            for i in range(2)
+        ]
+        stack = lazy_stack(tds, stack_dim)
+        with mock.patch.object(
+            LazyStackedTensorDict, "_get_str", side_effect=AssertionError
+        ):
+            dense = stack.to_tensordict()
+        assert type(dense) is TensorDict
+        assert dense.batch_size == stack.batch_size
+        assert list(dense.keys(True, True)) == ["a", ("n", "b")]
+        assert dense["n"].batch_size == stack["n"].batch_size
+        for key in ("a", ("n", "b")):
+            assert (
+                dense.get(key)
+                == torch.stack([td.get(key) for td in tds], stack.stack_dim)
+            ).all()
+
+    @staticmethod
+    def _describe_to_tensordict(make, call):
+        # What to_tensordict returns, warns and raises, for the equivalence test
+        with torch.random.fork_rng():
+            torch.manual_seed(0)
+            stack = make()
+        ptrs = {
+            leaf.untyped_storage().data_ptr()
+            for td in stack.tensordicts
+            for leaf in td.values(True, True)
+            if isinstance(leaf, torch.Tensor) and not leaf.is_nested
+        }
+
+        def describe(value):
+            if isinstance(value, torch.Tensor):
+                return (
+                    type(value),
+                    value.shape,
+                    None if value.is_nested else value.stride(),
+                    value.dtype,
+                    value.device,
+                    value.requires_grad,
+                    type(value.grad_fn),
+                    None
+                    if value.is_nested
+                    else value.untyped_storage().data_ptr() in ptrs,
+                    None if value.is_nested else value.detach().tolist(),
+                )
+            if is_non_tensor(value):
+                return (type(value), value.batch_size, value.tolist())
+            return (
+                type(value),
+                value.batch_size,
+                value.device,
+                value.is_locked,
+                value.names if value._has_names() else None,
+                [
+                    (key, describe(item))
+                    for key, item in value.items(is_leaf=is_leaf_nontensor)
+                ],
+            )
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            try:
+                out = ("ok", describe(call(stack)))
+            except Exception as err:
+                # the symbolic sizes of jagged tensors are numbered per tensor
+                out = ("err", type(err), re.sub(r"j\d+", "j", str(err)))
+        return out, [(w.category, str(w.message)) for w in caught]
+
+    _TO_TENSORDICT_STACKS = {
+        "flat": lambda: lazy_stack(
+            [TensorDict(a=torch.randn(3, 2), b=torch.arange(3), batch_size=[3])] * 2
+        ),
+        "nested": lambda: lazy_stack(
+            [
+                TensorDict(
+                    a=torch.randn(3),
+                    n=TensorDict(
+                        b=torch.randn(3, 2, 4),
+                        m=TensorDict(c=torch.randn(3, 2), batch_size=[3, 2]),
+                        batch_size=[3, 2],
+                    ),
+                    batch_size=[3],
+                )
+                for _ in range(3)
+            ],
+            1,
+        ),
+        "stack dim -1": lambda: lazy_stack(
+            [TensorDict(a=torch.randn(3, 2, 4), batch_size=[3, 2]) for _ in range(2)],
+            -1,
+        ),
+        "keys in another order": lambda: lazy_stack(
+            [
+                TensorDict(a=torch.zeros(3), b=torch.ones(3), batch_size=[3]),
+                TensorDict(b=torch.ones(3), a=torch.zeros(3), batch_size=[3]),
+            ]
+        ),
+        "exclusive key": lambda: lazy_stack(
+            [
+                TensorDict(a=torch.zeros(3), batch_size=[3]),
+                TensorDict(a=torch.zeros(3), b=torch.ones(3), batch_size=[3]),
+            ]
+        ),
+        "other keys": lambda: lazy_stack(
+            [
+                TensorDict(a=torch.zeros(3), b=torch.ones(3), batch_size=[3]),
+                TensorDict(a=torch.zeros(3), c=torch.ones(3), batch_size=[3]),
+            ]
+        ),
+        "exclusive nested key": lambda: lazy_stack(
+            [
+                TensorDict(n=TensorDict(a=torch.zeros(3)), batch_size=[3]),
+                TensorDict(
+                    n=TensorDict(a=torch.zeros(3), b=torch.ones(3)), batch_size=[3]
+                ),
+            ]
+        ),
+        "member names": lambda: lazy_stack(
+            [TensorDict(a=torch.zeros(3, 2), batch_size=[3], names=["x"])] * 2
+        ),
+        "stack dim name": lambda: lazy_stack(
+            [TensorDict(a=torch.zeros(3, 2), batch_size=[3])] * 2,
+            stack_dim_name="s",
+        ),
+        "non-tensor": lambda: lazy_stack(
+            [TensorDict(a=torch.zeros(3), s="x", batch_size=[3]) for _ in range(2)]
+        ),
+        "nested non-tensor": lambda: lazy_stack(
+            [
+                TensorDict(
+                    a=torch.zeros(3),
+                    n=TensorDict(s="x", b=torch.ones(3)),
+                    batch_size=[3],
+                )
+                for _ in range(2)
+            ]
+        ),
+        "tensorclass entry": lambda: lazy_stack(
+            [
+                TensorDict(
+                    a=torch.zeros(3),
+                    c=_Pair(x=torch.zeros(3, 2), y=torch.ones(3), batch_size=[3]),
+                    batch_size=[3],
+                )
+                for _ in range(2)
+            ]
+        ),
+        "lazy members": lambda: lazy_stack(
+            [
+                lazy_stack([TensorDict(a=torch.randn(3), batch_size=[3])] * 2)
+                for _ in range(2)
+            ]
+        ),
+        "lazy entry": lambda: lazy_stack(
+            [
+                TensorDict(
+                    n=lazy_stack([TensorDict(a=torch.randn(3)) for _ in range(3)]),
+                    batch_size=[3],
+                )
+                for _ in range(2)
+            ]
+        ),
+        "leaf shapes differ": lambda: lazy_stack(
+            [
+                TensorDict(a=torch.zeros(3, 2), batch_size=[3]),
+                TensorDict(a=torch.zeros(3, 4), batch_size=[3]),
+            ]
+        ),
+        "nested batch sizes differ": lambda: lazy_stack(
+            [
+                TensorDict(n=TensorDict(a=torch.zeros(3, 2), batch_size=[3, 2])),
+                TensorDict(n=TensorDict(a=torch.zeros(3, 2), batch_size=[3])),
+            ]
+        ),
+        "requires grad": lambda: lazy_stack(
+            [
+                TensorDict(
+                    a=torch.zeros(3),
+                    b=torch.ones(3, requires_grad=True),
+                    batch_size=[3],
+                ),
+                TensorDict(a=torch.zeros(3), b=torch.ones(3), batch_size=[3]),
+            ]
+        ),
+        "devices": lambda: lazy_stack(
+            [TensorDict(a=torch.zeros(3), batch_size=[3], device="cpu")] * 2
+        ),
+        "nested devices differ": lambda: lazy_stack(
+            [
+                TensorDict(
+                    n=TensorDict(a=torch.zeros(3), batch_size=[3], device="cpu"),
+                    batch_size=[3],
+                ),
+                TensorDict(
+                    n=TensorDict(a=torch.zeros(3), batch_size=[3]), batch_size=[3]
+                ),
+            ]
+        ),
+        "nested device": lambda: lazy_stack(
+            [
+                TensorDict(
+                    n=TensorDict(a=torch.zeros(3), batch_size=[3], device="cpu"),
+                    batch_size=[3],
+                )
+            ]
+            * 2
+        ),
+        "leaf types": lambda: lazy_stack(
+            [
+                TensorDict(
+                    p=torch.nn.Parameter(torch.zeros(3)),
+                    m=MemoryMappedTensor.from_tensor(torch.zeros(3)),
+                    batch_size=[3],
+                )
+            ]
+            * 2
+        ),
+        "leaf layouts": lambda: lazy_stack(
+            [
+                TensorDict(
+                    t=torch.randn(4, 3).T,
+                    c=torch.randn(3, 2, 4, 5).to(memory_format=torch.channels_last),
+                    e=torch.randn(1, 4).expand(3, 4),
+                    batch_size=[3],
+                )
+                for _ in range(2)
+            ]
+        ),
+        "dtypes differ": lambda: lazy_stack(
+            [
+                TensorDict(a=torch.zeros(3), b=torch.ones(3, dtype=torch.bool)),
+                TensorDict(a=torch.zeros(3, dtype=torch.double), b=torch.ones(3)),
+            ]
+        ),
+        "locked": lambda: lazy_stack(
+            [TensorDict(a=torch.zeros(3), n=TensorDict(b=torch.ones(3)))] * 2
+        ).lock_(),
+        "locked members": lambda: lazy_stack(
+            [TensorDict(a=torch.zeros(3), n=TensorDict(b=torch.ones(3))).lock_()] * 2
+        ),
+        "0-d members": lambda: lazy_stack(
+            [TensorDict(a=torch.zeros(()), b=torch.zeros(2))] * 2
+        ),
+        "empty members": lambda: lazy_stack(
+            [TensorDict(batch_size=[3]), TensorDict(batch_size=[3])]
+        ),
+        "no members": lambda: LazyStackedTensorDict(stack_dim=0, batch_size=[3]),
+        "one member": lambda: lazy_stack([TensorDict(a=torch.zeros(3, 2))]),
+        "unbatched": lambda: lazy_stack(
+            [TensorDict(u=UnbatchedTensor(torch.zeros(4)), batch_size=[3])] * 2
+        ),
+        "nested tensor": lambda: lazy_stack(
+            [
+                TensorDict(
+                    a=torch.nested.nested_tensor(
+                        [torch.zeros(2), torch.zeros(3)], layout=torch.jagged
+                    ),
+                    batch_size=[2],
+                )
+            ]
+            * 2
+        ),
+        "tensor subclass": lambda: lazy_stack(
+            [TensorDict(a=torch.zeros(3).as_subclass(_SubTensor), batch_size=[3])] * 2
+        ),
+        "permuted members": lambda: lazy_stack(
+            [TensorDict(a=torch.zeros(2, 3), batch_size=[2, 3]).permute(1, 0)] * 2
+        ),
+    }
+
+    # #3451: the dense path of to_tensordict gives what the general path of
+    # TensorDictBase gives, and the inputs it does not take keep that path.
+    @pytest.mark.parametrize("retain_none", [None, True])
+    @pytest.mark.parametrize("case", sorted(_TO_TENSORDICT_STACKS))
+    def test_to_tensordict_same_as_general_path(self, case, retain_none):
+        make = self._TO_TENSORDICT_STACKS[case]
+        out = self._describe_to_tensordict(
+            make, lambda stack: stack.to_tensordict(retain_none=retain_none)
+        )
+        expected = self._describe_to_tensordict(
+            make,
+            lambda stack: TensorDictBase._to_tensordict(stack, retain_none=retain_none),
+        )
+        assert out == expected
+
+    def test_to_tensordict_grad_leaf_is_cloned(self):
+        # #3451: a leaf that requires grad is still cloned, as before
+        tds = [TensorDict(a=torch.ones(3, requires_grad=True)) for _ in range(2)]
+        dense = lazy_stack(tds).to_tensordict()
+        assert type(dense["a"].grad_fn).__name__ == "CloneBackward0"
+        dense["a"].sum().backward()
+        assert all((td["a"].grad == 1).all() for td in tds)
+
+    def test_get_str_cache_while_locked(self):
+        # A locked lazy stack caches its sub-stacks, not its leaves
+        stack = lazy_stack(
+            [TensorDict(a=torch.zeros(3), n=TensorDict(b=torch.ones(3)))] * 2
+        ).lock_()
+        assert stack.get("n") is stack.get("n")
+        assert stack.get("a") is not stack.get("a")
+        assert (stack.to_tensordict()["n", "b"] == 1).all()
+        assert stack.get("n") is stack.get("n")
 
     @pytest.mark.parametrize("recurse", [False, True])
     def test_lazy_empty_keeps_member_types(self, recurse):
