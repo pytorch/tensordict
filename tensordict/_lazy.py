@@ -855,6 +855,19 @@ def _is_plain_tensor(tensor) -> bool:
     )
 
 
+def _reorders_members(sources, dests) -> bool:
+    """Whether a source of ``sources`` is a member of ``dests`` at another position."""
+    if len(sources) == len(dests) and all(map(operator.is_, sources, dests)):
+        return False
+    members = set(map(id, dests))
+    if members.isdisjoint(map(id, sources)):
+        return False
+    return any(
+        source is not dest and id(source) in members
+        for source, dest in zip(sources, dests)
+    )
+
+
 class LazyStackedTensorDict(TensorDictBase):
     """A stack of tensordicts that keeps each input as a separate tensordict.
 
@@ -4887,6 +4900,14 @@ class LazyStackedTensorDict(TensorDictBase):
             input_dict_or_td = TensorDict.from_dict(
                 input_dict_or_td, batch_dims=self.batch_dims
             )
+        elif isinstance(input_dict_or_td, LazyStackedTensorDict) and _reorders_members(
+            input_dict_or_td.tensordicts, self.tensordicts
+        ):
+            # The members are written one after another. A source that holds
+            # the members in another order, as a read of this stack such as
+            # td[perm] does, would give a later member a value that an
+            # earlier one overwrote (#3444).
+            input_dict_or_td = input_dict_or_td.clone()
         pieces = self._update_pieces(input_dict_or_td)
         if keys_to_update is None:
             plans = self._member_plans(pieces, non_blocking)
