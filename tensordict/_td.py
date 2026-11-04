@@ -2073,12 +2073,16 @@ class TensorDict(TensorDictBase):
                 out=dest,
             )
             if new_dest is not dest:
-                # torch.stack ignores out= for a non-tensor entry and returns
-                # a new stack: replace the entry, also in a locked tensordict,
-                # but not in a shared or memory-mapped one,
-                # which could not hold the new entry
-                replace_locked = self._is_locked and not (
-                    self._is_shared or self._is_memmap
+                # torch.stack ignores out= for a non-tensor or tensorclass
+                # entry and returns a new stack: replace the entry, also in a
+                # locked tensordict, but not in a shared or memory-mapped one,
+                # which could not hold the new entry. A tensor or a
+                # tensordict entry stays locked: it is not replaced by
+                # non-tensor values
+                replace_locked = (
+                    self._is_locked
+                    and not (self._is_shared or self._is_memmap)
+                    and (is_non_tensor(dest) or is_tensorclass(dest))
                 )
                 self._set_str(
                     key,

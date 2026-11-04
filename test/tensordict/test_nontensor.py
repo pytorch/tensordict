@@ -1997,6 +1997,37 @@ class TestNonTensorData:
         with pytest.raises(RuntimeError):
             torch.stack(items, 0, out=out)
 
+    @pytest.mark.parametrize("dest", ["tensor", "td"])
+    def test_stack_out_locked_tensor_entry_raises(self, dest):
+        # #3429: a locked out does not replace a tensor or a tensordict
+        # entry with stacked non-tensor values, it keeps raising
+        value = (
+            torch.zeros(2)
+            if dest == "tensor"
+            else TensorDict(y=torch.zeros(2), batch_size=[2])
+        )
+        out = torch.stack(
+            [TensorDict(x=value.clone(), batch_size=[2]) for _ in range(3)]
+        ).lock_()
+        old = out.get("x")
+        items = [TensorDict(x=f"s{i}", batch_size=[2]) for i in range(3)]
+        with pytest.raises(RuntimeError, match="locked"):
+            torch.stack(items, 0, out=out)
+        assert out.get("x") is old
+
+    def test_stack_out_locked_sub_tensordict(self):
+        # #3429: an unlocked out with a sub-tensordict locked on its own gives
+        # the result of unlocking that sub-tensordict around the call
+        out = torch.stack(
+            [TensorDict(sub={"x": "o"}, batch_size=[2]) for _ in range(3)]
+        ).clone()
+        out.get("sub").lock_()
+        items = [TensorDict(sub={"x": f"s{i}"}, batch_size=[2]) for i in range(3)]
+        assert torch.stack(items, 0, out=out) is out
+        assert out["sub", "x"] == [[f"s{i}"] * 2 for i in range(3)]
+        assert out.get("sub").is_locked and out.get(("sub", "x")).is_locked
+        assert not out.is_locked
+
     def test_assign_non_tensor(self):
         data = TensorDict({}, [1, 10])
 
