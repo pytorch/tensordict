@@ -2920,6 +2920,56 @@ class TestTDSequence:
                 Categorical(logits=to_logits.module(data["loc"])).logits,
             )
 
+    @pytest.mark.parametrize("interaction", [None, "random"])
+    @set_composite_lp_aggregate(False)
+    def test_probtdseq_log_prob_stored_samples_composite_head(self, interaction):
+        # #3447: a prefix module with a CompositeDistribution keeps its stored
+        # samples too. log_prob used to raise here.
+        torch.manual_seed(0)
+        params = TensorDictModule(
+            lambda loc, scale: TensorDict(
+                cont={"loc": loc, "scale": scale},
+                disc0={"logits": torch.zeros(*loc.shape[:-1], 3)},
+                batch_size=loc.shape[:-1],
+            ),
+            ["loc", "scale"],
+            ["params"],
+        )
+        head1 = ProbabilisticTensorDictModule(
+            ["params"],
+            ["cont", "disc0"],
+            distribution_class=CompositeDistribution,
+            distribution_kwargs={
+                "distribution_map": {"cont": Normal, "disc0": Categorical}
+            },
+        )
+        to_logits = TensorDictModule(nn.Linear(1, 3), ["cont"], ["logits"])
+        head2 = ProbabilisticTensorDictModule(
+            ["logits"], ["disc"], distribution_class=Categorical
+        )
+        seq = ProbabilisticTensorDictSequential(
+            params, head1, to_logits, head2, return_composite=True
+        )
+        td = TensorDict(loc=torch.zeros(4, 1), scale=torch.ones(4, 1), batch_size=[4])
+        with set_interaction_type("random"):
+            data = seq(td)
+        with torch.no_grad(), set_interaction_type(interaction):
+            lp = seq.log_prob(data)
+            expected = {
+                "cont_log_prob": Normal(data["loc"], data["scale"]).log_prob(
+                    data["cont"]
+                ),
+                "disc0_log_prob": Categorical(logits=torch.zeros(4, 3)).log_prob(
+                    data["disc0"]
+                ),
+                "disc_log_prob": Categorical(
+                    logits=to_logits.module(data["cont"])
+                ).log_prob(data["disc"]),
+            }
+        assert set(lp.keys()) == set(expected)
+        for key, value in expected.items():
+            torch.testing.assert_close(lp[key], value)
+
     @pytest.mark.parametrize("aggregate", [True, False])
     @pytest.mark.parametrize("inner_return_composite", [None, True, False])
     def test_probtdseq_log_prob_custom_keys(self, aggregate, inner_return_composite):
