@@ -973,10 +973,10 @@ class _Distributed:
         an expanded tensor, and the call waits for every reduction before it
         raises. A lazy stack reduces only the keys that every member holds:
         rank ``dst`` keeps its own values for the keys that only some
-        members hold.
-        To reduce them too, call ``reduce`` on each member
-        (``for member in td.tensordicts: member.reduce(dst)``), or call
-        :meth:`~.all_reduce`, which reduces every key. See
+        members hold. :meth:`~.all_reduce` reduces every key. To reduce them
+        on rank ``dst`` only, call ``reduce`` on each member
+        (``for member in td.tensordicts: member.reduce(dst)``); a member
+        that is itself a lazy stack has the same limit. See
         :ref:`distributed-collectives`.
 
         Args:

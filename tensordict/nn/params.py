@@ -387,10 +387,11 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     ``parameters()`` therefore does not see bfloat16 entries. Pass
     ``no_convert=True`` to register all tensors as buffers.
 
-    :meth:`update` with a nested dict or a nested tensordict, such as
-    ``params.update({"n": {"b": t}})``, skips this conversion: the nested
-    values become buffers, and leave ``parameters()``. Pass the nested keys
-    as tuples instead, for example
+    :meth:`update` with a nested dict or a nested tensordict of plain
+    tensors under an existing key, such as ``params.update({"n": {"b": t}})``
+    where ``params["n"]`` exists, skips this conversion: these values become
+    buffers, and leave ``parameters()``. Values that are already parameters
+    stay parameters. Pass the nested keys as tuples instead, for example
     ``params.update(dict(other.items(True, True)))``, or write into the
     existing entries with :meth:`update_`.
 

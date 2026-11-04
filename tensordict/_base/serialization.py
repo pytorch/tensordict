@@ -1453,8 +1453,8 @@ class _Serialization:
         A view of a memory-mapped tensordict, such as a slice or a transpose,
         written back to the directory that it maps can leave wrong data in
         that directory, without an error. Pass ``atomic=True`` and
-        ``copy_existing=True``, which write a new directory first, or write to
-        another directory (see :meth:`~.memmap`).
+        ``copy_existing=True``, which write a new directory first (not on
+        Windows), or write to another directory (see :meth:`~.memmap`).
 
         Args:
             prefix (str or Path, optional): the directory to write to.
@@ -1831,7 +1831,7 @@ class _Serialization:
             transpose, written back to the directory that it maps can leave
             wrong data in that directory, without an error. Pass
             ``atomic=True`` and ``copy_existing=True``, which write a new
-            directory first, or write to another directory.
+            directory first (not on Windows), or write to another directory.
 
         Examples:
             >>> import os

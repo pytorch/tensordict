@@ -308,7 +308,8 @@ layouts differ, the call can hang.
 On a lazy stack whose members have different keys, ``reduce`` reduces only
 the keys that every member holds: rank ``dst`` keeps its own values for the
 others. ``all_reduce`` reduces every key. To reduce every key on rank
-``dst`` only, call ``reduce`` on each member:
+``dst`` only, call ``reduce`` on each member (a member that is itself a lazy
+stack has the same limit):
 
 .. code-block:: python
 

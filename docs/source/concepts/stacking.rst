@@ -204,9 +204,10 @@ dimension that differs. Here, two systems have 2 and 4 particles:
   torch.Size([4])
 
 ``numel()`` of such a stack returns 1, whatever its members hold. To count
-the elements of the batch, call ``reshape(-1)`` first:
+the elements of the batch, add up the counts of the members (at each level,
+for a stack of lazy stacks):
 
-  >>> ragged.reshape(-1).numel()
+  >>> sum(member.numel() for member in ragged.tensordicts)
   6
 
 .. _stacking-which-function:
@@ -328,12 +329,14 @@ node:
   >>> graphs[1]["nodes"].shape
   torch.Size([3, 2])
 
-In a lazy stack of lazy stacks, ``as_padded_tensor=True`` puts the stack
-dimension of each inner stack first. If the inner stacks were built along
-different dimensions, some members come out transposed and padded with zeros,
-although their entries have the same shape. Build the inner stacks along the
-same dimension, or call ``contiguous()`` on each inner stack whose entries
-have the same shape.
+``as_padded_tensor=True`` puts the stack dimension of each lazy stack first,
+the outer one and, in a lazy stack of lazy stacks, the inner ones. For a stack
+built along another dimension than 0, the padded tensor is therefore laid out
+differently from the dense entry. If the inner stacks were built along
+different dimensions, some members come out transposed and padded with
+``padding_value``, although their entries have the same shape. Build the lazy
+stacks along dimension 0, or call ``contiguous()`` on each inner stack whose
+entries have the same shape.
 
 :meth:`~tensordict.LazyStackedTensorDict.densify` turns the whole lazy stack
 into a regular TensorDict. The entries with different shapes become nested

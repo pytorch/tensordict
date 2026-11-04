@@ -195,7 +195,7 @@ A view of a loaded tensordict, such as ``td[1:]`` or a transpose, written
 back to the directory that it maps with ``memmap``, ``memmap_`` or ``save``
 can leave wrong data in that directory, without an error. Pass
 ``atomic=True`` and ``copy_existing=True``, which write a new directory
-first, or write to another directory:
+first (not on Windows), or write to another directory:
 
   >>> _ = TensorDict({"a": torch.arange(4.0)}, batch_size=[4]).save(root / "trim")
   >>> td = TensorDict.load_memmap(root / "trim")
