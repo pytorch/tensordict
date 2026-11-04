@@ -3125,9 +3125,8 @@ class TestLazyStackedTensorDict:
         with pytest.raises(ValueError, match=r"view\(-1\)"):
             grouped.get("tokens", as_nested_tensor=True)
 
-    def test_get_padded_no_broadcast_and_promotes(self):
-        # #3445: as_padded_tensor broadcast size-1 dims instead of padding
-        # them, and cast to the first member's dtype
+    def test_get_padded_no_broadcast(self):
+        # #3445: as_padded_tensor broadcast size-1 dims instead of padding them
         ls = lazy_stack(
             [
                 lazy_stack(
@@ -3155,16 +3154,6 @@ class TestLazyStackedTensorDict:
         assert lazy_stack([b, a]).get("x", as_padded_tensor=True)[0].tolist() == (
             expected
         )
-        # mixed dtypes promote as torch.stack does, padding value included
-        ls = lazy_stack(
-            [
-                TensorDict(r=torch.tensor([1, 0, 1])),
-                TensorDict(r=torch.tensor([0.25, 0.75])),
-            ]
-        )
-        out = ls.get("r", as_padded_tensor=True, padding_value=0.5)
-        assert out.dtype == torch.float32
-        assert out.tolist() == [[1.0, 0.0, 1.0], [0.25, 0.75, 0.5]]
 
     def test_get_padded_unchanged(self):
         # #3445: inputs that were padded correctly keep their result
@@ -3189,13 +3178,23 @@ class TestLazyStackedTensorDict:
             [[1.0, 1.0], [-1.0, -1.0], [-1.0, -1.0]],
             [[2.0, 2.0], [2.0, 2.0], [2.0, 2.0]],
         ]
-        # the first member already has the promoted dtype
-        ls = lazy_stack(
-            [TensorDict(r=torch.tensor([0.25, 0.75])), TensorDict(r=torch.tensor([1]))]
-        )
-        out = ls.get("r", as_padded_tensor=True, padding_value=-1)
-        assert out.dtype == torch.float32
-        assert out.tolist() == [[0.25, 0.75], [1.0, -1.0]]
+        # mixed dtypes keep the cast to the first member's dtype
+        for first, second, expected in (
+            (torch.int64, torch.float32, [[1, 2, 3], [0, 0, -1]]),
+            (torch.float32, torch.int64, [[1.0, 2.0, 3.0], [0.0, 0.0, -1.0]]),
+            (torch.bool, torch.uint8, [[True, True, True], [False, False, True]]),
+            (torch.int64, torch.uint16, [[1, 2, 3], [0, 0, -1]]),
+            (torch.float32, torch.float8_e4m3fn, [[1, 2, 3], [0.25, 0.75, -1]]),
+        ):
+            ls = lazy_stack(
+                [
+                    TensorDict(r=torch.tensor([1, 2, 3], dtype=first)),
+                    TensorDict(r=torch.tensor([0.25, 0.75]).to(second)),
+                ]
+            )
+            out = ls.get("r", as_padded_tensor=True, padding_value=-1)
+            assert out.dtype == first
+            assert out.tolist() == expected
         # tensors of different ndims still raise
         ls = lazy_stack([TensorDict(x=torch.ones(2, 3)), TensorDict(x=torch.ones(2))])
         with pytest.raises(RuntimeError):

@@ -369,35 +369,32 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
 def _pad_tensors(
     tensors: list[Tensor], padding_value: float | int | bool, padding_side: str
 ) -> Tensor:
-    # the result has the dtype that torch.stack gives: pad_sequence would
-    # cast every tensor to the dtype of the first one
-    dtype = tensors[0].dtype
-    mixed = False
-    for t in tensors:
-        if t.dtype != dtype:
-            mixed = True
-            dtype = torch.promote_types(dtype, t.dtype)
-    if mixed:
-        tensors = [t.to(dtype) for t in tensors]
     ndim = tensors[0].ndim
+    dtype = tensors[0].dtype
     trailing = tensors[0].shape[1:]
-    if (
-        ndim < 2
-        or all(t.shape[1:] == trailing for t in tensors)
-        or any(t.ndim != ndim for t in tensors)
+    # pad_sequence pads only dim 0: it copies every tensor into an output
+    # shaped like the first one, which broadcasts the other dims where they
+    # have size 1. Tensors of one ndim and dtype whose other dims differ skip
+    # it; mixed dtypes keep its cast to the first dtype.
+    if not (
+        ndim > 1
+        and all(t.ndim == ndim and t.dtype == dtype for t in tensors)
+        and any(t.shape[1:] != trailing for t in tensors)
     ):
-        # pad_sequence pads only dim 0. It is not given tensors of one ndim
-        # whose other dims differ, which it would broadcast where a dim has
-        # size 1; tensors of different ndims keep its result or error.
-        return pad_sequence(
-            tensors,
-            padding_value=padding_value,
-            padding_side=padding_side,
-            batch_first=True,
-        )
-    # A lazy stack of lazy stacks gets here with tensors that the inner
-    # stacks have padded, or members can be ragged after dim 0: pad every
-    # other dim to its largest size, then pad dim 0 as before.
+        try:
+            return pad_sequence(
+                tensors,
+                padding_value=padding_value,
+                padding_side=padding_side,
+                batch_first=True,
+            )
+        except RuntimeError:
+            # pad_sequence needs the other dims to match or to broadcast. A
+            # lazy stack of lazy stacks gets here with tensors that the inner
+            # stacks have padded, or members can be ragged after dim 0: pad
+            # every other dim to its largest size, then pad dim 0 as before.
+            if ndim < 2 or any(t.ndim != ndim for t in tensors):
+                raise
     max_shape = [max(sizes) for sizes in zip(*(t.shape[1:] for t in tensors))]
     padded = []
     for t in tensors:
