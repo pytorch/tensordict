@@ -3125,6 +3125,82 @@ class TestLazyStackedTensorDict:
         with pytest.raises(ValueError, match=r"view\(-1\)"):
             grouped.get("tokens", as_nested_tensor=True)
 
+    def test_get_padded_no_broadcast_and_promotes(self):
+        # #3445: as_padded_tensor broadcast size-1 dims instead of padding
+        # them, and cast to the first member's dtype
+        ls = lazy_stack(
+            [
+                lazy_stack(
+                    [
+                        TensorDict(t=torch.tensor([1, 2, 3])),
+                        TensorDict(t=torch.tensor([4, 5])),
+                    ]
+                ),
+                lazy_stack(
+                    [TensorDict(t=torch.tensor([7])), TensorDict(t=torch.tensor([8]))]
+                ),
+            ]
+        )
+        assert ls.get("t", as_padded_tensor=True, padding_value=-1).tolist() == [
+            [[1, 2, 3], [4, 5, -1]],
+            [[7, -1, -1], [8, -1, -1]],
+        ]
+        # the result does not depend on the order of the members
+        a = TensorDict(x=torch.ones(2, 3), batch_size=[2])
+        b = TensorDict(x=torch.full((2, 1), 2.0), batch_size=[2])
+        expected = [[2.0, 0.0, 0.0], [2.0, 0.0, 0.0]]
+        assert lazy_stack([a, b]).get("x", as_padded_tensor=True)[1].tolist() == (
+            expected
+        )
+        assert lazy_stack([b, a]).get("x", as_padded_tensor=True)[0].tolist() == (
+            expected
+        )
+        # mixed dtypes promote as torch.stack does, padding value included
+        ls = lazy_stack(
+            [
+                TensorDict(r=torch.tensor([1, 0, 1])),
+                TensorDict(r=torch.tensor([0.25, 0.75])),
+            ]
+        )
+        out = ls.get("r", as_padded_tensor=True, padding_value=0.5)
+        assert out.dtype == torch.float32
+        assert out.tolist() == [[1.0, 0.0, 1.0], [0.25, 0.75, 0.5]]
+
+    def test_get_padded_unchanged(self):
+        # #3445: inputs that were padded correctly keep their result
+        ls = lazy_stack(
+            [TensorDict(t=torch.tensor([1, 2, 3])), TensorDict(t=torch.tensor([4, 5]))]
+        )
+        out = ls.get("t", as_padded_tensor=True, padding_value=-1)
+        assert out.dtype == torch.int64
+        assert out.tolist() == [[1, 2, 3], [4, 5, -1]]
+        out = ls.get("t", as_padded_tensor=True, padding_side="left")
+        assert out.tolist() == [[1, 2, 3], [0, 4, 5]]
+        # equal trailing dims, ragged dim 0
+        ls = lazy_stack(
+            [
+                TensorDict(x=torch.ones(1, 2), batch_size=[]),
+                TensorDict(x=torch.full((3, 2), 2.0), batch_size=[]),
+            ]
+        )
+        out = ls.get("x", as_padded_tensor=True, padding_value=-1)
+        assert out.dtype == torch.float32
+        assert out.tolist() == [
+            [[1.0, 1.0], [-1.0, -1.0], [-1.0, -1.0]],
+            [[2.0, 2.0], [2.0, 2.0], [2.0, 2.0]],
+        ]
+        # the first member already has the promoted dtype
+        ls = lazy_stack(
+            [TensorDict(r=torch.tensor([0.25, 0.75])), TensorDict(r=torch.tensor([1]))]
+        )
+        out = ls.get("r", as_padded_tensor=True, padding_value=-1)
+        assert out.dtype == torch.float32
+        assert out.tolist() == [[0.25, 0.75], [1.0, -1.0]]
+        # tensors of different ndims still raise
+        ls = lazy_stack([TensorDict(x=torch.ones(2, 3)), TensorDict(x=torch.ones(2))])
+        with pytest.raises(RuntimeError):
+            ls.get("x", as_padded_tensor=True)
+
     def test_lazy_stack_nested_tensordict_as_list(self):
         """Regression test: as_list should return list for leaf tensors,
         but properly stack nested TensorDicts"""
