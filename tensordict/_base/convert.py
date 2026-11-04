@@ -26,6 +26,7 @@ from typing import Any, List, Literal, Sequence, Type, TYPE_CHECKING
 import numpy as np
 import tensordict.base as _td_base
 import torch
+from tensordict._contextlib import _RESTORE_MODULE_STATE
 from tensordict._datasets import to_mds
 from tensordict._nestedkey import NestedKey
 from tensordict._tabular import (
@@ -325,13 +326,19 @@ def _restore_module(swap, args, kwargs, out):
     """
     hooks = torch.nn.modules.module._global_parameter_registration_hooks
     memo = {"hooks": tuple(hooks.values())}
-    # ``swap`` holds what the module held before the block: write it back as
-    # it is. Preserving the state of the slots would wrap an original
-    # parameter in a new one when its slot holds a vmap slice or a tensor
-    # that requires gradients, whose ``requires_grad`` is not the module's.
+    # ``swap`` holds what the module held before the block. Preserving the
+    # state of the slots would wrap an original parameter in a new one when
+    # its slot holds a vmap slice or a tensor that requires gradients, whose
+    # ``requires_grad`` is not the module's: write the parameters back as
+    # they are.
+    preserve = kwargs.get("preserve_module_state", True)
     current = swap._to_module(
         *args,
-        **{**kwargs, "memo": memo, "preserve_module_state": False},
+        **{
+            **kwargs,
+            "memo": memo,
+            "preserve_module_state": preserve and _RESTORE_MODULE_STATE,
+        },
         swap_dest={},
     )
     if not isinstance(current, dict):

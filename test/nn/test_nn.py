@@ -8654,6 +8654,36 @@ class TestToModule:
         assert module.weight.requires_grad is False
         assert module.bias.requires_grad is True
 
+    def test_to_module_nested_context_manager_keeps_parameter_slots(self, as_module):
+        # Leaving an inner block gives back the outer block's tensors that
+        # require grad as registered parameters (unchanged by #3461)
+        module = nn.Linear(3, 4)
+        outer = TensorDict.from_module(module).clone()
+        inner = TensorDict.from_module(module, as_module=as_module).detach().clone()
+        with outer.to_module(module):
+            with inner.to_module(module):
+                pass
+            assert module.weight is outer["weight"]
+            assert module.bias is outer["bias"]
+            assert {name for name, _ in module.named_parameters()} == {
+                "weight",
+                "bias",
+            }
+            assert set(module.state_dict()) == {"weight", "bias"}
+
+    def test_to_module_context_manager_keeps_nonleaf_parameter_slot(self, as_module):
+        # A tensor that requires grad, written into a parameter slot for good,
+        # is still registered there after a block (unchanged by #3461)
+        module = nn.Linear(3, 4)
+        weight = torch.randn(4, 3, requires_grad=True) * 1
+        TensorDict(weight=weight).to_module(module)
+        params = TensorDict.from_module(module, as_module=as_module).detach().clone()
+        with params.to_module(module):
+            pass
+        assert module.weight is weight
+        assert module._parameters["weight"] is weight
+        assert {name for name, _ in module.named_parameters()} == {"weight", "bias"}
+
     def test_to_module_context_manager_restores_on_error(self, as_module):
         # The module gets its original parameters back also when the body raises
         module = nn.Linear(4, 2)

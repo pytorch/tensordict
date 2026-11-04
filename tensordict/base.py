@@ -44,7 +44,7 @@ from typing import (
 import numpy as np
 import torch
 from tensordict._base.unsupported import _unsupported
-from tensordict._contextlib import LAST_OP_MAPS
+from tensordict._contextlib import _RESTORE_MODULE_STATE, LAST_OP_MAPS
 from tensordict._deprecation import (
     deprecated,
     deprecation_message,
@@ -1238,8 +1238,10 @@ def _maybe_preserve_module_state(
     name: str,
     tensor: torch.Tensor,
     *,
-    preserve_module_state: bool,
+    preserve_module_state: bool | str,
 ) -> torch.Tensor:
+    if preserve_module_state is _RESTORE_MODULE_STATE:
+        preserve_module_state = not isinstance(tensor, torch.nn.Parameter)
     if not preserve_module_state:
         return tensor
     try:
@@ -1280,9 +1282,11 @@ def _set_tensor_dict(
     inplace: bool,
     *,
     return_swap: bool,
-    preserve_module_state: bool,
+    preserve_module_state: bool | str,
 ) -> None:
     """Simplified version of torch.nn.utils._named_member_accessor."""
+    if preserve_module_state is _RESTORE_MODULE_STATE:
+        preserve_module_state = not isinstance(tensor, nn.Parameter)
     if (
         not inplace
         and not hooks

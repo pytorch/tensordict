@@ -17,6 +17,11 @@ from torch.compiler import is_compiling
 # TD cm functions
 LAST_OP_MAPS = {}
 
+# The ``preserve_module_state`` value with which a ``with ... to_module(...)``
+# block exits (#3461): the module's original parameters are written back as
+# they are, and its other original tensors as with ``True``.
+_RESTORE_MODULE_STATE = "restore"
+
 
 def _changed_in_place(self, out):
     # With inplace=True, the op changes the tensordict it was called on and
@@ -360,9 +365,13 @@ def _reverse_to_module(self, args, kwargs, out):
             else contextlib.nullcontext()
         ):
             # Write back what the module held, as _restore_module does.
+            preserve = kwargs.get("preserve_module_state", True)
             return self.to_module(
                 *args,
-                **{**kwargs, "preserve_module_state": False},
+                **{
+                    **kwargs,
+                    "preserve_module_state": preserve and _RESTORE_MODULE_STATE,
+                },
                 swap_dest=out,
             )
     except AttributeError:
