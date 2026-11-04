@@ -617,6 +617,30 @@ def test_lazy_stack_flags(benchmark):
     benchmark(lambda: (td.is_shared(), td.is_memmap()))
 
 
+def _rl_step_td(batch, features):
+    # 20 leaves: 9 at the top, 6 under "next", 5 under "stats" (1 deeper)
+    td = TensorDict(
+        {f"x{i}": torch.randn(batch, features) for i in range(8)},
+        batch_size=[batch],
+    )
+    td["obs"] = torch.randn(batch, features)
+    td["next"] = {f"y{i}": torch.randn(batch, features) for i in range(5)}
+    td["next", "obs"] = torch.randn(batch, features)
+    td["stats"] = {f"z{i}": torch.randn(batch, 1) for i in range(4)}
+    td["stats", "deep", "w"] = torch.randn(batch, features)
+    return td
+
+
+@pytest.mark.parametrize(
+    "batch,features", [(32, 4), (4096, 64)], ids=["rl_step", "large"]
+)
+def test_lazy_stack_to_tensordict(benchmark, batch, features):
+    td = LazyStackedTensorDict.lazy_stack(
+        [_rl_step_td(batch, features) for _ in range(8)], 0
+    )
+    benchmark(td.to_tensordict)
+
+
 def test_clone(benchmark, td):
     benchmark(td.clone)
 

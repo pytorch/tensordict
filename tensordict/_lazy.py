@@ -855,6 +855,111 @@ def _is_plain_tensor(tensor) -> bool:
     )
 
 
+def _dense_stack_members(tds, dim):
+    """Stacks lazy-stack members that are plain TensorDicts with the same entries.
+
+    Returns ``None``, before stacking anything, if a member or a nested
+    tensordict is not a plain TensorDict without names, if the members differ
+    in keys, batch size or device, or if an entry is not a plain tensor that
+    does not require grad.
+    """
+    if not tds or is_compiling():
+        # compiled code keeps the general path, its graphs and its guards
+        return None
+    if not _dense_stack_first_ok(tds[0]):
+        # most stacks that this path does not take stop at member 0, before
+        # the other members are read
+        return None
+    vals_by_key = _dense_stack_collect(tds)
+    if vals_by_key is None:
+        return None
+    try:
+        return _dense_stack_build(tds[0], vals_by_key, len(tds), dim)
+    except RuntimeError:
+        # e.g. leaves of different shapes: the general path raises its error
+        return None
+
+
+def _dense_stack_first_ok(td) -> bool:
+    # Whether td, member 0, holds only what _dense_stack_collect takes: plain
+    # TensorDicts without names, down to plain tensors that do not require
+    # grad. Its leaves must not be inference tensors either: outside inference
+    # mode, torch.stack of inference tensors only returns a view, where the
+    # clone of the general path does not; one other tensor among the inputs
+    # is enough for torch.stack to return a non-view.
+    if type(td) is not TensorDict or td._td_dim_names is not None:
+        return False
+    for value in td._tensordict.values():
+        if type(value) is Tensor:
+            if value.requires_grad or value.is_inference():
+                return False
+        elif not _dense_stack_first_ok(value):
+            return False
+    return True
+
+
+def _dense_stack_collect(tds):
+    td0 = tds[0]
+    if type(td0) is not TensorDict or td0._td_dim_names is not None:
+        return None
+    device = td0._device
+    batch_size = td0._batch_size
+    d0 = td0._tensordict
+    n = len(d0)
+    dicts = []
+    for td in tds:
+        if (
+            type(td) is not TensorDict
+            or td._td_dim_names is not None
+            or td._batch_size != batch_size
+            or td._device != device
+        ):
+            return None
+        d = td._tensordict
+        if len(d) != n:
+            return None
+        dicts.append(d)
+    out = {}
+    for key, v0 in d0.items():
+        vals = []
+        for d in dicts:
+            v = d.get(key)
+            if type(v) is not type(v0):
+                return None
+            vals.append(v)
+        if type(v0) is Tensor:
+            # The general path clones the stacked leaf, which gives it a
+            # CloneBackward0 grad_fn: keep that path for leaves with grad.
+            for v in vals:
+                if v.requires_grad:
+                    return None
+            out[key] = vals
+        elif type(v0) is TensorDict:
+            sub = _dense_stack_collect(vals)
+            if sub is None:
+                return None
+            out[key] = (vals[0], sub)
+        else:
+            return None
+    return out
+
+
+def _dense_stack_build(td0, vals_by_key, n, dim):
+    out = {}
+    for key, vals in vals_by_key.items():
+        if type(vals) is list:
+            out[key] = torch.stack(vals, dim)
+        else:
+            out[key] = _dense_stack_build(vals[0], vals[1], n, dim)
+    batch_size = td0._batch_size
+    return TensorDict._new_unsafe(
+        out,
+        batch_size=torch.Size((*batch_size[:dim], n, *batch_size[dim:])),
+        device=td0._device,
+        nested=False,
+    )
+
+
 class LazyStackedTensorDict(TensorDictBase):
     """A stack of tensordicts that keeps each input as a separate tensordict.
 
@@ -2565,6 +2670,15 @@ class LazyStackedTensorDict(TensorDictBase):
                     return None
             vals.append(val)
         return vals
+
+    # Override: stacks the leaves of the members directly, without building
+    # the lazy sub-stacks and cloning the stacked leaves.
+    def _to_tensordict(self, *, retain_none: bool | None) -> TensorDictBase:
+        if self._hook_out is None and not self._is_vmapped:
+            out = _dense_stack_members(self.tensordicts, self.stack_dim)
+            if out is not None:
+                return out
+        return TensorDictBase._to_tensordict(self, retain_none=retain_none)
 
     @_cache_while_locked
     def _get_str(
