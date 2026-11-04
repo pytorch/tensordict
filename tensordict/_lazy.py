@@ -4906,8 +4906,9 @@ class LazyStackedTensorDict(TensorDictBase):
             # The members are written one after another. A source that holds
             # the members in another order, as a read of this stack such as
             # td[perm] does, would give a later member a value that an
-            # earlier one overwrote (#3444).
-            input_dict_or_td = input_dict_or_td.clone()
+            # earlier one overwrote (#3444). Only the tensors are copied: the
+            # non-tensor data is written by reference, as for other sources.
+            input_dict_or_td = input_dict_or_td.apply(lambda x: x.clone())
         pieces = self._update_pieces(input_dict_or_td)
         if keys_to_update is None:
             plans = self._member_plans(pieces, non_blocking)

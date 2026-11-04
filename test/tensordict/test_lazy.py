@@ -3454,6 +3454,22 @@ class TestLazyStackedTensorDict:
         assert [m["a"].data_ptr() for m in t.tensordicts] == ptrs
 
     @pytest.mark.parametrize("op", ["copy_", "update_"])
+    @pytest.mark.parametrize("index", [[1, 2, 3, 3], [1, 1, 2, 3], [3, 2, 1, 0]])
+    def test_update_from_reordered_read_non_tensor(self, op, index):
+        # #3444: the non-tensor data of a reordered read is written by
+        # reference, and data that cannot be deep-copied does not raise
+        objs = [(i for i in range(j)) for j in range(4)]
+        t = lazy_stack(
+            [
+                TensorDict(a=torch.full((2,), float(i)), o=NonTensorData(objs[i]))
+                for i in range(4)
+            ]
+        )
+        getattr(t, op)(t[torch.tensor(index)])
+        assert t["a"][:, 0].tolist() == [float(i) for i in index]
+        assert all(m["o"] is objs[i] for m, i in zip(t.tensordicts, index))
+
+    @pytest.mark.parametrize("op", ["copy_", "update_"])
     @pytest.mark.parametrize("source", ["self", "slice", "flip", "fresh"])
     def test_update_from_same_order_read(self, op, source):
         # #3444: sources that are not reordered reads of the stack are
