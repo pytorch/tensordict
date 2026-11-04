@@ -1075,7 +1075,14 @@ def tensorclass(
             ``tensor_only``. Defaults to ``False``.
         frozen (bool, optional): if ``True``, assigning a field raises
             ``dataclasses.FrozenInstanceError``, as with
-            ``@dataclass(frozen=True)``. To block writes on one instance only,
+            ``@dataclass(frozen=True)``. In ``__post_init__``, fill a missing
+            field with ``self.set(name, value)``: ``object.__setattr__``
+            stores the value outside the tensordict, so pickle,
+            ``torch.save`` and ``to_dict()`` drop it. ``__post_init__`` also
+            runs when tensordict rebuilds a locked instance, so call ``set``
+            only when the field is missing, or pass
+            ``skip_post_init_on_rebuild=True`` (see :ref:`tensorclass-frozen`).
+            To block writes on one instance only,
             call ``lock_()`` on it or pass ``lock=True`` to the constructor:
             writes then raise a ``RuntimeError``. Defaults to ``False``.
         nocast (bool, optional): if ``True``, Tensor-compatible types such as
@@ -3955,6 +3962,24 @@ def _setattr(self, key: str, value: Any) -> None:
             f"field. Its fields are {sorted(self.__expected_keys__)}."
             f"{_did_you_mean(key, self.__expected_keys__)}"
         )
+    if type(value) is torch.Tensor:
+        # The steps of _set and TensorDict.set for a plain tensor, inlined:
+        # keep them in sync with _set (#3453)
+        cls = type(self)
+        td = __dict__["_tensordict"]
+        if (
+            type(td) is TensorDict
+            and not cls._autocast
+            and cls._is_non_tensor is not True
+            and getattr(cls, "set", None) is _set
+        ):
+            if td._is_locked:
+                raise RuntimeError(_LOCK_ERROR)
+            non_tensordict = __dict__["_non_tensordict"]
+            if key in non_tensordict:
+                del non_tensordict[key]
+            td._set_str(key, value, inplace=False, validated=False)
+            return
     out = self.set(key, value)
     if out is not self:
         raise RuntimeError(
@@ -6645,7 +6670,12 @@ class TensorClass(TensorCollection, metaclass=_TensorClassMeta):
     - ``frozen``: assigning a field raises ``FrozenInstanceError``, as with
       ``@dataclass(frozen=True)``. Subclasses of a frozen class are frozen
       too. A frozen class cannot subclass a non-frozen tensorclass: this
-      raises a ``TypeError``.
+      raises a ``TypeError``. In ``__post_init__``, fill a missing field
+      with ``self.set(name, value)``: ``object.__setattr__`` stores the value
+      outside the tensordict, so pickle, ``torch.save`` and ``to_dict()``
+      drop it. ``__post_init__`` also runs when tensordict rebuilds a locked
+      instance, so call ``set`` only when the field is missing, or add
+      ``"skip_post_init_on_rebuild"`` (see :ref:`tensorclass-frozen`).
 
           >>> class Foo(TensorClass["frozen"]):
           ...     x: torch.Tensor

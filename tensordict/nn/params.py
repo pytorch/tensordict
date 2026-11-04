@@ -396,6 +396,23 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         the old one. Write through the TensorDictParams, or pass
         ``lock=True``.
 
+    .. warning:: A TensorDictParams reads its entries from the
+        tensordict that it wraps, not from the ``_parameters`` and
+        ``_buffers`` of the module. The tools that swap the parameters
+        of a module by writing ``_parameters`` therefore do not reach it,
+        and silently use the stored values:
+        :func:`torch.func.functional_call` (and :func:`torch.func.grad`
+        through it), :func:`torch.export.export`, which captures the
+        top-level entries that the forward reads by key (``params["w"]``)
+        as constants, and FSDP2
+        (:func:`torch.distributed.fsdp.fully_shard`), where the forward
+        reads the original entries, so the sharded parameters get no
+        gradient and the optimizer does not train them. To call a module
+        with other values for its entries, use
+        :meth:`~tensordict.TensorDictBase.from_module` and
+        :meth:`~tensordict.TensorDictBase.to_module`:
+        ``with new_params.to_module(module): module(x)``.
+
     Args:
         parameters (TensorDictBase or dict, optional): the tensordict to wrap.
             A ``dict`` is wrapped in a :class:`~tensordict.TensorDict` first.

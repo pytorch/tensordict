@@ -1065,11 +1065,12 @@ class MemoryMappedTensor(torch.Tensor):
             index (index, optional): an index applied to the result, as in
                 ``tensor[index]``. Defaults to ``None``.
             mode (str, optional): ``"r"`` maps the file copy-on-write:
-                in-place writes stay in memory. ``"r+"`` maps it shared:
-                in-place writes reach the file, and a :class:`PermissionError`
-                is raised if the file is not writable. Defaults to ``None``,
-                which maps the file shared if it is writable and copy-on-write
-                otherwise.
+                in-place writes stay in the memory of this process, and a
+                pickled copy reads the file, without them. ``"r+"`` maps it
+                shared: in-place writes reach the file, and a
+                :class:`PermissionError` is raised if the file is not
+                writable. Defaults to ``None``, which maps the file shared if
+                it is writable and copy-on-write otherwise.
 
         Raises:
             ValueError: if ``mode`` is not ``None``, ``"r"`` or ``"r+"``.

@@ -132,7 +132,9 @@ An operator with a Python number or with another tensordict compiles:
 ``td[key] = value`` and :meth:`~tensordict.TensorDict.set` replace the
 tensor under the key. :meth:`~tensordict.TensorDict.set_` and
 :meth:`~tensordict.TensorDict.update_` copy the values into the existing
-tensor, and raise a ``KeyError`` for a missing key:
+tensor. ``set_`` raises a ``KeyError`` for a missing key. ``update_`` raises
+one when no tensor of the input matches an entry, and skips the missing keys
+otherwise:
 
   >>> td = TensorDict({"pos": torch.zeros(3)}, batch_size=[3])
   >>> old = td["pos"]

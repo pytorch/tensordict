@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import inspect
 import warnings
@@ -31,7 +32,12 @@ from functorch import (
 )
 from tensordict._deprecation import deprecated, deprecated_attributes
 from tensordict._td import TensorDict
-from tensordict.base import is_tensor_collection, NO_DEFAULT, TensorDictBase
+from tensordict.base import (
+    _is_leaf_nontensor,
+    is_tensor_collection,
+    NO_DEFAULT,
+    TensorDictBase,
+)
 from tensordict.functional import make_tensordict
 from tensordict.nn.utils import _dispatch_td_nn_modules, _set_skip_existing_None
 from tensordict.utils import (
@@ -729,8 +735,10 @@ class TensorDictModuleBase(nn.Module):
 
         Returns:
             ``None`` without ``parameters``. Otherwise a new tensordict of
-            tensors that share their storage with ``parameters`` and require
-            gradients.
+            tensors that share their storage with ``parameters``. The
+            floating-point and complex ones require gradients. A tensor that
+            a custom ``reset_parameters`` assigns, instead of writing it in
+            place, is returned as assigned.
 
         Raises:
             RuntimeError: if ``parameters`` has batch dimensions.
@@ -772,11 +780,53 @@ class TensorDictModuleBase(nn.Module):
                 "reset_parameters_recursive does not support batched TensorDicts, ensure `batch_size` is empty and the parameters shape match their original shape."
             )
 
-        sanitized_parameters = parameters.apply(
-            lambda x: x.detach().requires_grad_(), inplace=False
-        )
+        has_non_float = False
 
-        with sanitized_parameters.to_module(self, preserve_module_state=False):
+        @functools.cache
+        def keys_match():
+            # Nested nodes count too: an empty sub-tensordict that the module
+            # lacks makes the input malformed, as an extra leaf does
+            module_td = TensorDict.from_module(self, filter_empty=False)
+            leaves = set(module_td.keys(True, True))
+            nodes = set(module_td.keys(True)) - leaves
+            p_leaves = set(parameters.keys(True, True, is_leaf=_is_leaf_nontensor))
+            p_nodes = set(parameters.keys(True, is_leaf=_is_leaf_nontensor)) - p_leaves
+            if not (p_leaves <= leaves and p_nodes <= nodes):
+                return False
+            # A non-float leaf must stand for a non-float entry of the module:
+            # a float parameter stored as an integer tensor is malformed too
+            for key, value in parameters.items(True, True, is_leaf=_is_leaf_nontensor):
+                if isinstance(value, torch.Tensor) and not (
+                    value.is_floating_point() or value.is_complex()
+                ):
+                    entry = module_td.get(key)
+                    if not isinstance(entry, torch.Tensor) or (
+                        entry.is_floating_point() or entry.is_complex()
+                    ):
+                        return False
+            return True
+
+        def sanitize(x):
+            nonlocal has_non_float
+            # Only floating-point and complex tensors can require gradients.
+            # Other leaves are only detached when every leaf of parameters is
+            # a parameter or buffer of the module; otherwise requires_grad_
+            # raises its dtype error before the module is touched.
+            if x.is_floating_point() or x.is_complex() or not keys_match():
+                return x.detach().requires_grad_()
+            has_non_float = True
+            return x.detach()
+
+        sanitized_parameters = parameters.apply(sanitize, inplace=False)
+
+        # Modules with non-float buffers, such as BatchNorm, reset their float
+        # buffers in place, which autograd forbids on leaves that require
+        # gradients. Inputs with only floating-point and complex leaves keep
+        # grad mode as it is.
+        with (
+            sanitized_parameters.to_module(self, preserve_module_state=False),
+            torch.no_grad() if has_non_float else contextlib.nullcontext(),
+        ):
             self._reset_parameters(self)
         return sanitized_parameters
 

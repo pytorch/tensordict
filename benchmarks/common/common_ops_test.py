@@ -617,6 +617,30 @@ def test_lazy_stack_flags(benchmark):
     benchmark(lambda: (td.is_shared(), td.is_memmap()))
 
 
+def _rl_step_td(batch, features):
+    # 20 leaves: 9 at the top, 6 under "next", 5 under "stats" (1 deeper)
+    td = TensorDict(
+        {f"x{i}": torch.randn(batch, features) for i in range(8)},
+        batch_size=[batch],
+    )
+    td["obs"] = torch.randn(batch, features)
+    td["next"] = {f"y{i}": torch.randn(batch, features) for i in range(5)}
+    td["next", "obs"] = torch.randn(batch, features)
+    td["stats"] = {f"z{i}": torch.randn(batch, 1) for i in range(4)}
+    td["stats", "deep", "w"] = torch.randn(batch, features)
+    return td
+
+
+@pytest.mark.parametrize(
+    "batch,features", [(32, 4), (4096, 64)], ids=["rl_step", "large"]
+)
+def test_lazy_stack_to_tensordict(benchmark, batch, features):
+    td = LazyStackedTensorDict.lazy_stack(
+        [_rl_step_td(batch, features) for _ in range(8)], 0
+    )
+    benchmark(td.to_tensordict)
+
+
 def test_clone(benchmark, td):
     benchmark(td.clone)
 
@@ -671,6 +695,32 @@ def test_getitem(benchmark, td, c, index):
         _ = td[index]
 
     benchmark(exec_getitem)
+
+
+@pytest.mark.parametrize("size", ["small", "large"])
+@pytest.mark.parametrize("index", ["int", "slice", "tensor"])
+def test_getitem_rl_step(benchmark, index, size):
+    # 20 leaves in 4 nested nodes, as an RL step: per-env access, minibatches
+    # and replay-buffer samples
+    batch, features = (32, 4) if size == "small" else (4096, 64)
+    r = torch.randn
+    td = TensorDict(
+        {
+            **{f"x{i}": r(batch, features) for i in range(9)},
+            "next": {f"y{i}": r(batch, features) for i in range(6)},
+            "stats": {
+                **{f"z{i}": r(batch, 1) for i in range(4)},
+                "deep": {"w": r(batch, features)},
+            },
+        },
+        batch_size=[batch],
+    )
+    index = {
+        "int": 3,
+        "slice": slice(2, 10),
+        "tensor": torch.randint(0, batch, (batch // 2,)),
+    }[index]
+    benchmark(td.__getitem__, index)
 
 
 @pytest.mark.parametrize(
@@ -1317,6 +1367,32 @@ def test_pack_nested(benchmark, op):
 def test_apply_nested(benchmark):
     td = big_nested_td()[0][0]
     benchmark(td.apply, lambda x: x)
+
+
+@pytest.mark.parametrize("batch,features", [(32, 4), (4096, 64)])
+def test_apply_rl_step(benchmark, batch, features):
+    # a TorchRL step: 20 leaves in 4 nested nodes (#3460)
+    td = TensorDict(
+        {
+            **{f"x{i}": torch.randn(batch, features) for i in range(9)},
+            "next": {f"y{i}": torch.randn(batch, features) for i in range(6)},
+            "stats": {
+                **{f"z{i}": torch.randn(batch, 1) for i in range(4)},
+                "deep": {"w": torch.randn(batch, features)},
+            },
+        },
+        batch_size=[batch],
+    )
+    benchmark(td.apply, lambda x: x * 2)
+
+
+def test_apply_filter_none(benchmark):
+    # fn returns None for most leaves, which apply leaves out (#3460)
+    td = TensorDict(
+        {f"x{i}": torch.randn(32, 4 if i % 4 else 1) for i in range(20)},
+        batch_size=[32],
+    )
+    benchmark(td.apply, lambda x: x if x.shape[-1] == 1 else None)
 
 
 @pytest.mark.parametrize("safe", [True, False])
