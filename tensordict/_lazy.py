@@ -863,7 +863,8 @@ def _dense_stack_members(tds, dim):
     in keys, batch size or device, or if an entry is not a plain tensor that
     does not require grad.
     """
-    if not tds:
+    if not tds or is_compiling():
+        # compiled code keeps the general path, its graphs and its guards
         return None
     vals_by_key = _dense_stack_collect(tds)
     if vals_by_key is None:
