@@ -203,6 +203,12 @@ dimension that differs. Here, two systems have 2 and 4 particles:
   >>> ragged[1].batch_size
   torch.Size([4])
 
+``numel()`` of such a stack returns 1, whatever its members hold. To count
+the elements of the batch, call ``reshape(-1)`` first:
+
+  >>> ragged.reshape(-1).numel()
+  6
+
 .. _stacking-which-function:
 
 Which function to use
@@ -321,6 +327,13 @@ node:
   True
   >>> graphs[1]["nodes"].shape
   torch.Size([3, 2])
+
+In a lazy stack of lazy stacks, ``as_padded_tensor=True`` puts the stack
+dimension of each inner stack first. If the inner stacks were built along
+different dimensions, some members come out transposed and padded with zeros,
+although their entries have the same shape. Build the inner stacks along the
+same dimension, or call ``contiguous()`` on each inner stack whose entries
+have the same shape.
 
 :meth:`~tensordict.LazyStackedTensorDict.densify` turns the whole lazy stack
 into a regular TensorDict. The entries with different shapes become nested

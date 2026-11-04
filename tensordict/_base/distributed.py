@@ -971,7 +971,13 @@ class _Distributed:
         reduction, or with ``async_op=True``, after each reduction completes.
         That write raises if a member leaf cannot be written in place, such as
         an expanded tensor, and the call waits for every reduction before it
-        raises. See :ref:`distributed-collectives`.
+        raises. A lazy stack reduces only the keys that every member holds:
+        rank ``dst`` keeps its own values for the keys that only some
+        members hold.
+        To reduce them too, call ``reduce`` on each member
+        (``for member in td.tensordicts: member.reduce(dst)``), or call
+        :meth:`~.all_reduce`, which reduces every key. See
+        :ref:`distributed-collectives`.
 
         Args:
             dst (int): the rank that receives the result.

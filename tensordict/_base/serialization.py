@@ -1450,6 +1450,12 @@ class _Serialization:
         is not restored by :meth:`~.load_memmap`, and writing it to a
         directory warns (see :meth:`~.memmap`).
 
+        A view of a memory-mapped tensordict, such as a slice or a transpose,
+        written back to the directory that it maps can leave wrong data in
+        that directory, without an error. Pass ``atomic=True`` and
+        ``copy_existing=True``, which write a new directory first, or write to
+        another directory (see :meth:`~.memmap`).
+
         Args:
             prefix (str or Path, optional): the directory to write to.
                 Defaults to ``None``, which writes into the directory of the
@@ -1819,6 +1825,13 @@ class _Serialization:
             For a directory, the tensordict returned here still holds the
             entry, but an archive, which is read back, does not. Rename the
             entry before saving to keep it.
+
+        .. note::
+            A view of a memory-mapped tensordict, such as ``td[1:]`` or a
+            transpose, written back to the directory that it maps can leave
+            wrong data in that directory, without an error. Pass
+            ``atomic=True`` and ``copy_existing=True``, which write a new
+            directory first, or write to another directory.
 
         Examples:
             >>> import os

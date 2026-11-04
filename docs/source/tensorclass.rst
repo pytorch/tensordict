@@ -144,6 +144,13 @@ index always applies to the batch dimensions. To read a field by name, use
   >>> data.get("count").shape
   torch.Size([3, 4, 1])
 
+``"count" in data`` iterates over the rows of the batch, not over the
+fields: it returns ``False`` for a field that is set, and raises a
+``TypeError`` when the batch size is empty. Test the keys instead:
+
+  >>> "count" in data.keys()
+  True
+
 Assigning a name that is not a field, as an attribute or with ``set()``,
 raises ``AttributeError``. ``set_non_tensor()``, ``setdefault()``,
 ``create_nested()``, ``rename_key_()``, ``update()`` with a ``TensorDict``
