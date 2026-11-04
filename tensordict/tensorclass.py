@@ -4395,6 +4395,33 @@ def _update_scalar_fields(self, input_dict: dict, keys_to_update) -> dict:
     return rest
 
 
+def _update_nocast_fields(self, input_dict: dict, keys_to_update, clone: bool) -> dict:
+    """Sets the numbers and NumPy arrays that ``input_dict`` gives to fields of a ``nocast`` class as ``setattr`` does.
+
+    The dict path of ``update`` would make them tensors. With ``clone=True``,
+    a NumPy array is copied. Returns the other entries.
+    """
+    expected_keys = type(self).__expected_keys__
+    selected = (
+        None
+        if keys_to_update is None
+        else {key for key in keys_to_update if len(_unravel_key_to_tuple(key)) == 1}
+    )
+    rest = {}
+    for key, value in input_dict.items():
+        if (
+            isinstance(value, (int, float, np.ndarray, np.generic))
+            and key in expected_keys
+            and (selected is None or key in selected or (key,) in selected)
+        ):
+            if clone and isinstance(value, np.ndarray):
+                value = value.copy()
+            _set(self, key, value)
+        else:
+            rest[key] = value
+    return rest
+
+
 def _update(
     self,
     input_dict_or_td: dict[str, CompatibleType] | T | None = None,
@@ -4446,6 +4473,20 @@ def _update(
             # As setattr does (#1199): these calls raised before
             input_dict_or_td = _update_scalar_fields(
                 self, input_dict_or_td, keys_to_update
+            )
+            if not input_dict_or_td:
+                return self
+        elif (
+            type(self)._nocast
+            and not inplace
+            and not update_batch_size
+            and not ignore_lock
+            and not self._is_non_tensor
+            and not self._tensordict.is_locked
+        ):
+            # A nocast class keeps numbers and NumPy arrays as setattr does
+            input_dict_or_td = _update_nocast_fields(
+                self, input_dict_or_td, keys_to_update, clone
             )
             if not input_dict_or_td:
                 return self
