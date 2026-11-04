@@ -5355,6 +5355,14 @@ class LazyStackedTensorDict(TensorDictBase):
                     1 if size == -1 and dim < lead else size
                     for dim, size in enumerate(indexed_bs)
                 )
+            # a value for one element may have leading dims of size 1, as
+            # in TensorDict.update_at_
+            while (
+                not indexed_bs
+                and input_dict_or_td.batch_dims
+                and input_dict_or_td.batch_size[0] == 1
+            ):
+                input_dict_or_td = input_dict_or_td.squeeze(0)
             input_dict_or_td = input_dict_or_td.expand(indexed_bs)
         # the members of a NonTensorStack take no keys_to_update
         kwargs = {} if keys_to_update is None else {"keys_to_update": keys_to_update}
