@@ -87,6 +87,9 @@ def _reverse_flatten_keys(self, args, kwargs, out):
         isinstance(separator, str)
         and separator
         and separator != sep
+        # unflatten_keys(sep) restores a flat tensordict whose keys hold no
+        # sep exactly: keep it there
+        and any(not isinstance(key, str) or sep in key for key in out.keys(True))
         and all(
             separator.join(parts).split(separator) == list(parts)
             for parts in (
@@ -115,6 +118,9 @@ def _reverse_unflatten_keys(self, args, kwargs, out):
         and separator != sep
         and not _changed_in_place(self, out)
         and all(isinstance(key, str) for key in out.keys(True))
+        # with no key that holds the separator, the op changed nothing and
+        # flatten_keys(sep) restores the keys exactly: keep it there
+        and any(separator in key for key in out.keys(True))
     ):
         # flatten_keys undoes the op exactly: no key was nested before it
         sep = separator
