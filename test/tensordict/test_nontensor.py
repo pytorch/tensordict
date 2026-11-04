@@ -38,6 +38,7 @@ from tensordict import (
     TensorClass,
     tensorclass,
     TensorDict,
+    TensorDictParams,
     UnbatchedTensor,
 )
 from tensordict._utils_options import _set_capture_non_tensor_stack
@@ -2355,6 +2356,27 @@ class TestNonTensorData:
             assert entry.tolist() == ["old"] * 3
         else:
             assert entry.tolist() == ["a", "b", "c"]
+
+    @pytest.mark.parametrize("write", ["update_", "copy_", "update_at_"])
+    def test_update__stack_into_data_params_root(self, write):
+        # #3501: a TensorDictParams gets its tensors written without an error
+        # and can still be moved and cast afterwards; the non-tensor entry
+        # keeps its value or holds the rows of the source
+        td = TensorDict(x=torch.zeros(3), batch_size=[3])
+        td.set_non_tensor("s", "old")
+        params = TensorDictParams(td)
+        source = TensorDict(
+            x=torch.ones(3), s=NonTensorStack("a", "b", "c"), batch_size=[3]
+        )
+        if write == "update_at_":
+            params.update_at_(source, ())
+        else:
+            getattr(params, write)(source)
+        assert (params["x"] == 1).all()
+        assert params.get("s").tolist() in (["old"] * 3, ["a", "b", "c"])
+        params.to("cpu")
+        params.cpu()
+        params.to(torch.float64)
 
     @pytest.mark.parametrize(
         "value",

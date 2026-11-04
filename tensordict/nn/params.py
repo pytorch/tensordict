@@ -359,11 +359,25 @@ def _apply_on_data_and_non_tensor(func):
         else:
             data = self.data
         getattr(data, func.__name__)(*args, **kwargs)
-        if has_non_tensor and replaces_leaves:
+        if (
+            has_non_tensor
+            and replaces_leaves
+            and not _runs_update_(func.__name__, args, kwargs)
+        ):
             _set_replaced_non_tensor(self._param_td, data)
         return self
 
     return new_func
+
+
+def _runs_update_(name, args, kwargs):
+    # update_at_(value, ()) runs update_ on data. A NonTensorStack that update_
+    # puts in data stays there: the wrapped tensordict cannot hold one, since
+    # to() raises for it (#3501).
+    if name != "update_at_":
+        return False
+    idx = args[1] if len(args) > 1 else kwargs.get("idx", kwargs.get("index"))
+    return isinstance(idx, tuple) and not idx
 
 
 class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc,attr-defined]
