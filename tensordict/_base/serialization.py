@@ -1156,7 +1156,14 @@ class _Serialization:
                         or not v.is_contiguous()
                     ):
                         v = v.clone(memory_format=torch.contiguous_format)
-                    flat_view = v.reshape(-1).view(torch.uint8)
+                    try:
+                        flat_view = v.reshape(-1).view(torch.uint8)
+                    except RuntimeError:
+                        # a conjugate or negative view cannot be viewed as bytes
+                        if not (v.is_conj() or v.is_neg()):
+                            raise
+                        v = v.resolve_conj().resolve_neg()
+                        flat_view = v.reshape(-1).view(torch.uint8)
                     pad = offsets[idx + 1] - offsets[idx] - flat_view.numel()
                     if pad:
                         flat_view = torch.cat([flat_view, flat_view.new_zeros(pad)])
@@ -1193,7 +1200,15 @@ class _Serialization:
                             flat_view = flat_view.clone(
                                 memory_format=torch.contiguous_format
                             )
-                        flat_view = flat_view.view(torch.uint8)
+                        try:
+                            flat_view = flat_view.view(torch.uint8)
+                        except RuntimeError:
+                            # a conjugate or negative view cannot be viewed as bytes
+                            if not (flat_view.is_conj() or flat_view.is_neg()):
+                                raise
+                            flat_view = (
+                                flat_view.resolve_conj().resolve_neg().view(torch.uint8)
+                            )
                         start, stop = offsets[idx], offsets[idx + 1]
                         pad = stop - start - flat_view.numel()
                         storage[start : stop - pad].copy_(
@@ -1262,7 +1277,13 @@ class _Serialization:
                     or not v.is_contiguous()
                 ):
                     v = v.clone(memory_format=torch.contiguous_format)
-                v, pad = _view_and_pad(v)
+                try:
+                    v, pad = _view_and_pad(v)
+                except RuntimeError:
+                    # a conjugate or negative view cannot be viewed as bytes
+                    if not (v.is_conj() or v.is_neg()):
+                        raise
+                    v, pad = _view_and_pad(v.resolve_conj().resolve_neg())
                 items.append(v)
             if non_blocking and (device is None or device.type != "cuda"):
                 # sync if needed

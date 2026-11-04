@@ -950,6 +950,29 @@ class TestGeneric:
             assert actual.shape == expected.shape
             assert actual.dtype == expected.dtype
 
+    @pytest.mark.parametrize("device", get_available_devices())
+    @pytest.mark.parametrize("num_threads", [0, 2])
+    @pytest.mark.parametrize("view_kind", ["conjugate", "negative", "strided"])
+    def test_consolidate_view_bits(self, device, num_threads, view_kind):
+        # #3434: consolidate raised on contiguous conjugate and negative views,
+        # which cannot be viewed as bytes; a strided conjugate view worked.
+        # A CPU source with a CUDA device and threads takes the per-leaf copy
+        # path.
+        if view_kind == "conjugate":
+            tensor = torch.tensor([1 + 2j, 3 - 1j]).conj()
+        elif view_kind == "negative":
+            tensor = torch._neg_view(torch.arange(3.0))
+        else:
+            tensor = torch.tensor([[1 + 2j, 3 - 1j], [2j, 4]]).t().conj()
+        td = TensorDict(x=tensor, y=torch.arange(2))
+        td_c = td.consolidate(device=device, num_threads=num_threads)
+        td_p = pickle.loads(pickle.dumps(td_c))
+        for out in (td_c, td_p):
+            assert out["x"].tolist() == tensor.tolist()
+            assert not out["x"].is_conj()
+            assert not out["x"].is_neg()
+            assert torch.equal(out["y"].cpu(), td["y"])
+
     @pytest.mark.parametrize("num_threads", [0, 2])
     def test_consolidate_column_slice(self, num_threads):
         # x[:, :1] has strides (4, 1) and reshape(-1) returns a stride-4
@@ -3764,6 +3787,23 @@ class TestGeneric:
         out = tensordict.from_safetensors(tmp_path / "tc.safetensors")
         assert type(out) is Labeled
         assert (out == td["labeled"]).all()
+
+    @pytest.mark.skipif(not _has_safetensors, reason="safetensors not installed")
+    @pytest.mark.parametrize("view_kind", ["conjugate", "negative", "strided"])
+    def test_safetensors_view_bits(self, tmp_path, view_kind):
+        # #3434: the safetensors writer wrote a conjugate view's storage, which
+        # holds the values before conjugation
+        if view_kind == "conjugate":
+            tensor = torch.tensor([1 + 2j, 3 - 1j]).conj()
+        elif view_kind == "negative":
+            tensor = torch._neg_view(torch.tensor([1.0, 2.0]))
+        else:
+            tensor = torch.tensor([[1 + 2j, 3 - 1j], [2j, 4]]).t().conj()
+        td = TensorDict(x=tensor, y=torch.arange(2))
+        tensordict.to_safetensors(td, tmp_path / "td.safetensors")
+        out = tensordict.from_safetensors(tmp_path / "td.safetensors")
+        assert out["x"].tolist() == tensor.tolist()
+        assert torch.equal(out["y"], td["y"])
 
     @pytest.mark.skipif(not _has_safetensors, reason="safetensors not installed")
     def test_safetensors_module(self, tmp_path):
