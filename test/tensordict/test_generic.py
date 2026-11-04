@@ -17065,11 +17065,15 @@ class TestGeneric:
     def _apply_outcome(td_case, fn_case, kwargs):
         torch.manual_seed(0)
         td = TestGeneric._APPLY_DENSE_TDS[td_case]()
-        ptrs = {
-            leaf.untyped_storage().data_ptr()
+        # Keep the leaves alive until the result is described: the leaves of a
+        # lazy stack entry are temporaries, whose freed storage the result
+        # could reuse
+        leaves = [
+            leaf
             for leaf in td.values(True, True, is_leaf=is_leaf_nontensor)
             if isinstance(leaf, torch.Tensor) and not leaf.is_nested
-        }
+        ]
+        ptrs = {leaf.untyped_storage().data_ptr() for leaf in leaves}
         calls = []
         fn0 = TestGeneric._APPLY_DENSE_FNS[fn_case]
 
@@ -17091,6 +17095,7 @@ class TestGeneric:
                 outcome = (type(err), re.sub(r"\bj\d+", "j", str(err)))
             else:
                 outcome = TestGeneric._apply_describe(result, ptrs)
+        del leaves
         return (
             outcome,
             calls,
