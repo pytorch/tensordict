@@ -1363,6 +1363,26 @@ class ProbabilisticTensorDictModule(TensorDictModuleBase):
             raise NotImplementedError(f"unknown interaction_type {interaction_type}")
 
 
+def _stored_like_drawn(tensordict: TensorDictBase, keys, sample) -> bool:
+    """Whether the stored values of ``keys`` have the dtype, shape and device of the draw ``sample``."""
+    if isinstance(sample, torch.Tensor):
+        sample = [sample]
+    if is_tensor_collection(sample):
+        pairs = ((key, sample.get(key, None)) for key in keys)
+    else:
+        pairs = zip(keys, sample)
+    for key, drawn in pairs:
+        stored = tensordict.get(key, None)
+        if isinstance(drawn, torch.Tensor) and isinstance(stored, torch.Tensor):
+            if (
+                stored.dtype != drawn.dtype
+                or stored.shape != drawn.shape
+                or stored.device != drawn.device
+            ):
+                return False
+    return True
+
+
 class ProbabilisticTensorDictSequential(TensorDictSequential):
     """A :class:`~tensordict.nn.TensorDictSequential` with probabilistic modules, which can return their distribution.
 
@@ -2001,6 +2021,13 @@ class ProbabilisticTensorDictSequential(TensorDictSequential):
                         writeback(gen)
                     if tdm.num_samples not in ((), None):
                         td_copy = td_copy.expand(tdm.num_samples + td_copy.shape)
+                    if keep and not _stored_like_drawn(
+                        td_copy, tdm.dist_sample_keys, sample
+                    ):
+                        # A stored value of another dtype, shape or device
+                        # than the draw: the later modules read the draw, as
+                        # in get_dist
+                        keep = False
                     if keep:
                         # The later modules read the stored samples
                         pass

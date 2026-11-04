@@ -2920,6 +2920,29 @@ class TestTDSequence:
                 Categorical(logits=to_logits.module(data["loc"])).logits,
             )
 
+    def test_probtdseq_log_prob_stored_sample_other_dtype(self):
+        # #3447: a stored sample of another dtype than the draw is not fed to
+        # the later modules; they read the draw, as before
+        torch.manual_seed(0)
+        lin = nn.Linear(1, 3)
+        seq = ProbabilisticTensorDictSequential(
+            ProbabilisticTensorDictModule(
+                ["loc", "scale"], ["cont"], distribution_class=Normal
+            ),
+            TensorDictModule(lin, ["cont"], ["logits"]),
+            ProbabilisticTensorDictModule(
+                ["logits"], ["disc"], distribution_class=Categorical
+            ),
+            return_composite=True,
+        )
+        td = TensorDict(loc=torch.randn(4, 1), scale=torch.ones(4, 1), batch_size=[4])
+        data = seq(td.clone())
+        data["cont"] = data["cont"].double()
+        with set_composite_lp_aggregate(False):
+            lp = seq.log_prob(data)
+        expected = Categorical(logits=lin(data["loc"])).log_prob(data["disc"])
+        torch.testing.assert_close(lp["disc_log_prob"], expected)
+
     @pytest.mark.parametrize("interaction", [None, "random"])
     @set_composite_lp_aggregate(False)
     def test_probtdseq_log_prob_stored_samples_composite_head(self, interaction):
