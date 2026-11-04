@@ -9268,6 +9268,85 @@ class TestNoCasting:
 
         assert isinstance(X(False).a, bool)
 
+    @pytest.mark.parametrize("batch_size", [[2], [2, 3]])
+    def test_nocast_update_keeps_numbers(self, batch_size):
+        # #3436: with a batch size, update() on a nocast class raised a
+        # batch-size error for a Python number or a NumPy scalar, where
+        # setattr keeps it
+        class NC(TensorClass["nocast"]):
+            a: torch.Tensor
+            n: int
+            t: torch.Tensor = None
+            f: float = None
+
+        x = NC(a=torch.zeros(batch_size), n=3, batch_size=batch_size)
+        x.update({"n": 9, "t": 7, "f": np.float32(1.5)})
+        assert type(x.n) is int and x.n == 9
+        assert type(x.t) is int and x.t == 7
+        assert isinstance(x.f, np.float32) and x.f == 1.5
+        x.update(n=np.int64(4))
+        assert isinstance(x.n, np.int64) and x.n == 4
+        x.update({"n": True, "a": torch.ones(batch_size)}, clone=True)
+        assert x.n is True
+        assert (x.a == 1).all()
+        # keys_to_update still selects the keys
+        x.update({"n": 1}, keys_to_update=["a"])
+        assert x.n is True
+        x.update({"n": 2}, keys_to_update=[("n",)])
+        assert x.n == 2
+        # through a lazy stack, an indexed tensorclass and a TensorDict
+        y = torch.stack([x.clone(), x.clone()])
+        y.update({"n": 5})
+        assert y.n == 5
+        z = NC(
+            a=torch.zeros([4, *batch_size[1:]]), n=3, batch_size=[4, *batch_size[1:]]
+        )
+        z[1:3].update({"n": 5})
+        td = TensorDict(x=x, batch_size=batch_size)
+        td.update({"x": {"n": 6}})
+        assert td["x"].n == 6
+
+    @pytest.mark.parametrize("batch_size", [[], [2]])
+    def test_nocast_update_unchanged(self, batch_size):
+        # #3436: what the fix leaves as it is
+        class NC(TensorClass["nocast"]):
+            a: torch.Tensor
+            n: int
+
+        class Default(TensorClass):
+            a: torch.Tensor
+            n: int
+
+        if batch_size:
+            x = Default(a=torch.zeros(batch_size), n=3, batch_size=batch_size)
+            x.update({"n": 9})
+            assert type(x.n) is int and x.n == 9
+        else:
+            with pytest.warns(FutureWarning, match="keeping the Python value"):
+                x = Default(a=torch.zeros(()), n=3, batch_size=batch_size)
+            x.update({"n": 9})
+            assert isinstance(x.n, torch.Tensor) and x.n == 9
+
+        x = NC(a=torch.zeros(batch_size), n=3, batch_size=batch_size)
+        x.update({"a": torch.ones(batch_size)})
+        assert isinstance(x.a, torch.Tensor) and (x.a == 1).all()
+        # NumPy arrays take the tensor path at any batch size
+        x.update({"n": np.ones(batch_size)})
+        assert isinstance(x.n, torch.Tensor) and x.n.shape == torch.Size(batch_size)
+        if not batch_size:
+            # with an empty batch size, a number becomes a 0-d tensor
+            x.update({"n": 9})
+            assert isinstance(x.n, torch.Tensor) and x.n == 9
+        else:
+            with pytest.raises(RuntimeError, match="batch dimension mismatch"):
+                x.update({"n": np.ones(5)})
+            with pytest.raises(RuntimeError, match="batch dimension mismatch"):
+                x.update({"n": 9}, inplace=True)
+        x = NC(a=torch.zeros(batch_size), n=3, batch_size=batch_size)
+        with pytest.raises(RuntimeError):
+            x.update_({"n": 9})
+        assert x.n == 3
+
 
 class TestCastFilter:
     @staticmethod
