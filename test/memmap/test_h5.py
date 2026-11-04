@@ -2585,6 +2585,38 @@ class TestH5Indexing:
         for key in td.keys(True, True):
             assert (h5td.get(key) == td.get(key)).all(), key
 
+    def test_index_twice_set_new_nested(self, tmp_path):
+        # #3443: new nested entries written through h5td[i][j:k] were lost;
+        # they reach the file
+        td = TensorDict(
+            a=torch.zeros(2, 4),
+            n=TensorDict(b=torch.zeros(2, 4), batch_size=[2, 4]),
+            batch_size=[2, 4],
+        )
+        h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+        expected = [[0.0] * 4, [0.0, 7.0, 7.0, 0.0]]
+        sub = h5td[1][1:3]
+        sub.set(("p", "q"), torch.full((2,), 7.0))
+        assert h5td.get(("p", "q")).tolist() == expected
+        assert sub.get(("p", "q")).tolist() == [7.0, 7.0]
+        sub.update({"n": {"z": torch.full((2,), 7.0)}})
+        assert h5td.get(("n", "z")).tolist() == expected
+        sub.update({("r", "s"): torch.full((2,), 7.0)})
+        assert h5td.get(("r", "s")).tolist() == expected
+        # an existing nested leaf is still written in place
+        sub.set_(("n", "b"), torch.full((2,), 7.0))
+        assert h5td.get(("n", "b")).tolist() == expected
+        for key in (("p", "q"), ("n", "z"), ("r", "s")):
+            assert h5td.get(key).dtype == torch.float32, key
+        # update under "n" gives what one view gives
+        one = PersistentTensorDict.from_dict(td, filename=tmp_path / "one.h5")
+        value = {"n": {"z": torch.full((2,), 7.0), "y": torch.full((2,), 7)}}
+        one._get_sub_tensordict((1, slice(1, 3))).update(value)
+        sub.update(value)
+        for key in (("n", "z"), ("n", "y")):
+            assert h5td.get(key).dtype == one.get(key).dtype, key
+            assert h5td.get(key).tolist() == one.get(key).tolist(), key
+
     def test_stack_items(self, data):
         # h5td[idx] is a lazy view of the file, not a lazy stack
         td, h5td = data
