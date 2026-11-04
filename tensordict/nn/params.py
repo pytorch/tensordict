@@ -1605,10 +1605,50 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         self._param_td = param_td.copy()
         # Keep a list of buffers to update .data only
         bufs = dict(self._buffers)
+        params = dict(self._parameters)
         out: TensorDictBase = super()._apply(fn, recurse=recurse)
+        replaced = {}
         for key, val in bufs.items():
-            val.data = self._buffers[key].data
+            new = self._buffers[key]
+            if new is not val and not torch._has_compatible_shallow_copy_type(val, new):
+                # .data cannot be set across these tensor types (meta and
+                # to_empty): keep the new buffer.
+                replaced[key] = new
+                continue
+            val.data = new.data
             self._buffers[key] = val
+        # nn.Module._apply replaces a parameter with a new one when the tensor
+        # types are incompatible (meta), or with
+        # overwrite_module_params_on_conversion: put it into _param_td too.
+        for key, val in params.items():
+            new = self._parameters[key]
+            if new is not val:
+                replaced[key] = new
+        if replaced:
+            keys = self._leaf_keys()
+            # As in _load_from_state_dict: the TensorDictParams on the path of
+            # each leaf register it again.
+            owners = {self}
+            for key, new in replaced.items():
+                *path, last = _unravel_key_to_tuple(keys[key])
+                parent = self
+                for part in path:
+                    parent = parent._get_str(part, NO_DEFAULT)
+                    if isinstance(parent, TensorDictParams):
+                        owners.add(parent)
+                if isinstance(parent, TensorDictParams):
+                    parent = parent._param_td
+                # validated: the device of the tensordict is updated below.
+                parent._set_str(
+                    last,
+                    new,
+                    inplace=False,
+                    validated=True,
+                    ignore_lock=True,
+                    non_blocking=False,
+                )
+            for owner in owners:
+                owner._reset_params()
         # Check device and shape
         cbs = out._check_batch_size(raise_exception=False)
         if not cbs:

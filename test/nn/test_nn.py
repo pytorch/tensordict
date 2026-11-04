@@ -6155,6 +6155,101 @@ class TestTensorDictParams:
         assert (params["a.b"] == 1).all() and (params["c"] == 1).all()
         assert params["s"] == "text"
 
+    @staticmethod
+    def _apply_params(device=None):
+        # A parameter, a nested parameter, a buffer, and a nested
+        # TensorDictParams with a parameter and a buffer.
+        return TensorDictParams(
+            TensorDict(
+                w=torch.randn(3),
+                n={"b": torch.randn(2)},
+                buf=torch.arange(2),
+                sub=TensorDictParams(TensorDict(v=torch.randn(2), ib=torch.arange(3))),
+                device=device,
+            )
+        )
+
+    @staticmethod
+    def _check_registered(params):
+        registered = {**dict(params.named_parameters()), **dict(params.named_buffers())}
+        leaves = {
+            ".".join(key) if isinstance(key, tuple) else key: leaf
+            for key, leaf in params.items(True, True)
+        }
+        assert registered.keys() == leaves.keys()
+        for name, leaf in leaves.items():
+            assert registered[name] is leaf, name
+
+    @pytest.mark.parametrize("locked", [True, False])
+    @pytest.mark.parametrize("op", ["to_empty", "meta", "overwrite"])
+    def test_apply_replaced_leaves(self, op, locked):
+        # #3440: when nn.Module._apply replaces the tensors (meta, to_empty,
+        # overwrite_module_params_on_conversion), the leaves are the new
+        # tensors that named_parameters() and named_buffers() return.
+        if op == "to_empty":
+            with torch.device("meta"):
+                params = self._apply_params()
+        else:
+            params = self._apply_params()
+        params.lock_() if locked else params.unlock_()
+        module = self._parent(params)
+        if op == "to_empty":
+            module.to_empty(device="cpu")
+            device, dtype = torch.device("cpu"), torch.float32
+        elif op == "meta":
+            module.to("meta")
+            device, dtype = torch.device("meta"), torch.float32
+        else:
+            overwrite = torch.__future__.get_overwrite_module_params_on_conversion()
+            torch.__future__.set_overwrite_module_params_on_conversion(True)
+            try:
+                module.double()
+            finally:
+                torch.__future__.set_overwrite_module_params_on_conversion(overwrite)
+            device, dtype = torch.device("cpu"), torch.float64
+        assert params.is_locked is locked
+        for key in ("w", ("n", "b"), ("sub", "v")):
+            assert isinstance(params[key], nn.Parameter)
+            assert params[key].device == device and params[key].dtype == dtype
+        for key in ("buf", ("sub", "ib")):
+            assert params[key].device == device and params[key].dtype == torch.int64
+        self._check_registered(params)
+        self._check_registered(params["sub"])
+        assert set(dict(module.named_parameters())) == {
+            "params.w",
+            "params.n.b",
+            "params.sub.v",
+        }
+
+    def test_apply_replaced_leaves_td_device(self):
+        # #3440: the new leaves are not cast to the former device of the
+        # tensordict.
+        params = self._apply_params(device="cpu")
+        self._parent(params).to("meta")
+        assert params.device == torch.device("meta")
+        assert all(leaf.is_meta for leaf in params.values(True, True))
+        self._check_registered(params)
+
+    @pytest.mark.parametrize("swap", [True, False])
+    @pytest.mark.parametrize("op", ["cpu", "double", "share_memory"])
+    def test_apply_keeps_leaves(self, op, swap):
+        # #3440: a conversion that does not replace the tensors keeps every
+        # leaf object.
+        params = self._apply_params()
+        module = self._parent(params)
+        leaves = dict(params.items(True, True))
+        prev = torch.__future__.get_swap_module_params_on_conversion()
+        torch.__future__.set_swap_module_params_on_conversion(swap)
+        try:
+            getattr(module, op)()
+        finally:
+            torch.__future__.set_swap_module_params_on_conversion(prev)
+        assert set(params.keys(True, True)) == set(leaves)
+        for key, leaf in params.items(True, True):
+            assert leaf is leaves[key], key
+        self._check_registered(params)
+        self._check_registered(params["sub"])
+
     def test_inplace_ops(self):
         td = TensorDict(
             {
