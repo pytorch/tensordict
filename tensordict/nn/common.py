@@ -784,10 +784,14 @@ class TensorDictModuleBase(nn.Module):
 
         @functools.cache
         def keys_match():
-            module_keys = set(TensorDict.from_module(self).keys(True, True))
-            return module_keys.issuperset(
-                parameters.keys(True, True, is_leaf=_is_leaf_nontensor)
-            )
+            # Nested nodes count too: an empty sub-tensordict that the module
+            # lacks makes the input malformed, as an extra leaf does
+            module_td = TensorDict.from_module(self, filter_empty=False)
+            leaves = set(module_td.keys(True, True))
+            nodes = set(module_td.keys(True)) - leaves
+            p_leaves = set(parameters.keys(True, True, is_leaf=_is_leaf_nontensor))
+            p_nodes = set(parameters.keys(True, is_leaf=_is_leaf_nontensor)) - p_leaves
+            return p_leaves <= leaves and p_nodes <= nodes
 
         def sanitize(x):
             nonlocal has_non_float

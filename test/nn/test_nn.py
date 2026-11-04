@@ -970,7 +970,9 @@ class TestTDModule:
         # the module keeps its own values
         assert (module.module.w == 1).all()
 
-    @pytest.mark.parametrize("case", ["extra_int_key", "non_tensor_next_to_bn"])
+    @pytest.mark.parametrize(
+        "case", ["extra_int_key", "non_tensor_next_to_bn", "empty_sub_td"]
+    )
     def test_reset_functional_unknown_keys_unchanged(self, case):
         # #3462: params with an entry the module lacks still raise the dtype
         # error before the module is touched
@@ -978,6 +980,10 @@ class TestTDModule:
             net = nn.Linear(3, 2)
             params = TensorDict.from_module(net).clone()
             params["extra"] = torch.zeros(2, dtype=torch.long)
+        elif case == "empty_sub_td":
+            net = nn.BatchNorm1d(3)
+            params = TensorDict.from_module(net).clone()
+            params["extra"] = TensorDict()
         else:
             net = nn.BatchNorm1d(3)
             params = TensorDict.from_module(net).clone()
