@@ -48,6 +48,7 @@ from tensordict._indexing import (
     _INT,
     _MASK,
     _NONE,
+    _ragged_getitem_batch_size,
     _read_element,
     _SLICE,
 )
@@ -2489,14 +2490,35 @@ class LazyStackedTensorDict(TensorDictBase):
             value = self._hook_in(value)
         # give the value the batch dims of the result of the index, to which
         # it broadcasts
-        batch_size = _getitem_batch_size(self.batch_size, index)
+        ragged = False
+        try:
+            batch_size = _getitem_batch_size(self.batch_size, index)
+        except ValueError as err:
+            if -1 not in self.batch_size or (
+                # the members may skip the non-tensor leaves of a tensordict
+                not converted and is_tensor_collection(value) and value._has_non_tensor
+            ):
+                raise
+            # a slice of a ragged dim: each member checks its own piece
+            ragged = True
+            ragged_error = err
+            batch_size = _ragged_getitem_batch_size(self.batch_size, index)
         if is_tensor_collection(value):
             if converted and is_tensorclass(value) and is_non_tensor(value):
                 # the data was converted to a NonTensorData with the batch
                 # size of self: give it the batch size of the index, which
-                # expand cannot reach from there
+                # expand cannot reach from there. A sliced ragged dim gets
+                # size 1, which each member expands to its own rows.
+                if ragged:
+                    batch_size = [1 if size == -1 else size for size in batch_size]
                 value = value.empty(batch_size=batch_size)
             elif value.batch_size[: len(batch_size)] != batch_size:
+                # expand cannot add a leading dim of size -1
+                if (
+                    ragged
+                    and -1 in batch_size[: max(0, len(batch_size) - value.batch_dims)]
+                ):
+                    raise ragged_error
                 value = value.expand(batch_size)
         else:
             entry, entry_batch_dims = self._member_entry(key)
@@ -5299,12 +5321,48 @@ class LazyStackedTensorDict(TensorDictBase):
                 non_blocking=non_blocking,
                 keys_to_update=keys_to_update,
             )
-        indexed_bs = _getitem_batch_size(self.batch_size, idx)
+        ragged_error = None
+        try:
+            indexed_bs = _getitem_batch_size(self.batch_size, idx)
+        except ValueError as err:
+            if (
+                -1 not in self.batch_size
+                or not _is_tensor_collection(type(input_dict_or_td))
+                # the members may skip the non-tensor leaves of the value
+                or input_dict_or_td._has_non_tensor
+            ):
+                raise
+            # a slice of a ragged dim: each member checks its own piece
+            ragged_error = err
+            indexed_bs = _ragged_getitem_batch_size(self.batch_size, idx)
         if not _is_tensor_collection(type(input_dict_or_td)):
             input_dict_or_td = TensorDict._from_dict_impl(
                 input_dict_or_td, batch_size=indexed_bs
             )
         elif input_dict_or_td.batch_size != indexed_bs:
+            lead = len(indexed_bs) - input_dict_or_td.batch_dims
+            if ragged_error is not None and lead >= 0:
+                # each member broadcasts the value over a sliced ragged dim
+                # that the value lacks or has with size 1. A member does not
+                # broadcast a nested tensordict of the value, and it would
+                # write the other leaves before it raises, so such a value
+                # still raises.
+                value_bs = (1,) * lead + tuple(input_dict_or_td.batch_size)
+                if any(
+                    size == -1 and value_size == 1
+                    for size, value_size in zip(indexed_bs, value_bs)
+                ) and any(
+                    _is_tensor_collection(type(value))
+                    for value in input_dict_or_td.values()
+                ):
+                    raise ragged_error
+                if -1 in indexed_bs[:lead]:
+                    # expand cannot add a leading dim of size -1: a ragged
+                    # dim that the value does not have gets size 1
+                    indexed_bs = torch.Size(
+                        1 if size == -1 and dim < lead else size
+                        for dim, size in enumerate(indexed_bs)
+                    )
             # a value for one element may have leading dims of size 1, as
             # in TensorDict.update_at_
             while (

@@ -417,6 +417,37 @@ def _getitem_batch_size(batch_size, index):
     return torch.Size(out)
 
 
+def _ragged_getitem_batch_size(batch_size, index):
+    """Like :func:`_getitem_batch_size`, for a batch size with ragged dims, of size ``-1``.
+
+    A slice of a ragged dim gives a dim of size ``-1``: each member of the
+    stack has its own length there.
+    """
+    dims, advanced, position, rest = _read_index(index, len(batch_size), batch_size)
+    out = [
+        1
+        if dim is None
+        else -1
+        if batch_size[dim] == -1
+        else _slice_length(element, batch_size[dim])
+        for dim, element in dims
+    ]
+    out.extend(batch_size[rest:])
+    if advanced:
+        shapes = [_advanced_shape(kind, element) for kind, element, _, _ in advanced]
+        try:
+            shape = torch.broadcast_shapes(*shapes)
+        except RuntimeError:
+            _raise_index_error(
+                batch_size,
+                index,
+                "shape mismatch: indexing tensors could not be broadcast "
+                f"together with shapes {', '.join(str(list(s)) for s in shapes)}",
+            )
+        out[position:position] = shape
+    return torch.Size(out)
+
+
 def _mask_to_indices(index, batch_size, device):
     """Turn the index ``(mask,)`` of ``td[mask]`` into the indices of the mask.
 
