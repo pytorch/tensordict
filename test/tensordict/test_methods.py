@@ -6914,6 +6914,66 @@ def test_flatten_keys_context_manager_inplace_separator_in_key():
     assert set(td.keys(True, True)) == {"a", ("c", "d")}
 
 
+@pytest.mark.parametrize("op", ["flatten_keys", "unflatten_keys"])
+@pytest.mark.parametrize("keyword", [False, True])
+@pytest.mark.parametrize("locked", [False, True])
+def test_flatten_keys_context_manager_keyword_separator(op, keyword, locked):
+    # #3430: a with-block around flatten_keys(separator=...) or
+    # unflatten_keys(separator=...) undid the op with ".", so its writes were
+    # lost and a stray key appeared. The keyword form now gives the same
+    # result as the positional one.
+    td = TensorDict(a=torch.ones(2), b={"c": torch.ones(2)}, batch_size=[2])
+    if op == "unflatten_keys":
+        td = td.flatten_keys("/")
+    if locked:
+        td.lock_()
+    cm = getattr(td, op)(separator="/") if keyword else getattr(td, op)("/")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        with cm as t:
+            for key in list(t.keys(True, True)):
+                t.set(key, t.get(key) + 10)
+    if op == "flatten_keys":
+        assert set(td.keys(True, True)) == {"a", ("b", "c")}
+        assert (td.get(("b", "c")) == 11).all()
+    else:
+        assert set(td.keys(True, True)) == {"a", "b/c"}
+        assert (td.get("b/c") == 11).all()
+    assert (td.get("a") == 11).all()
+    assert td.is_locked is locked
+
+
+@pytest.mark.parametrize("keyword", [False, True])
+def test_flatten_keys_context_manager_keyword_separator_inplace(keyword):
+    # #3430 changes the non-inplace with-blocks only: with inplace=True, the
+    # keyword separator keeps the keys flat with a FutureWarning (gh-2700),
+    # and unflatten_keys leaves the keys that it left before.
+    td = TensorDict(a=torch.ones(2), b={"c": torch.ones(2)}, batch_size=[2])
+    if keyword:
+        with pytest.warns(FutureWarning, match="keys flat"):
+            with td.flatten_keys(separator="/", inplace=True):
+                pass
+        assert set(td.keys(True, True)) == {"a", "b/c"}
+    else:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            with td.flatten_keys("/", inplace=True):
+                pass
+        assert set(td.keys(True, True)) == {"a", ("b", "c")}
+
+    td = TensorDict({"a": torch.ones(2), "b/c": torch.ones(2)}, batch_size=[2])
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        if keyword:
+            with td.unflatten_keys(separator="/", inplace=True):
+                pass
+        else:
+            with td.unflatten_keys("/", inplace=True):
+                pass
+    stray = "b.c" if keyword else "b/c"
+    assert set(td.keys(True, True)) == {"a", ("b", "c"), stray}
+
+
 @pytest.mark.parametrize("device", get_available_devices())
 def test_cat_tensors_shape_mismatch_preserves_entries(device):
     # Last dims differ, and dim=1 is not that dim, so cat raises.

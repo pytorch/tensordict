@@ -82,6 +82,7 @@ def _reverse_flatten_keys(self, args, kwargs, out):
             return out.unflatten_keys(sep, inplace=True)
         # A key held the separator before the block, so unflatten_keys
         # cannot tell it from a flattened nested key: keep main's result.
+    sep = args[0] if args else kwargs.get("separator", KEY_SEPARATOR)
     if not out.is_locked:
         return out.update(self.unflatten_keys(sep), inplace=False)
     else:
@@ -93,6 +94,8 @@ LAST_OP_MAPS["flatten_keys"] = _reverse_flatten_keys
 
 def _reverse_unflatten_keys(self, args, kwargs, out):
     sep = args[0] if args else KEY_SEPARATOR
+    if not _changed_in_place(self, out):
+        sep = kwargs.get("separator", sep)
     if not out.is_locked:
         return out.update(self.flatten_keys(sep), inplace=False)
     else:
