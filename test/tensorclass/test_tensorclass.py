@@ -8567,6 +8567,37 @@ class TestMemmap:
             adj = result["adj"] if nested else result
             assert isinstance(adj, Ragged)
 
+    def test_memmap_reserved_entry_name_warns(self, tmp_path):
+        # #3455: load_memmap does not restore an entry named shape or device,
+        # in a tensordict field or as a shadow field: saving warns.
+        class Mesh(TensorClass):
+            points: torch.Tensor
+            point_data: TensorDict
+
+        class Robot(TensorClass["shadow"]):
+            x: torch.Tensor
+            device: str
+
+        mesh = Mesh(
+            points=torch.zeros(4, 3),
+            point_data=TensorDict(shape=torch.ones(4), batch_size=[4]),
+            batch_size=[4],
+        )
+        with pytest.warns(UserWarning, match="The entry 'shape' is saved"):
+            out = mesh.save(tmp_path / "mesh")
+        assert set(out.point_data.keys()) == {"shape"}
+        robot = Robot(x=torch.zeros(3), device="arm-7", batch_size=[3])
+        with pytest.warns(UserWarning, match="The entry 'device' is saved"):
+            out = robot.memmap(tmp_path / "robot")
+        assert out.device == "arm-7"
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            Mesh(
+                points=torch.zeros(4, 3),
+                point_data=TensorDict(T=torch.ones(4), batch_size=[4]),
+                batch_size=[4],
+            ).save(tmp_path / "plain")
+
     def test_memmap_like(self):
         @tensorclass
         class MyClass:

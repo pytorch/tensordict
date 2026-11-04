@@ -1421,6 +1421,10 @@ class _Serialization:
         into its leaves in place, but you cannot add, remove or replace an
         entry. Once it is unlocked, :meth:`~.is_memmap` returns ``False``.
 
+        An entry named ``"shape"``, ``"device"`` or ``"_type"``, at any depth,
+        is not restored by :meth:`~.load_memmap`, and writing it to a
+        directory warns (see :meth:`~.memmap`).
+
         Args:
             prefix (str or Path, optional): the directory to write to.
                 Defaults to ``None``, which writes into the directory of the
@@ -1585,6 +1589,10 @@ class _Serialization:
         ``existsok=True``. :meth:`~.memmap` documents the arguments in full.
         The tensordict is not changed. Read the files back with :meth:`~.load`.
         See :ref:`saving`.
+
+        An entry named ``"shape"``, ``"device"`` or ``"_type"``, at any depth,
+        is not restored by :meth:`~.load`, and saving it warns (see
+        :meth:`~.memmap`).
 
         Args:
             prefix (str or Path, optional): the directory where the tensordict
@@ -1777,6 +1785,15 @@ class _Serialization:
             :func:`~tensordict.pack_memmap` and
             :func:`~tensordict.unpack_memmap` convert between archives and
             directories.
+
+        .. note::
+            ``meta.json`` uses the names ``"shape"``, ``"device"`` and
+            ``"_type"`` for the batch size, the device and the type of each
+            level, so :meth:`~.load_memmap` does not restore an entry with
+            one of these names, at any depth. Saving such an entry warns.
+            For a directory, the tensordict returned here still holds the
+            entry, but an archive, which is read back, does not. Rename the
+            entry before saving to keep it.
 
         Examples:
             >>> import os

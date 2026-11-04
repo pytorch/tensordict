@@ -12180,6 +12180,48 @@ class TestGeneric:
         assert set(loaded.keys(True, True)) == {name, ("n", name, "x")}
         assert (loaded == td).all()
 
+    @pytest.mark.parametrize("name", ["shape", "device", "_type"])
+    def test_memmap_reserved_entry_name_warns(self, name, tmp_path):
+        # #3455: meta.json uses these names for the batch size, device and
+        # type of a level, so load_memmap does not restore an entry with one
+        # of them. Saving warns, at any depth, and still returns the entry.
+        match = f"The entry '{name}' is saved, but load_memmap will not restore it"
+        td = TensorDict({name: torch.ones(3), "x": torch.zeros(3)}, [3])
+        with pytest.warns(UserWarning, match=match) as record:
+            out = td.memmap(tmp_path / "flat")
+        assert all(w.filename == __file__ for w in record)
+        assert set(out.keys()) == {name, "x"}
+        with pytest.warns(UserWarning, match=match):
+            td.clone().memmap_(tmp_path / "inplace")
+        with pytest.warns(UserWarning, match=match):
+            td.save(tmp_path / "td.tdz")
+        with pytest.warns(UserWarning, match=match):
+            td.memmap(tmp_path / "threads", num_threads=2)
+        nested = TensorDict(n=TensorDict({name: torch.ones(3)}, [3]), batch_size=[3])
+        with pytest.warns(UserWarning, match=match):
+            nested.memmap(tmp_path / "nested")
+        stack = lazy_stack([TensorDict({name: torch.ones(3)}) for _ in range(2)])
+        with pytest.warns(UserWarning, match=match):
+            out = stack.memmap(tmp_path / "stack")
+        assert set(out.keys()) == {name}
+        # The files are written as before: the entry is not loaded.
+        assert set(TensorDict.load_memmap(tmp_path / "flat").keys()) == {"x"}
+
+    @pytest.mark.parametrize("name", ["_format_version", "_class", "_names", "x"])
+    def test_memmap_entry_name_no_warning(self, name, tmp_path):
+        # #3455: the names that load_memmap restores do not warn, nor does a
+        # memmap without a prefix, which writes no meta.json.
+        td = TensorDict(
+            {name: torch.ones(3), "n": TensorDict({name: torch.ones(3)}, [3])}, [3]
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            td.memmap(tmp_path / "dir")
+            td.save(tmp_path / "td.tdz")
+            loaded = TensorDict.load_memmap(tmp_path / "dir")
+            TensorDict({"shape": torch.ones(3)}, [3]).memmap()
+        assert (loaded == td).all()
+
     @pytest.mark.parametrize("inplace", [True, False])
     def test_select_nested(self, inplace):
         tensor_1 = torch.rand(4, 5, 6, 7)
