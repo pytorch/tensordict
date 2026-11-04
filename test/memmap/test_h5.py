@@ -101,6 +101,78 @@ class TestH5Serialization:
         finally:
             p.join()
 
+    @pytest.mark.parametrize(
+        "data",
+        [
+            {"c/d": torch.zeros(3), "c": {"d": torch.ones(3)}},
+            {"c": {"d": torch.ones(3)}, "c/d": torch.zeros(3)},
+            {"c/d": torch.zeros(3), "c": torch.ones(3)},
+            {"/a": torch.zeros(3), "a": torch.ones(3)},
+            {"n": {"a/b": torch.zeros(3), "a": {"b": torch.ones(3)}}},
+            {"s/t": "x", "s": {"t": "y"}},
+        ],
+    )
+    @pytest.mark.parametrize("source", ["td", "lazy", "dict"])
+    def test_slash_key_collision_raises(self, tmp_path, data, source):
+        # #3435: a key with "/" silently replaced the entry at the same h5 path
+        if source == "dict":
+            src = data
+        else:
+            src = TensorDict(data, batch_size=[3])
+            if source == "lazy":
+                src = lazy_stack([src, src.clone()])
+        with pytest.raises(ValueError, match="replaced"):
+            PersistentTensorDict.from_dict(src, tmp_path / "x.h5", backend="h5")
+
+    def test_slash_key_alias_keeps_returning(self, tmp_path):
+        # #3435: a "/" key that holds the same value as the nested key it maps
+        # to, as after td.update(td.flatten_keys("/")), loses nothing: the
+        # call returns, and the file reads back the nested key
+        td = TensorDict(
+            {"obs": {"pos": torch.arange(3.0)}, "r": torch.ones(3)}, batch_size=[3]
+        )
+        td.update(td.flatten_keys("/"))
+        out = td.to_h5(tmp_path / "a.h5")
+        out.close()
+        loaded = TensorDict.from_h5(tmp_path / "a.h5")
+        assert set(loaded.keys(True, True)) == {("obs", "pos"), "r"}
+        assert (loaded["obs", "pos"] == torch.arange(3.0)).all()
+
+    def test_slash_key_without_collision(self, tmp_path):
+        # #3435: a "/" key alone, or next to a disjoint group, keeps loading
+        # as a nested key; a leaf before a "/" key under it keeps raising
+        # h5py's error
+        z, o = torch.zeros(3), torch.ones(3)
+        TensorDict({"c/d": z}, batch_size=[3]).to_h5(tmp_path / "a.h5")
+        out = TensorDict.from_h5(tmp_path / "a.h5")
+        assert set(out.keys(True, True)) == {("c", "d")}
+        assert (out["c", "d"] == z).all()
+        td = TensorDict({"c/d": z, "c": {"e": o}}, batch_size=[3])
+        td.to_h5(tmp_path / "b.h5")
+        out = TensorDict.from_h5(tmp_path / "b.h5")
+        assert set(out.keys(True, True)) == {("c", "d"), ("c", "e")}
+        assert (out["c", "d"] == z).all()
+        assert (out["c", "e"] == o).all()
+        with pytest.raises(TypeError, match="already exists"):
+            TensorDict({"c": o, "c/d": z}, batch_size=[3]).to_h5(tmp_path / "c.h5")
+
+    @pytest.mark.parametrize(
+        "data,error",
+        [
+            ({"a": torch.ones(3), "a/": torch.zeros(3)}, TypeError),
+            ({"": torch.zeros(3), "/": torch.ones(3)}, TypeError),
+            ({"/": torch.ones(3), "": torch.zeros(3)}, KeyError),
+            ({"a/": torch.zeros(3), "a": torch.ones(3)}, ValueError),
+            ({"a/b": torch.zeros(3), "a": [{"c": torch.ones(3)}] * 3}, TypeError),
+        ],
+    )
+    def test_slash_key_clash_keeps_h5_error(self, tmp_path, data, error):
+        # #3435: a clash that h5py rejects itself keeps its error
+        with pytest.raises(error) as excinfo:
+            PersistentTensorDict.from_dict(data, tmp_path / "x.h5", backend="h5")
+        assert type(excinfo.value) is error
+        assert "replaced" not in str(excinfo.value)
+
     def test_h5_nontensor(self, tmpdir):
         file = Path(tmpdir) / "file.h5"
         td = TensorDict(
@@ -2512,6 +2584,38 @@ class TestH5Indexing:
         td[idx] = td[idx].add(1.0).mul(2).neg()
         for key in td.keys(True, True):
             assert (h5td.get(key) == td.get(key)).all(), key
+
+    def test_index_twice_set_new_nested(self, tmp_path):
+        # #3443: new nested entries written through h5td[i][j:k] were lost;
+        # they reach the file
+        td = TensorDict(
+            a=torch.zeros(2, 4),
+            n=TensorDict(b=torch.zeros(2, 4), batch_size=[2, 4]),
+            batch_size=[2, 4],
+        )
+        h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+        expected = [[0.0] * 4, [0.0, 7.0, 7.0, 0.0]]
+        sub = h5td[1][1:3]
+        sub.set(("p", "q"), torch.full((2,), 7.0))
+        assert h5td.get(("p", "q")).tolist() == expected
+        assert sub.get(("p", "q")).tolist() == [7.0, 7.0]
+        sub.update({"n": {"z": torch.full((2,), 7.0)}})
+        assert h5td.get(("n", "z")).tolist() == expected
+        sub.update({("r", "s"): torch.full((2,), 7.0)})
+        assert h5td.get(("r", "s")).tolist() == expected
+        # an existing nested leaf is still written in place
+        sub.set_(("n", "b"), torch.full((2,), 7.0))
+        assert h5td.get(("n", "b")).tolist() == expected
+        for key in (("p", "q"), ("n", "z"), ("r", "s")):
+            assert h5td.get(key).dtype == torch.float32, key
+        # update under "n" gives what one view gives
+        one = PersistentTensorDict.from_dict(td, filename=tmp_path / "one.h5")
+        value = {"n": {"z": torch.full((2,), 7.0), "y": torch.full((2,), 7)}}
+        one._get_sub_tensordict((1, slice(1, 3))).update(value)
+        sub.update(value)
+        for key in (("n", "z"), ("n", "y")):
+            assert h5td.get(key).dtype == one.get(key).dtype, key
+            assert h5td.get(key).tolist() == one.get(key).tolist(), key
 
     def test_stack_items(self, data):
         # h5td[idx] is a lazy view of the file, not a lazy stack

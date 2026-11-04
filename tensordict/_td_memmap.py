@@ -29,6 +29,10 @@ __all__ = [
 # "_format_version" entry was written before the format had a version: version 0.
 _FORMAT_VERSION = 1
 
+# The entries of meta.json that _save_metadata writes over the entry of a key
+# with the same name, which load_memmap then does not restore (#3455).
+_RESERVED_ENTRY_NAMES = frozenset(("shape", "device", "_type"))
+
 
 def _class_id(cls: type) -> str:
     """Returns the identifier of ``cls`` that a meta.json stores under ``"_class"``.
@@ -239,8 +243,28 @@ def _populate_storage(
     return memmap_tensor
 
 
+def _warn_if_reserved_entry_name(key) -> None:
+    """Warns that the entry ``key`` is not loaded back, if meta.json uses its name (#3455).
+
+    Call it on the thread of the user's call, as for
+    :func:`_warn_if_existing_file_smaller`.
+    """
+    if key in _RESERVED_ENTRY_NAMES:
+        from .utils import _user_stacklevel
+
+        warnings.warn(
+            f"The entry {key!r} is saved, but load_memmap will not restore it: "
+            "meta.json uses the names 'shape', 'device' and '_type' for the "
+            "batch size, device and type of the tensordict that holds the "
+            "entry. Rename the entry before saving to keep it.",
+            UserWarning,
+            stacklevel=_user_stacklevel(),
+        )
+
+
 def _update_metadata(*, metadata, key, value, is_collection):
     """Records the metadata of a leaf or of a nested tensordict in ``metadata[key]``."""
+    _warn_if_reserved_entry_name(key)
     if not is_collection:
         metadata[key] = {
             "device": str(value.device),

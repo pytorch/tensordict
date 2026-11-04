@@ -183,6 +183,15 @@ NO_DEFAULT = _NoDefault.ZERO
 # Unlike NO_DEFAULT (which triggers KeyError in get()), _UNSET can be returned by get()
 # to indicate a missing key. This makes pop() compatible with torch.compile.
 _UNSET = object()
+# Dynamo's frame callback, set in a torch.compile region, also in the frames
+# that Dynamo runs eagerly (torch's set_stance makes the same check).
+# _index_tensordict takes its eager shortcut only when this is available.
+try:
+    from torch._C._dynamo.eval_frame import (
+        get_eval_frame_callback as _get_eval_frame_callback,
+    )
+except ImportError:
+    _get_eval_frame_callback = None
 
 T = TypeVar("T", bound="TensorCollection")
 
@@ -9242,6 +9251,40 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             ignored = [k for k in constructor_kwargs if k not in _APPLY_NEST_KWARGS]
             if ignored:
                 _warn_ignored_kwargs("apply", ignored)
+        elif (
+            not others
+            and out is None
+            and not inplace
+            and batch_size is None
+            and names is NO_DEFAULT
+            and not call_on_nested
+            # a device that _new_unsafe would parse could raise before fn runs
+            and (device is NO_DEFAULT or device is None or type(device) is torch.device)
+            and (
+                is_leaf is None
+                or is_leaf is _default_is_leaf
+                or is_leaf is _NESTED_TENSORS_AS_LISTS
+                or is_leaf is _is_leaf_or_lazy_stack
+            )
+            and not is_compiling()
+            and self._is_dense_node()
+        ):
+            # perf: an exact TensorDict without dim names: build the result
+            # directly, with the validation of _apply_nest for each entry.
+            result = self._dense_apply(
+                fn,
+                False,
+                False,
+                (),
+                filter_empty,
+                _default_is_leaf if is_leaf is None else is_leaf,
+                device,
+                False,
+                False,
+            )
+            if propagate_lock and self.is_locked and result is not None:
+                result.lock_()
+            return result
         result = self._apply_nest(
             fn,
             *others,
@@ -12168,8 +12211,19 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             names = self._get_names_idx(index)
 
         source = {}
+        # perf: in eager mode an exact Tensor, which is neither unbatched nor a
+        # TensorDict, goes straight to _get_item. Under torch.compile, also in
+        # a frame that Dynamo runs eagerly, the loop takes the generic path, so
+        # that the frames Dynamo compiles do not change.
+        eager = (
+            not is_compiling()
+            and _get_eval_frame_callback is not None
+            and _get_eval_frame_callback() is None
+        )
         for key, item in self.items():
-            if _is_unbatched(item):
+            if eager and type(item) is Tensor:
+                source[key] = _get_item(item, index)
+            elif _is_unbatched(item):
                 source[key] = _unbatched_with_batch_size(item, batch_size)
             elif isinstance(item, TensorDict):
                 # this is the simplest case, we can pre-compute the batch size easily

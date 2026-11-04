@@ -76,6 +76,79 @@ class TestZarrRoundTrip:
         assert (td_recon["b", "c"] == td["b", "c"]).all()
         assert (td_recon.to_tensordict() == td).all()
 
+    @pytest.mark.parametrize(
+        "data",
+        [
+            {"c/d": torch.zeros(3), "c": {"d": torch.ones(3)}},
+            {"c": {"d": torch.ones(3)}, "c/d": torch.zeros(3)},
+            {"c/d": torch.zeros(3), "c": torch.ones(3)},
+            {"/a": torch.zeros(3), "a": torch.ones(3)},
+            {"n": {"a/b": torch.zeros(3), "a": {"b": torch.ones(3)}}},
+            {"s/t": "x", "s": {"t": "y"}},
+        ],
+    )
+    @pytest.mark.parametrize("source", ["td", "lazy", "dict"])
+    def test_slash_key_collision_raises(self, tmp_path, data, source):
+        # #3435: a key with "/" silently replaced the entry at the same zarr path
+        pytest.importorskip("zarr", minversion="3")
+        if source == "dict":
+            src = data
+        else:
+            src = TensorDict(data, batch_size=[3])
+            if source == "lazy":
+                src = lazy_stack([src, src.clone()])
+        with pytest.raises(ValueError, match="replaced"):
+            PersistentTensorDict.from_dict(src, tmp_path / "x.zarr", backend="zarr")
+
+    def test_slash_key_alias_keeps_returning(self, tmp_path):
+        # #3435: a "/" key that holds the same value as the nested key it maps
+        # to, as after td.update(td.flatten_keys("/")), loses nothing: the
+        # call returns, and the file reads back the nested key
+        pytest.importorskip("zarr", minversion="3")
+        td = TensorDict(
+            {"obs": {"pos": torch.arange(3.0)}, "r": torch.ones(3)}, batch_size=[3]
+        )
+        td.update(td.flatten_keys("/"))
+        out = td.to_zarr(tmp_path / "a.zarr")
+        out.close()
+        loaded = TensorDict.from_zarr(tmp_path / "a.zarr")
+        assert set(loaded.keys(True, True)) == {("obs", "pos"), "r"}
+        assert (loaded["obs", "pos"] == torch.arange(3.0)).all()
+
+    def test_slash_key_without_collision(self, tmp_path):
+        # #3435: a "/" key alone, or next to a disjoint group, keeps loading
+        # as a nested key; a leaf before a "/" key under it keeps raising
+        # zarr's error
+        pytest.importorskip("zarr", minversion="3")
+        z, o = torch.zeros(3), torch.ones(3)
+        TensorDict({"c/d": z}, batch_size=[3]).to_zarr(tmp_path / "a.zarr")
+        out = TensorDict.from_zarr(tmp_path / "a.zarr")
+        assert set(out.keys(True, True)) == {("c", "d")}
+        assert (out["c", "d"] == z).all()
+        td = TensorDict({"c/d": z, "c": {"e": o}}, batch_size=[3])
+        td.to_zarr(tmp_path / "b.zarr")
+        out = TensorDict.from_zarr(tmp_path / "b.zarr")
+        assert set(out.keys(True, True)) == {("c", "d"), ("c", "e")}
+        assert (out["c", "d"] == z).all()
+        assert (out["c", "e"] == o).all()
+        with pytest.raises(TypeError, match="already exists"):
+            TensorDict({"c": o, "c/d": z}, batch_size=[3]).to_zarr(tmp_path / "c.zarr")
+
+    @pytest.mark.parametrize(
+        "data,error",
+        [
+            ({"a": torch.ones(3), "a/": torch.zeros(3)}, TypeError),
+            ({"": torch.zeros(3), "/": torch.ones(3)}, TypeError),
+        ],
+    )
+    def test_slash_key_clash_keeps_zarr_error(self, tmp_path, data, error):
+        # #3435: a clash that zarr rejects itself keeps its error
+        pytest.importorskip("zarr", minversion="3")
+        with pytest.raises(error) as excinfo:
+            PersistentTensorDict.from_dict(data, tmp_path / "x.zarr", backend="zarr")
+        assert type(excinfo.value) is error
+        assert "replaced" not in str(excinfo.value)
+
     def test_empty_batch_size(self, tmp_path):
         td = TensorDict({"a": torch.randn(3)}, batch_size=[])
         td.to_zarr(tmp_path / "s.zarr")
@@ -666,6 +739,36 @@ class TestZarrIndexing:
         ztd[0] = value
         assert (ztd.get_at("a", 0) == 0).all()
         assert (ztd.get_at(("b", "c"), 0) == 0).all()
+
+    def test_index_twice_set_new_nested(self, tmp_path):
+        # #3443: new nested entries written through ztd[i][j:k] were lost;
+        # they reach the store
+        pytest.importorskip("zarr", minversion="3")
+        td = TensorDict(
+            a=torch.zeros(2, 4),
+            n=TensorDict(b=torch.zeros(2, 4), batch_size=[2, 4]),
+            batch_size=[2, 4],
+        )
+        ztd = PersistentTensorDict.from_dict(
+            td, filename=tmp_path / "s.zarr", backend="zarr"
+        )
+        expected = [[0.0] * 4, [0.0, 7.0, 7.0, 0.0]]
+        sub = ztd[1][1:3]
+        sub.set(("p", "q"), torch.full((2,), 7.0))
+        assert ztd.get(("p", "q")).tolist() == expected
+        assert ztd.get(("p", "q")).dtype == torch.float32
+        sub.update({("r", "s"): torch.full((2,), 7.0)})
+        assert ztd.get(("r", "s")).tolist() == expected
+        # update under "n" gives what one view gives
+        one = PersistentTensorDict.from_dict(
+            td, filename=tmp_path / "one.zarr", backend="zarr"
+        )
+        value = {"n": {"z": torch.full((2,), 7.0), "y": torch.full((2,), 7)}}
+        one._get_sub_tensordict((1, slice(1, 3))).update(value)
+        sub.update(value)
+        for key in (("n", "z"), ("n", "y")):
+            assert ztd.get(key).dtype == one.get(key).dtype, key
+            assert ztd.get(key).tolist() == one.get(key).tolist(), key
 
     @pytest.mark.parametrize(
         "index",

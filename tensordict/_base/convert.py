@@ -1820,8 +1820,10 @@ class _Conversion:
         ``retain_none`` is the argument of :meth:`to_tensordict`. The base
         implementation clones each tensor and converts each nested tensordict
         and tensorclass with its own :meth:`to_tensordict`. A store overrides
-        it to read all the leaves in one round trip; a ``NonTensorStack``,
-        which is already the dense form of its data, returns itself.
+        it to read all the leaves in one round trip; a lazy stack of plain
+        TensorDicts with the same entries stacks their leaves directly; a
+        ``NonTensorStack``, which is already the dense form of its data,
+        returns itself.
         """
         from tensordict import TensorDict
 

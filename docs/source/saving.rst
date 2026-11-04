@@ -890,6 +890,14 @@ JSON cannot represent a ``set``, so ``save`` writes a ``set`` value to an
 `Load data that you did not write`_). To keep the value in ``meta.json``,
 convert it to a list first.
 
+``meta.json`` uses the names ``"shape"``, ``"device"`` and ``"_type"`` for
+the batch size, the device and the type of its level, so ``load_memmap`` does
+not restore an entry with one of these names, at any depth. ``memmap``,
+``memmap_`` and ``save`` warn when they write such an entry. For a
+directory, the tensordict that they return still holds it; for a ``.tdz``
+archive, which they read back, it does not. Rename the entry before saving to
+keep it.
+
 Memory-mapped tensors
 ---------------------
 
