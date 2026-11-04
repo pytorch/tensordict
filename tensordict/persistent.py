@@ -34,7 +34,7 @@ from tensordict._td import (
     NO_DEFAULT,
     TensorDict,
 )
-from tensordict._td_memmap import _format_metadata
+from tensordict._td_memmap import _format_metadata, _warn_if_reserved_entry_name
 from tensordict._tensorcollection import TensorCollection
 from tensordict.base import (
     _default_is_leaf,
@@ -2167,6 +2167,8 @@ class PersistentTensorDict(
         )
         dest._is_memmap = True
         for key, value in self._items_metadata():
+            if prefix is not None:
+                _warn_if_reserved_entry_name(key)
             # an h5 enum has a torch dtype in the metadata but reads as a
             # non-tensor
             if not value.get("array") or self._backend.is_non_tensor(
