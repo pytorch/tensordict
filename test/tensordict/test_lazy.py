@@ -734,6 +734,197 @@ class TestLazyStackedTensorDict:
             [0.0],
         ]
 
+    def test_ragged_write_slice_ragged_dim(self):
+        # #3500: update_at_ and set_at_ with a slice or an Ellipsis on the
+        # ragged dim raised ValueError since 0.15.0
+        def make():
+            return lazy_stack(
+                [TensorDict(a=torch.zeros(k, 1), batch_size=[k]) for k in (2, 3, 1)]
+            )
+
+        def rows(ls):
+            return [t.flatten().tolist() for t in ls.get("a", as_list=True)]
+
+        ls = make()
+        ls.update_at_(TensorDict(a=torch.ones(2, 1), batch_size=[2]), (1, slice(0, 2)))
+        assert rows(ls) == [[0.0, 0.0], [1.0, 1.0, 0.0], [0.0]]
+        ls = make()
+        ls.update_at_(TensorDict(a=torch.ones(3, 1), batch_size=[3]), (1, ...))
+        assert rows(ls) == [[0.0, 0.0], [1.0, 1.0, 1.0], [0.0]]
+        ls = make()
+        ls.set_at_("a", torch.ones(2, 1), (1, slice(0, 2)))
+        assert rows(ls) == [[0.0, 0.0], [1.0, 1.0, 0.0], [0.0]]
+        ls = make()
+        ls.set_at_("a", torch.ones(3, 1), (1, ...))
+        assert rows(ls) == [[0.0, 0.0], [1.0, 1.0, 1.0], [0.0]]
+        # a value that broadcasts to the rows of every member
+        ls = make()
+        ls.set_at_("a", torch.ones(1), (slice(None), slice(0, 1)))
+        assert rows(ls) == [[1.0, 0.0], [1.0, 0.0, 0.0], [1.0]]
+        ls = make()
+        ls.update_at_(
+            TensorDict(a=torch.ones(1, 1), batch_size=[1]), (slice(0, 2), ...)
+        )
+        assert rows(ls) == [[1.0, 1.0], [1.0, 1.0, 1.0], [0.0]]
+        ls = make()
+        ls.update_at_(TensorDict(a=torch.ones(1), batch_size=[]), (0, slice(None)))
+        assert rows(ls) == [[1.0, 1.0], [0.0, 0.0, 0.0], [0.0]]
+        # a non-tensor value is written to the rows of each member silently
+        ls = lazy_stack(
+            [
+                TensorDict(s=NonTensorData("z", batch_size=[k]), batch_size=[k])
+                for k in (2, 3, 1)
+            ]
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            ls.set_at_("s", "x", (slice(None), slice(0, 1)))
+        assert [t.tolist() for t in ls.get("s", as_list=True)] == [
+            ["x", "z"],
+            ["x", "z", "z"],
+            ["x"],
+        ]
+        # a value that does not fit a member raises the error of that member
+        # after the earlier members are written, as writing them one by one
+        ls = make()
+        with pytest.raises(RuntimeError):
+            ls.set_at_("a", torch.ones(3, 2, 1), (slice(None), slice(0, 2)))
+        assert rows(ls) == [[1.0, 1.0], [1.0, 1.0, 0.0], [0.0]]
+
+    def test_ragged_write_slice_ragged_dim_unchanged(self):
+        # #3500: a value with a non-tensor leaf either raises and writes
+        # nothing, or writes every leaf of the selected rows; never a part of
+        # the leaves (#3501). Dense stacks are unchanged.
+        sizes = (2, 3, 1)
+
+        def state(ls):
+            return (
+                [t.flatten().tolist() for t in ls.get("a", as_list=True)],
+                [t.tolist() for t in ls.get("s", as_list=True)],
+            )
+
+        scalar = TensorDict(a=torch.ones(1), s=NonTensorData("y"), batch_size=[])
+        stacked = TensorDict(
+            a=torch.ones(3, 1),
+            s=NonTensorStack(*(NonTensorData("y") for _ in range(3))),
+            batch_size=[3],
+        )
+        for value, index in (
+            (scalar, (1, ...)),
+            (scalar, (0, slice(None))),
+            (stacked, (1, ...)),
+        ):
+            nt = lazy_stack(
+                [
+                    TensorDict(
+                        a=torch.zeros(k, 1),
+                        s=NonTensorData("z", batch_size=[k]),
+                        batch_size=[k],
+                    )
+                    for k in sizes
+                ]
+            )
+            try:
+                nt.update_at_(value, index)
+            except Exception:
+                written = None
+            else:
+                written = index[0]
+            assert state(nt) == (
+                [[1.0 if i == written else 0.0] * k for i, k in enumerate(sizes)],
+                [["y" if i == written else "z"] * k for i, k in enumerate(sizes)],
+            )
+        dense = lazy_stack(
+            [TensorDict(a=torch.zeros(3, 1), batch_size=[3]) for _ in range(2)]
+        )
+        with pytest.raises(RuntimeError):
+            dense.set_at_("a", torch.ones(4, 1), (slice(None), slice(0, 2)))
+        dense.update_at_(TensorDict(a=torch.ones(1, 1), batch_size=[1]), (0, ...))
+        assert dense[0]["a"].flatten().tolist() == [1.0, 1.0, 1.0]
+
+    def test_ragged_set_at_tensordict_broadcast_slice_ragged_dim(self):
+        # #3500: set_at_ of a tensordict value that broadcasts over a sliced
+        # ragged dim either raises and writes nothing, or writes the rows
+        sizes = (2, 3, 1)
+        ls = lazy_stack(
+            [
+                TensorDict(
+                    a=torch.zeros(k, 1),
+                    n=TensorDict(b=torch.zeros(k), batch_size=[k]),
+                    batch_size=[k],
+                )
+                for k in sizes
+            ]
+        )
+
+        def state():
+            return (
+                [t.flatten().tolist() for t in ls.get("a", as_list=True)],
+                [t.tolist() for t in ls.get(("n", "b"), as_list=True)],
+            )
+
+        try:
+            ls.set_at_(
+                "n", TensorDict(b=torch.ones(()), batch_size=[]), (1, slice(0, 2))
+            )
+        except Exception:
+            b = [[0.0] * k for k in sizes]
+        else:
+            b = [[0.0, 0.0], [1.0, 1.0, 0.0], [0.0]]
+        assert state() == ([[0.0] * k for k in sizes], b)
+
+    def test_ragged_update_at_nested_broadcast_slice_ragged_dim(self):
+        # #3500: a value with a nested tensordict that the members would
+        # broadcast over a sliced ragged dim either raises and leaves every
+        # leaf of every member unchanged, or writes every leaf of the selected
+        # rows; never a part of a member
+        sizes = (2, 3, 1)
+
+        def make():
+            return lazy_stack(
+                [
+                    TensorDict(
+                        a=torch.zeros(k, 2),
+                        n=TensorDict(b=torch.zeros(k), batch_size=[k]),
+                        batch_size=[k],
+                    )
+                    for k in sizes
+                ]
+            )
+
+        def value(*batch_size):
+            return TensorDict(
+                a=torch.ones(*batch_size, 2),
+                n=TensorDict(b=torch.ones(batch_size), batch_size=batch_size),
+                batch_size=batch_size,
+            )
+
+        first_two = {i: range(min(2, k)) for i, k in enumerate(sizes)}
+        for batch_size, index, rows in (
+            ((1,), (0, slice(0, 2)), {0: range(2)}),
+            ((1,), (slice(None), slice(0, 2)), first_two),
+            ((1, 1), (slice(None), slice(0, 2)), first_two),
+            ((3, 1), (slice(None), slice(0, 2)), first_two),
+            (
+                (1, 1),
+                (slice(None), slice(1, None)),
+                {i: range(1, k) for i, k in enumerate(sizes)},
+            ),
+        ):
+            ls = make()
+            try:
+                ls.update_at_(value(*batch_size), index)
+            except Exception:
+                rows = {}
+            expected = [
+                [1.0 if row in rows.get(i, ()) else 0.0 for row in range(k)]
+                for i, k in enumerate(sizes)
+            ]
+            assert [t.tolist() for t in ls.get("a", as_list=True)] == [
+                [[x, x] for x in member] for member in expected
+            ]
+            assert [t.tolist() for t in ls.get(("n", "b"), as_list=True)] == expected
+
     def test_to_dict_state_dict_exclusive_keys_raise(self):
         # to_dict and state_dict would silently drop the keys that are not in
         # every member, so they raise
