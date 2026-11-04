@@ -1269,6 +1269,23 @@ def test_unbind_speed_stack1(benchmark):
     benchmark(lambda td: td.unbind(1), td)
 
 
+@pytest.mark.parametrize("rows,features", [(32, 4), (4096, 64)], ids=["step", "large"])
+def test_unbind_nested(benchmark, rows, features):
+    # a batch of RL steps split into rows: 20 leaves in 4 nested nodes
+    def r(*shape):
+        return torch.randn(rows, *shape)
+
+    td = TensorDict(
+        {
+            **{f"x{i}": r(features) for i in range(9)},
+            "next": {f"y{i}": r(features) for i in range(6)},
+            "stats": {**{f"z{i}": r(1) for i in range(4)}, "deep": {"w": r(features)}},
+        },
+        batch_size=[rows],
+    )
+    benchmark(lambda td: td.unbind(0), td)
+
+
 def test_stack_nested(benchmark):
     td = big_nested_td()[0][0]
     benchmark(torch.stack, [td] * 4, 0)

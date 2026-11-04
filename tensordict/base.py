@@ -5125,6 +5125,18 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     key, _val, validated=True, inplace=False, non_blocking=False
                 )
 
+        # is_compiling() first: testing the type first adds a Dynamo guard
+        if not is_compiling() and type(self) is _TENSORDICT_TYPE:
+            # The results are new, unlocked TensorDicts, where _set_str with
+            # validated=True and inplace=False only writes to the dict
+            dicts = [td._tensordict for td in tds]
+            for key, val in self._tensordict.items():
+                if type(val) is Tensor:
+                    for d, _val in _zip_strict(dicts, val.unbind(dim)):
+                        d[key] = _val
+                else:
+                    unbind(key, val)
+            return tds
         for key, val in self.items():
             unbind(key, val)
         return tds

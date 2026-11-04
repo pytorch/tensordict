@@ -15019,6 +15019,229 @@ class TestGeneric:
             f"got {td_unbind[0].batch_size} and {td[:, 0].batch_size}"
         )
 
+    def test_unbind_writes_dense_leaves_directly(self):
+        # #3459: unbind of a TensorDict writes the pieces of its plain tensors
+        # straight into the results, without a _set_str call per piece (the
+        # sub-tensordicts still go through _set_str)
+        td = TensorDict(
+            {"a": torch.randn(4, 3), "n": {"b": torch.randn(4)}}, batch_size=[4]
+        )
+        with mock.patch.object(
+            TensorDict, "_set_str", autospec=True, side_effect=TensorDict._set_str
+        ) as set_str:
+            rows = td.unbind(0)
+        written = [type(call.args[2]) for call in set_str.call_args_list]
+        assert written == [TensorDict] * 4
+        assert len(rows) == 4
+        for i, row in enumerate(rows):
+            assert row["a"].data_ptr() == td["a"][i].data_ptr()
+            assert row["n", "b"].data_ptr() == td["n", "b"][i].data_ptr()
+
+    @staticmethod
+    def _unbind_inputs():
+        # #3459: inputs of the unbind equivalence test, as name -> factory
+        def nested():
+            return TensorDict(
+                {
+                    "a": torch.randn(4, 3, 2),
+                    "b": torch.randint(5, (4, 3)),
+                    "n": {"c": torch.randn(4, 3, 2), "d": {"e": torch.randn(4, 3)}},
+                    "z": torch.randn(4, 3, 1),
+                },
+                batch_size=[4, 3],
+            )
+
+        def grad():
+            return nested().apply(
+                lambda x: (
+                    x * torch.ones((), requires_grad=True)
+                    if x.is_floating_point()
+                    else x
+                )
+            )
+
+        return {
+            "nested": nested,
+            "flat": lambda: TensorDict(
+                {"a": torch.randn(4), "b": torch.randn(4, 2)}, batch_size=[4]
+            ),
+            "zero_d": lambda: TensorDict({"a": torch.randn(2)}, batch_size=[]),
+            "empty": lambda: TensorDict(batch_size=[4, 3]),
+            "zero_rows": lambda: TensorDict(
+                {"a": torch.randn(0, 3), "n": {"b": torch.randn(0, 3)}},
+                batch_size=[0, 3],
+            ),
+            "names": lambda: TensorDict(
+                {"a": torch.randn(4, 3), "n": {"c": torch.randn(4, 3)}},
+                batch_size=[4, 3],
+                names=["x", "y"],
+            ),
+            "one_name": lambda: TensorDict(
+                {"a": torch.randn(4, 3)}, batch_size=[4, 3], names=["x", None]
+            ),
+            "device": lambda: TensorDict(
+                {"a": torch.randn(4, 3), "n": {"c": torch.randn(4, 3)}},
+                batch_size=[4, 3],
+                device="cpu",
+            ),
+            "non_tensor": lambda: TensorDict(
+                {
+                    "a": torch.randn(4, 3),
+                    "s": NonTensorData("x", batch_size=[4, 3]),
+                    "t": NonTensorStack(*[NonTensorStack(*"abc") for _ in range(4)]),
+                },
+                batch_size=[4, 3],
+            ),
+            "unbatched": lambda: TensorDict(
+                {
+                    "a": torch.randn(4, 3),
+                    "u": tensordict.UnbatchedTensor(torch.randn(5)),
+                },
+                batch_size=[4, 3],
+            ),
+            "parameter": lambda: TensorDict(
+                {"a": nn.Parameter(torch.randn(4, 3)), "b": torch.randn(4, 3)},
+                batch_size=[4, 3],
+            ),
+            "lazy_entry": lambda: TensorDict(
+                {
+                    "a": torch.randn(4, 3),
+                    "l": lazy_stack(
+                        [TensorDict({"x": torch.randn(3, 2)}, [3]) for _ in range(4)]
+                    ),
+                },
+                batch_size=[4, 3],
+            ),
+            "tensorclass_entry": lambda: TensorDict(
+                {
+                    "a": torch.randn(4, 3),
+                    "t": _AppendMemmapRows(
+                        x=torch.randn(4, 3, 2), label="l", batch_size=[4, 3]
+                    ),
+                },
+                batch_size=[4, 3],
+            ),
+            "jagged": lambda: TensorDict(
+                {
+                    "j": torch.nested.nested_tensor(
+                        [torch.randn(2), torch.randn(3)], layout=torch.jagged
+                    ),
+                    "a": torch.randn(2),
+                },
+                batch_size=[2],
+            ),
+            "non_contiguous": lambda: TensorDict(
+                {"a": torch.randn(3, 4).t(), "b": torch.randn(8, 3)[::2]},
+                batch_size=[4, 3],
+            ),
+            "grad": grad,
+            "locked": lambda: nested().lock_(),
+            "shared": lambda: nested().share_memory_(),
+            "td_params": lambda: TensorDictParams(nested()),
+            "sub_td": lambda: nested()._get_sub_tensordict((slice(None), slice(None))),
+            "lazy_stack": lambda: lazy_stack([nested(), nested()], 1),
+            "tensorclass": lambda: _AppendMemmapRows(
+                x=torch.randn(4, 3), label="l", batch_size=[4, 3]
+            ),
+        }
+
+    @classmethod
+    def _describe_unbind(cls, x):
+        # #3459: what unbind returns, for the equivalence test
+        if isinstance(x, (list, tuple)):
+            return (type(x), [cls._describe_unbind(v) for v in x])
+        if is_non_tensor(x):
+            return (type(x), x.batch_size, x.tolist())
+        if is_tensor_collection(x):
+            if isinstance(x, LazyStackedTensorDict):
+                inner = (x.stack_dim, [cls._describe_unbind(t) for t in x.tensordicts])
+            elif is_tensorclass(x):
+                inner = cls._describe_unbind(x._tensordict)
+            else:
+                inner = [(k, cls._describe_unbind(v)) for k, v in x.items()]
+            return (
+                type(x),
+                x.batch_size,
+                x.names if x._has_names() else None,
+                x.device,
+                x.is_locked,
+                x._is_shared,
+                x._is_memmap,
+                inner,
+            )
+        if isinstance(x, torch.Tensor):
+            if x.is_nested:
+                return (type(x), x.dtype, [t.tolist() for t in x.unbind()])
+            return (
+                type(x),
+                x.dtype,
+                x.device,
+                x.shape,
+                x.stride(),
+                x.storage_offset(),
+                x.untyped_storage().data_ptr(),
+                x.requires_grad,
+                type(x.grad_fn),
+                x.detach().tolist(),
+            )
+        return (type(x), x)
+
+    @pytest.mark.parametrize("dim", [0, 1, -1, -2, 2, -3])
+    def test_unbind_dense_path_matches_generic(self, dim):
+        # #3459: unbind of a TensorDict writes its plain tensors straight into
+        # the results. Compare with the generic path, which _unbind takes when
+        # is_compiling() is True there (and only there), on inputs that take
+        # either path.
+        unbind_code = TensorDictBase._unbind.__code__
+
+        def in_unbind():
+            return sys._getframe(1).f_code is unbind_code
+
+        def generic_path():
+            return mock.patch.object(tensordict_base, "is_compiling", in_unbind)
+
+        # the switch works: the generic path writes each piece with _set_str
+        with (
+            generic_path(),
+            mock.patch.object(
+                TensorDict, "_set_str", autospec=True, side_effect=TensorDict._set_str
+            ) as set_str,
+        ):
+            TensorDict({"a": torch.zeros(2)}, batch_size=[2]).unbind(0)
+        assert set_str.call_count == 2
+
+        def run(td, generic):
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")
+                with generic_path() if generic else contextlib.nullcontext():
+                    try:
+                        out = self._describe_unbind(td.unbind(dim))
+                    except Exception as err:
+                        out = (type(err), str(err))
+            return out, [(x.category, str(x.message)) for x in w]
+
+        for name, make in self._unbind_inputs().items():
+            torch.manual_seed(0)
+            td = make()
+            assert run(td, generic=False) == run(td, generic=True), name
+            # the torch function and iteration take the same path
+            if dim == 0 and td.batch_dims:
+                assert self._describe_unbind(
+                    torch.unbind(td, 0)
+                ) == self._describe_unbind(td.unbind(0)), name
+                assert self._describe_unbind(list(td)) == self._describe_unbind(
+                    list(td.unbind(0))
+                ), name
+
+    def test_unbind_dense_path_grad(self):
+        # #3459: gradients flow through the pieces that unbind writes directly
+        x = torch.randn(4, 3, requires_grad=True)
+        td = TensorDict({"a": x * 2, "n": {"b": x + 1}}, batch_size=[4])
+        rows = td.unbind(0)
+        assert type(rows[0]["a"].grad_fn).__name__ == "UnbindBackward0"
+        sum(row["a"].sum() + row["n", "b"].sum() for row in rows).backward()
+        torch.testing.assert_close(x.grad, torch.full((4, 3), 3.0))
+
     @pytest.mark.parametrize("stack", [True, False])
     @pytest.mark.parametrize("todict", [True, False])
     def test_update_(self, stack, todict):
