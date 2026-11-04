@@ -5080,6 +5080,17 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             batch_size=shape,
         )
 
+    def _unbind_writes_dicts(self, source: TensorDictBase) -> bool:
+        """Whether ``source._unbind`` may write the pieces of its plain tensors straight into the results' dicts.
+
+        ``self`` is the first result of ``source._unbind``, built but still
+        empty. An override returns ``True`` only when writing a piece into
+        ``self._tensordict`` is what ``_set_str`` with ``validated=True`` and
+        ``inplace=False`` would do. The default returns ``False``, which keeps
+        the generic loop.
+        """
+        return False
+
     def _unbind(self, dim: int):
         batch_size = torch.Size([s for i, s in enumerate(self.batch_size) if i != dim])
         names = None
@@ -5134,6 +5145,18 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     key, _val, validated=True, inplace=False, non_blocking=False
                 )
 
+        # Ask a result rather than self: under torch.compile a result has no
+        # guarded source, and TensorDict._new_unsafe has already read the
+        # is_compiling() that the check reads, so it adds no Dynamo guard
+        if tds and tds[0]._unbind_writes_dicts(self):
+            dicts = [td._tensordict for td in tds]
+            for key, val in self._tensordict.items():
+                if type(val) is Tensor:
+                    for d, _val in _zip_strict(dicts, val.unbind(dim)):
+                        d[key] = _val
+                else:
+                    unbind(key, val)
+            return tds
         for key, val in self.items():
             unbind(key, val)
         return tds

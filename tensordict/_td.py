@@ -1242,6 +1242,15 @@ class TensorDict(TensorDictBase):
         self._maybe_set_shared_attributes(result)
         return result
 
+    def _unbind_writes_dicts(self, source: TensorDictBase) -> bool:
+        """The results of ``TensorDict._unbind`` are new, unlocked TensorDicts.
+
+        There, ``_set_str`` with ``validated=True`` and ``inplace=False``
+        only writes to the dict. Under ``torch.compile``, ``_unbind`` keeps
+        the generic loop.
+        """
+        return not is_compiling() and type(source) is TensorDict
+
     def _unsqueeze(self, dim: int):
         batch_size = list(self.batch_size)
         batch_size.insert(dim, 1)
