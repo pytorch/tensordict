@@ -5072,8 +5072,14 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         )
 
     def _unbind_writes_dicts(self, source: TensorDictBase) -> bool:
-        # Whether source._unbind, of which self is a result, can write the
-        # pieces of plain tensors straight into the results' dicts
+        """Whether ``source._unbind`` may write the pieces of its plain tensors straight into the results' dicts.
+
+        ``self`` is the first result of ``source._unbind``, built but still
+        empty. An override returns ``True`` only when writing a piece into
+        ``self._tensordict`` is what ``_set_str`` with ``validated=True`` and
+        ``inplace=False`` would do. The default returns ``False``, which keeps
+        the generic loop.
+        """
         return False
 
     def _unbind(self, dim: int):
