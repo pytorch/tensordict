@@ -2015,6 +2015,31 @@ class TestNonTensorData:
             torch.stack(items, 0, out=out)
         assert out.get("x") is old
 
+    def test_stack_out_locked_tensorclass_entry_other_type_raises(self):
+        # #3429: a locked out replaces a tensorclass entry only with a stack
+        # of the same class, not with a non-tensor stack
+        @tensorclass
+        class Data:
+            x: torch.Tensor
+
+        out = torch.stack(
+            [
+                TensorDict(a=Data(x=torch.zeros(2), batch_size=[2]), batch_size=[2])
+                for _ in range(3)
+            ]
+        ).lock_()
+        old = out.get("a")
+        items = [
+            TensorDict(
+                a=NonTensorStack(NonTensorData("p"), NonTensorData("q")),
+                batch_size=[2],
+            )
+            for _ in range(3)
+        ]
+        with pytest.raises(RuntimeError, match="locked"):
+            torch.stack(items, 0, out=out)
+        assert type(out.get("a")) is type(old)
+
     def test_stack_out_locked_sub_tensordict(self):
         # #3429: an unlocked out with a sub-tensordict locked on its own gives
         # the result of unlocking that sub-tensordict around the call

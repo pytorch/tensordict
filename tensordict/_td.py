@@ -2082,7 +2082,10 @@ class TensorDict(TensorDictBase):
                 replace_locked = (
                     self._is_locked
                     and not (self._is_shared or self._is_memmap)
-                    and (is_non_tensor(dest) or is_tensorclass(dest))
+                    and (
+                        is_non_tensor(dest)
+                        or (is_tensorclass(dest) and type(new_dest) is type(dest))
+                    )
                 )
                 self._set_str(
                     key,
