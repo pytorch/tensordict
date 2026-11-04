@@ -3111,13 +3111,12 @@ class TestLazyStackedTensorDict:
         root = make()
         view(root).set(("p", "q", "r"), torch.full((2,), 7.0))
         assert root.get(("p", "q", "r")).tolist() == expected
-        root = make()
-        view(root).update({"n": {"z": torch.full((2,), 7.0)}})
         if source == "dense" or depth == 1:
+            # deeper views of a nested lazy stack: see
+            # test_sub_of_sub_update_nested_lazy_new_key
+            root = make()
+            view(root).update({"n": {"z": torch.full((2,), 7.0)}})
             assert root.get(("n", "z")).tolist() == expected
-        else:
-            # a nested lazy stack is updated through a copy, as before
-            assert ("n", "z") not in root.keys(True)
         root = make()
         view(root).update({("p", "q"): torch.full((2,), 7.0)})
         assert root.get(("p", "q")).tolist() == expected
@@ -3127,6 +3126,23 @@ class TestLazyStackedTensorDict:
         with pytest.raises(KeyError, match='key "p" not found'):
             view(root).set_(("p", "q"), torch.full((2,), 7.0))
         assert set(root.keys(True)) == keys
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason="#3481: update through a view of a view of a nested lazy stack "
+        "still writes a copy and loses the new key",
+    )
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_sub_of_sub_update_nested_lazy_new_key(self, stack_dim):
+        td = TensorDict(
+            a=torch.zeros(2, 4),
+            n=TensorDict(b=torch.zeros(2, 4), batch_size=[2, 4]),
+            batch_size=[2, 4],
+        )
+        root = lazy_stack(list(td.unbind(stack_dim)), stack_dim)
+        sub = root._get_sub_tensordict(1)._get_sub_tensordict(slice(1, 3))
+        sub.update({"n": {"z": torch.full((2,), 7.0)}})
+        assert root.get(("n", "z")).tolist() == [[0.0] * 4, [0.0, 7.0, 7.0, 0.0]]
 
     @pytest.mark.parametrize("idx", [torch.tensor([1]), torch.tensor([False, True])])
     def test_sub_of_sub_update_nested_tensor_index(self, idx):
@@ -3204,8 +3220,25 @@ class TestLazyStackedTensorDict:
         sub.set(("p", "q"), torch.full((2,), 7.0))
         sub.update({"n": {"z": torch.full((2,), 7.0)}})
         sub.update({("r", "s"): torch.full((2,), 7.0)})
-        assert set(root.keys(True, True)) == {"a", ("n", "b")}
+        # no leaf of the root becomes a plain tensor
         assert all(isinstance(p, torch.nn.Parameter) for p in root.values(True, True))
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason="#3481: new nested keys set through a view of a view of a "
+        "TensorDictParams are still lost",
+    )
+    def test_sub_of_sub_tensordict_params_root_new_key(self):
+        root = TensorDictParams(
+            TensorDict(
+                a=torch.zeros(2, 4),
+                n=TensorDict(b=torch.zeros(2, 4), batch_size=[2, 4]),
+                batch_size=[2, 4],
+            )
+        )
+        sub = root._get_sub_tensordict(1)._get_sub_tensordict(slice(1, 3))
+        sub.set(("p", "q"), torch.full((2,), 7.0))
+        assert ("p", "q") in root.keys(True, True)
 
     def test_lazy_stack_nested_get(self):
         td0 = TensorDict(a=torch.randn(3))

@@ -3703,19 +3703,16 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
                     target = None
                     if isinstance(source, _SubTensorDict):
                         from tensordict.nn.params import TensorDictParams
-                        from tensordict.persistent import PersistentTensorDict
 
                         if not isinstance(_view_root(source), TensorDictParams):
                             # get() of a view returns a copy of a nested
-                            # tensordict, which would not keep new keys: take
+                            # TensorDict, which would not keep new keys: take
                             # the view of a TensorDict entry (a lazy stack
                             # keeps its exclusive-keys guard, a tensorclass
-                            # its field check)
+                            # its field check, and get() already returns a
+                            # view of a PersistentTensorDict entry)
                             view = source._get_str(firstkey, NO_DEFAULT)
-                            if type(_view_root(view)) in (
-                                TensorDict,
-                                PersistentTensorDict,
-                            ):
+                            if type(_view_root(view)) is TensorDict:
                                 target = view
                     if target is None:
                         target = source.get(firstkey)
