@@ -1091,6 +1091,32 @@ def test_get_nested_with_default(benchmark, key):
     benchmark(td.get, key, None)
 
 
+def _rl_step_td(batch, features):
+    # 20 leaves: 9 at the top, 6 under "next", 4 under "stats", 1 deeper
+    entries = {f"x{i}": torch.zeros(batch, features) for i in range(8)}
+    entries["obs"] = torch.zeros(batch, features)
+    entries["next"] = {f"y{i}": torch.zeros(batch, features) for i in range(5)}
+    entries["next"]["obs"] = torch.zeros(batch, features)
+    entries["stats"] = {f"z{i}": torch.zeros(batch, 1) for i in range(4)}
+    entries["stats"]["deep"] = {"w": torch.zeros(batch, features)}
+    return TensorDict(entries, batch_size=[batch])
+
+
+@pytest.mark.parametrize("size", ["rl_step", "large"])
+@pytest.mark.parametrize(
+    "key",
+    [("next", "obs"), ("stats", "deep", "w"), ("stats", "deep")],
+    ids=["nested", "deep", "sub_td"],
+)
+def test_lazy_stack_get_nested(benchmark, size, key):
+    # a nested read from a lazy stack of 8 tensordicts
+    batch, features = {"rl_step": (32, 4), "large": (4096, 64)}[size]
+    td = LazyStackedTensorDict.lazy_stack(
+        [_rl_step_td(batch, features) for _ in range(8)], 0
+    )
+    benchmark(td.get, key)
+
+
 def test_select(benchmark, td, c):
     def exec_select():
         tdc = td.clone()
