@@ -84,8 +84,9 @@ def _reverse_flatten_keys(self, args, kwargs, out):
         # cannot tell it from a flattened nested key: keep main's result.
     separator = kwargs.get("separator", sep)
     if (
-        separator != sep
+        isinstance(separator, str)
         and separator
+        and separator != sep
         and all(
             separator.join(parts).split(separator) == list(parts)
             for parts in (
@@ -109,7 +110,9 @@ def _reverse_unflatten_keys(self, args, kwargs, out):
     sep = args[0] if args else KEY_SEPARATOR
     separator = kwargs.get("separator", sep)
     if (
-        separator != sep
+        isinstance(separator, str)
+        and separator
+        and separator != sep
         and not _changed_in_place(self, out)
         and all(isinstance(key, str) for key in out.keys(True))
     ):
