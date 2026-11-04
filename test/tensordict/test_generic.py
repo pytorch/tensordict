@@ -16973,6 +16973,308 @@ class TestGeneric:
                 assert r.is_locked == e.is_locked
             assert_allclose_td(res, exp)
 
+    @staticmethod
+    def _apply_nested(batch=3):
+        return TensorDict(
+            a=torch.randn(batch, 2),
+            b=torch.randint(5, (batch,)),
+            n={"c": torch.randn(batch, 2, 2), "d": {"e": torch.randn(batch)}},
+            z=torch.randn(batch, 1),
+            batch_size=[batch],
+        )
+
+    # The tensordicts and functions of the equivalence test of public apply
+    # (#3460): the dense ones take _dense_apply, the others _apply_nest.
+    _APPLY_DENSE_TDS = {
+        "nested": lambda: TestGeneric._apply_nested(),
+        "empty": lambda: TensorDict(batch_size=[3]),
+        "empty sub": lambda: TensorDict(n=TensorDict(batch_size=[3]), batch_size=[3]),
+        "0-d": lambda: TensorDict(
+            a=torch.randn(2), b=torch.randn(()), n={"c": torch.randn(3)}
+        ),
+        "device": lambda: TensorDict(
+            a=torch.randn(3, 2), n={"c": torch.randn(3)}, batch_size=[3], device="cpu"
+        ),
+        "names": lambda: TensorDict(
+            a=torch.randn(3, 2),
+            n={"c": torch.randn(3, 2)},
+            batch_size=[3, 2],
+            names=["x", "y"],
+        ),
+        "named sub": lambda: TensorDict(
+            a=torch.randn(3, 2),
+            n=TensorDict(c=torch.randn(3, 2), batch_size=[3, 2], names=["x", "y"]),
+            m={"d": torch.randn(3, 2)},
+            batch_size=[3, 2],
+        ),
+        "deep named sub": lambda: TensorDict(
+            m={"d": torch.randn(3, 2)},
+            n={
+                "o": TensorDict(
+                    c=torch.randn(3, 2), batch_size=[3, 2], names=["x", "y"]
+                )
+            },
+            p={"e": torch.randn(3, 2)},
+            batch_size=[3],
+        ),
+        "locked": lambda: TestGeneric._apply_nested().lock_(),
+        "non-tensor": lambda: TensorDict(
+            a=torch.randn(3),
+            s=NonTensorData("x", batch_size=[3]),
+            n={"t": "y", "b": torch.randn(3)},
+            batch_size=[3],
+        ),
+        "non-tensor stack": lambda: TensorDict(
+            a=torch.randn(3), s=NonTensorStack("a", "b", "c"), batch_size=[3]
+        ),
+        "unbatched": lambda: TensorDict(
+            a=torch.randn(3),
+            u=tensordict.UnbatchedTensor(torch.randn(5)),
+            batch_size=[3],
+        ),
+        "lazy stack entry": lambda: TensorDict(
+            a=torch.randn(3),
+            l=lazy_stack([TensorDict(x=torch.randn(2), batch_size=[2])] * 3),
+            batch_size=[3],
+        ),
+        "tensorclass entry": lambda: TensorDict(
+            a=torch.randn(3),
+            t=TestGeneric._PlanTC(
+                a=torch.randn(3, 2), b=torch.randn(3), batch_size=[3]
+            ),
+            batch_size=[3],
+        ),
+        "parameter": lambda: TensorDict(
+            a=nn.Parameter(torch.randn(3)), n={"b": torch.randn(3, 2)}, batch_size=[3]
+        ),
+        "grad": lambda: TensorDict(
+            a=torch.randn(3, 2, requires_grad=True) * 1, batch_size=[3]
+        ),
+        "longer sub batch": lambda: TensorDict(
+            a=torch.randn(3, 4),
+            n=TensorDict(c=torch.randn(3, 4), batch_size=[3, 4]),
+            batch_size=[3],
+        ),
+        "view": lambda: TestGeneric._apply_nested(5)[1:4],
+        "jagged": lambda: TensorDict(
+            a=torch.nested.nested_tensor(
+                [torch.randn(2), torch.randn(3)], layout=torch.jagged
+            ),
+            batch_size=[2],
+        ),
+        "strided nested": lambda: TensorDict(
+            a=torch.nested.nested_tensor([torch.randn(2), torch.randn(3)]),
+            batch_size=[2],
+        ),
+        # fn may give the result of a sub-td dim names, which go to the parent
+        "sub only": lambda: TensorDict(n={"c": torch.randn(3, 2)}, batch_size=[3]),
+        "leaf first": lambda: TensorDict(
+            a=torch.randn(3), n={"c": torch.randn(3, 2)}, batch_size=[3]
+        ),
+    }
+
+    _APPLY_DENSE_FNS = {
+        "x2": lambda x: x * 2,
+        "identity": lambda x: x,
+        "none some": lambda x: None if x.ndim == 2 else x + 1,
+        "none all": lambda x: None,
+        "flatten": lambda x: x.reshape(-1),
+        "unsqueeze 0": lambda x: x.unsqueeze(0),
+        "unsqueeze -1": lambda x: x.unsqueeze(-1),
+        "float": lambda x: 1.0,
+        "int": lambda x: 3,
+        "parameter": lambda x: nn.Parameter(x.float().clone()),
+        "td": lambda x: TensorDict(q=x, batch_size=x.shape[:1]),
+        "td no batch": lambda x: TensorDict(q=x),
+        "dict": lambda x: {"q": x},
+        "meta": lambda x: torch.empty_like(x, device="meta"),
+        "str": lambda x: "s",
+        "list": lambda x: [1, 2],
+        "nested tensor": lambda x: (
+            torch.nested.nested_tensor(
+                [x.flatten()[:1], x.flatten()[:2]], layout=torch.jagged
+            )
+            if x.numel() >= 2
+            else x
+        ),
+        "unbatched": lambda x: tensordict.UnbatchedTensor(x.flatten()),
+        "non-tensor": lambda x: NonTensorData("v", batch_size=x.shape[:1]),
+        "named td": lambda x: (
+            TensorDict(q=x, batch_size=x.shape[:1], names=["w"]) if x.ndim else x
+        ),
+        "named td for 1-d": lambda x: (
+            TensorDict(q=x, batch_size=x.shape[:1], names=["w"]) if x.ndim == 1 else x
+        ),
+        "double": lambda x: x.to(torch.float64),
+        "raise on third": None,
+    }
+
+    _APPLY_DENSE_KWARGS = [
+        {},
+        {"filter_empty": True},
+        {"filter_empty": False},
+        {"device": "cpu"},
+        {"device": None},
+        {"device": "meta"},
+        {"device": torch.device("meta")},
+        {"device": "foo"},
+        {"propagate_lock": True},
+        {"is_leaf": is_leaf_nontensor},
+        {"is_leaf": _NESTED_TENSORS_AS_LISTS},
+        {"call_on_nested": True},
+        {"batch_size": [3]},
+        {"names": None},
+    ]
+
+    @staticmethod
+    def _apply_describe(x, ptrs):
+        # type, keys and their order, batch size, device, lock, names, and for
+        # each tensor its dtype, device, shape, values, storage and grad_fn
+        if is_non_tensor(x):
+            return type(x).__name__, x.batch_size, repr(x.tolist())
+        if is_tensor_collection(x):
+            desc = (
+                type(x).__name__,
+                x.batch_size,
+                x.device,
+                x.is_locked,
+                x.names if x._has_names() else None,
+            )
+            if isinstance(x, LazyStackedTensorDict):
+                members = x.tensordicts
+                return desc + (
+                    x.stack_dim,
+                    [TestGeneric._apply_describe(td, ptrs) for td in members],
+                )
+            src = x._tensordict if is_tensorclass(x) else x
+            return desc + (
+                [
+                    (key, TestGeneric._apply_describe(value, ptrs))
+                    for key, value in src.items()
+                ],
+            )
+        if isinstance(x, torch.Tensor):
+            desc = (type(x).__name__, x.dtype, x.device, x.requires_grad)
+            if x.device.type == "meta":
+                return desc + (x.is_nested or x.shape,)
+            if x.is_nested:
+                return desc + ([t.tolist() for t in x.unbind()],)
+            return desc + (
+                x.shape,
+                x.stride(),
+                x.tolist(),
+                x.untyped_storage().data_ptr() in ptrs,
+                type(x.grad_fn).__name__,
+            )
+        return repr(x)
+
+    @staticmethod
+    def _apply_outcome(td_case, fn_case, kwargs):
+        torch.manual_seed(0)
+        td = TestGeneric._APPLY_DENSE_TDS[td_case]()
+        # Keep the leaves alive until the result is described: the leaves of a
+        # lazy stack entry are temporaries, whose freed storage the result
+        # could reuse
+        leaves = [
+            leaf
+            for leaf in td.values(True, True, is_leaf=is_leaf_nontensor)
+            if isinstance(leaf, torch.Tensor) and not leaf.is_nested
+        ]
+        ptrs = {leaf.untyped_storage().data_ptr() for leaf in leaves}
+        calls = []
+        fn0 = TestGeneric._APPLY_DENSE_FNS[fn_case]
+
+        def fn(x):
+            nested = getattr(x, "is_nested", False)
+            calls.append((type(x).__name__, nested or getattr(x, "shape", None)))
+            if fn0 is None:
+                if len(calls) == 3:
+                    raise ValueError("third call")
+                return x
+            return fn0(x)
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            try:
+                result = td.apply(fn, **kwargs)
+            except Exception as err:
+                # the size of a jagged dim is a symbol numbered at each call
+                outcome = (type(err), re.sub(r"\bj\d+", "j", str(err)))
+            else:
+                outcome = TestGeneric._apply_describe(result, ptrs)
+        del leaves
+        return (
+            outcome,
+            calls,
+            TestGeneric._apply_describe(td, ()),
+            [(w.category, str(w.message)) for w in caught],
+        )
+
+    @pytest.mark.parametrize("td_case", list(_APPLY_DENSE_TDS))
+    def test_apply_dense_path_matches_general(self, td_case, monkeypatch):
+        # #3460: apply on a TensorDict without dim names takes _dense_apply,
+        # with the results, errors, warnings and fn calls of _apply_nest, the
+        # route that _is_dense_node gates.
+        cases = [
+            (fn_case, kwargs)
+            for fn_case in self._APPLY_DENSE_FNS
+            for kwargs in self._APPLY_DENSE_KWARGS
+        ]
+        fast = [self._apply_outcome(td_case, *case) for case in cases]
+        monkeypatch.setattr(TensorDict, "_is_dense_node", lambda self: False)
+        general = [self._apply_outcome(td_case, *case) for case in cases]
+        for case, outcome, expected in zip(cases, fast, general):
+            assert outcome == expected, case
+
+    def test_apply_dense_path(self, monkeypatch):
+        # #3460: public apply on a tree of TensorDicts without dim names builds
+        # the result with _dense_apply, not with _apply_nest.
+        def apply_nest(self, *args, **kwargs):
+            raise AssertionError("_apply_nest was called")
+
+        monkeypatch.setattr(TensorDictBase, "_apply_nest", apply_nest)
+        td = self._apply_nested().lock_()
+        result = td.apply(lambda x: x * 2, propagate_lock=True)
+        assert result.is_locked
+        assert_allclose_td(result, td.clone() * 2)
+        assert td.apply(lambda x: None if x.ndim == 2 else x, filter_empty=True)[
+            "n", "d"
+        ].batch_size == torch.Size([3])
+        result = td.apply(lambda x: x.to("meta"), device=torch.device("meta"))
+        assert result["n", "d", "e"].device == torch.device("meta")
+
+    def test_apply_dense_path_validates(self):
+        # #3460: on the dense path of apply, the results of fn are validated as
+        # before: names of a named child, Parameters, device moves, shape
+        # errors, and an error stops the walk at the leaf that raised.
+        td = self._APPLY_DENSE_TDS["named sub"]()
+        assert td.apply(lambda x: x + 1).names == ["x", "y"]
+        td = self._apply_nested()
+        result = td.apply(lambda x: nn.Parameter(x.float()))
+        assert type(result["a"]) is nn.Parameter
+        assert type(result["n", "d", "e"]) is nn.Parameter
+        td = self._APPLY_DENSE_TDS["device"]()
+        result = td.apply(lambda x: x + 1, device="meta")
+        assert result["a"].device == result["n", "c"].device == torch.device("meta")
+        msg = r"value.shape=torch.Size\(\[6\]\) for key 'a'"
+        with pytest.raises(RuntimeError, match=msg):
+            self._apply_nested().apply(lambda x: x.reshape(-1))
+        calls = []
+
+        def fn(x):
+            calls.append(x)
+            if len(calls) == 3:
+                raise ValueError("third call")
+            return x
+
+        with pytest.raises(ValueError, match="third call"):
+            self._apply_nested().apply(fn)
+        assert len(calls) == 3
+        # a device given as a string is parsed only when a result is built
+        calls.clear()
+        assert self._apply_nested().apply(calls.append, device="foo") is None
+        assert len(calls) == len(self._apply_nested().keys(True, True))
+
     def test_norm_out(self):
         td = TensorDict(a=torch.ones(3), b={"c": torch.ones(3, 2)}, batch_size=[3])
         out = td.norm().zero_()

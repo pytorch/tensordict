@@ -587,17 +587,25 @@ class TensorDict(TensorDictBase):
         is_leaf,
         device=NO_DEFAULT,
         call_on_unbatched=False,
+        checked=True,
     ):
         # What _apply_nest returns for a node that passes _is_dense_node, with
-        # checked=True and no others, out, inplace, batch size or names: each
-        # node gets the batch size of its source node, and the given device
-        # or, without one, the device of its source node. Entries other than
-        # tensors and such nodes take the steps of _apply_nest for one entry.
+        # no others, out, inplace, batch size or names: each node gets the
+        # batch size of its source node, and the given device or, without one,
+        # the device of its source node. Entries other than tensors and such
+        # nodes take the steps of _apply_nest for one entry. With
+        # checked=False, a result that is not an exact Tensor with the batch
+        # size and device of the node, or a node built here without dim names,
+        # is written with the validation that _apply_nest gives it.
         result = self._new_unsafe(
             batch_size=self._batch_size,
             device=self._device if device is NO_DEFAULT else device,
         )
         _tensordict = result._tensordict
+        if not checked:
+            batch_size = result._batch_size
+            batch_dims = len(batch_size)
+            result_device = result._device
         for key, item in self._tensordict.items():
             cls = type(item)
             if cls is TensorDict and item._td_dim_names is None:
@@ -610,7 +618,29 @@ class TensorDict(TensorDictBase):
                     is_leaf,
                     device,
                     call_on_unbatched,
+                    checked,
                 )
+                if (
+                    not checked
+                    and item_trsf is not None
+                    and (
+                        item_trsf._td_dim_names is not None
+                        or result._td_dim_names is not None
+                        or item_trsf._batch_size[:batch_dims] != batch_size
+                        or (
+                            result_device is not None
+                            and item_trsf._device != result_device
+                        )
+                    )
+                ):
+                    result._set_str(
+                        key,
+                        item_trsf,
+                        inplace=False,
+                        validated=False,
+                        non_blocking=False,
+                    )
+                    continue
             elif cls is not Tensor and not is_leaf(cls):
                 # the call _apply_nest makes for a nested collection
                 item_trsf = item._apply_nest(
@@ -618,7 +648,7 @@ class TensorDict(TensorDictBase):
                     inplace=False,
                     batch_size=None,
                     device=device,
-                    checked=True,
+                    checked=checked,
                     named=named,
                     nested_keys=nested_keys,
                     default=NO_DEFAULT,
@@ -628,13 +658,46 @@ class TensorDict(TensorDictBase):
                     out=None,
                     call_on_unbatched=call_on_unbatched,
                 )
-            elif named:
-                if nested_keys:
-                    item_trsf = fn(prefix + (key,) if prefix != () else key, item)
-                else:
-                    item_trsf = fn(key, item)
+                if not checked and item_trsf is not None:
+                    result._set_str(
+                        key,
+                        item_trsf,
+                        inplace=False,
+                        validated=False,
+                        non_blocking=False,
+                    )
+                    continue
             else:
-                item_trsf = fn(item)
+                if named:
+                    if nested_keys:
+                        item_trsf = fn(prefix + (key,) if prefix != () else key, item)
+                    else:
+                        item_trsf = fn(key, item)
+                else:
+                    item_trsf = fn(item)
+                if (
+                    not checked
+                    and item_trsf is not None
+                    and not (
+                        type(item_trsf) is Tensor
+                        and (
+                            not batch_dims
+                            or (
+                                not item_trsf.is_nested
+                                and item_trsf.shape[:batch_dims] == batch_size
+                            )
+                        )
+                        and (result_device is None or item_trsf.device == result_device)
+                    )
+                ):
+                    result._set_str(
+                        key,
+                        item_trsf,
+                        inplace=False,
+                        validated=False,
+                        non_blocking=False,
+                    )
+                    continue
             if item_trsf is not None:
                 _tensordict[key] = item_trsf
         if not _tensordict and (
