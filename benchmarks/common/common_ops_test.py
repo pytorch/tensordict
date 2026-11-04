@@ -1319,6 +1319,32 @@ def test_apply_nested(benchmark):
     benchmark(td.apply, lambda x: x)
 
 
+@pytest.mark.parametrize("batch,features", [(32, 4), (4096, 64)])
+def test_apply_rl_step(benchmark, batch, features):
+    # a TorchRL step: 20 leaves in 4 nested nodes (#3460)
+    td = TensorDict(
+        {
+            **{f"x{i}": torch.randn(batch, features) for i in range(9)},
+            "next": {f"y{i}": torch.randn(batch, features) for i in range(6)},
+            "stats": {
+                **{f"z{i}": torch.randn(batch, 1) for i in range(4)},
+                "deep": {"w": torch.randn(batch, features)},
+            },
+        },
+        batch_size=[batch],
+    )
+    benchmark(td.apply, lambda x: x * 2)
+
+
+def test_apply_filter_none(benchmark):
+    # fn returns None for most leaves, which apply leaves out (#3460)
+    td = TensorDict(
+        {f"x{i}": torch.randn(32, 4 if i % 4 else 1) for i in range(20)},
+        batch_size=[32],
+    )
+    benchmark(td.apply, lambda x: x if x.shape[-1] == 1 else None)
+
+
 @pytest.mark.parametrize("safe", [True, False])
 def test_pad_nested(benchmark, safe):
     # a TorchRL transition, padded to a common length as split_trajectories does
