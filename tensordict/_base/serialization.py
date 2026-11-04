@@ -566,12 +566,6 @@ class _Serialization:
         if device is not None and self.device is not None and device != self.device:
             raise RuntimeError("Loading data from another device is not yet supported.")
 
-        # Leaves that require grad (the parameters of from_module) are copied
-        # into without autograd, as nn.Module does. Only the dict of a
-        # TensorDict is read: other tensordicts would read from disk or stack.
-        leaves = None if assign else getattr(self, "_tensordict", None)
-        if not isinstance(leaves, dict):
-            leaves = {}
         for key, item in state_dict.items():
             if isinstance(item, dict):
                 dest = self.get(key, None)
@@ -583,11 +577,28 @@ class _Serialization:
                     dest,
                     inplace=not assign,
                 )
-            elif _is_leaf_requiring_grad(leaves.get(key)):
-                with torch.no_grad():
-                    self.set(key, item, inplace=True)
             else:
-                self.set(key, item, inplace=not assign)
+                retry = False
+                try:
+                    self.set(key, item, inplace=not assign)
+                except RuntimeError:
+                    # A leaf that requires grad (a parameter of from_module)
+                    # refuses the in-place copy under autograd, before
+                    # anything is written: copy into it without autograd, as
+                    # nn.Module does. Only the dict of a TensorDict is read,
+                    # as other tensordicts would read from disk or stack.
+                    leaves = getattr(self, "_tensordict", None)
+                    if (
+                        assign
+                        or not torch.is_grad_enabled()
+                        or not isinstance(leaves, dict)
+                        or not _is_leaf_requiring_grad(leaves.get(key))
+                    ):
+                        raise
+                    retry = True
+                if retry:
+                    with torch.no_grad():
+                        self.set(key, item, inplace=True)
         return self
 
     def is_memmap(self) -> bool:
