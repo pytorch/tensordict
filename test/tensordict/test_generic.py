@@ -15036,6 +15036,10 @@ class TestGeneric:
         for i, row in enumerate(rows):
             assert row["a"].data_ptr() == td["a"][i].data_ptr()
             assert row["n", "b"].data_ptr() == td["n", "b"][i].data_ptr()
+        # under torch.compile, unbind takes the generic path
+        assert rows[0]._unbind_writes_dicts(td)
+        with mock.patch.object(tensordict._td, "is_compiling", lambda: True):
+            assert not rows[0]._unbind_writes_dicts(td)
 
     @staticmethod
     def _unbind_inputs():
@@ -15190,15 +15194,12 @@ class TestGeneric:
     def test_unbind_dense_path_matches_generic(self, dim):
         # #3459: unbind of a TensorDict writes its plain tensors straight into
         # the results. Compare with the generic path, which _unbind takes when
-        # is_compiling() is True there (and only there), on inputs that take
-        # either path.
-        unbind_code = TensorDictBase._unbind.__code__
-
-        def in_unbind():
-            return sys._getframe(1).f_code is unbind_code
-
+        # TensorDict._unbind_writes_dicts returns False (as it does under
+        # torch.compile), on inputs that take either path.
         def generic_path():
-            return mock.patch.object(tensordict_base, "is_compiling", in_unbind)
+            return mock.patch.object(
+                TensorDict, "_unbind_writes_dicts", lambda self, source: False
+            )
 
         # the switch works: the generic path writes each piece with _set_str
         with (

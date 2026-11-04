@@ -5071,6 +5071,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             batch_size=shape,
         )
 
+    def _unbind_writes_dicts(self, source: TensorDictBase) -> bool:
+        # Whether source._unbind, of which self is a result, can write the
+        # pieces of plain tensors straight into the results' dicts
+        return False
+
     def _unbind(self, dim: int):
         batch_size = torch.Size([s for i, s in enumerate(self.batch_size) if i != dim])
         names = None
@@ -5125,10 +5130,10 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     key, _val, validated=True, inplace=False, non_blocking=False
                 )
 
-        # is_compiling() first: testing the type first adds a Dynamo guard
-        if not is_compiling() and type(self) is _TENSORDICT_TYPE:
-            # The results are new, unlocked TensorDicts, where _set_str with
-            # validated=True and inplace=False only writes to the dict
+        # Ask a result rather than self: under torch.compile a result has no
+        # guarded source, and TensorDict._new_unsafe has already read the
+        # is_compiling() that the check reads, so it adds no Dynamo guard
+        if tds and tds[0]._unbind_writes_dicts(self):
             dicts = [td._tensordict for td in tds]
             for key, val in self._tensordict.items():
                 if type(val) is Tensor:
