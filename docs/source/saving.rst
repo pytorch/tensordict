@@ -491,10 +491,10 @@ or ``.consolidate()`` first. Pickle and
   >>> batch_c = TensorDict(
   ...     {"obs": torch.zeros(3, 4), "action": torch.zeros(3, dtype=torch.long)}, batch_size=[3]
   ... ).consolidate()
-  >>> torch.save(batch_c[:2], root / "rows.pt")
+  >>> torch.save(batch_c[:2], root / "rows.pt")  # doctest: +ELLIPSIS
   Traceback (most recent call last):
   ...
-  RuntimeError: Cannot save multiple tensors or storages that view the same data as different types
+  RuntimeError: Cannot save multiple tensors or storages that view the same data as different types...
   >>> torch.save(batch_c[:2].clone(), root / "rows.pt")
   >>> torch.load(root / "rows.pt", weights_only=True).batch_size
   torch.Size([2])
