@@ -6464,6 +6464,54 @@ class TestTensorDictParams:
         # torch's "Did you mean to pass `assign=True`" warning does not fire.
         assert not [w for w in caught if "assign=True" in str(w.message)]
 
+    @pytest.mark.parametrize(
+        "device",
+        [
+            "meta",
+            pytest.param(
+                "cuda",
+                marks=pytest.mark.skipif(
+                    not torch.cuda.is_available(), reason="CUDA is not available"
+                ),
+            ),
+        ],
+    )
+    @pytest.mark.parametrize(
+        "ckpt",
+        [
+            pytest.param(lambda: nn.Parameter(torch.ones(3)), id="parameter"),
+            pytest.param(lambda: torch.ones(3, requires_grad=True), id="requires_grad"),
+        ],
+    )
+    def test_load_state_dict_assign_other_device_to_buffer(self, device, ckpt):
+        # #3510: a buffer that gets a tensor from another device with
+        # assign=True ends as a load from the same device does: a leaf, an
+        # nn.Parameter registered as a parameter if the checkpoint holds one.
+        def load(device):
+            params = TensorDictParams(
+                TensorDict(b=torch.zeros(3), device=device), no_convert=True
+            )
+            module = self._parent(params)
+            module.load_state_dict({"params.b": ckpt()}, assign=True)
+            leaf = params["b"]
+            return (
+                params,
+                leaf,
+                (
+                    type(leaf),
+                    leaf.requires_grad,
+                    leaf.is_leaf,
+                    set(dict(module.named_parameters())),
+                    set(dict(module.named_buffers())),
+                ),
+            )
+
+        params, leaf, result = load(device)
+        assert result == load(None)[2]
+        assert leaf.grad_fn is None
+        assert leaf.device == params.device
+        assert (params._parameters.get("b") is leaf) is isinstance(leaf, nn.Parameter)
+
     def test_load_state_dict_assign_no_device(self):
         # #3510: without a device on the tensordict, assign=True keeps the
         # device and the storage of the checkpoint, as torch does.
