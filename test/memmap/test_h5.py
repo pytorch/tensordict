@@ -45,7 +45,6 @@ def _keep_batch(batch):
     return batch
 
 
-@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 class _MetaList(list):
     # a list whose equality also compares an attribute (#3511)
     def __init__(self, items, meta):
@@ -58,6 +57,7 @@ class _MetaList(list):
     __hash__ = None
 
 
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 class TestH5Serialization:
     @pytest.mark.parametrize("allow_pickle", [None, True, False])
     def test_zarr_pickle_policy_does_not_change_h5(self, tmp_path, allow_pickle):
