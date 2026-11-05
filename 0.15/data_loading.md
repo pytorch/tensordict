@@ -159,7 +159,17 @@ the list of indices of each batch, and `collate_fn` gets the tensordict:
 Passing it as `sampler`, with `batch_size=None`, gives the same batches
 through `data[indices]`, but the workers of the `DataLoader` then send
 an HDF5 or zarr [`PersistentTensorDict`](reference/generated/tensordict.PersistentTensorDict.html#tensordict.PersistentTensorDict) batch as a lazy
-view, which the main process reads.
+view, which the main process reads. With `batch_size=None`, also pass
+`collate_fn=lambda x: x`. Without a `collate_fn`, the `DataLoader`
+passes each batch to [`torch.utils.data.default_convert()`](https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.default_convert), which reads a
+mapping by iterating over its keys, and iterating over a tensordict gives its
+rows, so the call raises a `TypeError`:
+
+```
+>>> loader = DataLoader(data, sampler=sampler, batch_size=None, collate_fn=lambda x: x)
+>>> [batch["label"].tolist() for batch in loader]
+[[0, 1, 2, 3], [4, 5, 6, 7]]
+```
 
 ## Worker processes and pinned memory
 
@@ -171,7 +181,9 @@ the worker inherits a copy-on-write view of the memory of the main process.
 - With `spawn` (the default on macOS and Windows) and `forkserver` (the
 default on Linux from Python 3.14), the `DataLoader` pickles the dataset
 to each worker. A memory-mapped tensordict pickles as its file names, so
-the workers open the same files and do not copy the data. Pickle cannot
+the workers open the same files and do not copy the data. Writes made in
+the main process into a directory loaded with `mode="r"` do not reach
+these workers (see [Save and load tensordicts](saving.html#saving)). Pickle cannot
 send a `lambda`, so define `collate_fn` as a function at the top level
 of a module.
 

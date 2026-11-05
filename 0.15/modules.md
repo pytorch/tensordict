@@ -823,6 +823,22 @@ After the block, `mlp` has its own parameters again. Without `with`,
 `to_module` keeps the new parameters in the module, and
 returns a tensordict with the old ones.
 
+`to_module` registers the parameters that the tensordict holds again, in
+its key order, after the ones that it does not hold. After the call, and
+after a `with` block, `parameters()` and `state_dict()` follow that
+order. A tensordict from `from_module` of the same module keeps the order.
+An optimizer maps a saved state to its parameters by position, so build the
+optimizer, and load its state, with the parameters in the same order:
+
+```
+>>> lin = nn.Linear(2, 3)
+>>> [name for name, _ in lin.named_parameters()]
+['weight', 'bias']
+>>> _ = TensorDict(bias=torch.zeros(3), weight=torch.zeros(3, 2)).to_module(lin)
+>>> [name for name, _ in lin.named_parameters()]
+['bias', 'weight']
+```
+
 ### Ensembles with from_modules and vmap
 
 [`from_modules()`](reference/generated/tensordict.TensorDictBase.from_modules.html#tensordict.TensorDictBase.from_modules) stacks the parameters of several
@@ -935,6 +951,13 @@ become [`Parameter`](https://docs.pytorch.org/docs/stable/generated/torch.nn.par
 `bfloat16`, complex, and `bool`, become buffers. An optimizer does not see
 a buffer. With `no_convert=True`, all tensors that are not already
 parameters become buffers.
+- `update()` with a nested dict or a nested tensordict of plain tensors
+under an existing key, such as `params.update({"n": {"b": t}})` where
+`params["n"]` exists, skips this conversion: these values become buffers,
+and leave `parameters()`. Values that are already parameters stay
+parameters. Pass the nested keys as tuples instead, for example
+`params.update(dict(other.items(True, True)))`, or write into the
+existing entries with `update_()`.
 - `named_parameters()` names each entry by its nested key, joined with
 `"."`, for example `"0.weight"`.
 - The constructor does not copy the tensordict that you pass. It turns the
@@ -942,6 +965,13 @@ leaves of that tensordict into parameters and buffers, in place. If you
 later add or replace an entry of that tensordict, indexing sees the new
 value, but `parameters()` and `buffers()` do not. Write through the
 [`TensorDictParams`](reference/generated/tensordict.TensorDictParams.html#tensordict.TensorDictParams) instead.
+- A [`TensorDictParams`](reference/generated/tensordict.TensorDictParams.html#tensordict.TensorDictParams) reads its entries from the
+tensordict that it wraps, not from the `_parameters` of the module.
+[`torch.func.functional_call()`](https://docs.pytorch.org/docs/stable/generated/torch.func.functional_call.html#torch.func.functional_call) and FSDP2 swap parameters by writing
+`_parameters`, so they silently use the stored values, and
+[`torch.export.export()`](https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/export/api_reference.html#torch.export.export) captures the top-level entries that the
+forward reads by key as constants. To call a module with other values, use `from_module` and
+`to_module` (see Parameters as tensordicts).
 
 In this example, only the `float32` entry becomes a parameter:
 

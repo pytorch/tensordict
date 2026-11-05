@@ -24,7 +24,14 @@ is converted to the annotated type. Exclusive with `nocast` and
 `tensor_only`. Defaults to `False`.
 - **frozen** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, assigning a field raises
 `dataclasses.FrozenInstanceError`, as with
-`@dataclass(frozen=True)`. To block writes on one instance only,
+`@dataclass(frozen=True)`. In `__post_init__`, fill a missing
+field with `self.set(name, value)`: `object.__setattr__`
+stores the value outside the tensordict, so pickle,
+`torch.save` and `to_dict()` drop it. `__post_init__` also
+runs when tensordict rebuilds a locked instance, so call `set`
+only when the field is missing, or pass
+`skip_post_init_on_rebuild=True` (see [Immutability with frozen](../../tensorclass.html#tensorclass-frozen)).
+To block writes on one instance only,
 call `lock_()` on it or pass `lock=True` to the constructor:
 writes then raise a `RuntimeError`. Defaults to `False`.
 - **nocast** ([*bool*](https://docs.python.org/3/builtins/functions.html#bool)*,**optional*) - if `True`, Tensor-compatible types such as

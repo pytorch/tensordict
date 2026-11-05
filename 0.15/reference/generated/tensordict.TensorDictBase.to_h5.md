@@ -11,6 +11,11 @@ and the file stores them in the attributes of each group. Requires
 `h5py`. [`from_h5()`](tensordict.TensorDictBase.from_h5.html#tensordict.TensorDictBase.from_h5) opens the file again, but infers the batch
 sizes until TensorDict 0.17. See [Save and load tensordicts](../../saving.html#saving).
 
+For a lazy stack, only the keys that [`keys()`](tensordict.TensorDictBase.keys.html#tensordict.TensorDictBase.keys) lists, the keys
+that every stacked tensordict has, are written: the other keys are
+dropped without a warning, as by [`to_tensordict()`](tensordict.TensorDictBase.to_tensordict.html#tensordict.TensorDictBase.to_tensordict).
+[`memmap()`](tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap) keeps them.
+
 Parameters:
 
 - **filename** ([*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or**path*) - the path of the HDF5 file.

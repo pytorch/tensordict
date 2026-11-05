@@ -13,7 +13,8 @@ the method is called on is not used. See [Distributed tensordicts](../../distrib
 
 Parameters:
 
-- **src** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - the rank of the source process.
+- **src** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - the global rank of the source process, as in
+[`torch.distributed.scatter()`](https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.scatter).
 - **tensordicts** ([*list*](https://docs.python.org/3/builtins/stdtypes.html#list)*of*[*TensorDictBase*](tensordict.TensorDictBase.html#tensordict.TensorDictBase)*,**optional*) - on the source rank,
 the tensordicts to scatter, one per rank. Ignored on the other
 ranks. Defaults to `None`.

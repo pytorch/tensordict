@@ -12,7 +12,7 @@ trust. See [`init_remote()`](tensordict.TensorDictBase.init_remote.html#tensordi
 
 Parameters:
 
-- **src** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - the rank of the sender.
+- **src** ([*int*](https://docs.python.org/3/builtins/functions.html#int)) - the global rank of the sender.
 - **group** (*torch.distributed.ProcessGroup**,**optional*) - the process group.
 Defaults to `None`, the default process group.
 - **device** ([*device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,*[*str*](https://docs.python.org/3/builtins/stdtypes.html#str)*or*[*int*](https://docs.python.org/3/builtins/functions.html#int)*,**optional*) - the device of the result.

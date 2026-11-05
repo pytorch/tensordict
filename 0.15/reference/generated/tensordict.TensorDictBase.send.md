@@ -9,6 +9,12 @@ shapes and dtypes, which writes the values into its tensors. By default,
 each leaf is one message, marked with a tag. To send to a rank that does
 not know the structure, use [`init_remote()`](tensordict.TensorDictBase.init_remote.html#tensordict.TensorDictBase.init_remote). See [Distributed tensordicts](../../distributed.html#distributed).
 
+Only the tensors move. A non-tensor entry, such as a string, keeps the
+value that the receiver holds. With `consolidated=True`, the
+non-tensor values travel only in the metadata that
+[`init_remote()`](tensordict.TensorDictBase.init_remote.html#tensordict.TensorDictBase.init_remote) sends, so the later sends refresh the tensors
+only.
+
 Parameters:
 
 **dst** ([*int*](https://docs.python.org/3/builtins/functions.html#int)*or*[*TensorDictPipe*](tensordict._ucxx.TensorDictPipe.html#tensordict._ucxx.TensorDictPipe)*,**optional*) - the global rank of the

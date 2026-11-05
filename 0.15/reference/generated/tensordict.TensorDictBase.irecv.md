@@ -5,8 +5,9 @@ TensorDictBase.irecv(*src: [int](https://docs.python.org/3/builtins/functions.ht
 Receives the leaves that [`isend()`](tensordict.TensorDictBase.isend.html#tensordict.TensorDictBase.isend) or [`send()`](tensordict.TensorDictBase.send.html#tensordict.TensorDictBase.send) sends, one asynchronous transfer per leaf.
 
 The tensordict must have the keys, shapes and dtypes of the tensordict
-that the sender sends; the values are written into its tensors in place.
-By default, the call waits until all the transfers are done. With
+that the sender sends; the values are written into its tensors in place,
+and the non-tensor entries keep their values. By default, the call
+waits until all the transfers are done. With
 `return_premature=True`, it returns at once: call `wait()` on each
 returned `Work` object before you read the tensordict. See
 [`isend()`](tensordict.TensorDictBase.isend.html#tensordict.TensorDictBase.isend) for an example, and [Distributed tensordicts](../../distributed.html#distributed).

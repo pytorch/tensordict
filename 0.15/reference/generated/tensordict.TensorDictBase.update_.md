@@ -6,7 +6,13 @@ Copies the entries of a dictionary or tensordict into the existing entries, and 
 
 Each value is copied into the existing tensor, which keeps its
 storage, as with [`set_()`](tensordict.TensorDictBase.set_.html#tensordict.TensorDictBase.set_). `update_` therefore works on a
-locked tensordict. Every key of the input must exist in the tensordict.
+locked tensordict. Without `keys_to_update`, a key of the input that
+the tensordict lacks is skipped, not copied, when a tensor of the
+input matches a tensor entry of the tensordict; otherwise it raises a
+`KeyError`, as a key in `keys_to_update` that the input has and
+the tensordict lacks does. A sub-tensordict view raises a `KeyError`
+for every missing key, and a tensorclass raises a `ValueError` for
+a key that is not one of its fields.
 Keyword arguments are top-level entries, and win over an entry of the
 input with the same key. A key named like an argument of `update_`
 must go in the input dictionary. See [In-place operations](../../concepts/operations.html#inplace-conventions).
@@ -51,7 +57,8 @@ Returns:
 
 Raises:
 
-- [**KeyError**](https://docs.python.org/3/builtins/exceptions.html#KeyError) - if a key of the input is missing from the tensordict.
+- [**KeyError**](https://docs.python.org/3/builtins/exceptions.html#KeyError) - if a key of the input is missing from the tensordict
+ and is not skipped as described above.
 - [**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if a value does not fit the shape of its entry.
 
 Examples
@@ -67,6 +74,9 @@ Examples
 >>> _ = td.update_(a=torch.ones(3)) # keyword form
 >>> a.sum()
 tensor(3.)
+>>> _ = td.update_({"a": torch.zeros(3), "extra": torch.zeros(3)})
+>>> "extra" in td.keys() # skipped, since "a" matches
+False
 ```
 
 Every tensordict class and every tensorclass has this method. For the

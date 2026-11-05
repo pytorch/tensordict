@@ -118,6 +118,24 @@ but other hard links keep the old content.
 [`unpack_memmap()`](tensordict.unpack_memmap.html#tensordict.unpack_memmap) convert between archives and
 directories.
 
+Note
+
+`meta.json` uses the names `"shape"`, `"device"` and
+`"_type"` for the batch size, the device and the type of each
+level, so [`load_memmap()`](tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap) does not restore an entry with
+one of these names, at any depth. Saving such an entry warns.
+For a directory, the tensordict returned here still holds the
+entry, but an archive, which is read back, does not. Rename the
+entry before saving to keep it.
+
+Note
+
+A view of a memory-mapped tensordict, such as `td[1:]` or a
+transpose, written back to the directory that it maps can leave
+wrong data in that directory, without an error. Pass
+`atomic=True` and `copy_existing=True`, which write a new
+directory first (not on Windows), or write to another directory.
+
 Examples
 
 ```

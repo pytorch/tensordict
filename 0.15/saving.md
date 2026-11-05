@@ -169,6 +169,20 @@ RuntimeError: A filename was provided but the tensor already has a file associat
 MemoryMappedTensor(1)
 ```
 
+A view of a loaded tensordict, such as `td[1:]` or a transpose, written
+back to the directory that it maps with `memmap`, `memmap_` or `save`
+can leave wrong data in that directory, without an error. Pass
+`atomic=True` and `copy_existing=True`, which write a new directory
+first (not on Windows), or write to another directory:
+
+```
+>>> _ = TensorDict({"a": torch.arange(4.0)}, batch_size=[4]).save(root / "trim")
+>>> td = TensorDict.load_memmap(root / "trim")
+>>> _ = td[1:].save(root / "trim", copy_existing=True, atomic=True)
+>>> TensorDict.load_memmap(root / "trim")["a"]
+MemoryMappedTensor([1., 2., 3.])
+```
+
 ### Write to the files after you load them
 
 The `mode` argument of `load_memmap` sets where an in-place change to a
@@ -194,6 +208,24 @@ MemoryMappedTensor([0., 0., 0.])
 >>> _ = writer["a"].add_(1)
 >>> TensorDict.load_memmap(root / "data")["a"]
 MemoryMappedTensor([1., 1., 1.])
+```
+
+In-place writes into a directory loaded with `mode="r"` stay in the memory
+of the process that made them. Pickling it, as [`multiprocessing`](https://docs.python.org/3/library/multiprocessing.html#module-multiprocessing) queues
+and spawned `DataLoader` workers do, and [`torch.save()`](https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save) record the file
+names, so the copy reads the files and does not have these writes. To send or
+save the changed values, send `td.clone()` or `td.consolidate()`, or save
+to a new directory with `td.memmap(path, copy_existing=True)`:
+
+```
+>>> import pickle
+>>> _ = TensorDict({"a": torch.zeros(3)}, batch_size=[3]).save(root / "cow")
+>>> reader = TensorDict.load_memmap(root / "cow", mode="r")
+>>> _ = reader["a"].add_(1)
+>>> pickle.loads(pickle.dumps(reader))["a"] # reads the file
+MemoryMappedTensor([0., 0., 0.])
+>>> pickle.loads(pickle.dumps(reader.clone()))["a"]
+tensor([1., 1., 1.])
 ```
 
 If many nodes read the same files on a network file system, load with
@@ -419,6 +451,34 @@ The file keeps the batch sizes and names that the tensordict had when
 False
 ```
 
+The leaves of a consolidated tensordict are views of one storage of bytes, and
+so are the leaves of a tensordict that `load_memmap` reads from a `.tdz`
+archive. [`torch.save()`](https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save) saves a consolidated tensordict, but not a
+tensordict that holds these views, is not consolidated, and has leaves of more
+than one dtype: an index, a `select`, a sub-tensordict, `clone(False)`, an
+unlocked copy, or the archive load itself. It raises
+`RuntimeError: Cannot save multiple tensors or storages that view the same
+data as different types`. When the leaves that are saved have one dtype,
+`torch.save` of a `.tdz` load, or of a tensordict made from its views (a
+`select` of one entry of a mixed archive, for example), writes a file that
+[`torch.load()`](https://docs.pytorch.org/docs/stable/generated/torch.load.html#torch.load) rejects with `record size ... does not match expected
+size`. Both are limits of `torch.save`. Call `.clone()`
+or `.consolidate()` first. Pickle and
+[`memmap()`](reference/generated/tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap) save these tensordicts as they are:
+
+```
+>>> batch_c = TensorDict(
+... {"obs": torch.zeros(3, 4), "action": torch.zeros(3, dtype=torch.long)}, batch_size=[3]
+... ).consolidate()
+>>> torch.save(batch_c[:2], root / "rows.pt") 
+Traceback (most recent call last):
+...
+RuntimeError: Cannot save multiple tensors or storages that view the same data as different types...
+>>> torch.save(batch_c[:2].clone(), root / "rows.pt")
+>>> torch.load(root / "rows.pt", weights_only=True).batch_size
+torch.Size([2])
+```
+
 A consolidated tensordict also pickles faster, because pickle gets one
 storage instead of one tensor for each leaf. In one measurement, pickling a
 tensordict with 1000 small leaves took 34 ms, and 0.3 ms once consolidated
@@ -528,10 +588,32 @@ tensorclass, allowlist the tensorclass:
 datetime.date(2024, 1, 1)
 ```
 
+To save a tensordict derived from a consolidated one, or loaded from a
+`.tdz` archive, call `.clone()` or `.consolidate()` on it first (see
+Consolidated files).
+
 `weights_only=True` cannot load a tensordict with
 [`MemoryMappedTensor`](reference/generated/tensordict.MemoryMappedTensor.html#tensordict.MemoryMappedTensor) leaves. Save it with
 [`save()`](reference/generated/tensordict.TensorDictBase.save.html#tensordict.TensorDictBase.save) and load it with
 [`load_memmap()`](reference/generated/tensordict.TensorDictBase.load_memmap.html#tensordict.TensorDictBase.load_memmap) instead.
+
+From PyTorch 2.15, `weights_only=True` does not load nested tensors by
+default either. A tensordict with jagged leaves (`layout=torch.jagged`)
+that [`torch.save()`](https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save) wrote, and a file of its `state_dict()`, stop with
+`Unsupported global: GLOBAL torch.nested._internal.nested_tensor._rebuild_njt`.
+A consolidated tensordict (see [`consolidate()`](reference/generated/tensordict.TensorDictBase.consolidate.html#tensordict.TensorDictBase.consolidate))
+with jagged leaves still loads. If the file comes from a source that you
+trust, allowlist the two names that the error messages give:
+
+```
+from torch.nested._internal.nested_tensor import NestedTensor, _rebuild_njt
+
+with torch.serialization.safe_globals([_rebuild_njt, NestedTensor]):
+ td = torch.load(path, weights_only=True)
+```
+
+For a nested tensor with the default `torch.strided` layout, allowlist
+`torch._utils._rebuild_nested_tensor` instead.
 
 ## state_dict and load_state_dict
 
@@ -809,6 +891,14 @@ JSON cannot represent a `set`, so `save` writes a `set` value to an
 `other.pickle` file. To load it, pass `allow_pickle=True` (see
 Load data that you did not write). To keep the value in `meta.json`,
 convert it to a list first.
+
+`meta.json` uses the names `"shape"`, `"device"` and `"_type"` for
+the batch size, the device and the type of its level, so `load_memmap` does
+not restore an entry with one of these names, at any depth. `memmap`,
+`memmap_` and `save` warn when they write such an entry. For a
+directory, the tensordict that they return still holds it; for a `.tdz`
+archive, which they read back, it does not. Rename the entry before saving to
+keep it.
 
 ## Memory-mapped tensors
 

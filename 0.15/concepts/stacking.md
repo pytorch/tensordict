@@ -93,6 +93,30 @@ True
 tensor(10.)
 ```
 
+Along the stack dimension, indexing with a list, a tensor or a slice,
+[`torch.cat()`](https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat), and
+[`repeat_interleave()`](../reference/generated/tensordict.TensorDictBase.repeat_interleave.html#tensordict.TensorDictBase.repeat_interleave) return a lazy
+stack that holds the same tensordicts, not copies. A write into the result
+goes to the original tensordicts. A tensordict that the result holds twice,
+as in `stacked[[0, 0]]`, `torch.cat([stacked, stacked])` or
+`stacked.repeat_interleave(2)`, is one object, so a write into one of its
+rows also writes the other. Call `clone()` on the result to get independent
+rows:
+
+```
+>>> rows = lazy_stack([TensorDict(score=torch.zeros(())) for _ in range(2)])
+>>> shared = rows.repeat_interleave(2)
+>>> shared["score"] = torch.arange(4.0)
+>>> shared["score"] # the rows 0 and 1 are one tensordict
+tensor([1., 1., 3., 3.])
+>>> rows["score"] # and the writes reached the original tensordicts
+tensor([1., 3.])
+>>> independent = rows.repeat_interleave(2).clone()
+>>> independent["score"] = torch.arange(4.0)
+>>> independent["score"]
+tensor([0., 1., 2., 3.])
+```
+
 Each read of an entry stacks the values again, and allocates a new tensor. If
 you read the same keys many times, call
 [`contiguous()`](../reference/generated/tensordict.TensorDictBase.contiguous.html#tensordict.TensorDictBase.contiguous) once and read from its
@@ -163,6 +187,20 @@ instead:
 torch.Size([3])
 ```
 
+The conversions to one container follow `keys()`:
+[`contiguous()`](../reference/generated/tensordict.TensorDictBase.contiguous.html#tensordict.TensorDictBase.contiguous), `to_tensordict()`,
+[`to_h5()`](../reference/generated/tensordict.TensorDictBase.to_h5.html#tensordict.TensorDictBase.to_h5), and
+[`to_zarr()`](../reference/generated/tensordict.TensorDictBase.to_zarr.html#tensordict.TensorDictBase.to_zarr) write only the keys that every
+tensordict has, and drop the exclusive keys without a warning.
+[`memmap()`](../reference/generated/tensordict.TensorDictBase.memmap.html#tensordict.TensorDictBase.memmap) and
+[`save()`](../reference/generated/tensordict.TensorDictBase.save.html#tensordict.TensorDictBase.save) write each tensordict of the stack, so
+they keep them:
+
+```
+>>> list(mixed.contiguous().keys())
+['pos']
+```
+
 A lazy stack also accepts tensordicts with different batch sizes, if they have
 the same number of batch dimensions. The batch size then shows `-1` for each
 dimension that differs. Here, two systems have 2 and 4 particles:
@@ -176,6 +214,15 @@ dimension that differs. Here, two systems have 2 and 4 particles:
 torch.Size([2, -1])
 >>> ragged[1].batch_size
 torch.Size([4])
+```
+
+`numel()` of such a stack returns 1, whatever its members hold. To count
+the elements of the batch, add up the counts of the members (at each level,
+for a stack of lazy stacks):
+
+```
+>>> sum(member.numel() for member in ragged.tensordicts)
+6
 ```
 
 ## Which function to use
@@ -253,6 +300,15 @@ True
 >>> graphs[1]["nodes"].shape
 torch.Size([3, 2])
 ```
+
+`as_padded_tensor=True` puts the stack dimension of each lazy stack first,
+the outer one and, in a lazy stack of lazy stacks, the inner ones. For a stack
+built along another dimension than 0, the padded tensor is therefore laid out
+differently from the dense entry. If the inner stacks were built along
+different dimensions, some members come out transposed and padded with
+`padding_value`, although their entries have the same shape. Build the lazy
+stacks along dimension 0, or call `contiguous()` on each inner stack whose
+entries have the same shape.
 
 [`densify()`](../reference/generated/tensordict.TensorDictBase.densify.html#tensordict.TensorDictBase.densify) turns the whole lazy stack
 into a regular TensorDict. The entries with different shapes become nested

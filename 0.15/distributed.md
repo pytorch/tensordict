@@ -181,6 +181,15 @@ def cold_start_broadcast(rank, world_size):
  print(td["obs"].shape) # torch.Size([2, 84])
 ```
 
+`send`, `recv`, `isend`, and `irecv` move tensors only. A non-tensor
+entry, such as a string (see [Non-tensor data and unbatched entries](concepts/non_tensor.html#non-tensor-data)), keeps the value that the
+receiver holds, even when the sender holds another one. With
+`send(consolidated=True)`, the non-tensor values travel only in the
+metadata that [`init_remote()`](reference/generated/tensordict.TensorDictBase.init_remote.html#tensordict.TensorDictBase.init_remote) sends, so the
+later sends refresh the tensors only. To send changing non-tensor values,
+send them separately, for example with
+[`torch.distributed.send_object_list()`](https://docs.pytorch.org/docs/stable/distributed.html#torch.distributed.send_object_list).
+
 ## Collectives
 
 Every rank of the group must call a collective. The methods that send the
@@ -250,6 +259,17 @@ to 7 times slower. Non-contiguous and sparse leaves, such as those of
 `td[::2]`, are never packed. Each rank builds its buckets from its own
 leaves, so every rank must hold the same keys, shapes and dtypes; if the
 layouts differ, the call can hang.
+
+On a lazy stack whose members have different keys, `reduce` reduces only
+the keys that every member holds: rank `dst` keeps its own values for the
+others. `all_reduce` reduces every key. To reduce every key on rank
+`dst` only, call `reduce` on each member (a member that is itself a lazy
+stack has the same limit):
+
+```
+for member in td.tensordicts:
+ member.reduce(dst=0)
+```
 
 ### all_gather, scatter, and gather_and_stack
 

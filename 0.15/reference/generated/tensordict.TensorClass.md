@@ -136,7 +136,12 @@ tensor(1)
 - `frozen`: assigning a field raises `FrozenInstanceError`, as with
 `@dataclass(frozen=True)`. Subclasses of a frozen class are frozen
 too. A frozen class cannot subclass a non-frozen tensorclass: this
-raises a `TypeError`.
+raises a `TypeError`. In `__post_init__`, fill a missing field
+with `self.set(name, value)`: `object.__setattr__` stores the value
+outside the tensordict, so pickle, `torch.save` and `to_dict()`
+drop it. `__post_init__` also runs when tensordict rebuilds a locked
+instance, so call `set` only when the field is missing, or add
+`"skip_post_init_on_rebuild"` (see [Immutability with frozen](../../tensorclass.html#tensorclass-frozen)).
 
 ```
 >>> class Foo(TensorClass["frozen"]):

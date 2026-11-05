@@ -279,6 +279,16 @@ that consolidate, such as `send(consolidated=True)` and `broadcast`.
 `NotImplementedError`: DTensor has no rule for `c10d.allreduce_`.
 Reduce DTensors with the DTensor API, or call the collectives on the local
 shards.
+- `fully_shard` on a module that holds a
+[`TensorDictParams`](reference/generated/tensordict.TensorDictParams.html#tensordict.TensorDictParams). `fully_shard` swaps the
+`_parameters` of the module for DTensors, but a `TensorDictParams`
+reads its entries from the tensordict that it wraps. The forward then reads
+the original entries, the sharded parameters get no gradient, and the
+optimizer does not train them, without an error. The same holds for
+[`torch.func.functional_call()`](https://docs.pytorch.org/docs/stable/generated/torch.func.functional_call.html#torch.func.functional_call), and [`torch.export.export()`](https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/export/api_reference.html#torch.export.export)
+captures the top-level entries that the forward reads by key as
+constants. Shard a
+module that holds plain parameters instead.
 
 To work on the local shards, apply `to_local()`. The shards have a shape
 other than the global one, so pass a new batch size. This example runs on two

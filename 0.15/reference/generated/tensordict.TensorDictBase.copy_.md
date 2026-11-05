@@ -5,8 +5,11 @@ TensorDictBase.copy_(*tensordict: T*, *non_blocking: [bool](https://docs.python.
 Copies the entries of `tensordict` into the existing entries, and returns `self`.
 
 The same as [`update_()`](tensordict.TensorDictBase.update_.html#tensordict.TensorDictBase.update_), under the name of
-[`torch.Tensor.copy_()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.copy_.html#torch.Tensor.copy_): the existing tensors keep their storage,
-and every key of `tensordict` must exist in the tensordict.
+[`torch.Tensor.copy_()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.copy_.html#torch.Tensor.copy_): the existing tensors keep their storage.
+A key of `tensordict` that the tensordict lacks is skipped, not
+copied, when a tensor of `tensordict` matches a tensor entry of the
+tensordict; otherwise it raises a `KeyError`. A sub-tensordict view
+raises a `KeyError` for every missing key.
 
 Parameters:
 
@@ -18,7 +21,7 @@ can run asynchronously with respect to the host. Defaults to
 Raises:
 
 - [**KeyError**](https://docs.python.org/3/builtins/exceptions.html#KeyError) - if a key of `tensordict` is missing from the
- tensordict.
+ tensordict and is not skipped as described above.
 - [**RuntimeError**](https://docs.python.org/3/builtins/exceptions.html#RuntimeError) - if a value does not fit the shape of its entry.
 
 Examples

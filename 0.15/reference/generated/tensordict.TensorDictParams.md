@@ -29,6 +29,14 @@ bfloat16, complex and bool) become buffers. An optimizer built from
 `parameters()` therefore does not see bfloat16 entries. Pass
 `no_convert=True` to register all tensors as buffers.
 
+[`update()`](tensordict.TensorDictBase.update.html#tensordict.TensorDictBase.update) with a nested dict or a nested tensordict of plain
+tensors under an existing key, such as `params.update({"n": {"b": t}})`
+where `params["n"]` exists, skips this conversion: these values become
+buffers, and leave `parameters()`. Values that are already parameters
+stay parameters. Pass the nested keys as tuples instead, for example
+`params.update(dict(other.items(True, True)))`, or write into the
+existing entries with [`update_()`](tensordict.TensorDictBase.update_.html#tensordict.TensorDictBase.update_).
+
 Warning
 
 TensorDictParams wraps the TensorDict that you pass,
@@ -39,6 +47,25 @@ original TensorDict, indexing the TensorDictParams shows the
 new value, but `parameters()` and `buffers()` keep
 the old one. Write through the TensorDictParams, or pass
 `lock=True`.
+
+Warning
+
+A TensorDictParams reads its entries from the
+tensordict that it wraps, not from the `_parameters` and
+`_buffers` of the module. The tools that swap the parameters
+of a module by writing `_parameters` therefore do not reach it,
+and silently use the stored values:
+[`torch.func.functional_call()`](https://docs.pytorch.org/docs/stable/generated/torch.func.functional_call.html#torch.func.functional_call) (and [`torch.func.grad()`](https://docs.pytorch.org/docs/stable/generated/torch.func.grad.html#torch.func.grad)
+through it), [`torch.export.export()`](https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/export/api_reference.html#torch.export.export), which captures the
+top-level entries that the forward reads by key (`params["w"]`)
+as constants, and FSDP2
+([`torch.distributed.fsdp.fully_shard()`](https://docs.pytorch.org/docs/stable/distributed.fsdp.fully_shard.html#torch.distributed.fsdp.fully_shard)), where the forward
+reads the original entries, so the sharded parameters get no
+gradient and the optimizer does not train them. To call a module
+with other values for its entries, use
+[`from_module()`](tensordict.TensorDictBase.from_module.html#tensordict.TensorDictBase.from_module) and
+[`to_module()`](tensordict.TensorDictBase.to_module.html#tensordict.TensorDictBase.to_module):
+`with new_params.to_module(module): module(x)`.
 
 Parameters:
 

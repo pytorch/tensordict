@@ -15,7 +15,13 @@ leaf, like a dense tensordict of the same keys and shapes, and rank
 reduction, or with `async_op=True`, after each reduction completes.
 That write raises if a member leaf cannot be written in place, such as
 an expanded tensor, and the call waits for every reduction before it
-raises. See [Collectives](../../distributed.html#distributed-collectives).
+raises. A lazy stack reduces only the keys that every member holds:
+rank `dst` keeps its own values for the keys that only some
+members hold. [`all_reduce()`](tensordict.TensorDictBase.all_reduce.html#tensordict.TensorDictBase.all_reduce) reduces every key. To reduce them
+on rank `dst` only, call `reduce` on each member
+(`for member in td.tensordicts: member.reduce(dst)`); a member
+that is itself a lazy stack has the same limit. See
+[Collectives](../../distributed.html#distributed-collectives).
 
 Parameters:
 

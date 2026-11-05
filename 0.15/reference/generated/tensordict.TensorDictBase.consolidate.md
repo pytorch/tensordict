@@ -9,6 +9,11 @@ because its leaves are one block of memory: [`to()`](tensordict.TensorDictBase.t
 [`pickle`](https://docs.python.org/3/library/pickle.html#module-pickle), [`send()`](tensordict.TensorDictBase.send.html#tensordict.TensorDictBase.send) and [`broadcast()`](tensordict.TensorDictBase.broadcast.html#tensordict.TensorDictBase.broadcast) move that block
 in one copy. The result is locked (see [Locking and temporary changes](../../concepts/keys.html#keys-locking)): you can
 write into its leaves in place, but you cannot add or remove entries.
+[`torch.save()`](https://docs.pytorch.org/docs/stable/generated/torch.save.html#torch.save) saves the result, but not a tensordict made from
+its views that is not consolidated and has leaves of more than one
+dtype (an index, a `select`, an unlocked copy): call `clone()` or
+`consolidate()` on it first
+(see [Consolidated files](../../saving.html#saving-torch-save-views)).
 
 If the tensordict is already consolidated, `self` is returned and
 the other arguments are ignored, except `pin_memory=True`: a
