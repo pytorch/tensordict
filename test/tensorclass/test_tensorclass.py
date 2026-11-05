@@ -9347,6 +9347,31 @@ class TestNoCasting:
             x.update_({"n": 9})
         assert x.n == 3
 
+    def test_nocast_update_timedelta64_order(self):
+        # #3512: np.timedelta64 is an np.number, but update() stores it as
+        # v0.15.4 did, in the order of the dict, not before the other entries
+        class NC(TensorClass["nocast"]):
+            x: torch.Tensor
+            y: torch.Tensor = None
+            n: Any = None
+
+        td64 = np.timedelta64(5, "s")
+        tc = NC(x=torch.zeros(3), batch_size=[3])
+        tc.update({"y": torch.ones(3), "n": td64})
+        assert list(tc.keys()) == ["x", "y", "n"]
+        assert list(tc.to_dict().keys()) == ["x", "y", "n"]
+        assert isinstance(tc.n, np.timedelta64) and tc.n == td64
+        assert isinstance(tc._tensordict.get("n"), NonTensorData)
+        # what must not change: a timedelta64 alone, and a datetime64
+        tc = NC(x=torch.zeros(3), batch_size=[3])
+        tc.update({"n": td64})
+        assert isinstance(tc.n, np.timedelta64) and tc.n == td64
+        dt64 = np.datetime64("2026-01-01")
+        tc = NC(x=torch.zeros(3), batch_size=[3])
+        tc.update({"y": torch.ones(3), "n": dt64})
+        assert list(tc.keys()) == ["x", "y", "n"]
+        assert isinstance(tc.n, np.datetime64) and tc.n == dt64
+
 
 class TestCastFilter:
     @staticmethod
