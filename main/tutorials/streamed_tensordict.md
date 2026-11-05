@@ -89,7 +89,7 @@ print("lengths of stream0:", data_cont["stream0"].offsets().diff())
 ```
 
 ```
-TensorDict(batch_size=[2], fields={stream0: f32[j1], stream1: f32[j2]})
+TensorDict(batch_size=[2], fields={stream0: f32[j2], stream1: f32[j1]})
 lengths of stream0: tensor([5, 4])
 ```
 
@@ -227,7 +227,7 @@ print("TensorDict from stream", td)
 ```
 
 ```
-TensorDict from stream TensorDict(batch_size=[5], fields={bucket0: i64[j3], bucket1: i64[j4]})
+TensorDict from stream TensorDict(batch_size=[5], fields={bucket0: i64[j4], bucket1: i64[j3]})
 ```
 
 Print the data of both streams. Each stream counts up from 0, so the values
