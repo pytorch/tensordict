@@ -2991,10 +2991,19 @@ def _same_leaf_value(input_dict, key0: tuple, key1: tuple) -> bool:
         second = _leaf_value(input_dict, key1)
         if first is second:
             return True
+        both_non_tensor = is_non_tensor(first) and is_non_tensor(second)
         if is_non_tensor(first):
             first = first.tolist()
         if is_non_tensor(second):
             second = second.tolist()
+        if both_non_tensor:
+            try:
+                # non-tensors that == counts as the same, such as [1] and 1,
+                # keep returning, as #3478 made them (#3511)
+                if bool(first == second):
+                    return True
+            except Exception:
+                pass
         if isinstance(first, torch.Tensor) and isinstance(second, torch.Tensor):
             return (
                 first.shape == second.shape

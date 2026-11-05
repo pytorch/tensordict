@@ -343,6 +343,25 @@ class TestH5Serialization:
             td.to_h5(tmp_path / "a.h5")
         assert "replaced" not in str(excinfo.value)
 
+    @pytest.mark.parametrize(
+        "first,second",
+        [
+            (lambda: torch.tensor([1]), lambda: torch.tensor([1.0])),
+            (lambda: torch.tensor([1.0]), lambda: torch.tensor(1.0)),
+            (lambda: np.array([1]), lambda: np.array(1)),
+            (lambda: np.array([1.0]), lambda: 1.0),
+        ],
+        ids=["tensor_dtype", "tensor_0d", "numpy_0d", "numpy_float"],
+    )
+    def test_slash_key_alias_nontensor_one_element_keeps_returning(
+        self, tmp_path, first, second
+    ):
+        # #3511: non-tensors that == counts as the same, as before the fix,
+        # keep returning
+        td = TensorDict(a={"b": NonTensorData(first())})
+        td["a/b"] = NonTensorData(second())
+        td.to_h5(tmp_path / "a.h5").close()
+
     def test_slash_key_without_collision(self, tmp_path):
         # #3435: a "/" key alone, or next to a disjoint group, keeps loading
         # as a nested key; a leaf before a "/" key under it keeps raising
