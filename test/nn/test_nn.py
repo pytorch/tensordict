@@ -6415,6 +6415,67 @@ class TestTensorDictParams:
         assert inner._parameters["w"] is inner["w"]
         assert set(dict(module.named_parameters())) == {"params.a", "params.sub.w"}
 
+    @pytest.mark.parametrize(
+        "device",
+        [
+            "meta",
+            pytest.param(
+                "cuda",
+                marks=pytest.mark.skipif(
+                    not torch.cuda.is_available(), reason="CUDA is not available"
+                ),
+            ),
+        ],
+    )
+    def test_load_state_dict_assign_other_device(self, device):
+        # #3510: assign=True from a checkpoint on another device keeps the
+        # parameters registered as parameters, on the device of the tensordict.
+        params = TensorDictParams(
+            TensorDict(
+                a=nn.Parameter(torch.zeros(3)),
+                sub=TensorDict(b=nn.Parameter(torch.zeros(2))),
+                buf=torch.zeros(2),
+            ),
+            no_convert=True,
+        ).to(device)
+        assert params.device.type == device
+        module = self._parent(params)
+        sd = {
+            "params.a": torch.ones(3),
+            "params.sub.b": nn.Parameter(torch.ones(2)),
+            "params.buf": torch.ones(2),
+        }
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            module.load_state_dict(sd, assign=True)
+        assert set(dict(module.named_parameters())) == {"params.a", "params.sub.b"}
+        assert set(dict(module.named_buffers())) == {"params.buf"}
+        for key in ("a", ("sub", "b")):
+            assert isinstance(params[key], nn.Parameter)
+            assert params[key].requires_grad
+        assert not isinstance(params["buf"], nn.Parameter)
+        assert params._parameters["a"] is params["a"]
+        assert params._parameters["sub.b"] is params["sub", "b"]
+        assert params._buffers["buf"] is params["buf"]
+        for leaf in params.values(True, True):
+            assert leaf.device == params.device
+            if device != "meta":
+                assert (leaf == 1).all()
+        # torch's "Did you mean to pass `assign=True`" warning does not fire.
+        assert not [w for w in caught if "assign=True" in str(w.message)]
+
+    def test_load_state_dict_assign_no_device(self):
+        # #3510: without a device on the tensordict, assign=True keeps the
+        # device and the storage of the checkpoint, as torch does.
+        params = TensorDictParams(TensorDict(a=torch.zeros(3, device="meta")))
+        assert params.device is None
+        module = self._parent(params)
+        ckpt = torch.ones(3)
+        module.load_state_dict({"params.a": ckpt}, assign=True)
+        assert isinstance(params["a"], nn.Parameter)
+        assert params["a"].data_ptr() == ckpt.data_ptr()
+        assert set(dict(module.named_parameters())) == {"params.a"}
+
     def test_load_state_dict_assign_parameter_to_buffer(self):
         # #3425: as in torch, assign=True makes a buffer that gets an
         # nn.Parameter a parameter, and leaves the checkpoint tensor as it is.
