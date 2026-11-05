@@ -4437,7 +4437,10 @@ def _update_nocast_fields(self, input_dict: dict, keys_to_update) -> dict:
     size. Returns the other entries.
     """
     for value in input_dict.values():
-        if isinstance(value, (int, float, np.number, np.bool_)):
+        # np.timedelta64 is an np.number, but takes the dict path (#3512)
+        if isinstance(value, (int, float, np.number, np.bool_)) and not isinstance(
+            value, np.timedelta64
+        ):
             break
     else:
         # no number: the common case, which takes the dict path as it is
@@ -4452,6 +4455,7 @@ def _update_nocast_fields(self, input_dict: dict, keys_to_update) -> dict:
     for key, value in input_dict.items():
         if (
             isinstance(value, (int, float, np.number, np.bool_))
+            and not isinstance(value, np.timedelta64)
             and key in expected_keys
             and (selected is None or key in selected or (key,) in selected)
         ):
