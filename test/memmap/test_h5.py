@@ -138,6 +138,51 @@ class TestH5Serialization:
         assert set(loaded.keys(True, True)) == {("obs", "pos"), "r"}
         assert (loaded["obs", "pos"] == torch.arange(3.0)).all()
 
+    @pytest.mark.parametrize("case", ["nan_lazy", "nan_clone", "numpy", "tensor"])
+    def test_slash_key_alias_equal_nan_or_array_keeps_returning(self, tmp_path, case):
+        # #3511: a "/" key that holds the same value as the nested key it maps
+        # to raised when the value held a NaN or was an array non-tensor
+        nan = float("nan")
+        if case == "nan_lazy":
+            td = lazy_stack(
+                [
+                    TensorDict(a={"b": torch.tensor(nan)}),
+                    TensorDict(a={"b": torch.tensor(2.0)}),
+                ]
+            )
+            td.update(td.flatten_keys("/"))
+        elif case == "nan_clone":
+            td = TensorDict(a={"b": torch.tensor([nan, 1.0])})
+            td["a/b"] = td["a", "b"].clone()
+        else:
+            make = np.arange if case == "numpy" else torch.arange
+            td = TensorDict(a={"b": NonTensorData(make(3))})
+            td["a/b"] = NonTensorData(make(3))
+        td.to_h5(tmp_path / "a.h5").close()
+        loaded = TensorDict.from_h5(tmp_path / "a.h5")
+        assert set(loaded.keys(True)) == {"a", ("a", "b")}
+        np.testing.assert_array_equal(
+            np.asarray(loaded["a", "b"]), np.asarray(td["a", "b"])
+        )
+
+    @pytest.mark.parametrize(
+        "first,second,raises",
+        [
+            ([0.0, float("nan")], [-0.0, float("nan")], False),
+            ([float("nan"), 1.0], [1.0, float("nan")], True),
+            ([float("nan"), 1.0], [float("nan"), 2.0], True),
+        ],
+    )
+    def test_slash_key_clash_with_nan(self, tmp_path, first, second, raises):
+        # #3511: NaN matches NaN at the same place only; a "/" key whose value
+        # differs anywhere else keeps raising
+        td = TensorDict({"a": {"b": torch.tensor(first)}, "a/b": torch.tensor(second)})
+        if raises:
+            with pytest.raises(ValueError, match="replaced"):
+                td.to_h5(tmp_path / "a.h5")
+        else:
+            td.to_h5(tmp_path / "a.h5").close()
+
     def test_slash_key_without_collision(self, tmp_path):
         # #3435: a "/" key alone, or next to a disjoint group, keeps loading
         # as a nested key; a leaf before a "/" key under it keeps raising

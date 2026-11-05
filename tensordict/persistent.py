@@ -2996,12 +2996,25 @@ def _same_leaf_value(input_dict, key0: tuple, key1: tuple) -> bool:
                 first.shape == second.shape
                 and first.dtype == second.dtype
                 and first.device == second.device
-                and bool(torch.equal(first, second))
+                and (
+                    bool(torch.equal(first, second))
+                    # NaN in the same places counts as the same value (#3511)
+                    or (
+                        (first.is_floating_point() or first.is_complex())
+                        and bool(
+                            torch.allclose(
+                                first, second, rtol=0, atol=0, equal_nan=True
+                            )
+                        )
+                    )
+                )
             )
         if is_non_tensor(first) and is_non_tensor(second):
             return bool(first.tolist() == second.tolist())
     except Exception:
-        return False
+        # values that can't be compared, such as numpy arrays, are not known
+        # to differ: the call returns, as before the check (#3511)
+        return True
     return False
 
 
