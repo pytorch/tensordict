@@ -936,10 +936,10 @@ def _dense_stack_members(tds, dim):
     in keys, batch size or device, or if an entry is not a plain tensor that
     does not require grad.
     """
-    if not tds or dim < 0 or is_compiling():
+    if not tds or dim < 0 or dim > len(tds[0].batch_size) or is_compiling():
         # compiled code keeps the general path, its graphs and its guards; a
-        # negative dim (from_dict keeps one outside the batch dims) is
-        # normalized per sub-tensordict by the general path
+        # dim outside the batch dims (from_dict keeps one as it is) is
+        # handled per sub-tensordict by the general path
         return None
     if not _dense_stack_first_ok(tds[0]):
         # most stacks that this path does not take stop at member 0, before

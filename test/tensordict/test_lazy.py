@@ -3376,6 +3376,20 @@ class TestLazyStackedTensorDict:
             with pytest.raises(RuntimeError, match="batch dimension mismatch"):
                 stack.to_tensordict()
 
+    def test_to_tensordict_stack_dim_past_batch_dims_raises(self):
+        # #3509: from_dict keeps a positive stack_dim past the batch dims too
+        stack = LazyStackedTensorDict.from_dict(
+            [{"a": torch.zeros(3, 4)}] * 2, batch_size=[3], stack_dim=2
+        )
+        assert stack.stack_dim == 2
+        with pytest.raises(RuntimeError, match="batch dimension mismatch"):
+            stack.to_tensordict()
+        nested = LazyStackedTensorDict.from_dict(
+            [{"sub": {"b": torch.zeros(3)}}] * 2, batch_size=[3], stack_dim=2
+        )
+        with pytest.raises(RuntimeError, match="Stack dim 2 is too big"):
+            nested.to_tensordict()
+
     def test_to_tensordict_grad_leaf_is_cloned(self):
         # #3451: a leaf that requires grad is still cloned, as before
         tds = [TensorDict(a=torch.ones(3, requires_grad=True)) for _ in range(2)]
