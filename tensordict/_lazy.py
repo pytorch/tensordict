@@ -936,8 +936,10 @@ def _dense_stack_members(tds, dim):
     in keys, batch size or device, or if an entry is not a plain tensor that
     does not require grad.
     """
-    if not tds or is_compiling():
-        # compiled code keeps the general path, its graphs and its guards
+    if not tds or dim < 0 or dim > len(tds[0].batch_size) or is_compiling():
+        # compiled code keeps the general path, its graphs and its guards; a
+        # dim outside the batch dims (from_dict keeps one as it is) is
+        # handled per sub-tensordict by the general path
         return None
     if not _dense_stack_first_ok(tds[0]):
         # most stacks that this path does not take stop at member 0, before
@@ -2770,7 +2772,9 @@ class LazyStackedTensorDict(TensorDictBase):
     def _to_tensordict(self, *, retain_none: bool | None) -> TensorDictBase:
         if self._hook_out is None and not self._is_vmapped:
             out = _dense_stack_members(self.tensordicts, self.stack_dim)
-            if out is not None:
+            # a sub-stack of a stack with a negative stack_dim can have a
+            # batch size that its members and stack dim do not give
+            if out is not None and out._batch_size == self._batch_size:
                 return out
         return TensorDictBase._to_tensordict(self, retain_none=retain_none)
 
