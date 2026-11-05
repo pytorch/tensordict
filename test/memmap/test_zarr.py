@@ -6,6 +6,7 @@ import argparse
 import pickle
 import re
 import warnings
+from collections import OrderedDict
 from pathlib import Path
 
 import numpy as np
@@ -31,6 +32,18 @@ TIMEOUT = 100
 
 def _keep_batch(batch):
     return batch
+
+
+class _MetaList(list):
+    # a list whose equality also compares an attribute (#3511)
+    def __init__(self, items, meta):
+        super().__init__(items)
+        self.meta = meta
+
+    def __eq__(self, other):
+        return list.__eq__(self, other) and self.meta == getattr(other, "meta", None)
+
+    __hash__ = None
 
 
 class _CustomNonTensor:
@@ -114,6 +127,410 @@ class TestZarrRoundTrip:
         loaded = TensorDict.from_zarr(tmp_path / "a.zarr")
         assert set(loaded.keys(True, True)) == {("obs", "pos"), "r"}
         assert (loaded["obs", "pos"] == torch.arange(3.0)).all()
+
+    @pytest.mark.parametrize("case", ["nan_lazy", "nan_clone", "numpy", "tensor"])
+    def test_slash_key_alias_equal_nan_or_array_keeps_returning(self, tmp_path, case):
+        # #3511: a "/" key that holds the same value as the nested key it maps
+        # to raised when the value held a NaN or was an array non-tensor
+        pytest.importorskip("zarr", minversion="3")
+        nan = float("nan")
+        if case == "nan_lazy":
+            td = lazy_stack(
+                [
+                    TensorDict(a={"b": torch.tensor(nan)}),
+                    TensorDict(a={"b": torch.tensor(2.0)}),
+                ]
+            )
+            td.update(td.flatten_keys("/"))
+        elif case == "nan_clone":
+            td = TensorDict(a={"b": torch.tensor([nan, 1.0])})
+            td["a/b"] = td["a", "b"].clone()
+        else:
+            make = np.arange if case == "numpy" else torch.arange
+            td = TensorDict(a={"b": NonTensorData(make(3))})
+            td["a/b"] = NonTensorData(make(3))
+        td.to_zarr(tmp_path / "a.zarr").close()
+        loaded = TensorDict.from_zarr(tmp_path / "a.zarr")
+        assert set(loaded.keys(True)) == {"a", ("a", "b")}
+        np.testing.assert_array_equal(
+            np.asarray(loaded["a", "b"]), np.asarray(td["a", "b"])
+        )
+
+    @pytest.mark.parametrize(
+        "first,second,raises",
+        [
+            ([0.0, float("nan")], [-0.0, float("nan")], False),
+            ([float("nan"), 1.0], [1.0, float("nan")], True),
+            ([float("nan"), 1.0], [float("nan"), 2.0], True),
+        ],
+    )
+    def test_slash_key_clash_with_nan(self, tmp_path, first, second, raises):
+        # #3511: NaN matches NaN at the same place only; a "/" key whose value
+        # differs anywhere else keeps raising
+        pytest.importorskip("zarr", minversion="3")
+        td = TensorDict({"a": {"b": torch.tensor(first)}, "a/b": torch.tensor(second)})
+        if raises:
+            with pytest.raises(ValueError, match="replaced"):
+                td.to_zarr(tmp_path / "a.zarr")
+        else:
+            td.to_zarr(tmp_path / "a.zarr").close()
+
+    @pytest.mark.parametrize(
+        "make",
+        [
+            lambda: float("nan"),
+            lambda: torch.tensor([float("nan")]),
+            lambda: np.array([float("nan")]),
+            lambda: [float("nan")],
+        ],
+        ids=["float", "tensor", "numpy", "list"],
+    )
+    def test_slash_key_alias_nontensor_nan_keeps_returning(self, tmp_path, make):
+        # #3511: a "/" key whose non-tensor value holds a NaN, like the nested
+        # key it maps to, raised although nothing was lost
+        pytest.importorskip("zarr", minversion="3")
+        td = TensorDict(a={"b": NonTensorData(make())})
+        td["a/b"] = NonTensorData(make())
+        td.to_zarr(tmp_path / "a.zarr").close()
+        loaded = TensorDict.from_zarr(tmp_path / "a.zarr")
+        assert set(loaded.keys(True)) == {"a", ("a", "b")}
+
+    @pytest.mark.parametrize(
+        "make",
+        [
+            lambda: float("1.5"),
+            lambda: int("1000"),
+            lambda: "x" + str(1),
+            lambda: np.arange(3),
+            lambda: np.array([float("nan")]),
+        ],
+        ids=["float", "int", "str", "numpy", "numpy_nan"],
+    )
+    def test_slash_key_alias_equal_raw_values_keeps_returning(self, tmp_path, make):
+        # #3511: a plain dict whose "/" key and nested key hold equal values,
+        # built as distinct objects, raised although nothing was lost
+        pytest.importorskip("zarr", minversion="3")
+        data = {"a": {"b": make()}, "a/b": make()}
+        PersistentTensorDict.from_dict(
+            data, tmp_path / "a.zarr", backend="zarr"
+        ).close()
+
+    @pytest.mark.parametrize(
+        "make",
+        [
+            lambda: {"a": {"b": 1.0}, "a/b": 2.0},
+            lambda: {"a": {"b": "x"}, "a/b": "y"},
+            lambda: TensorDict({"a": {"b": "x"}, "a/b": "y"}),
+            lambda: TensorDict(
+                {"a": {"b": NonTensorData(1.0)}, "a/b": NonTensorData(2.0)}
+            ),
+            lambda: TensorDict({"a": {"b": torch.zeros(3)}, "a/b": torch.ones(3)}),
+            lambda: TensorDict(
+                {
+                    "a": {"b": torch.tensor([float("nan"), 1.0])},
+                    "a/b": torch.tensor([1.0, float("nan")]),
+                }
+            ),
+            lambda: TensorDict(
+                {
+                    "a": {"b": torch.tensor([float("inf")])},
+                    "a/b": torch.tensor([-float("inf")]),
+                }
+            ),
+        ],
+        ids=[
+            "float",
+            "str",
+            "nontensor_str",
+            "nontensor_float",
+            "tensor",
+            "nan",
+            "inf",
+        ],
+    )
+    def test_slash_key_clash_different_values_raises(self, tmp_path, make):
+        # #3511: values that differ keep raising when they compare as tensors
+        # or with ==
+        pytest.importorskip("zarr", minversion="3")
+        with pytest.raises(ValueError, match="replaced"):
+            PersistentTensorDict.from_dict(make(), tmp_path / "a.zarr", backend="zarr")
+
+    @pytest.mark.parametrize(
+        "make",
+        [
+            lambda: TensorDict(
+                {
+                    "a": {"b": NonTensorData(np.zeros(3, dtype=np.int64))},
+                    "a/b": NonTensorData(np.ones(3)),
+                }
+            ),
+            lambda: TensorDict(
+                {
+                    "a": {"b": NonTensorData(torch.tensor([1.0]))},
+                    "a/b": NonTensorData(torch.tensor([1.0, 2.0])),
+                }
+            ),
+            lambda: TensorDict(
+                {
+                    "a": {"b": NonTensorData(torch.tensor([1]))},
+                    "a/b": NonTensorData(torch.tensor([2.0])),
+                }
+            ),
+            lambda: TensorDict(
+                {
+                    "a": {"b": NonTensorData(np.arange(3))},
+                    "a/b": NonTensorData(np.arange(4)),
+                }
+            ),
+            lambda: {"a": {"b": torch.tensor(1.0)}, "a/b": 2.0},
+            lambda: {"a": {"b": torch.zeros(3)}, "a/b": 1.0},
+            lambda: {"a": {"b": np.arange(3)}, "a/b": np.arange(4)},
+            lambda: {"a": {"b": np.zeros(3)}, "a/b": np.ones((2, 3))},
+            lambda: {"a": {"b": np.array(1.0)}, "a/b": np.array([2.0])},
+            lambda: {"a": {"b": torch.zeros(3)}, "a/b": np.ones(3)},
+        ],
+        ids=[
+            "nontensor_numpy_dtype",
+            "nontensor_tensor_shape",
+            "nontensor_tensor_dtype",
+            "nontensor_numpy_shape",
+            "tensor_scalar",
+            "tensor_broadcast",
+            "numpy_shape",
+            "numpy_broadcast",
+            "numpy_0d",
+            "tensor_numpy",
+        ],
+    )
+    def test_slash_key_clash_mismatched_values_raises(self, tmp_path, make):
+        # #3511: values of other shapes or types that differ keep raising
+        pytest.importorskip("zarr", minversion="3")
+        with pytest.raises(ValueError, match="replaced"):
+            PersistentTensorDict.from_dict(make(), tmp_path / "a.zarr", backend="zarr")
+
+    @pytest.mark.parametrize(
+        "first,second",
+        [(1, 1.0), (True, 1), (torch.zeros(3), np.zeros(3))],
+        ids=["int_float", "bool_int", "tensor_numpy"],
+    )
+    def test_slash_key_clash_mixed_types_raises(self, tmp_path, first, second):
+        # #3511: raw values of different types keep raising, as with #3478
+        pytest.importorskip("zarr", minversion="3")
+        data = {"a": {"b": first}, "a/b": second}
+        with pytest.raises(ValueError, match="replaced"):
+            PersistentTensorDict.from_dict(data, tmp_path / "a.zarr", backend="zarr")
+
+    @pytest.mark.parametrize(
+        "first,second",
+        [
+            (
+                np.ma.array([1.0, 2.0], mask=[0, 1]),
+                np.ma.array([1.0, 2.0], mask=[0, 0]),
+            ),
+            (OrderedDict(a=1, b=2), OrderedDict(b=2, a=1)),
+            ({1}, {1.0}),
+            ([{1}], [{1.0}]),
+            (np.array([1, "x"], dtype=object), np.array([1.0, "x"], dtype=object)),
+            (np.array([True, 2], dtype=object), np.array([1, 2], dtype=object)),
+            (_MetaList([1], meta=1), _MetaList([1], meta=2)),
+        ],
+        ids=[
+            "masked",
+            "ordereddict",
+            "set",
+            "list_of_set",
+            "object_str",
+            "object_bool",
+            "list_subclass",
+        ],
+    )
+    def test_slash_key_clash_unknown_values_raises(self, first, second):
+        # #3511: values whose == may ignore part of their state (masks, element
+        # types, order, subclass attributes) are not known to be equal, so a
+        # "/" clash between them keeps raising, as with #3478
+        assert not tensordict_persistent._same_leaf_value(
+            {"a": {"b": first}, "a/b": second}, ("a", "b"), ("a/b",)
+        )
+
+    @pytest.mark.parametrize(
+        "first,second",
+        [
+            (
+                np.array([1, 2.5, "x"], dtype=object),
+                np.array([1, 2.5, "x"], dtype=object),
+            ),
+            ([1, (2.0, "x"), {"k": None}], [1, (2.0, "x"), {"k": None}]),
+            (np.float32(float("nan")), np.float32(float("nan"))),
+            (complex(float("nan"), 1.0), complex(float("nan"), 1.0)),
+        ],
+        ids=["object_array", "nested_plain", "np_float_nan", "complex_nan"],
+    )
+    def test_slash_key_alias_equal_plain_values_keeps_returning(self, first, second):
+        # #3511: equal plain values of the same type at every level match
+        assert tensordict_persistent._same_leaf_value(
+            {"a": {"b": first}, "a/b": second}, ("a", "b"), ("a/b",)
+        )
+
+    def test_slash_key_clash_masked_array_keeps_raising(self, tmp_path):
+        # #3511: masked arrays that differ only in their mask keep raising
+        pytest.importorskip("zarr", minversion="3")
+        td = TensorDict(a={"b": NonTensorData(np.ma.array([1.0, 2.0], mask=[0, 1]))})
+        td["a/b"] = NonTensorData(np.ma.array([1.0, 2.0], mask=[0, 0]))
+        with pytest.raises(ValueError, match="replaced"):
+            td.to_zarr(tmp_path / "a.zarr")
+
+    def test_slash_key_alias_readonly_numpy_no_warning(self, tmp_path):
+        # #3511: comparing read-only arrays warns about nothing
+        pytest.importorskip("zarr", minversion="3")
+        first, second = np.arange(3.0), np.arange(3.0)
+        first.flags.writeable = second.flags.writeable = False
+        data = {"a": {"b": first}, "a/b": second}
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            same = tensordict_persistent._same_leaf_value(data, ("a", "b"), ("a/b",))
+        assert same
+        assert not record
+        PersistentTensorDict.from_dict(
+            data, tmp_path / "a.zarr", backend="zarr"
+        ).close()
+
+    @pytest.mark.parametrize("delta", [0, 1])
+    def test_slash_key_nontensor_big_int(self, tmp_path, delta):
+        # #3511: ints beyond int64 compare as Python ints: equal ones return,
+        # different ones keep raising
+        pytest.importorskip("zarr", minversion="3")
+        td = TensorDict(a={"b": NonTensorData(2**70)})
+        td["a/b"] = NonTensorData(2**70 + delta)
+        if delta:
+            with pytest.raises(ValueError, match="replaced"):
+                td.to_zarr(tmp_path / "a.zarr")
+        else:
+            td.to_zarr(tmp_path / "a.zarr").close()
+
+    @pytest.mark.parametrize(
+        "first,second",
+        [
+            (lambda: torch.tensor([1]), lambda: torch.tensor([1.0])),
+            (lambda: torch.tensor([1.0]), lambda: torch.tensor(1.0)),
+            (lambda: np.array([1]), lambda: np.array(1)),
+            (lambda: np.array([1.0]), lambda: 1.0),
+        ],
+        ids=["tensor_dtype", "tensor_0d", "numpy_0d", "numpy_float"],
+    )
+    def test_slash_key_alias_nontensor_one_element_keeps_returning(
+        self, tmp_path, first, second
+    ):
+        # #3511: non-tensors that == counts as the same, as before the fix,
+        # keep returning
+        pytest.importorskip("zarr", minversion="3")
+        td = TensorDict(a={"b": NonTensorData(first())})
+        td["a/b"] = NonTensorData(second())
+        td.to_zarr(tmp_path / "a.zarr").close()
+
+    @pytest.mark.parametrize(
+        "make",
+        [
+            lambda: {"a": {"b": -0.0}, "a/b": 0.0},
+            lambda: {"a": {"b": b"x" + b"1"}, "a/b": b"x" + b"1"},
+            lambda: {"a": {"b": [[1, 2], [3]]}, "a/b": [[1, 2], [3]]},
+            lambda: TensorDict(
+                {
+                    "a": {
+                        "b": NonTensorData(
+                            torch.tensor([float("nan")], dtype=torch.bfloat16)
+                        )
+                    },
+                    "a/b": NonTensorData(
+                        torch.tensor([float("nan")], dtype=torch.bfloat16)
+                    ),
+                }
+            ),
+        ],
+        ids=["neg_zero", "bytes", "ragged", "bfloat16"],
+    )
+    def test_slash_key_alias_equal_same_type_keeps_returning(self, tmp_path, make):
+        # #3511: equal values of one type return, as before #3478
+        pytest.importorskip("zarr", minversion="3")
+        PersistentTensorDict.from_dict(
+            make(), tmp_path / "a.zarr", backend="zarr"
+        ).close()
+
+    @pytest.mark.parametrize(
+        "make",
+        [
+            lambda: TensorDict(
+                {"a": {"b": NonTensorData([1, "x"])}, "a/b": NonTensorData(["1", "x"])}
+            ),
+            lambda: TensorDict(
+                {
+                    "a": {"b": NonTensorData([1.0, "x"])},
+                    "a/b": NonTensorData(["1.0", "x"]),
+                }
+            ),
+            lambda: TensorDict(
+                {
+                    "a": {"b": NonTensorData([True, "x"])},
+                    "a/b": NonTensorData(["True", "x"]),
+                }
+            ),
+            lambda: {"a": {"b": b"ab"}, "a/b": b"ab\x00"},
+            lambda: TensorDict(
+                {"a": {"b": NonTensorData(b"\x01\x00")}, "a/b": NonTensorData(b"\x01")}
+            ),
+            lambda: {"a": {"b": 2**53 + 1}, "a/b": 2.0**53},
+            lambda: TensorDict(
+                {"a": {"b": NonTensorData(2**53 + 1)}, "a/b": NonTensorData(2.0**53)}
+            ),
+            lambda: {
+                "a": {"b": complex(float("nan"), 1)},
+                "a/b": complex(1, float("nan")),
+            },
+            lambda: TensorDict(
+                {
+                    "a": {"b": torch.tensor([complex(float("nan"), 1)])},
+                    "a/b": torch.tensor([complex(1, float("nan"))]),
+                }
+            ),
+            lambda: TensorDict(
+                {
+                    "a": {
+                        "b": NonTensorStack(NonTensorData(b"a"), NonTensorData(b"b"))
+                    },
+                    "a/b": NonTensorStack(NonTensorData(b"a"), NonTensorData(b"b\x00")),
+                },
+                batch_size=[2],
+            ),
+            lambda: {"a": {"b": [[1, 2], [3]]}, "a/b": [[1, 2], [4]]},
+            lambda: TensorDict(
+                {
+                    "a": {
+                        "b": NonTensorData(torch.tensor([1.0], dtype=torch.bfloat16))
+                    },
+                    "a/b": NonTensorData(2.0),
+                }
+            ),
+        ],
+        ids=[
+            "int_str_list",
+            "float_str_list",
+            "bool_str_list",
+            "bytes_nul",
+            "nontensor_bytes_nul",
+            "int_float_2_53",
+            "nontensor_int_float_2_53",
+            "complex_nan",
+            "tensor_complex_nan",
+            "stack_bytes_nul",
+            "ragged",
+            "bfloat16",
+        ],
+    )
+    def test_slash_key_clash_inexact_values_raises(self, tmp_path, make):
+        # #3511: values that only a lossy conversion makes equal, such as
+        # 2**53 + 1 and 2.0**53 or b"ab" and b"ab\x00", keep raising
+        pytest.importorskip("zarr", minversion="3")
+        with pytest.raises(ValueError, match="replaced"):
+            PersistentTensorDict.from_dict(make(), tmp_path / "a.zarr", backend="zarr")
 
     def test_slash_key_without_collision(self, tmp_path):
         # #3435: a "/" key alone, or next to a disjoint group, keeps loading

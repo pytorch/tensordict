@@ -2984,6 +2984,67 @@ def _leaf_value(value, key: tuple):
     raise KeyError(key)
 
 
+def _exactly_equal(first, second) -> bool:
+    """Whether two values are known to be equal, NaN matching NaN (#3511).
+
+    Only plain values are compared: tensors, NumPy arrays and scalars, Python
+    numbers, strings, bytes and None, and plain lists, tuples and dicts of
+    them, each of the same type at every level. Any other value, such as a
+    set, a masked array or a subclass, whose ``==`` may ignore part of its
+    state, is not known to be equal.
+    """
+    if isinstance(first, torch.Tensor) and isinstance(second, torch.Tensor):
+        if (first.shape, first.dtype, first.device) != (
+            second.shape,
+            second.dtype,
+            second.device,
+        ):
+            return False
+        if torch.equal(first, second):
+            return True
+        if first.is_complex():
+            first, second = torch.view_as_real(first), torch.view_as_real(second)
+        return first.is_floating_point() and bool(
+            torch.allclose(first, second, rtol=0, atol=0, equal_nan=True)
+        )
+    cls = type(first)
+    if cls is not type(second):
+        return False
+    if cls is np.ndarray:
+        if (first.dtype, first.shape) != (second.dtype, second.shape):
+            return False
+        kind = first.dtype.kind
+        if kind == "O":
+            return _exactly_equal(first.tolist(), second.tolist())
+        if kind == "c":
+            return _exactly_equal(first.real, second.real) and _exactly_equal(
+                first.imag, second.imag
+            )
+        if kind == "f":
+            return bool(np.array_equal(first, second, equal_nan=True))
+        return kind in "biuSUMm" and bool(np.array_equal(first, second))
+    if cls is float or isinstance(first, np.floating):
+        return bool(first == second or (first != first and second != second))
+    if cls is complex or isinstance(first, np.complexfloating):
+        return _exactly_equal(first.real, second.real) and _exactly_equal(
+            first.imag, second.imag
+        )
+    if cls is list or cls is tuple:
+        return len(first) == len(second) and all(
+            _exactly_equal(x, y) for x, y in zip(first, second)
+        )
+    if cls is dict:
+        return first.keys() == second.keys() and all(
+            _exactly_equal(first[key], second[key]) for key in first
+        )
+    if cls in (bool, int, str, bytes, type(None)) or isinstance(
+        first, (np.integer, np.bool_, np.str_, np.bytes_, np.datetime64, np.timedelta64)
+    ):
+        same = first == second
+        return isinstance(same, (bool, np.bool_)) and bool(same)
+    return False
+
+
 def _same_leaf_value(input_dict, key0: tuple, key1: tuple) -> bool:
     """Whether the leaves ``key0`` and ``key1`` hold the same value (#3435)."""
     try:
@@ -2991,18 +3052,18 @@ def _same_leaf_value(input_dict, key0: tuple, key1: tuple) -> bool:
         second = _leaf_value(input_dict, key1)
         if first is second:
             return True
-        if isinstance(first, torch.Tensor) and isinstance(second, torch.Tensor):
-            return (
-                first.shape == second.shape
-                and first.dtype == second.dtype
-                and first.device == second.device
-                and bool(torch.equal(first, second))
-            )
         if is_non_tensor(first) and is_non_tensor(second):
-            return bool(first.tolist() == second.tolist())
+            first, second = first.tolist(), second.tolist()
+            try:
+                # the check of #3478: pairs that it accepts keep returning
+                if bool(first == second):
+                    return True
+            except Exception:
+                pass
+        return _exactly_equal(first, second)
     except Exception:
+        # values that can't be compared are not known to be equal
         return False
-    return False
 
 
 def _path_collision(input_dict, backend) -> str | None:
