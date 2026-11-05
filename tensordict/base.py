@@ -3584,6 +3584,75 @@ def _stored_value(source, dest):
     return _stored_non_tensor(dest, source)
 
 
+def _is_dense_path(td, key) -> bool:
+    """Whether ``td`` and each node on ``key`` down to the parent of the leaf is an unconsolidated ``TensorDict``."""
+    for k in (None, *key[:-1]):
+        if k is not None:
+            td = td._tensordict.get(k)
+        if type(td) is not _TENSORDICT_TYPE or hasattr(td, "_consolidated"):
+            return False
+    return True
+
+
+_ROW_FAMILY = {
+    type(None): "none",
+    str: "str",
+    bytes: "bytes",
+    bool: "number",
+    int: "number",
+    float: "number",
+    complex: "number",
+}
+
+
+def _rows_differ(stack, value) -> bool:
+    """Whether a row of the NonTensorStack ``stack`` provably differs from ``value``.
+
+    ``value`` and every row must have one of the exact types of ``_ROW_FAMILY``;
+    otherwise returns ``False``, since ``==`` cannot prove that other values
+    differ. A row of another family differs; two NaNs count as equal.
+    """
+    from tensordict.tensorclass import NonTensorData, NonTensorStack
+
+    family = _ROW_FAMILY.get(type(value))
+    if family is None:
+        return False
+    differ = False
+    stacks = [stack]
+    while stacks:
+        for member in stacks.pop().tensordicts:
+            if type(member) is NonTensorData:
+                # member.data without the field getter: for the types of
+                # _ROW_FAMILY, its shared and memmap conversions return the
+                # stored value, and an empty TensorDict holds no "data" entry
+                # that it would read instead
+                row = member._non_tensordict.get("data", _UNSET)
+                row_family = _ROW_FAMILY.get(type(row))
+                inner = member._tensordict
+                if (
+                    row_family is None
+                    or type(inner) is not _TENSORDICT_TYPE
+                    or inner._tensordict
+                ):
+                    row = member.data
+                    row_family = _ROW_FAMILY.get(type(row))
+            elif isinstance(member, NonTensorStack):
+                stacks.append(member)
+                continue
+            elif isinstance(member, NonTensorData):
+                row = member.data
+                row_family = _ROW_FAMILY.get(type(row))
+            else:
+                return False
+            if row_family is None:
+                return False
+            if row_family != family or (
+                row != value and not (row != row and value != value)
+            ):
+                differ = True
+    return differ
+
+
 def _update_at_aliases(update_at_: Callable) -> Callable:
     """Accepts the argument names that the overrides of ``update_at_`` took before 0.15.
 
@@ -7630,23 +7699,54 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 self._write_back(new_keys, vals, "update_")
             if not has_non_tensor:
                 return
-            from tensordict import NonTensorStack
+            from tensordict import NonTensorData, NonTensorStack
 
             # _items_list leaves out the non-tensor leaves: copy them here.
             # Like the tensor leaves, keys missing in self are skipped.
-            # copy_ raises for a NonTensorStack into a NonTensorData:
-            # these leaves are skipped too.
+            # copy_ raises for a NonTensorStack into a NonTensorData: these
+            # leaves are skipped, except that the rows are written as
+            # update_at_(value, slice(None)) writes them when one differs from
+            # the value of a plain NonTensorData in a TensorDict in memory
+            # (#3501).
             skipped = []
 
             def inplace_update(name, source, dest):
-                if (
-                    _is_non_tensor(type(source))
-                    and _is_non_tensor(type(dest))
-                    and (
-                        not isinstance(source, NonTensorStack)
-                        or isinstance(dest, NonTensorStack)
-                    )
+                if not (_is_non_tensor(type(source)) and _is_non_tensor(type(dest))):
+                    return
+                if isinstance(source, NonTensorStack) and not isinstance(
+                    dest, NonTensorStack
                 ):
+                    key = _unravel_key_to_tuple(name)
+                    if not _is_dense_path(self, key):
+                        return
+                    inner = dest._tensordict
+                    if (
+                        type(dest) is not NonTensorData
+                        or type(inner) is not _TENSORDICT_TYPE
+                        or inner._tensordict
+                        or inner._is_shared
+                        or inner._is_memmap
+                    ):
+                        # a MetaData or another subclass keeps its type, and a
+                        # shared or memory-mapped entry its storage
+                        return
+                    # what dest.data returns, without the field getter
+                    value = dest._non_tensordict.get("data", _UNSET)
+                    if value is _UNSET:
+                        value = dest.data
+                    if (
+                        type(value) in _ROW_FAMILY
+                        and source.batch_size == dest.batch_size
+                        and _rows_differ(source, value)
+                    ):
+                        self._set_at_tuple(
+                            key,
+                            source,
+                            slice(None),
+                            validated=False,
+                            non_blocking=non_blocking,
+                        )
+                else:
                     source = _stored_value(source, dest)
                     if source is None:
                         skipped.append(name)
