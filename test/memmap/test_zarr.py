@@ -242,6 +242,102 @@ class TestZarrRoundTrip:
         with pytest.raises(ValueError, match="replaced"):
             PersistentTensorDict.from_dict(make(), tmp_path / "a.zarr", backend="zarr")
 
+    @pytest.mark.parametrize(
+        "make",
+        [
+            lambda: TensorDict(
+                {
+                    "a": {"b": NonTensorData(np.zeros(3, dtype=np.int64))},
+                    "a/b": NonTensorData(np.ones(3)),
+                }
+            ),
+            lambda: TensorDict(
+                {
+                    "a": {"b": NonTensorData(torch.tensor([1.0]))},
+                    "a/b": NonTensorData(torch.tensor([1.0, 2.0])),
+                }
+            ),
+            lambda: TensorDict(
+                {
+                    "a": {"b": NonTensorData(torch.tensor([1]))},
+                    "a/b": NonTensorData(torch.tensor([2.0])),
+                }
+            ),
+            lambda: TensorDict(
+                {
+                    "a": {"b": NonTensorData(np.arange(3))},
+                    "a/b": NonTensorData(np.arange(4)),
+                }
+            ),
+            lambda: {"a": {"b": torch.tensor(1.0)}, "a/b": 2.0},
+            lambda: {"a": {"b": torch.zeros(3)}, "a/b": 1.0},
+            lambda: {"a": {"b": np.arange(3)}, "a/b": np.arange(4)},
+            lambda: {"a": {"b": np.zeros(3)}, "a/b": np.ones((2, 3))},
+            lambda: {"a": {"b": np.array(1.0)}, "a/b": np.array([2.0])},
+            lambda: {"a": {"b": torch.zeros(3)}, "a/b": np.ones(3)},
+        ],
+        ids=[
+            "nontensor_numpy_dtype",
+            "nontensor_tensor_shape",
+            "nontensor_tensor_dtype",
+            "nontensor_numpy_shape",
+            "tensor_scalar",
+            "tensor_broadcast",
+            "numpy_shape",
+            "numpy_broadcast",
+            "numpy_0d",
+            "tensor_numpy",
+        ],
+    )
+    def test_slash_key_clash_mismatched_values_raises(self, tmp_path, make):
+        # #3511: values of other shapes or types that differ keep raising
+        pytest.importorskip("zarr", minversion="3")
+        with pytest.raises(ValueError, match="replaced"):
+            PersistentTensorDict.from_dict(make(), tmp_path / "a.zarr", backend="zarr")
+
+    @pytest.mark.parametrize(
+        "first,second",
+        [(1, 1.0), (True, 1), (torch.zeros(3), np.zeros(3))],
+        ids=["int_float", "bool_int", "tensor_numpy"],
+    )
+    def test_slash_key_alias_equal_mixed_types_keeps_returning(
+        self, tmp_path, first, second
+    ):
+        # #3511: equal values of different types return, as before #3478
+        pytest.importorskip("zarr", minversion="3")
+        data = {"a": {"b": first}, "a/b": second}
+        PersistentTensorDict.from_dict(
+            data, tmp_path / "a.zarr", backend="zarr"
+        ).close()
+
+    def test_slash_key_alias_readonly_numpy_no_warning(self, tmp_path):
+        # #3511: comparing read-only arrays warns about nothing
+        pytest.importorskip("zarr", minversion="3")
+        first, second = np.arange(3.0), np.arange(3.0)
+        first.flags.writeable = second.flags.writeable = False
+        data = {"a": {"b": first}, "a/b": second}
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            same = tensordict_persistent._same_leaf_value(data, ("a", "b"), ("a/b",))
+        assert same
+        assert not record
+        PersistentTensorDict.from_dict(
+            data, tmp_path / "a.zarr", backend="zarr"
+        ).close()
+
+    @pytest.mark.parametrize("delta", [0, 1])
+    def test_slash_key_nontensor_big_int(self, tmp_path, delta):
+        # #3511: ints beyond int64 compare as Python ints: equal ones return,
+        # different ones keep raising
+        pytest.importorskip("zarr", minversion="3")
+        td = TensorDict(a={"b": NonTensorData(2**70)})
+        td["a/b"] = NonTensorData(2**70 + delta)
+        if delta:
+            with pytest.raises(ValueError, match="replaced"):
+                td.to_zarr(tmp_path / "a.zarr")
+        else:
+            td.to_zarr(tmp_path / "a.zarr").close()
+
     def test_slash_key_without_collision(self, tmp_path):
         # #3435: a "/" key alone, or next to a disjoint group, keeps loading
         # as a nested key; a leaf before a "/" key under it keeps raising
