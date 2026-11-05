@@ -315,12 +315,11 @@ class TestH5Serialization:
         [(1, 1.0), (True, 1), (torch.zeros(3), np.zeros(3))],
         ids=["int_float", "bool_int", "tensor_numpy"],
     )
-    def test_slash_key_alias_equal_mixed_types_keeps_returning(
-        self, tmp_path, first, second
-    ):
-        # #3511: equal values of different types return, as before #3478
+    def test_slash_key_clash_mixed_types_raises(self, tmp_path, first, second):
+        # #3511: raw values of different types keep raising, as with #3478
         data = {"a": {"b": first}, "a/b": second}
-        PersistentTensorDict.from_dict(data, tmp_path / "a.h5", backend="h5").close()
+        with pytest.raises(ValueError, match="replaced"):
+            PersistentTensorDict.from_dict(data, tmp_path / "a.h5", backend="h5")
 
     def test_slash_key_alias_readonly_numpy_no_warning(self, tmp_path):
         # #3511: comparing read-only arrays warns about nothing
@@ -361,6 +360,105 @@ class TestH5Serialization:
         td = TensorDict(a={"b": NonTensorData(first())})
         td["a/b"] = NonTensorData(second())
         td.to_h5(tmp_path / "a.h5").close()
+
+    @pytest.mark.parametrize(
+        "make",
+        [
+            lambda: {"a": {"b": -0.0}, "a/b": 0.0},
+            lambda: {"a": {"b": b"x" + b"1"}, "a/b": b"x" + b"1"},
+        ],
+        ids=["neg_zero", "bytes"],
+    )
+    def test_slash_key_alias_equal_same_type_keeps_returning(self, tmp_path, make):
+        # #3511: equal values of one type return, as before #3478
+        PersistentTensorDict.from_dict(make(), tmp_path / "a.h5", backend="h5").close()
+
+    @pytest.mark.parametrize(
+        "make",
+        [
+            lambda: TensorDict(
+                {"a": {"b": NonTensorData([1, "x"])}, "a/b": NonTensorData(["1", "x"])}
+            ),
+            lambda: TensorDict(
+                {
+                    "a": {"b": NonTensorData([1.0, "x"])},
+                    "a/b": NonTensorData(["1.0", "x"]),
+                }
+            ),
+            lambda: TensorDict(
+                {
+                    "a": {"b": NonTensorData([True, "x"])},
+                    "a/b": NonTensorData(["True", "x"]),
+                }
+            ),
+            lambda: {"a": {"b": b"ab"}, "a/b": b"ab\x00"},
+            lambda: TensorDict(
+                {"a": {"b": NonTensorData(b"\x01\x00")}, "a/b": NonTensorData(b"\x01")}
+            ),
+            lambda: {"a": {"b": 2**53 + 1}, "a/b": 2.0**53},
+            lambda: TensorDict(
+                {"a": {"b": NonTensorData(2**53 + 1)}, "a/b": NonTensorData(2.0**53)}
+            ),
+            lambda: {
+                "a": {"b": complex(float("nan"), 1)},
+                "a/b": complex(1, float("nan")),
+            },
+            lambda: TensorDict(
+                {
+                    "a": {"b": torch.tensor([complex(float("nan"), 1)])},
+                    "a/b": torch.tensor([complex(1, float("nan"))]),
+                }
+            ),
+            lambda: TensorDict(
+                {
+                    "a": {
+                        "b": NonTensorStack(NonTensorData(b"a"), NonTensorData(b"b"))
+                    },
+                    "a/b": NonTensorStack(NonTensorData(b"a"), NonTensorData(b"b\x00")),
+                },
+                batch_size=[2],
+            ),
+        ],
+        ids=[
+            "int_str_list",
+            "float_str_list",
+            "bool_str_list",
+            "bytes_nul",
+            "nontensor_bytes_nul",
+            "int_float_2_53",
+            "nontensor_int_float_2_53",
+            "complex_nan",
+            "tensor_complex_nan",
+            "stack_bytes_nul",
+        ],
+    )
+    def test_slash_key_clash_inexact_values_raises(self, tmp_path, make):
+        # #3511: values that only a lossy conversion makes equal, such as
+        # 2**53 + 1 and 2.0**53 or b"ab" and b"ab\x00", keep raising
+        with pytest.raises(ValueError, match="replaced"):
+            PersistentTensorDict.from_dict(make(), tmp_path / "a.h5", backend="h5")
+
+    @pytest.mark.parametrize(
+        "first,second,same",
+        [
+            ([[1, 2], [3]], [[1, 2], [3]], True),
+            ([[1, 2], [3]], [[1, 2], [4]], False),
+            (
+                torch.tensor([float("nan"), 1.0], dtype=torch.bfloat16),
+                torch.tensor([float("nan"), 1.0], dtype=torch.bfloat16),
+                True,
+            ),
+            (torch.tensor([1.0], dtype=torch.bfloat16), 2.0, False),
+        ],
+        ids=["ragged", "ragged_differ", "bfloat16", "bfloat16_float"],
+    )
+    def test_slash_key_same_value_h5_cannot_store(self, first, second, same):
+        # #3511: the check for values that h5py can't store, which zarr tests
+        # end to end
+        data = {"a": {"b": first}, "a/b": second}
+        assert (
+            tensordict_persistent._same_leaf_value(data, ("a", "b"), ("a/b",)) is same
+        )
 
     def test_slash_key_without_collision(self, tmp_path):
         # #3435: a "/" key alone, or next to a disjoint group, keeps loading
