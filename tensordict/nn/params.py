@@ -1490,13 +1490,6 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                 val = state_dict.get(prefix + name)
                 if val is None or val is dest:
                     continue
-                if isinstance(dest, nn.Parameter):
-                    if isinstance(val, nn.Parameter):
-                        val.requires_grad_(dest.requires_grad)
-                    else:
-                        val = nn.Parameter(val, requires_grad=dest.requires_grad)
-                    # The base's copy_ of a tensor into itself is a no-op.
-                    state_dict[prefix + name] = val
                 *path, last = _unravel_key_to_tuple(keys[name])
                 parent = self
                 for part in path:
@@ -1505,6 +1498,25 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                         owners.add(parent)
                 if isinstance(parent, TensorDictParams):
                     parent = parent._param_td
+                # Cast before wrapping: the cast of a Parameter is a plain
+                # tensor, which would be registered as a buffer. Detach it so
+                # that it is a leaf, and keep its type and requires_grad as a
+                # load from the same device does.
+                if parent.device is not None and val.device != parent.device:
+                    is_param = isinstance(val, nn.Parameter)
+                    requires_grad = val.requires_grad
+                    val = val.detach().to(parent.device)
+                    if is_param:
+                        val = nn.Parameter(val, requires_grad=requires_grad)
+                    else:
+                        val.requires_grad_(requires_grad)
+                if isinstance(dest, nn.Parameter):
+                    if isinstance(val, nn.Parameter):
+                        val.requires_grad_(dest.requires_grad)
+                    else:
+                        val = nn.Parameter(val, requires_grad=dest.requires_grad)
+                # The base's copy_ of a tensor into itself is a no-op.
+                state_dict[prefix + name] = val
                 parent._set_str(
                     last,
                     val,
