@@ -183,6 +183,81 @@ class TestH5Serialization:
         else:
             td.to_h5(tmp_path / "a.h5").close()
 
+    @pytest.mark.parametrize(
+        "make",
+        [
+            lambda: float("nan"),
+            lambda: torch.tensor([float("nan")]),
+            lambda: np.array([float("nan")]),
+            lambda: [float("nan")],
+        ],
+        ids=["float", "tensor", "numpy", "list"],
+    )
+    def test_slash_key_alias_nontensor_nan_keeps_returning(self, tmp_path, make):
+        # #3511: a "/" key whose non-tensor value holds a NaN, like the nested
+        # key it maps to, raised although nothing was lost
+        td = TensorDict(a={"b": NonTensorData(make())})
+        td["a/b"] = NonTensorData(make())
+        td.to_h5(tmp_path / "a.h5").close()
+        loaded = TensorDict.from_h5(tmp_path / "a.h5")
+        assert set(loaded.keys(True)) == {"a", ("a", "b")}
+
+    @pytest.mark.parametrize(
+        "make",
+        [
+            lambda: float("1.5"),
+            lambda: int("1000"),
+            lambda: "x" + str(1),
+            lambda: np.arange(3),
+            lambda: np.array([float("nan")]),
+        ],
+        ids=["float", "int", "str", "numpy", "numpy_nan"],
+    )
+    def test_slash_key_alias_equal_raw_values_keeps_returning(self, tmp_path, make):
+        # #3511: a plain dict whose "/" key and nested key hold equal values,
+        # built as distinct objects, raised although nothing was lost
+        data = {"a": {"b": make()}, "a/b": make()}
+        PersistentTensorDict.from_dict(data, tmp_path / "a.h5", backend="h5").close()
+
+    @pytest.mark.parametrize(
+        "make",
+        [
+            lambda: {"a": {"b": 1.0}, "a/b": 2.0},
+            lambda: {"a": {"b": "x"}, "a/b": "y"},
+            lambda: TensorDict({"a": {"b": "x"}, "a/b": "y"}),
+            lambda: TensorDict(
+                {"a": {"b": NonTensorData(1.0)}, "a/b": NonTensorData(2.0)}
+            ),
+            lambda: TensorDict({"a": {"b": torch.zeros(3)}, "a/b": torch.ones(3)}),
+            lambda: TensorDict(
+                {
+                    "a": {"b": torch.tensor([float("nan"), 1.0])},
+                    "a/b": torch.tensor([1.0, float("nan")]),
+                }
+            ),
+            lambda: TensorDict(
+                {
+                    "a": {"b": torch.tensor([float("inf")])},
+                    "a/b": torch.tensor([-float("inf")]),
+                }
+            ),
+        ],
+        ids=[
+            "float",
+            "str",
+            "nontensor_str",
+            "nontensor_float",
+            "tensor",
+            "nan",
+            "inf",
+        ],
+    )
+    def test_slash_key_clash_different_values_raises(self, tmp_path, make):
+        # #3511: values that differ keep raising when they compare as tensors
+        # or with ==
+        with pytest.raises(ValueError, match="replaced"):
+            PersistentTensorDict.from_dict(make(), tmp_path / "a.h5", backend="h5")
+
     def test_slash_key_without_collision(self, tmp_path):
         # #3435: a "/" key alone, or next to a disjoint group, keeps loading
         # as a nested key; a leaf before a "/" key under it keeps raising

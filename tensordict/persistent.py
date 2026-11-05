@@ -2991,31 +2991,48 @@ def _same_leaf_value(input_dict, key0: tuple, key1: tuple) -> bool:
         second = _leaf_value(input_dict, key1)
         if first is second:
             return True
-        if isinstance(first, torch.Tensor) and isinstance(second, torch.Tensor):
-            return (
-                first.shape == second.shape
-                and first.dtype == second.dtype
-                and first.device == second.device
-                and (
-                    bool(torch.equal(first, second))
-                    # NaN in the same places counts as the same value (#3511)
-                    or (
-                        (first.is_floating_point() or first.is_complex())
-                        and bool(
-                            torch.allclose(
-                                first, second, rtol=0, atol=0, equal_nan=True
-                            )
-                        )
+        if not (isinstance(first, torch.Tensor) and isinstance(second, torch.Tensor)):
+            # raw values and non-tensor payloads: compare them as tensors when
+            # they convert alike, so that NaN matches NaN, else with == (#3511)
+            if is_non_tensor(first):
+                first = first.tolist()
+            if is_non_tensor(second):
+                second = second.tolist()
+            try:
+                # np.asarray keeps the precision of Python floats
+                tensors = [
+                    torch.as_tensor(v if isinstance(v, torch.Tensor) else np.asarray(v))
+                    for v in (first, second)
+                ]
+            except Exception:
+                tensors = None
+            if tensors is None or (
+                (tensors[0].shape, tensors[0].dtype, tensors[0].device)
+                != (tensors[1].shape, tensors[1].dtype, tensors[1].device)
+            ):
+                same = first == second
+                # an array result can't tell: count it as the same
+                return bool(same) if isinstance(same, (bool, np.bool_)) else True
+            first, second = tensors
+        return (
+            first.shape == second.shape
+            and first.dtype == second.dtype
+            and first.device == second.device
+            and (
+                bool(torch.equal(first, second))
+                # NaN in the same places counts as the same value (#3511)
+                or (
+                    (first.is_floating_point() or first.is_complex())
+                    and bool(
+                        torch.allclose(first, second, rtol=0, atol=0, equal_nan=True)
                     )
                 )
             )
-        if is_non_tensor(first) and is_non_tensor(second):
-            return bool(first.tolist() == second.tolist())
+        )
     except Exception:
         # values that can't be compared, such as numpy arrays, are not known
         # to differ: the call returns, as before the check (#3511)
         return True
-    return False
 
 
 def _path_collision(input_dict, backend) -> str | None:
