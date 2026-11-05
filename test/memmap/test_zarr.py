@@ -6,6 +6,7 @@ import argparse
 import pickle
 import re
 import warnings
+from collections import OrderedDict
 from pathlib import Path
 
 import numpy as np
@@ -31,6 +32,18 @@ TIMEOUT = 100
 
 def _keep_batch(batch):
     return batch
+
+
+class _MetaList(list):
+    # a list whose equality also compares an attribute (#3511)
+    def __init__(self, items, meta):
+        super().__init__(items)
+        self.meta = meta
+
+    def __eq__(self, other):
+        return list.__eq__(self, other) and self.meta == getattr(other, "meta", None)
+
+    __hash__ = None
 
 
 class _CustomNonTensor:
@@ -306,6 +319,65 @@ class TestZarrRoundTrip:
         data = {"a": {"b": first}, "a/b": second}
         with pytest.raises(ValueError, match="replaced"):
             PersistentTensorDict.from_dict(data, tmp_path / "a.zarr", backend="zarr")
+
+    @pytest.mark.parametrize(
+        "first,second",
+        [
+            (
+                np.ma.array([1.0, 2.0], mask=[0, 1]),
+                np.ma.array([1.0, 2.0], mask=[0, 0]),
+            ),
+            (OrderedDict(a=1, b=2), OrderedDict(b=2, a=1)),
+            ({1}, {1.0}),
+            ([{1}], [{1.0}]),
+            (np.array([1, "x"], dtype=object), np.array([1.0, "x"], dtype=object)),
+            (np.array([True, 2], dtype=object), np.array([1, 2], dtype=object)),
+            (_MetaList([1], meta=1), _MetaList([1], meta=2)),
+        ],
+        ids=[
+            "masked",
+            "ordereddict",
+            "set",
+            "list_of_set",
+            "object_str",
+            "object_bool",
+            "list_subclass",
+        ],
+    )
+    def test_slash_key_clash_unknown_values_raises(self, first, second):
+        # #3511: values whose == may ignore part of their state (masks, element
+        # types, order, subclass attributes) are not known to be equal, so a
+        # "/" clash between them keeps raising, as with #3478
+        assert not tensordict_persistent._same_leaf_value(
+            {"a": {"b": first}, "a/b": second}, ("a", "b"), ("a/b",)
+        )
+
+    @pytest.mark.parametrize(
+        "first,second",
+        [
+            (
+                np.array([1, 2.5, "x"], dtype=object),
+                np.array([1, 2.5, "x"], dtype=object),
+            ),
+            ([1, (2.0, "x"), {"k": None}], [1, (2.0, "x"), {"k": None}]),
+            (np.float32(float("nan")), np.float32(float("nan"))),
+            (complex(float("nan"), 1.0), complex(float("nan"), 1.0)),
+        ],
+        ids=["object_array", "nested_plain", "np_float_nan", "complex_nan"],
+    )
+    def test_slash_key_alias_equal_plain_values_keeps_returning(self, first, second):
+        # #3511: equal plain values of the same type at every level match
+        assert tensordict_persistent._same_leaf_value(
+            {"a": {"b": first}, "a/b": second}, ("a", "b"), ("a/b",)
+        )
+
+    def test_slash_key_clash_masked_array_keeps_raising(self, tmp_path):
+        # #3511: masked arrays that differ only in their mask keep raising
+        pytest.importorskip("zarr", minversion="3")
+        td = TensorDict(a={"b": NonTensorData(np.ma.array([1.0, 2.0], mask=[0, 1]))})
+        td["a/b"] = NonTensorData(np.ma.array([1.0, 2.0], mask=[0, 0]))
+        with pytest.raises(ValueError, match="replaced"):
+            td.to_zarr(tmp_path / "a.zarr")
 
     def test_slash_key_alias_readonly_numpy_no_warning(self, tmp_path):
         # #3511: comparing read-only arrays warns about nothing
