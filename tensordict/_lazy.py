@@ -5174,7 +5174,19 @@ class LazyStackedTensorDict(TensorDictBase):
             # tensor per key instead, where stacking cannot raise
             stacked = _stack_reordered_source(input_dict_or_td)
         if stacked is not None:
-            pieces = self._update_pieces(stacked)
+            stacked_pieces = self._update_pieces(stacked)
+            if len(pieces) == len(input_dict_or_td.tensordicts) and all(
+                map(operator.is_, pieces, input_dict_or_td.tensordicts)
+            ):
+                # as below, a member that is its own piece is written from
+                # itself, as before
+                stacked_pieces = [
+                    dest if piece is dest else new
+                    for piece, new, dest in zip(
+                        pieces, stacked_pieces, self.tensordicts
+                    )
+                ]
+            pieces = stacked_pieces
         elif reorders:
             # The members are written one after another. A source that holds
             # the members in another order, as a read of this stack such as

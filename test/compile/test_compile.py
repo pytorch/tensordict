@@ -395,9 +395,11 @@ def test_lazy_softmax_ragged_compiles():
 
 @pytest.mark.parametrize("op", ["copy_", "update_"])
 @pytest.mark.parametrize("stack_dim", [0, 1])
-def test_lazy_update_reordered_compiles(op, stack_dim):
+@pytest.mark.parametrize("n", [4, 5])
+def test_lazy_update_reordered_compiles(op, stack_dim, n):
     # #3518: compiled with inductor, copy_/update_ from the members of the
-    # stack in another order write the right rows into the stack itself
+    # stack in another order write the right rows into the stack itself; with
+    # 5 members, the middle one is its own source
     def update(ls):
         getattr(ls, op)(lazy_stack(ls.tensordicts[::-1], ls.stack_dim))
         return torch.stack([m["n", "b"][0, 0] for m in ls.tensordicts])
@@ -409,13 +411,13 @@ def test_lazy_update_reordered_compiles(op, stack_dim):
                 n=TensorDict(b=torch.full((3, 2), float(i)), batch_size=[3]),
                 batch_size=[3],
             )
-            for i in range(4)
+            for i in range(n)
         ],
         stack_dim,
     )
     ptrs = [m["a"].data_ptr() for m in ls.tensordicts]
     out = torch.compile(update, fullgraph=True)(ls)
-    expected = [3.0, 2.0, 1.0, 0.0]
+    expected = [float(i) for i in reversed(range(n))]
     assert out.tolist() == expected
     assert [m["a"][0].item() for m in ls.tensordicts] == expected
     assert [m["n", "b"][0, 0].item() for m in ls.tensordicts] == expected
