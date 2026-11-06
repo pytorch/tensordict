@@ -928,6 +928,38 @@ def _reorders_members(sources, dests) -> bool:
     )
 
 
+def _stack_reordered_source(td):
+    """``td``, a lazy stack, stacked into a ``TensorDict`` with one new tensor per key, or ``None``.
+
+    ``None``, before stacking anything, where the stack could raise or give
+    another value: unless the members are plain TensorDicts with the same
+    keys and batch size, down to plain tensors that do not require grad and
+    have the same shape, dtype and device. Under ``torch.compile`` an
+    exception cannot be caught, so these are checked first.
+    """
+    tds = td.tensordicts
+    if not tds or td.stack_dim > len(tds[0].batch_size):
+        return None
+    vals_by_key = _dense_stack_collect(tds)
+    if vals_by_key is None or not _same_leaf_meta(vals_by_key):
+        return None
+    return _dense_stack_build(tds[0], vals_by_key, len(tds), td.stack_dim)
+
+
+def _same_leaf_meta(vals_by_key) -> bool:
+    # Whether the leaves that _dense_stack_collect gathered under each key
+    # have the same shape, dtype and device.
+    for vals in vals_by_key.values():
+        if type(vals) is list:
+            v0 = vals[0]
+            for v in vals:
+                if v.shape != v0.shape or v.dtype != v0.dtype or v.device != v0.device:
+                    return False
+        elif not _same_leaf_meta(vals[1]):
+            return False
+    return True
+
+
 def _dense_stack_members(tds, dim):
     """Stacks lazy-stack members that are plain TensorDicts with the same entries.
 
@@ -5135,7 +5167,27 @@ class LazyStackedTensorDict(TensorDictBase):
             input_dict_or_td, LazyStackedTensorDict
         ) and _reorders_members(input_dict_or_td.tensordicts, self.tensordicts)
         pieces = self._update_pieces(input_dict_or_td)
-        if reorders:
+        stacked = None
+        if reorders and is_compiling():
+            # Inductor writes stale values where the copies read clones of
+            # the other destinations (#3518): read the pieces from one new
+            # tensor per key instead, where stacking cannot raise
+            stacked = _stack_reordered_source(input_dict_or_td)
+        if stacked is not None:
+            stacked_pieces = self._update_pieces(stacked)
+            if len(pieces) == len(input_dict_or_td.tensordicts) and all(
+                map(operator.is_, pieces, input_dict_or_td.tensordicts)
+            ):
+                # as below, a member that is its own piece is written from
+                # itself, as before
+                stacked_pieces = [
+                    dest if piece is dest else new
+                    for piece, new, dest in zip(
+                        pieces, stacked_pieces, self.tensordicts
+                    )
+                ]
+            pieces = stacked_pieces
+        elif reorders:
             # The members are written one after another. A source that holds
             # the members in another order, as a read of this stack such as
             # td[perm] does, would give a later member a value that an
