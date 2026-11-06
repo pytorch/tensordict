@@ -5188,7 +5188,12 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
         if dests:
             try:
-                _copy_leaves(dests, sources, non_blocking)
+                _copy_leaves(
+                    dests,
+                    sources,
+                    non_blocking,
+                    force_individual=reorders and is_compiling(),
+                )
             except RuntimeError:
                 # the copy checks the leaves that require grad before the
                 # shapes of the first member: raise as update_ of that

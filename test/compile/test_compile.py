@@ -584,6 +584,32 @@ def test_td_index_exact_tensor_shortcut_compiles_as_base(monkeypatch):
         assert guards in (base[name][2], base[name][2] | {extra}), name
 
 
+def test_lazy_stack_reordered_update_compile():
+    def make_stack():
+        return lazy_stack(
+            [
+                TensorDict(
+                    a=torch.full((3,), float(i)),
+                    batch_size=[3],
+                )
+                for i in range(4)
+            ]
+        )
+
+    def update_reversed(stack):
+        stack.update_(lazy_stack(stack.tensordicts[::-1]))
+        return stack["a"][:, 0]
+
+    expected = torch.tensor([3.0, 2.0, 1.0, 0.0])
+
+    # Check eager behavior.
+    torch.testing.assert_close(update_reversed(make_stack()), expected)
+
+    # Check the default torch.compile backend (Inductor).
+    compiled = torch.compile(update_reversed, fullgraph=True)
+    torch.testing.assert_close(compiled(make_stack()), expected)
+
+
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestTD:
     def test_tensor_output(self, mode):

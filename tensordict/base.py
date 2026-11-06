@@ -3223,7 +3223,11 @@ def _any_requires_grad(tensors: list[Tensor]) -> bool:
 
 
 def _copy_leaves(
-    dests: list[Tensor], sources: list[Tensor], non_blocking: bool, exact: bool = False
+    dests: list[Tensor],
+    sources: list[Tensor],
+    non_blocking: bool,
+    exact: bool = False,
+    force_individual: bool = False,
 ) -> None:
     """Copies each tensor of ``sources`` into the tensor of ``dests`` at the same position, as ``update_`` does.
 
@@ -3250,6 +3254,11 @@ def _copy_leaves(
         and (_any_requires_grad(dests) or _any_requires_grad(sources))
         and not any(dest.requires_grad and dest.is_leaf for dest in dests)
     ):
+        for dest, source in zip(dests, sources):
+            dest.copy_(source, non_blocking=non_blocking)
+    # Inductor can miscompile foreach_copy_ when sources are reordered
+    # members of the destination tensors. Use individual copy_ calls.
+    elif force_individual:
         for dest, source in zip(dests, sources):
             dest.copy_(source, non_blocking=non_blocking)
     elif is_compiling():
