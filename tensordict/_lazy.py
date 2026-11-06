@@ -928,6 +928,56 @@ def _reorders_members(sources, dests) -> bool:
     )
 
 
+def _plans_reorder(plans) -> bool:
+    """Whether the first source of a plan of ``plans`` is the first destination of another plan.
+
+    As in the plans of the members of a lazy stack for a source member that
+    is a new tensordict holding the tensors of a member at another
+    position, such as a ``select()`` of it (#3520). Only the first leaf of
+    each plan is compared, which keeps the check to a few steps per member.
+    """
+    firsts = {}
+    for i, plan in enumerate(plans):
+        if plan is not None and plan[0]:
+            firsts[id(plan[0][0])] = i
+    for i, plan in enumerate(plans):
+        if plan is not None and plan[1] and firsts.get(id(plan[1][0]), i) != i:
+            return True
+    return False
+
+
+def _stack_reordered_source(td):
+    """``td``, a lazy stack, stacked into a ``TensorDict`` with one new tensor per key, or ``None``.
+
+    ``None``, before stacking anything, where the stack could raise or give
+    another value: unless the members are plain TensorDicts with the same
+    keys and batch size, down to plain tensors that do not require grad and
+    have the same shape, dtype and device. Under ``torch.compile`` an
+    exception cannot be caught, so these are checked first.
+    """
+    tds = td.tensordicts
+    if not tds or td.stack_dim > len(tds[0].batch_size):
+        return None
+    vals_by_key = _dense_stack_collect(tds)
+    if vals_by_key is None or not _same_leaf_meta(vals_by_key):
+        return None
+    return _dense_stack_build(tds[0], vals_by_key, len(tds), td.stack_dim)
+
+
+def _same_leaf_meta(vals_by_key) -> bool:
+    # Whether the leaves that _dense_stack_collect gathered under each key
+    # have the same shape, dtype and device.
+    for vals in vals_by_key.values():
+        if type(vals) is list:
+            v0 = vals[0]
+            for v in vals:
+                if v.shape != v0.shape or v.dtype != v0.dtype or v.device != v0.device:
+                    return False
+        elif not _same_leaf_meta(vals[1]):
+            return False
+    return True
+
+
 def _dense_stack_members(tds, dim):
     """Stacks lazy-stack members that are plain TensorDicts with the same entries.
 
@@ -5131,11 +5181,20 @@ class LazyStackedTensorDict(TensorDictBase):
             input_dict_or_td = TensorDict.from_dict(
                 input_dict_or_td, batch_dims=self.batch_dims
             )
-        reorders = isinstance(
-            input_dict_or_td, LazyStackedTensorDict
-        ) and _reorders_members(input_dict_or_td.tensordicts, self.tensordicts)
+        lazy_source = isinstance(input_dict_or_td, LazyStackedTensorDict)
+        reorders = lazy_source and _reorders_members(
+            input_dict_or_td.tensordicts, self.tensordicts
+        )
         pieces = self._update_pieces(input_dict_or_td)
-        if reorders:
+        stacked = None
+        if reorders and is_compiling():
+            # Inductor writes stale values where the copies read clones of
+            # the other destinations (#3518): read the pieces from one new
+            # tensor per key instead, where stacking cannot raise
+            stacked = _stack_reordered_source(input_dict_or_td)
+        if stacked is not None:
+            pieces = self._update_pieces(stacked)
+        elif reorders:
             # The members are written one after another. A source that holds
             # the members in another order, as a read of this stack such as
             # td[perm] does, would give a later member a value that an
@@ -5156,6 +5215,19 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
         if keys_to_update is None:
             plans = self._member_plans(pieces, non_blocking)
+            if (
+                lazy_source
+                and not reorders
+                and not is_compiling()
+                and _plans_reorder(plans)
+            ):
+                # source members that hold the tensors of members at other
+                # positions, as select() copies do (#3520): copy the pieces
+                # as above
+                pieces = self._update_pieces(
+                    input_dict_or_td.apply(lambda x: x.clone())
+                )
+                plans = self._member_plans(pieces, non_blocking)
         else:
             plans = [None] * len(pieces)
         dests, sources, ends = [], [], []
@@ -5214,6 +5286,18 @@ class LazyStackedTensorDict(TensorDictBase):
         plans = self._member_plans(self._update_pieces(input_dict_or_td), non_blocking)
         if any(plan is None for plan in plans):
             return None
+        if (
+            isinstance(input_dict_or_td, LazyStackedTensorDict)
+            and not is_compiling()
+            and _plans_reorder(plans)
+        ):
+            # a reordered read of the members of self, as in _update_ (#3520)
+            plans = self._member_plans(
+                self._update_pieces(input_dict_or_td.apply(lambda x: x.clone())),
+                non_blocking,
+            )
+            if any(plan is None for plan in plans):
+                return None
         finishes = [plan[2] for plan in plans if plan[2] is not None]
 
         def finish():

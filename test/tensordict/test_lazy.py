@@ -4805,6 +4805,93 @@ class TestLazyStackedTensorDict:
             assert leaf._version == version
             y.backward()
 
+    @pytest.mark.parametrize("op", ["copy_", "update_"])
+    @pytest.mark.parametrize("source", ["select", "select_swapped", "wrapper"])
+    def test_update_from_reordered_copies(self, op, source):
+        # #3520: new tensordicts that hold the tensors of the members in
+        # another order, such as select() copies, write the values of the
+        # members they were read from
+        t = lazy_stack(
+            [
+                TensorDict(
+                    a=torch.full((3,), float(i)),
+                    b=torch.full((2,), float(i)),
+                    o=NonTensorData(f"o{i}"),
+                )
+                for i in range(4)
+            ]
+        )
+        ptrs = [m["a"].data_ptr() for m in t.tensordicts]
+        if source == "select":
+            members = [m.select("a", "b", "o") for m in t.tensordicts[::-1]]
+        elif source == "select_swapped":
+            members = [m.select("b", "o", "a") for m in t.tensordicts[::-1]]
+        else:
+            members = [TensorDict(dict(m.items())) for m in t.tensordicts[::-1]]
+        getattr(t, op)(lazy_stack(members))
+        assert t["a"][:, 0].tolist() == [3.0, 2.0, 1.0, 0.0]
+        assert t["b"][:, 0].tolist() == [3.0, 2.0, 1.0, 0.0]
+        assert [m["o"] for m in t.tensordicts] == ["o3", "o2", "o1", "o0"]
+        assert [m["a"].data_ptr() for m in t.tensordicts] == ptrs
+
+    @pytest.mark.parametrize("op", ["copy_", "update_"])
+    @pytest.mark.parametrize(
+        "order", ["inner_reversed", "inner_select", "outer_swapped"]
+    )
+    def test_update_from_reordered_lazy_of_lazy(self, op, order):
+        # #3520: a lazy stack of lazy stacks from its own members in another
+        # order, within or across the inner stacks
+        def leaf(i):
+            return TensorDict(
+                a=torch.full((3,), float(i)), b=torch.full((2,), float(i))
+            )
+
+        t = lazy_stack([lazy_stack([leaf(0), leaf(1)]), lazy_stack([leaf(2), leaf(3)])])
+        inner = [list(s.tensordicts) for s in t.tensordicts]
+        if order == "inner_reversed":
+            source = lazy_stack([lazy_stack(m[::-1]) for m in inner])
+            expected = [1.0, 0.0, 3.0, 2.0]
+        elif order == "inner_select":
+            source = lazy_stack(
+                [lazy_stack([x.select("a", "b") for x in m[::-1]]) for m in inner]
+            )
+            expected = [1.0, 0.0, 3.0, 2.0]
+        else:
+            source = lazy_stack([lazy_stack(m) for m in inner[::-1]])
+            expected = [2.0, 3.0, 0.0, 1.0]
+        getattr(t, op)(source)
+        assert [
+            x["a"][0].item() for s in t.tensordicts for x in s.tensordicts
+        ] == expected
+        assert [
+            x["b"][0].item() for s in t.tensordicts for x in s.tensordicts
+        ] == expected
+
+    @pytest.mark.parametrize("source", ["fresh", "same_order_select", "dense"])
+    def test_update_from_not_reordered_copies(self, source):
+        # #3520: sources that do not hold the tensors of other members are
+        # written as before, without copies: a member that is its own source
+        # keeps its graph
+        w = torch.ones(3, requires_grad=True)
+        t = lazy_stack([TensorDict(a=torch.full((3,), float(i)) * w) for i in range(4)])
+        ptrs = [m["a"].data_ptr() for m in t.tensordicts]
+        if source == "fresh":
+            value = lazy_stack(
+                [TensorDict(a=torch.full((3,), 10.0 + i)) for i in range(4)]
+            )
+            expected = [10.0, 11.0, 12.0, 13.0]
+        elif source == "same_order_select":
+            value = lazy_stack([m.select("a") for m in t.tensordicts])
+            expected = [0.0, 1.0, 2.0, 3.0]
+        else:
+            value = t.to_tensordict().flip(0)
+            expected = [3.0, 2.0, 1.0, 0.0]
+        t.update_(value)
+        assert t["a"][:, 0].tolist() == expected
+        assert [m["a"].data_ptr() for m in t.tensordicts] == ptrs
+        t["a"].sum().backward()
+        assert w.grad is not None
+
     @pytest.mark.parametrize("stack_dim", [0, 1, 2])
     @pytest.mark.parametrize(
         "index", [(..., 0), (0, ..., 1), (..., [1, 0]), (..., None)]

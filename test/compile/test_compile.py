@@ -393,6 +393,51 @@ def test_lazy_softmax_ragged_compiles():
         torch.testing.assert_close(member["a"], expected["a"].softmax(0))
 
 
+@pytest.mark.parametrize("op", ["copy_", "update_"])
+@pytest.mark.parametrize("stack_dim", [0, 1])
+def test_lazy_update_reordered_compiles(op, stack_dim):
+    # #3518: compiled with inductor, copy_/update_ from the members of the
+    # stack in another order write the right rows into the stack itself
+    def update(ls):
+        getattr(ls, op)(lazy_stack(ls.tensordicts[::-1], ls.stack_dim))
+        return torch.stack([m["n", "b"][0, 0] for m in ls.tensordicts])
+
+    ls = lazy_stack(
+        [
+            TensorDict(
+                a=torch.full((3,), float(i)),
+                n=TensorDict(b=torch.full((3, 2), float(i)), batch_size=[3]),
+                batch_size=[3],
+            )
+            for i in range(4)
+        ],
+        stack_dim,
+    )
+    ptrs = [m["a"].data_ptr() for m in ls.tensordicts]
+    out = torch.compile(update, fullgraph=True)(ls)
+    expected = [3.0, 2.0, 1.0, 0.0]
+    assert out.tolist() == expected
+    assert [m["a"][0].item() for m in ls.tensordicts] == expected
+    assert [m["n", "b"][0, 0].item() for m in ls.tensordicts] == expected
+    assert [m["a"].data_ptr() for m in ls.tensordicts] == ptrs
+
+
+def test_lazy_update_reordered_ragged_compiles():
+    # #3518: a ragged stack, which cannot be stacked, keeps its route
+    def update(ls):
+        ls.update_(lazy_stack(ls.tensordicts[::-1]))
+        return ls
+
+    ls = lazy_stack(
+        [
+            TensorDict(a=torch.full((2,), float(i)), r=torch.zeros(n))
+            for i, n in enumerate((1, 2, 2, 1))
+        ]
+    )
+    torch.compile(update, fullgraph=True, backend="aot_eager")(ls)
+    assert [m["a"][0].item() for m in ls.tensordicts] == [3.0, 2.0, 1.0, 0.0]
+
+
 @pytest.mark.parametrize(
     "name", ["td == 0", "td != td", "td ^ True", "td.all(0)", "td.where(mask, 0)"]
 )
