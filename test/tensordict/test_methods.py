@@ -7029,7 +7029,6 @@ def test_unflatten_keys_context_manager_keyword_separator_locked_nested(
     # unflatten_keys(separator=...) raised KeyError, also around a nested
     # flatten_keys(separator=...) block, where v0.15.4 returned.
     td = TensorDict({"b": {"c": torch.zeros(2)}, "a/z": torch.zeros(2)}, [2])
-    td["s/t"] = "hello"
     td.lock_()
     with warnings.catch_warnings():
         warnings.simplefilter("error")
@@ -7039,26 +7038,21 @@ def test_unflatten_keys_context_manager_keyword_separator_locked_nested(
                     if action != "none":
                         getattr(g, action)("a/z", torch.ones(2))
                         getattr(g, action)("b/c", torch.ones(2))
-                        g.set("s/t", "bye")
             elif action != "none":
                 getattr(f, action)(("a", "z"), torch.ones(2))
                 getattr(f, action)(("b", "c"), torch.ones(2))
-                f.set(("s", "t"), "bye")
     assert td.is_locked
-    assert set(td.keys(True, True, is_leaf=_is_leaf_nontensor)) == {
-        ("b", "c"),
-        "a/z",
-        "s/t",
-    }
+    assert set(td.keys(True, True)) == {("b", "c"), "a/z"}
     expected = 0.0 if action == "none" else 1.0
     assert (td["a/z"] == expected).all()
     assert (td["b", "c"] == expected).all()
-    assert td["s/t"] == ("hello" if action == "none" else "bye")
 
 
 def test_unflatten_keys_context_manager_keyword_separator_locked_unchanged():
     # #3517 leaves these as they were: a key added in the block, and a lazy
     # stack whose members hold leaves of different shapes, still raise.
+    # The write-back takes only exact TensorDicts with exact strided tensor
+    # leaves: anything else raises the KeyError with nothing written.
     td = TensorDict({"b": {"c": torch.zeros(2)}, "a/z": torch.zeros(2)}, [2]).lock_()
     with pytest.raises(KeyError, match="b.c"):
         with td.unflatten_keys(separator="/") as f:
@@ -7084,6 +7078,38 @@ def test_unflatten_keys_context_manager_keyword_separator_locked_unchanged():
     with pytest.raises(KeyError, match="b.c"):
         with params.unflatten_keys(separator="/"):
             pass
+    # a lazy stack whose members hold an inference tensor, a meta value, a
+    # jagged nested tensor leaf and a non-tensor leaf
+    with torch.inference_mode():
+        inference = torch.zeros(2)
+    td = LazyStackedTensorDict(
+        *[TensorDict({"b": {"c": torch.zeros(2)}, "a/z": inference}, [])] * 2
+    ).lock_()
+    with pytest.raises(KeyError, match="b.c"):
+        with td.unflatten_keys(separator="/") as f:
+            f.set(("b", "c"), torch.ones(2, 2))
+    assert (td["b", "c"] == 0).all()
+    td = TensorDict({"b": {"c": torch.zeros(2)}, "a/z": torch.zeros(2)}, [2]).lock_()
+    with pytest.raises(KeyError, match="b.c"):
+        with td.unflatten_keys(separator="/") as f:
+            f.set(("b", "c"), torch.ones(2))
+            f.set(("a", "z"), torch.zeros(2, device="meta"))
+    assert (td["b", "c"] == 0).all()
+    njt = torch.nested.nested_tensor(
+        [torch.zeros(2), torch.zeros(3)], layout=torch.jagged
+    )
+    td = TensorDict({"b": {"c": torch.zeros(2)}, "a/z": njt}, [2]).lock_()
+    with pytest.raises(KeyError, match="b.c"):
+        with td.unflatten_keys(separator="/") as f:
+            f.set(("b", "c"), torch.ones(2))
+    assert (td["b", "c"] == 0).all()
+    td = TensorDict({"b": {"c": torch.zeros(2)}, "a/z": torch.zeros(2)}, [2])
+    td["s/t"] = "hello"
+    td.lock_()
+    with pytest.raises(KeyError, match="b.c"):
+        with td.unflatten_keys(separator="/") as f:
+            f.set(("b", "c"), torch.ones(2))
+    assert (td["b", "c"] == 0).all()
     # a key that collides with a nested one under "."
     td = TensorDict({"b": {"c": torch.zeros(2)}, "b.c": torch.zeros(2)}, [2]).lock_()
     with pytest.raises(KeyError, match="collide"):

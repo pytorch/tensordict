@@ -110,55 +110,81 @@ def _reverse_flatten_keys(self, args, kwargs, out):
 LAST_OP_MAPS["flatten_keys"] = _reverse_flatten_keys
 
 
+def _is_plain_td(td):
+    # A genuine circular import: tensordict.base imports this module before
+    # tensordict._td defines TensorDict.
+    from tensordict._td import TensorDict
+
+    # exact TensorDicts at every depth, so that _get_tuple returns the stored
+    # leaf, and no non-tensor leaf
+    return type(td) is TensorDict and all(
+        isinstance(value, torch.Tensor) or _is_plain_td(value) for value in td.values()
+    )
+
+
+def _is_plain_leaf(tensor):
+    if not (
+        type(tensor) is torch.Tensor
+        and tensor.layout is torch.strided
+        and not tensor.is_nested
+        and not tensor.is_quantized
+        and not tensor.is_inference()
+        and not (tensor.requires_grad and torch.is_grad_enabled())
+    ):
+        return False
+    # no expanded or internally overlapping dims
+    extent = 1
+    for stride, size in sorted(
+        (stride, size)
+        for stride, size in zip(tensor.stride(), tensor.shape)
+        if size > 1
+    ):
+        if stride < extent:
+            return False
+        extent += stride * (size - 1)
+    return True
+
+
 def _unsplit_keys(self, out, separator):
     """Returns the leaves of ``self`` under the keys of ``out`` they were split from.
 
     Returns ``None`` unless splitting the keys of ``out`` at ``separator`` gives
-    the keys of ``self`` exactly, one for one.
+    the keys of ``self`` exactly, one for one, and ``out.update_`` takes every
+    leaf without raising, skipping or warning.
     """
-    # A genuine circular import: tensordict.base imports this module before it
-    # defines these.
-    from tensordict.base import _is_leaf_nontensor, _stored_value
-
-    if is_tensorclass(self) or is_tensorclass(out):
+    if not (_is_plain_td(self) and _is_plain_td(out)):
         return None
     keys = {}
-    for key in out.keys(True, True, is_leaf=_is_leaf_nontensor):
+    for key in out.keys(True, True):
         key = (key,) if isinstance(key, str) else key
         # unflatten_keys splits the keys of the root only
         keys[(*key[0].split(separator), *key[1:])] = key
     self_keys = {
-        (key,) if isinstance(key, str) else key
-        for key in self.keys(True, True, is_leaf=_is_leaf_nontensor)
+        (key,) if isinstance(key, str) else key for key in self.keys(True, True)
     }
     if len(keys) != len(self_keys) or set(keys) != self_keys:
         # the op made two keys of out one, or the block changed the keys
         return None
     source = self.empty()
-    try:
-        for split_key, key in keys.items():
-            value = self._get_tuple(split_key, None)
-            dest = out._get_tuple(key, None)
-            # write nothing unless update_ takes every leaf without raising,
-            # skipping or warning
-            if not isinstance(dest, torch.Tensor):
-                # a non-tensor leaf
-                if type(value) is not type(dest) or _stored_value(value, dest) is None:
-                    return None
-            elif not (
-                isinstance(value, torch.Tensor)
-                and torch.broadcast_shapes(value.shape, dest.shape) == dest.shape
-                and not (dest.requires_grad and torch.is_grad_enabled())
-                and not (dest.is_inference() and not torch.is_inference_mode_enabled())
-                and not (value.is_complex() and not dest.is_complex())
-                and 0 not in [st for st, n in zip(dest.stride(), dest.shape) if n > 1]
-            ):
-                return None
-            source.set(key, value)
-    except RuntimeError:
-        # a lazy stack whose members hold leaves of different shapes, or a
-        # value that does not broadcast to its leaf
-        return None
+    for split_key, key in keys.items():
+        value = self._get_tuple(split_key, None)
+        dest = out._get_tuple(key, None)
+        # write nothing unless every pair is known to be safe for copy_
+        if not (
+            _is_plain_leaf(value)
+            and _is_plain_leaf(dest)
+            and value.shape == dest.shape
+            and value.device == dest.device
+            and not (value.is_complex() and not dest.is_complex())
+            and (
+                value is dest
+                or not dest.numel()
+                or value.untyped_storage().data_ptr()
+                != dest.untyped_storage().data_ptr()
+            )
+        ):
+            return None
+        source.set(key, value)
     return source
 
 
