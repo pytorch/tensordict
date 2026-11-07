@@ -3000,6 +3000,40 @@ class TestNonTensorData:
         with pytest.raises(TypeError, match="cannot be interpreted as an integer"):
             td.get("val").copy_(NonTensorData(data=None, batch_size=[]))
 
+    @pytest.mark.parametrize("nested", [False, True])
+    @pytest.mark.parametrize("value", ["a string", 3, [1, 2]])
+    def test_share_memory_locked(self, nested, value):
+        # #3505: share_memory_() on a locked tensordict that holds a non-tensor value
+        td = TensorDict(x=torch.zeros(3), n=TensorDict(batch_size=[3]), batch_size=[3])
+        key = ("n", "s") if nested else "s"
+        td.set_non_tensor(key, value)
+        td.lock_()
+        assert td.share_memory_() is td
+        assert td.is_shared()
+        assert td.is_locked
+        assert td[key] == value
+        assert td.get(key)._tensordict._is_shared
+
+    def test_share_memory_unlocked_and_memmap(self, tmp_path):
+        # #3505: the calls that do not hit a locked parent keep their behaviour
+        td = TensorDict(x=torch.zeros(3), batch_size=[3])
+        td.set_non_tensor("s", "a")
+        assert td.share_memory_() is td
+        assert td.is_shared()
+        assert td.is_locked
+        assert td["s"] == "a"
+
+        nt = NonTensorData("q", batch_size=[2]).memmap_(tmp_path / "nt")
+        assert nt.share_memory_() is nt
+        assert nt.is_shared()
+
+        m = NonTensorData("mm", batch_size=[3]).memmap_(tmp_path / "m")
+        parent = TensorDict(x=torch.zeros(3), batch_size=[3])
+        parent.set("s", m)
+        parent.lock_()
+        with pytest.raises(RuntimeError, match="Cannot unlock"):
+            parent.share_memory_()
+
     @pytest.mark.parametrize("strategy", ["shared", "memmap"])
     @pytest.mark.parametrize(
         "val0,val1",
