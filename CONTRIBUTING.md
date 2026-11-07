@@ -26,6 +26,18 @@ in your shell. tensordict is pure Python, so this needs no compiler.
 
 tensordict is not strongly-typed, i.e. we do not enforce type hints, neither do we check that the ones that are present are valid. We rely on type hints purely for documentary purposes. Although this might change in the future, there is currently no need for this to be enforced at the moment.
 
+CI does run the [ty](https://docs.astral.sh/ty/) type checker, and fails when a
+change adds diagnostics to a file. To run the same check locally, from the
+repository root:
+```
+uv venv --python 3.12 .ty-venv
+uv pip install --python .ty-venv/bin/python --torch-backend cpu \
+    -c .github/ci-constraints.txt -r .github/ty-requirements.txt
+python .github/scripts/ty_ratchet.py
+```
+If a new diagnostic is a ty false positive, `python .github/scripts/ty_ratchet.py --update`
+raises the baseline in `.github/ty-baseline.json`; say why in the PR.
+
 **Linting**
 
 Before your PR is ready, you'll probably want your code to be checked. The

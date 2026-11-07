@@ -491,4 +491,12 @@ touches these places:
   tests with `.github/unittest/rl_linux_optdeps/scripts/run_all.sh`. Other
   CI helpers are in `.github/scripts/`.
 - Lint: `.pre-commit-config.yaml`, which runs `scripts/check_rst_titles.py`.
+  - ty: the `ty-ratchet` job in `lint.yml` runs `.github/scripts/ty_ratchet.py`,
+    which fails when a (file, rule) count of ty's diagnostics on
+    `tensordict/` rises above `.github/ty-baseline.json`; counts may fall.
+    It runs against the environment pinned in
+    `.github/ty-requirements.txt`, whose header gives the commands to build
+    it locally; then run `python .github/scripts/ty_ratchet.py`. A PR that
+    bumps ty or a pin there reruns the script with `--update` and commits
+    the new baseline.
 - Packaging: `setup.py`, `pyproject.toml` and `version.txt`.
