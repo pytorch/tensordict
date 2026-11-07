@@ -7170,6 +7170,52 @@ class TestTensorDictParams:
         assert params.is_locked
         assert params.get("m").is_locked
 
+    @pytest.mark.parametrize("op", ["to_cpu", "cpu", "to_double"])
+    @pytest.mark.parametrize("write", ["set_at_", "update_at_"])
+    def test_to_after_non_tensor_row_write(self, write, op):
+        # #3504: to() and cpu() raised after set_at_ or update_at_ wrote a
+        # string into some rows, which leaves a NonTensorStack in the params
+        td = TensorDict(x=torch.zeros(3), i=torch.arange(3), batch_size=[3])
+        td.set_non_tensor("s", "old")
+        params = TensorDictParams(td)
+        with torch.no_grad():
+            if write == "set_at_":
+                params.set_at_("s", "new", 0)
+            else:
+                src = TensorDict(
+                    x=torch.ones(1), i=torch.ones(1, dtype=torch.long), batch_size=[1]
+                )
+                src.set("s", NonTensorStack("new"))
+                params.update_at_(src, slice(0, 1))
+        out = {
+            "to_cpu": lambda: params.to("cpu"),
+            "cpu": lambda: params.cpu(),
+            "to_double": lambda: params.to(torch.float64),
+        }[op]()
+        assert type(out) is TensorDictParams
+        assert out.get("s").tolist() == ["new", "old", "old"]
+        assert isinstance(out["x"], nn.Parameter)
+        assert [name for name, _ in out.named_parameters()] == ["x"]
+        assert [name for name, _ in out.named_buffers()] == ["i"]
+
+    def test_non_tensor_stack_constructor_raises(self):
+        # #3504: the constructor still rejects a lazy stack, a NonTensorStack
+        # included
+        td = TensorDict(
+            x=torch.zeros(2),
+            l=lazy_stack(
+                [TensorDict(y=torch.zeros(())), TensorDict(y=torch.zeros(()))]
+            ),
+            batch_size=[2],
+        )
+        with pytest.raises(RuntimeError, match="within a TensorDictParams"):
+            TensorDictParams(td)
+        td = TensorDict(
+            x=torch.zeros(3), s=NonTensorStack("a", "b", "c"), batch_size=[3]
+        )
+        with pytest.raises(RuntimeError, match="within a TensorDictParams"):
+            TensorDictParams(td)
+
     def test_data_update_non_tensor(self):
         # .data builds new non-tensor leaves, so plain td.data.update_() does
         # not write them

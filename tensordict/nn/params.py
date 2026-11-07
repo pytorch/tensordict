@@ -75,7 +75,7 @@ else:
 __all__ = ["TensorDictParams"]
 
 
-def _apply_leaves(data, fn, *others):
+def _apply_leaves(data, fn, *others, non_tensor_stack_leaves=False):
     # ``others`` have the same structure as ``data``: ``fn`` receives their
     # matching leaves after the leaf of ``data``.
     if isinstance(data, TensorDict):
@@ -84,13 +84,20 @@ def _apply_leaves(data, fn, *others):
                 other_vals = [other._get_str(key, NO_DEFAULT) for other in others]
                 data._set_str(
                     key,
-                    _apply_leaves(val, fn, *other_vals),
+                    _apply_leaves(
+                        val,
+                        fn,
+                        *other_vals,
+                        non_tensor_stack_leaves=non_tensor_stack_leaves,
+                    ),
                     validated=True,
                     inplace=False,
                     non_blocking=False,
                 )
         return data
-    elif isinstance(data, LazyStackedTensorDict):
+    elif isinstance(data, LazyStackedTensorDict) and not (
+        non_tensor_stack_leaves and is_non_tensor(data)
+    ):
         # this is currently not implemented as the registration of params will only work
         # with plain TensorDict. The solution will be using pytree to get each independent
         # leaf
@@ -98,7 +105,12 @@ def _apply_leaves(data, fn, *others):
             "Using a LazyStackedTensorDict within a TensorDictParams isn't permitted."
         )
     elif isinstance(data, _CustomOpTensorDict):
-        _apply_leaves(data._source, fn, *(other._source for other in others))
+        _apply_leaves(
+            data._source,
+            fn,
+            *(other._source for other in others),
+            non_tensor_stack_leaves=non_tensor_stack_leaves,
+        )
         return data
     elif isinstance(data, _SubTensorDict):
         raise RuntimeError(
@@ -912,7 +924,11 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     def _from_converted(self, params: TensorDictBase) -> TensorDictParams:
         # Wraps what to(), cpu() or cuda() returned for self._param_td, keeping
         # the parameters and buffers of self and its no_convert.
-        params = _apply_leaves(params, _wrap_like, self._param_td)
+        # set_at_ and update_at_ can leave a NonTensorStack in _param_td: it
+        # holds no tensor to wrap (#3504).
+        params = _apply_leaves(
+            params, _wrap_like, self._param_td, non_tensor_stack_leaves=True
+        )
         out = TensorDictParams(params, no_convert="skip")
         out.no_convert = self.no_convert
         return out
