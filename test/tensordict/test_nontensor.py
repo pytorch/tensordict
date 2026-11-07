@@ -3014,6 +3014,17 @@ class TestNonTensorData:
         assert td[key] == value
         assert td.get(key)._tensordict._is_shared
 
+    def test_share_memory_consolidated(self):
+        # #3505: consolidate() returns a locked tensordict, so sharing it raised too
+        td = TensorDict(x=torch.arange(3.0), batch_size=[3])
+        td.set_non_tensor("s", "abc")
+        c = td.consolidate()
+        assert c.is_locked
+        assert c.share_memory_() is c
+        assert c.is_shared()
+        assert c.is_locked
+        assert c["s"] == "abc"
+
     def test_share_memory_unlocked_and_memmap(self, tmp_path):
         # #3505: the calls that do not hit a locked parent keep their behaviour
         td = TensorDict(x=torch.zeros(3), batch_size=[3])
