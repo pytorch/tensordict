@@ -2,7 +2,6 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-import collections
 import contextlib
 import warnings
 
@@ -130,6 +129,7 @@ def _is_plain_leaf(tensor):
         and not tensor.is_nested
         and not tensor.is_quantized
         and not tensor.is_inference()
+        and not tensor.is_meta
         and not (tensor.requires_grad and torch.is_grad_enabled())
     ):
         return False
@@ -144,6 +144,11 @@ def _is_plain_leaf(tensor):
             return False
         extent += stride * (size - 1)
     return True
+
+
+def _storage_range(tensor):
+    storage = tensor.untyped_storage()
+    return storage.data_ptr(), storage.data_ptr() + storage.nbytes()
 
 
 def _unsplit_keys(self, out, separator):
@@ -182,21 +187,18 @@ def _unsplit_keys(self, out, separator):
         pairs.append((key, value, dest))
     # update_ copies one leaf at a time, so a value that shares memory with
     # any entry, or an entry that shares memory with another, could be
-    # overwritten before it is read. Empty tensors can all have data_ptr 0.
-    storages = collections.Counter(
-        dest.untyped_storage().data_ptr() for _, _, dest in pairs if dest.numel()
-    )
+    # overwritten before it is read. Compare the byte ranges of the storages:
+    # from_numpy, from_dlpack or frombuffer can make a storage that starts
+    # inside another. Empty tensors can all have data_ptr 0.
+    ranges = sorted(_storage_range(dest) for _, _, dest in pairs if dest.numel())
+    if any(start < end for (_, end), (start, _) in zip(ranges, ranges[1:])):
+        return None
     source = self.empty()
     for key, value, dest in pairs:
-        if (
-            value is not dest
-            and value.numel()
-            and (
-                storages[value.untyped_storage().data_ptr()]
-                or storages[dest.untyped_storage().data_ptr()] > 1
-            )
-        ):
-            return None
+        if value is not dest and value.numel():
+            start, end = _storage_range(value)
+            if any(start < e and s < end for s, e in ranges):
+                return None
         source.set(key, value)
     return source
 

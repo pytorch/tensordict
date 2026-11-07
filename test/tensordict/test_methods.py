@@ -7136,6 +7136,27 @@ def test_unflatten_keys_context_manager_keyword_separator_locked_unchanged():
             f.set(("b", "c"), torch.ones(2))
             f.set(("a", "z"), torch.full((2,), 3.0))
     assert (shared == 0).all()
+    # values that share memory with an entry through a storage of their own,
+    # which starts inside the entry's storage
+    x = torch.tensor([[1.0, 10.0], [2.0, 20.0]])
+    for alias in (
+        lambda: torch.from_numpy(x.numpy()[:, 1:]),
+        lambda: torch.frombuffer(x.numpy(), dtype=x.dtype, offset=8).view(2, 1),
+    ):
+        td = TensorDict({"b": {"c": x}, "a/z": torch.zeros(2, 1)}, [2]).lock_()
+        with pytest.raises(KeyError, match="b.c"):
+            with td.unflatten_keys(separator="/") as f:
+                f.set(("a", "z"), alias())
+                f.set(("b", "c"), torch.full((2, 2), 7.0))
+        assert (x == torch.tensor([[1.0, 10.0], [2.0, 20.0]])).all()
+        assert (td["a/z"] == 0).all()
+    # a tensordict on the meta device
+    td = TensorDict(
+        {"b": {"c": torch.zeros(2)}, "a/z": torch.zeros(2)}, [2], device="meta"
+    ).lock_()
+    with pytest.raises(KeyError, match="b.c"):
+        with td.unflatten_keys(separator="/"):
+            pass
     # a key that collides with a nested one under "."
     td = TensorDict({"b": {"c": torch.zeros(2)}, "b.c": torch.zeros(2)}, [2]).lock_()
     with pytest.raises(KeyError, match="collide"):
