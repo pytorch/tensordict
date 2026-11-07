@@ -17836,6 +17836,65 @@ class TestGeneric:
         assert stack.tolist() == before
         assert padded.tolist() == [row + [None] for row in before]
 
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_pad_nontensor_stack_inplace_names_locked(self, stack_dim):
+        # #2187: a locked stack read its cached names while locked, but its
+        # members lost theirs
+        stack = self._named_nontensor_stack(stack_dim, ["x", "y"])
+        stack.lock_()
+        pad(stack, [0, 1, 0, 1], inplace=True)
+        assert stack.is_locked
+        stack.unlock_()
+        assert stack.names == ["x", "y"]
+
+    @staticmethod
+    def _nontensor_stack_names_taken():
+        # a 3-D stack whose stack dim name is also used by its members, which
+        # is deprecated but still accepted
+        mids = [
+            NonTensorStack(
+                *[
+                    NonTensorData(f"{i}{j}", batch_size=[2], names=["z"])
+                    for j in range(3)
+                ],
+                stack_dim_name="x",
+            )
+            for i in range(2)
+        ]
+        with pytest.warns(FutureWarning, match="is also the name of a dim"):
+            return NonTensorStack(*mids, stack_dim_name="x")
+
+    def test_pad_nontensor_stack_inplace_names_taken(self):
+        # #2187: on a stack whose stack dim name is also used by its members,
+        # an in-place pad of the stack dim left .names raising
+        stack = self._nontensor_stack_names_taken()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            pad(stack, [0, 1], inplace=True)
+        assert stack.batch_size == (3, 3, 2)
+        assert stack.names == ["x", "x", "z"]
+        members = [
+            NonTensorStack(NonTensorData(f"{i}0"), NonTensorData(f"{i}1"))
+            for i in range(3)
+        ]
+        for member in members:
+            member.names = ["x"]
+        stack = NonTensorStack(*members, stack_dim_name="x")
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            pad(stack, [0, 1, 0, 1], inplace=True)
+        assert stack.names == ["x", "x"]
+
+    def test_pad_nontensor_stack_inplace_names_taken_unchanged(self):
+        # #2187 changes nothing where the names are already right: the inner
+        # pad returns with the same names and the same single warning
+        stack = self._nontensor_stack_names_taken()
+        with pytest.warns(FutureWarning, match="is also the name of a dim") as record:
+            pad(stack, [0, 0, 0, 1], inplace=True)
+        assert len(record) == 1
+        assert stack.batch_size == (2, 4, 2)
+        assert stack.names == ["x", "x", "z"]
+
 
 class TestPRClaims:
     """Behaviour that the descriptions of merged PRs promise and no other test covers.
