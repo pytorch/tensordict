@@ -8230,7 +8230,7 @@ class TensorAttrs(TensorClass):
             >>> attrs.tgt_dtype, attrs.tgt_shape
             (torch.float32, None)
         """
-        kwargs = {}
+        kwargs: dict[str, Any] = {}
         if "device" in fields:
             kwargs["tgt_device"] = tensor.device
         if "dtype" in fields:
