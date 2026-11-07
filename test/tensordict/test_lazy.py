@@ -5611,6 +5611,93 @@ class TestLazyStackedTensorDict:
         with pytest.raises(RuntimeError, match="too big for batch size"):
             LazyStackedTensorDict(stack_dim=3, batch_size=[3])
 
+    def test_numel_ragged(self):
+        # #3442: numel() of a lazy stack with a ragged batch dim returned 1
+        ls = lazy_stack(
+            [TensorDict(a=torch.zeros(k), batch_size=[k]) for k in (2, 3, 1)]
+        )
+        assert ls.batch_size == torch.Size([3, -1])
+        assert ls.numel() == 6 == ls.reshape(-1).numel()
+        assert lazy_stack([ls, ls]).numel() == 12
+        tds = [TensorDict(batch_size=[2]), TensorDict(batch_size=[3])]
+        assert lazy_stack(tds, 1).numel() == 5
+        assert ls[0:2].numel() == 5
+        # a member with an empty batch counts 0 rows
+        assert lazy_stack([TensorDict(batch_size=[0]), tds[0]]).numel() == 2
+        # with two ragged dims, main returned the product of the batch size, 2
+        double = lazy_stack(
+            [TensorDict(batch_size=[2, 3]), TensorDict(batch_size=[4, 5])]
+        )
+        assert double.batch_size == torch.Size([2, -1, -1])
+        assert double.numel() == 26
+        # vmapped over a dim that is not the stack dim, a slice holds 2 + 3 rows
+        numels = []
+
+        def record(td):
+            numels.append((td.batch_size, td.numel()))
+            return torch.zeros(())
+
+        torch.vmap(record, (0,))(
+            lazy_stack(
+                [TensorDict(batch_size=[2, 2]), TensorDict(batch_size=[2, 3])], 1
+            )
+        )
+        assert numels == [(torch.Size([2, -1]), 5)]
+
+    def test_numel_homogeneous_unchanged(self):
+        # #3442: stacks without a ragged batch dim keep the product of batch_size
+        assert lazy_stack([TensorDict(batch_size=[2])] * 3).numel() == 6
+        assert lazy_stack([TensorDict(batch_size=[2])] * 3, 1).numel() == 6
+        assert lazy_stack([TensorDict(batch_size=[0])] * 2).numel() == 1
+        assert lazy_stack([TensorDict(), TensorDict()]).numel() == 2
+        assert LazyStackedTensorDict(stack_dim=0).numel() == 1
+
+    def test_numel_ragged_uncounted_unchanged(self):
+        # #3442: ragged stacks whose members cannot give the count keep returning 1
+        def ragged(ks):
+            return lazy_stack([TensorDict(batch_size=[2, k]) for k in ks], 1)
+
+        sub = lazy_stack([TensorDict(batch_size=[k]) for k in (2, 3, 1)])
+        sub = sub._get_sub_tensordict(slice(0, 2))
+        assert sub.batch_size == torch.Size([2, -1])
+        assert lazy_stack([sub, TensorDict(batch_size=[2, 3])]).numel() == 1
+
+        numels = []
+
+        def record(td):
+            numels.append((td.batch_size, td.numel()))
+            return torch.zeros(())
+
+        # vmapped over the stack dim, the stack still holds every slice's members
+        torch.vmap(record, (1,))(ragged([2, 3]))
+        assert numels == [(torch.Size([2, -1]), 1)]
+
+    @pytest.mark.parametrize(
+        "sizes,stack_dim,shape,expected",
+        [
+            ([[2], [3], [1]], 0, (-1,), None),
+            ([[2, 3], [4, 5]], 0, (-1,), (26,)),
+            ([[1, 2], [2, 1]], 0, (-1,), (4,)),
+            ([[1, 0], [0, 1]], 0, (-1,), (0,)),
+            ([[2, 3], [4, 5]], 0, (-1, 2), None),
+            ([[2, 2], [2, 3]], 1, (-1,), None),
+            ([[0], [2]], 0, (2, -1), (2, -1)),
+        ],
+    )
+    def test_view_ragged_unchanged(self, sizes, stack_dim, shape, expected):
+        # #3442: view() of a ragged stack infers its -1 from the product of the
+        # batch size, not from numel(), so its results and errors do not change
+        ls = lazy_stack(
+            [TensorDict(a=torch.zeros(*s, 1), batch_size=s) for s in sizes], stack_dim
+        )
+        if expected is None:
+            with pytest.raises(
+                RuntimeError, match="Cannot call `view` on a lazy stacked"
+            ):
+                ls.view(*shape)
+        else:
+            assert ls.view(*shape).batch_size == torch.Size(expected)
+
     def test_new_methods(self):
         td = TensorDict(
             dense=torch.randn(1, 10),
