@@ -24,7 +24,7 @@ in your shell. tensordict is pure Python, so this needs no compiler.
 ## Formatting your code
 **Type annotation**
 
-tensordict does not enforce type hints at runtime, but they must be accurate: tensordict ships `py.typed`, so users' type checkers read them. CI type-checks a corpus of user code against them with mypy and pyright, and runs the [ty](https://docs.astral.sh/ty/) type checker on the package itself, which fails when a change adds diagnostics to a file. To run the ty check locally, from the repository root:
+tensordict does not enforce type hints at runtime, but they must be accurate: tensordict ships `py.typed`, so users' type checkers read them. CI type-checks a corpus of user code against them with mypy and pyright, and runs the [ty](https://docs.astral.sh/ty/) type checker on the package itself, which fails when a change adds diagnostics to a file (for a few noisy rules it only reports them). To run the ty check locally, from the repository root:
 ```
 uv venv --python 3.12 .ty-venv
 uv pip install --python .ty-venv/bin/python --torch-backend cpu \

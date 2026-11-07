@@ -494,6 +494,8 @@ touches these places:
   - ty: the `ty-ratchet` job in `lint.yml` runs `.github/scripts/ty_ratchet.py`,
     which fails when a (file, rule) count of ty's diagnostics on
     `tensordict/` rises above `.github/ty-baseline.json`; counts may fall.
+    Rises of the rules in the script's `REPORT_ONLY` are printed without
+    failing.
     It runs against the environment pinned in
     `.github/ty-requirements.txt`, whose header gives the commands to build
     it locally; then run `python .github/scripts/ty_ratchet.py`. A PR that

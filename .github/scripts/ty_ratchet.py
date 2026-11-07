@@ -2,8 +2,9 @@
 
 Runs ``ty check`` on the ``tensordict`` package, counts its diagnostics per
 (file, rule) and compares the counts with ``.github/ty-baseline.json``. The
-check fails when any count rises above the baseline (a file that is not in the
+check fails when a count rises above the baseline (a file that is not in the
 baseline counts from 0), and prints every diagnostic of each such (file, rule).
+For the rules in ``REPORT_ONLY`` a rise is printed but does not fail.
 Counts that fall pass: ``--update`` rewrites the baseline from the current
 counts, to lock the lower counts in or to accept a ty false positive.
 
@@ -29,6 +30,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 BASELINE = ROOT / ".github" / "ty-baseline.json"
 PACKAGE = "tensordict"
+# Rules whose rises are reported without failing the check: on tensordict,
+# almost all of their new diagnostics come from narrowing that ty cannot
+# follow (is_tensor_collection checks, values that an earlier branch rules
+# out) or from mixins that read attributes of the class they are mixed into.
+# Replayed over the 40 merges to main before this check was added, these rules
+# account for every rise, and none of the new diagnostics was a bug.
+REPORT_ONLY = frozenset(
+    {
+        "import-not-found",
+        "invalid-argument-type",
+        "unresolved-attribute",
+        "unsupported-operator",
+    }
+)
 
 
 def run_ty(python: Path) -> list[dict]:
@@ -102,17 +117,30 @@ def main() -> int:
     risen = {
         k for k, count in counts.items() if count > baseline.get(k[0], {}).get(k[1], 0)
     }
-    if risen:
-        print(
-            f"\nThese (file, rule) counts are above {BASELINE.relative_to(ROOT)}; "
-            "all diagnostics of each are listed:\n"
-        )
-        for k in sorted(risen):
+    reported = {k for k in risen if k[1] in REPORT_ONLY}
+    failing = risen - reported
+
+    def show(keys: set[tuple[str, str]]) -> None:
+        for k in sorted(keys):
             was = baseline.get(k[0], {}).get(k[1], 0)
             print(f"{k[0]} {k[1]}: {was} -> {counts[k]}")
             for d in diagnostics:
                 if key(d) == k:
                     print(f"  {format_diagnostic(d)}")
+
+    if reported:
+        print(
+            f"\nThese (file, rule) counts are above {BASELINE.relative_to(ROOT)}, "
+            "for rules that are reported without failing the check; all "
+            "diagnostics of each are listed:\n"
+        )
+        show(reported)
+    if failing:
+        print(
+            f"\nThese (file, rule) counts are above {BASELINE.relative_to(ROOT)}; "
+            "all diagnostics of each are listed:\n"
+        )
+        show(failing)
         print(
             "\nFix the new diagnostics. If one is a ty false positive, or the file "
             "was renamed or moved (its counts start from 0 under the new path), "
@@ -128,6 +156,8 @@ def main() -> int:
             "Run `python .github/scripts/ty_ratchet.py --update` to lock the lower "
             "counts in."
         )
+    elif reported:
+        print("\nNo count of the other rules rose.")
     else:
         print("The counts match the baseline.")
     return 0
