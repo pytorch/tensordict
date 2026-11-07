@@ -388,6 +388,12 @@ def _pad_non_tensor(
     pairs = [(pad_size[2 * i], pad_size[2 * i + 1]) for i in range(len(pad_size) // 2)]
     if all(left == 0 and right == 0 for left, right in pairs):
         return tensordict
+    inplace_names = None
+    if inplace and isinstance(tensordict, NonTensorStack):
+        try:
+            inplace_names = tensordict.names
+        except (IndexError, ValueError):
+            pass
     result = _pad_non_tensor_rec(tensordict, pairs)
     try:
         names = tensordict._maybe_names()
@@ -412,6 +418,10 @@ def _pad_non_tensor(
         new_tensordicts = result.unbind(tensordict.stack_dim)
     tensordict.tensordicts[:] = new_tensordicts
     tensordict._change_batch_size(result.batch_size)
+    if inplace_names is not None and any(name is not None for name in inplace_names):
+        # The new members are unnamed: name the stack again, as an in-place
+        # pad of a dense tensordict or of a lazy stack keeps its names
+        tensordict.names = inplace_names
     return tensordict
 
 

@@ -17771,6 +17771,71 @@ class TestGeneric:
         assert out is lst
         assert out.get("instr").tolist() == expected
 
+    @staticmethod
+    def _named_nontensor_stack(stack_dim, names):
+        stack = NonTensorStack(
+            *[
+                NonTensorStack(NonTensorData(f"{i}0"), NonTensorData(f"{i}1"))
+                for i in range(3)
+            ],
+            stack_dim=stack_dim,
+        )
+        if names is not None:
+            stack.names = names
+        return stack
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize(
+        "pad_size", [[0, 1, 0, 0], [0, 0, 0, 1], [1, 0, -1, 0], [-1, 0, 1, 0]]
+    )
+    @pytest.mark.parametrize("names", [["x", "y"], ["x", None], [None, "y"]])
+    def test_pad_nontensor_stack_inplace_names(self, stack_dim, pad_size, names):
+        # #2187: an in-place pad of a named NonTensorStack dropped some of its
+        # names, or left .names raising, unlike a dense tensordict
+        stack = self._named_nontensor_stack(stack_dim, names)
+        expected = pad(self._named_nontensor_stack(stack_dim, None), pad_size)
+        out = pad(stack, pad_size, inplace=True)
+        assert out is stack
+        assert stack.names == names
+        assert stack.batch_size == expected.batch_size
+        assert stack.tolist() == expected.tolist()
+
+    def test_pad_nontensor_stack_inplace_names_nested(self):
+        # #2187: the same for a NonTensorStack in a tensordict padded in place
+        td = TensorDict(
+            instr=self._named_nontensor_stack(0, None),
+            batch_size=[3, 2],
+            names=["x", "y"],
+        )
+        instr = td.get("instr")
+        pad(td, [0, 1, 0, 1], inplace=True)
+        assert td.get("instr") is instr
+        assert td.names == ["x", "y"]
+        assert instr.names == ["x", "y"]
+        assert instr.tolist() == [
+            ["00", "01", None],
+            ["10", "11", None],
+            ["20", "21", None],
+            [None, None, None],
+        ]
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    def test_pad_nontensor_stack_names_unchanged(self, stack_dim):
+        # #2187 changes only the names of a named stack padded in place: an
+        # unnamed stack stays unnamed, and an out-of-place pad leaves the
+        # input as it is
+        stack = self._named_nontensor_stack(stack_dim, None)
+        pad(stack, [0, 1, 0, 1], inplace=True)
+        assert stack.names == [None, None]
+        assert stack.batch_size == ((4, 3) if stack_dim == 0 else (3, 4))
+        stack = self._named_nontensor_stack(stack_dim, ["x", "y"])
+        before = stack.tolist()
+        padded = pad(stack, [0, 0, 0, 1])
+        assert padded is not stack
+        assert stack.names == ["x", "y"]
+        assert stack.tolist() == before
+        assert padded.tolist() == [row + [None] for row in before]
+
 
 class TestPRClaims:
     """Behaviour that the descriptions of merged PRs promise and no other test covers.
