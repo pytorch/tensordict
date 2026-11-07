@@ -925,6 +925,92 @@ class TestLazyStackedTensorDict:
             ]
             assert [t.tolist() for t in ls.get(("n", "b"), as_list=True)] == expected
 
+    def test_ragged_update_at_nested_broadcast_writes(self):
+        # #3503: a value with a nested tensordict that the members broadcast
+        # over a sliced ragged dim writes every leaf of the selected rows of
+        # each member, as a stack without a ragged dim does
+        def make(sizes):
+            return lazy_stack(
+                [
+                    TensorDict(
+                        a=torch.zeros(*bs, 1),
+                        n=TensorDict(b=torch.zeros(bs), batch_size=bs),
+                        batch_size=bs,
+                    )
+                    for bs in sizes
+                ]
+            )
+
+        def value(*bs):
+            return TensorDict(
+                a=torch.ones(*bs, 1),
+                n=TensorDict(b=torch.ones(bs), batch_size=bs),
+                batch_size=bs,
+            )
+
+        ls = make(([2, 3], [3, 2], [1, 1]))
+        ls.update_at_(value(2), (1, slice(None)))
+        for key in ("a", ("n", "b")):
+            got = [t.flatten().tolist() for t in ls.get(key, as_list=True)]
+            assert got == [[0.0] * 6, [1.0] * 6, [0.0]]
+        ls = make(([2], [3], [1]))
+        ls.update_at_(value(1), (slice(None), slice(0, 2)))
+        for key in ("a", ("n", "b")):
+            got = [t.flatten().tolist() for t in ls.get(key, as_list=True)]
+            assert got == [[1.0, 1.0], [1.0, 1.0, 0.0], [1.0]]
+        ls = make(([2], [3], [1]))
+        ls.update_at_(value(3, 1), (slice(None), slice(0, 1)))
+        for key in ("a", ("n", "b")):
+            got = [t.flatten().tolist() for t in ls.get(key, as_list=True)]
+            assert got == [[1.0, 0.0], [1.0, 0.0, 0.0], [1.0]]
+
+    def test_ragged_update_at_nested_broadcast_unchanged(self):
+        # #3503: a value that does not fit every member keeps the old error and
+        # writes nothing; a list index out of range of a member, a missing key,
+        # a lazy member and a dict value too
+        def make(sizes=([2], [3], [1])):
+            return lazy_stack(
+                [
+                    TensorDict(
+                        a=torch.zeros(*bs, 1),
+                        n=TensorDict(b=torch.zeros(bs), batch_size=bs),
+                        batch_size=bs,
+                    )
+                    for bs in sizes
+                ]
+            )
+
+        def value(*bs, extra=False):
+            td = TensorDict(
+                a=torch.ones(*bs, 1),
+                n=TensorDict(b=torch.ones(bs), batch_size=bs),
+                batch_size=bs,
+            )
+            if extra:
+                td["n", "c"] = torch.ones(*bs)
+            return td
+
+        nested = lazy_stack([make(([2], [3])), make(([1], [2]))])
+        for ls, val, index in (
+            (make(), value(2, 1), (slice(None), slice(0, 2))),
+            (make(), value(1, extra=True), (slice(None), slice(0, 2))),
+            (
+                make(([2, 3], [3, 2], [1, 1])),
+                value(),
+                (slice(None), slice(None), [0, 1]),
+            ),
+            (nested, value(1), (1, 1, slice(0, 1))),
+            (
+                make(),
+                {"a": torch.ones(2, 1), "n": {"b": torch.ones(2)}},
+                (1, slice(0, 2)),
+            ),
+        ):
+            before = ls.clone()
+            with pytest.raises(ValueError, match="length should not be negative"):
+                ls.update_at_(val, index)
+            assert (ls == before).all()
+
     def test_to_dict_state_dict_exclusive_keys_raise(self):
         # to_dict and state_dict would silently drop the keys that are not in
         # every member, so they raise

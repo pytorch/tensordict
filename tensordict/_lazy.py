@@ -5411,7 +5411,18 @@ class LazyStackedTensorDict(TensorDictBase):
                     _is_tensor_collection(type(value))
                     for value in input_dict_or_td.values()
                 ):
-                    raise ragged_error
+                    # expand the piece of each member to the rows it selects,
+                    # as a stack without a ragged dim expands the value, and
+                    # check every piece before any member is written
+                    return self._update_at_ragged_broadcast(
+                        input_dict_or_td,
+                        idx,
+                        indexed_bs,
+                        lead,
+                        ragged_error,
+                        non_blocking=non_blocking,
+                        keys_to_update=keys_to_update,
+                    )
                 if -1 in indexed_bs[:lead]:
                     # expand cannot add a leading dim of size -1: a ragged
                     # dim that the value does not have gets size 1
@@ -5437,6 +5448,61 @@ class LazyStackedTensorDict(TensorDictBase):
                 non_blocking=non_blocking,
                 **kwargs,
             )
+        return self
+
+    def _update_at_ragged_broadcast(
+        self,
+        value: TensorDictBase,
+        idx: IndexType,
+        indexed_bs: torch.Size,
+        lead: int,
+        ragged_error: ValueError,
+        *,
+        non_blocking: bool,
+        keys_to_update: list[tuple[str, ...]] | None,
+    ) -> Self:
+        """Writes a value that a sliced ragged dim broadcasts into each member, for :meth:`_update_at_`.
+
+        Each member's piece is expanded to the rows the member selects. If a
+        piece does not fit its member, ``ragged_error`` is raised before any
+        member is written.
+        """
+        try:
+            # a ragged dim gets size 1, which each piece expands
+            value = value.expand(
+                torch.Size(
+                    1 if size == -1 and dim < lead else size
+                    for dim, size in enumerate(indexed_bs)
+                )
+            )
+            plan = []
+            for member, member_index, piece in self._split_value(idx, value):
+                td = self.tensordicts[member]
+                member_index = () if member_index is None else member_index
+                if not isinstance(td, TensorDict):
+                    raise ragged_error
+                selected = _getitem_batch_size(td.batch_size, member_index)
+                if piece.batch_size != selected:
+                    piece = piece.expand(selected)
+                for key, leaf in piece.items(True, True):
+                    key = _unravel_key_to_tuple(key)
+                    if keys_to_update is not None and not any(
+                        key[: len(k)] == k for k in keys_to_update
+                    ):
+                        continue
+                    dest = td._get_tuple(key, None)
+                    if not isinstance(leaf, Tensor) or not isinstance(dest, Tensor):
+                        raise ragged_error
+                    # indexing the entry checks the index against it
+                    shape = dest[member_index].shape
+                    if torch.broadcast_shapes(leaf.shape, shape) != shape:
+                        raise ragged_error
+                plan.append((td, member_index, piece))
+        except Exception:
+            raise ragged_error from None
+        kwargs = {} if keys_to_update is None else {"keys_to_update": keys_to_update}
+        for td, member_index, piece in plan:
+            td.update_at_(piece, member_index, non_blocking=non_blocking, **kwargs)
         return self
 
     def _innermost_tensordicts(self) -> list[TensorDictBase]:
