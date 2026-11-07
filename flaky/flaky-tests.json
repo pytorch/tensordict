@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-11-06T06:22:28.517391+00:00",
+  "generated_at": "2026-11-07T06:19:45.288023+00:00",
   "repository": "pytorch/tensordict",
   "analysis_period": {
     "start": "2026-11-04",
-    "end": "2026-11-05",
+    "end": "2026-11-06",
     "runs_analyzed": 30
   },
   "summary": {
-    "total_tests": 77664,
+    "total_tests": 77673,
     "flaky_count": 0,
     "flaky_case_count": 0,
     "new_flaky_count": 0,
