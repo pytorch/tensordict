@@ -963,6 +963,13 @@ class TestLazyStackedTensorDict:
         for key in ("a", ("n", "b")):
             got = [t.flatten().tolist() for t in ls.get(key, as_list=True)]
             assert got == [[1.0, 0.0], [1.0, 0.0, 0.0], [1.0]]
+        # without grad mode, a leaf that requires grad is written
+        ls = make(([2], [3], [1]))
+        ls.tensordicts[2].set("a", torch.zeros(1, 1, requires_grad=True), inplace=False)
+        with torch.no_grad():
+            ls.update_at_(value(1), (slice(None), slice(0, 2)))
+        got = [t.flatten().tolist() for t in ls.get("a", as_list=True)]
+        assert got == [[1.0, 1.0], [1.0, 1.0, 0.0], [1.0]]
 
     def test_ragged_update_at_nested_broadcast_unchanged(self):
         # #3503: a value that does not fit every member keeps the old error and
@@ -1010,6 +1017,57 @@ class TestLazyStackedTensorDict:
             with pytest.raises(ValueError, match="length should not be negative"):
                 ls.update_at_(val, index)
             assert (ls == before).all()
+
+    def test_ragged_update_at_nested_broadcast_failing_write_unchanged(self):
+        # #3503: a leaf of the last member that the write would fail on keeps
+        # the old error, and the members before it are not written
+        def make(key, leaf, sizes=([2], [3], [1])):
+            tds = [
+                TensorDict(
+                    a=torch.zeros(*bs, 1),
+                    n=TensorDict(b=torch.zeros(bs), batch_size=bs),
+                    batch_size=bs,
+                )
+                for bs in sizes
+            ]
+            tds[-1].set(key, leaf, inplace=False)
+            return lazy_stack(tds)
+
+        def value(*bs, requires_grad=False):
+            return TensorDict(
+                a=torch.ones(*bs, 1, requires_grad=requires_grad),
+                n=TensorDict(
+                    b=torch.ones(bs, requires_grad=requires_grad), batch_size=bs
+                ),
+                batch_size=bs,
+            )
+
+        with torch.inference_mode():
+            inference = torch.zeros(1)
+        with torch.no_grad():
+            no_grad_view = torch.zeros(2)[:1]
+        index = (slice(None), slice(0, 2))
+        for ls, val, idx in (
+            (make("a", torch.zeros(1, 1, requires_grad=True)), value(1), index),
+            (
+                make(("n", "b"), torch.zeros(1).expand(2), [[2], [3], [2]]),
+                value(1),
+                index,
+            ),
+            (make(("n", "b"), inference), value(1), index),
+            (make(("n", "b"), no_grad_view), value(1, requires_grad=True), index),
+            (
+                make(
+                    ("n", "b"), torch.zeros(1, 2, dtype=torch.float64), [[2, 2], [1, 2]]
+                ),
+                value(2),
+                (slice(None), slice(0, 1), [0, 1]),
+            ),
+        ):
+            before = ls.clone()
+            with pytest.raises(ValueError, match="length should not be negative"):
+                ls.update_at_(val, idx)
+            assert (ls.detach() == before.detach()).all()
 
     def test_to_dict_state_dict_exclusive_keys_raise(self):
         # to_dict and state_dict would silently drop the keys that are not in

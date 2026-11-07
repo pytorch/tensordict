@@ -5493,6 +5493,27 @@ class LazyStackedTensorDict(TensorDictBase):
                     dest = td._get_tuple(key, None)
                     if not isinstance(leaf, Tensor) or not isinstance(dest, Tensor):
                         raise ragged_error
+                    # the write may raise for these after it has written
+                    # the members before this one: keep the error instead
+                    if (
+                        leaf.dtype != dest.dtype
+                        or leaf.device != dest.device
+                        or (
+                            torch.is_grad_enabled()
+                            and (leaf.requires_grad or dest.requires_grad)
+                        )
+                        or (
+                            dest.is_inference()
+                            and not torch.is_inference_mode_enabled()
+                        )
+                        or any(
+                            stride == 0 and size > 1
+                            for stride, size in zip(dest.stride(), dest.shape)
+                        )
+                        or leaf.untyped_storage().data_ptr()
+                        == dest.untyped_storage().data_ptr()
+                    ):
+                        raise ragged_error
                     # indexing the entry checks the index against it
                     shape = dest[member_index].shape
                     if torch.broadcast_shapes(leaf.shape, shape) != shape:
