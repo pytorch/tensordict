@@ -2,6 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
+import collections
 import contextlib
 import warnings
 
@@ -165,7 +166,7 @@ def _unsplit_keys(self, out, separator):
     if len(keys) != len(self_keys) or set(keys) != self_keys:
         # the op made two keys of out one, or the block changed the keys
         return None
-    source = self.empty()
+    pairs = []
     for split_key, key in keys.items():
         value = self._get_tuple(split_key, None)
         dest = out._get_tuple(key, None)
@@ -176,11 +177,23 @@ def _unsplit_keys(self, out, separator):
             and value.shape == dest.shape
             and value.device == dest.device
             and not (value.is_complex() and not dest.is_complex())
+        ):
+            return None
+        pairs.append((key, value, dest))
+    # update_ copies one leaf at a time, so a value that shares memory with
+    # any entry, or an entry that shares memory with another, could be
+    # overwritten before it is read. Empty tensors can all have data_ptr 0.
+    storages = collections.Counter(
+        dest.untyped_storage().data_ptr() for _, _, dest in pairs if dest.numel()
+    )
+    source = self.empty()
+    for key, value, dest in pairs:
+        if (
+            value is not dest
+            and value.numel()
             and (
-                value is dest
-                or not dest.numel()
-                or value.untyped_storage().data_ptr()
-                != dest.untyped_storage().data_ptr()
+                storages[value.untyped_storage().data_ptr()]
+                or storages[dest.untyped_storage().data_ptr()] > 1
             )
         ):
             return None

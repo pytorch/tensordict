@@ -7110,6 +7110,32 @@ def test_unflatten_keys_context_manager_keyword_separator_locked_unchanged():
         with td.unflatten_keys(separator="/") as f:
             f.set(("b", "c"), torch.ones(2))
     assert (td["b", "c"] == 0).all()
+    # a block that gives one key the tensor of another, and one tensor
+    # stored under two keys: update_ would overwrite a value before it reads it
+    td = TensorDict({"b": {"c": torch.ones(2)}, "a/z": torch.full((2,), 2.0)}, [2])
+    td.lock_()
+    with pytest.raises(KeyError, match="b.c"):
+        with td.unflatten_keys(separator="/") as f:
+            bc, az = f.get(("b", "c")), f.get(("a", "z"))
+            f.set(("b", "c"), az)
+            f.set(("a", "z"), bc)
+    assert (td["b", "c"] == 1).all()
+    assert (td["a/z"] == 2).all()
+    td = TensorDict({"a/z": torch.full((2,), 2.0), "b": {"c": torch.ones(2)}}, [2])
+    td.lock_()
+    with pytest.raises(KeyError, match="b.c"):
+        with td.unflatten_keys(separator="/") as f:
+            f.set(("b", "c"), f.get(("a", "z")))
+            f.set(("a", "z"), torch.full((2,), 7.0))
+    assert (td["b", "c"] == 1).all()
+    assert (td["a/z"] == 2).all()
+    shared = torch.zeros(2)
+    td = TensorDict({"b": {"c": shared}, "a/z": shared}, [2]).lock_()
+    with pytest.raises(KeyError, match="b.c"):
+        with td.unflatten_keys(separator="/") as f:
+            f.set(("b", "c"), torch.ones(2))
+            f.set(("a", "z"), torch.full((2,), 3.0))
+    assert (shared == 0).all()
     # a key that collides with a nested one under "."
     td = TensorDict({"b": {"c": torch.zeros(2)}, "b.c": torch.zeros(2)}, [2]).lock_()
     with pytest.raises(KeyError, match="collide"):
