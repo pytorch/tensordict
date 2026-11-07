@@ -7048,6 +7048,23 @@ def test_unflatten_keys_context_manager_keyword_separator_locked_nested(
     assert (td["b", "c"] == expected).all()
 
 
+def test_unflatten_keys_context_manager_keyword_separator_locked_mapped(tmp_path):
+    # #3517: a value that shares memory with an entry through a second mapping
+    # of the same file, which an address check cannot see, is read before the
+    # entry is written
+    filename = str(tmp_path / "x.bin")
+    torch.tensor([1.0, 10.0, 2.0, 20.0]).numpy().tofile(filename)
+    x = torch.from_file(filename, shared=True, size=4).view(2, 2)
+    td = TensorDict({"b": {"c": x}, "a/z": torch.zeros(2, 2)}, [2]).lock_()
+    with td.unflatten_keys(separator="/") as f:
+        y = torch.from_file(filename, shared=True, size=4).view(2, 2)
+        f.set(("a", "z"), y)
+        f.set(("b", "c"), torch.full((2, 2), 7.0))
+    assert (td["a/z"] == torch.tensor([[1.0, 10.0], [2.0, 20.0]])).all()
+    assert (td["b", "c"] == 7).all()
+    assert (x == 7).all()
+
+
 def test_unflatten_keys_context_manager_keyword_separator_locked_unchanged():
     # #3517 leaves these as they were: a key added in the block, and a lazy
     # stack whose members hold leaves of different shapes, still raise.

@@ -199,7 +199,9 @@ def _unsplit_keys(self, out, separator):
             start, end = _storage_range(value)
             if any(start < e and s < end for s, e in ranges):
                 return None
-        source.set(key, value)
+        # a copy read before any write also covers memory that the address
+        # check cannot see shared, such as two mappings of one file
+        source.set(key, value if value is dest else value.clone())
     return source
 
 
