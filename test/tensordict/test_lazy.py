@@ -1018,6 +1018,49 @@ class TestLazyStackedTensorDict:
                 ls.update_at_(val, index)
             assert (ls == before).all()
 
+        # a sub-tensordict of the value that has no sub-tensordict of the same
+        # batch size in a member, or a value that is not a plain TensorDict
+        def with_entry(key, entry, *bs):
+            td = value(*bs)
+            td._set_tuple(key, entry, inplace=False, validated=False)
+            return td
+
+        locked = make()
+        for td in locked.tensordicts:
+            td.lock_()
+        tensor_m = make()
+        tensor_m.tensordicts[-1].set(("n", "m"), torch.zeros(1), inplace=False)
+        wide = lazy_stack(
+            [
+                TensorDict(
+                    a=torch.zeros(*bs, 1),
+                    n=TensorDict(b=torch.zeros(*bs, 2), batch_size=[*bs, 2]),
+                    batch_size=bs,
+                )
+                for bs in ([2, 3], [3, 2], [1, 1])
+            ]
+        )
+        wide_value = TensorDict(
+            a=torch.ones(1, 1),
+            n=TensorDict(b=torch.ones(1, 1), batch_size=[1, 1]),
+            batch_size=[1],
+        )
+        empty = TensorDict({}, batch_size=[1])
+        index = (slice(None), slice(0, 1))
+        for ls, val in (
+            (locked, with_entry(("n", "m"), empty, 1)),
+            (make(), with_entry(("z",), empty, 1)),
+            (tensor_m, with_entry(("n", "m"), empty, 1)),
+            (wide, wide_value),
+            (make(), lazy_stack([value()])),
+        ):
+            before = ls.clone()
+            keys = [set(td.keys(True)) for td in ls.tensordicts]
+            with pytest.raises(ValueError, match="length should not be negative"):
+                ls.update_at_(val, index)
+            assert [set(td.keys(True)) for td in ls.tensordicts] == keys
+            assert (ls == before).all()
+
     def test_ragged_update_at_nested_broadcast_failing_write_unchanged(self):
         # #3503: a leaf of the last member that the write would fail on keeps
         # the old error, and the members before it are not written

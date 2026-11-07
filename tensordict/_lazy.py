@@ -5505,8 +5505,15 @@ class LazyStackedTensorDict(TensorDictBase):
                 key[: len(k)] == k for k in keys_to_update
             )
 
+        def walked(key):
+            # the member writes into a sub-tensordict that is selected or
+            # holds a selected key
+            return selected(key) or any(k[: len(key)] == key for k in keys_to_update)
+
         try:
-            if not all(_is_plain_td(td) for td in self.tensordicts):
+            if not (
+                _is_plain_td(value) and all(_is_plain_td(td) for td in self.tensordicts)
+            ):
                 raise ragged_error
             sources = []
             for key, leaf in value.items(True, True):
@@ -5530,6 +5537,18 @@ class LazyStackedTensorDict(TensorDictBase):
                 rows = _getitem_batch_size(td.batch_size, member_index)
                 if piece.batch_size != rows:
                     piece = piece.expand(rows)
+                for key, entry in piece.items(True, False):
+                    key = _unravel_key_to_tuple(key)
+                    if isinstance(entry, Tensor) or not walked(key):
+                        continue
+                    # an existing sub-tensordict of the batch size of the
+                    # entry, so that no key is created and no check raises
+                    dest = td._get_tuple(key, None)
+                    if not (
+                        type(dest) is TensorDict
+                        and dest[member_index].batch_size == entry.batch_size
+                    ):
+                        raise ragged_error
                 for key, leaf in piece.items(True, True):
                     key = _unravel_key_to_tuple(key)
                     if not selected(key):
