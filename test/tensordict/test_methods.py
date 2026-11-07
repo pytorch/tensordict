@@ -7019,6 +7019,64 @@ def test_flatten_keys_context_manager_keyword_separator_inplace(keyword):
     assert set(td.keys(True, True)) == {"a", ("b", "c"), stray}
 
 
+@pytest.mark.parametrize("nested_block", [False, True])
+@pytest.mark.parametrize("action", ["none", "set_", "set"])
+def test_unflatten_keys_context_manager_keyword_separator_locked_nested(
+    nested_block, action
+):
+    # #3517: on a locked tensordict that holds nested keys and keys with the
+    # separator in them, the exit of a with-block around
+    # unflatten_keys(separator=...) raised KeyError, also around a nested
+    # flatten_keys(separator=...) block, where v0.15.4 returned.
+    td = TensorDict({"b": {"c": torch.zeros(2)}, "a/z": torch.zeros(2)}, [2])
+    td["s/t"] = "hello"
+    td.lock_()
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        with td.unflatten_keys(separator="/") as f:
+            if nested_block:
+                with f.flatten_keys(separator="/") as g:
+                    if action != "none":
+                        getattr(g, action)("a/z", torch.ones(2))
+                        getattr(g, action)("b/c", torch.ones(2))
+                        g.set("s/t", "bye")
+            elif action != "none":
+                getattr(f, action)(("a", "z"), torch.ones(2))
+                getattr(f, action)(("b", "c"), torch.ones(2))
+                f.set(("s", "t"), "bye")
+    assert td.is_locked
+    assert set(td.keys(True, True, is_leaf=_is_leaf_nontensor)) == {
+        ("b", "c"),
+        "a/z",
+        "s/t",
+    }
+    expected = 0.0 if action == "none" else 1.0
+    assert (td["a/z"] == expected).all()
+    assert (td["b", "c"] == expected).all()
+    assert td["s/t"] == ("hello" if action == "none" else "bye")
+
+
+def test_unflatten_keys_context_manager_keyword_separator_locked_unchanged():
+    # #3517 leaves these as they were: a key added in the block, and a lazy
+    # stack whose members hold leaves of different shapes, still raise.
+    td = TensorDict({"b": {"c": torch.zeros(2)}, "a/z": torch.zeros(2)}, [2]).lock_()
+    with pytest.raises(KeyError, match="b.c"):
+        with td.unflatten_keys(separator="/") as f:
+            f.set(("n", "m"), torch.ones(2))
+    td = LazyStackedTensorDict(
+        TensorDict({"b": {"c": torch.zeros(3)}, "a/z": torch.zeros(2)}, []),
+        TensorDict({"b": {"c": torch.zeros(4)}, "a/z": torch.zeros(2)}, []),
+    ).lock_()
+    with pytest.raises(KeyError, match="b.c"):
+        with td.unflatten_keys(separator="/"):
+            pass
+    # unlocked: the stray keys of the "." reversal are a separate bug
+    td = TensorDict({"b": {"c": torch.zeros(2)}, "a/z": torch.zeros(2)}, [2])
+    with td.unflatten_keys(separator="/"):
+        pass
+    assert set(td.keys(True, True)) == {("b", "c"), "a/z", "a.z", "b.c"}
+
+
 @pytest.mark.parametrize("device", get_available_devices())
 def test_cat_tensors_shape_mismatch_preserves_entries(device):
     # Last dims differ, and dim=1 is not that dim, so cat raises.

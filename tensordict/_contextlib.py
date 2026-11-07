@@ -109,6 +109,40 @@ def _reverse_flatten_keys(self, args, kwargs, out):
 LAST_OP_MAPS["flatten_keys"] = _reverse_flatten_keys
 
 
+def _unsplit_keys(self, out, separator):
+    """Returns the leaves of ``self`` under the keys of ``out`` they were split from.
+
+    Returns ``None`` unless splitting the keys of ``out`` at ``separator`` gives
+    the keys of ``self`` exactly, one for one.
+    """
+    # A genuine circular import: tensordict.base imports this module before it
+    # defines _is_leaf_nontensor.
+    from tensordict.base import _is_leaf_nontensor
+
+    if is_tensorclass(self) or is_tensorclass(out):
+        return None
+    keys = {}
+    for key in out.keys(True, True, is_leaf=_is_leaf_nontensor):
+        key = (key,) if isinstance(key, str) else key
+        # unflatten_keys splits the keys of the root only
+        keys[(*key[0].split(separator), *key[1:])] = key
+    self_keys = {
+        (key,) if isinstance(key, str) else key
+        for key in self.keys(True, True, is_leaf=_is_leaf_nontensor)
+    }
+    if len(keys) != len(self_keys) or set(keys) != self_keys:
+        # the op made two keys of out one, or the block changed the keys
+        return None
+    source = self.empty()
+    try:
+        for split_key, key in keys.items():
+            source.set(key, self._get_tuple(split_key, None))
+    except RuntimeError:
+        # a lazy stack whose members hold leaves of different shapes
+        return None
+    return source
+
+
 def _reverse_unflatten_keys(self, args, kwargs, out):
     sep = args[0] if args else KEY_SEPARATOR
     separator = kwargs.get("separator", sep)
@@ -126,8 +160,23 @@ def _reverse_unflatten_keys(self, args, kwargs, out):
         sep = separator
     if not out.is_locked:
         return out.update(self.flatten_keys(sep), inplace=False)
-    else:
+    try:
         return out.update_(self.flatten_keys(sep))
+    except KeyError:
+        if not (
+            isinstance(separator, str)
+            and separator
+            and separator != sep
+            and not _changed_in_place(self, out)
+        ):
+            raise
+        # #3517: out holds nested keys, which flatten_keys cannot tell from
+        # the keys that the op split. Where the block kept the keys that the
+        # op made, write each leaf back under its key in out.
+        source = _unsplit_keys(self, out, separator)
+        if source is None:
+            raise
+    return out.update_(source)
 
 
 LAST_OP_MAPS["unflatten_keys"] = _reverse_unflatten_keys
