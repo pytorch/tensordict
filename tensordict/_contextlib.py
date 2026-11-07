@@ -6,6 +6,7 @@ import contextlib
 import warnings
 
 import numpy as np
+import torch
 from tensordict.utils import (
     _parse_to,
     _user_stacklevel,
@@ -116,8 +117,8 @@ def _unsplit_keys(self, out, separator):
     the keys of ``self`` exactly, one for one.
     """
     # A genuine circular import: tensordict.base imports this module before it
-    # defines _is_leaf_nontensor.
-    from tensordict.base import _is_leaf_nontensor
+    # defines these.
+    from tensordict.base import _is_leaf_nontensor, _stored_value
 
     if is_tensorclass(self) or is_tensorclass(out):
         return None
@@ -136,9 +137,27 @@ def _unsplit_keys(self, out, separator):
     source = self.empty()
     try:
         for split_key, key in keys.items():
-            source.set(key, self._get_tuple(split_key, None))
+            value = self._get_tuple(split_key, None)
+            dest = out._get_tuple(key, None)
+            # write nothing unless update_ takes every leaf without raising,
+            # skipping or warning
+            if not isinstance(dest, torch.Tensor):
+                # a non-tensor leaf
+                if type(value) is not type(dest) or _stored_value(value, dest) is None:
+                    return None
+            elif not (
+                isinstance(value, torch.Tensor)
+                and torch.broadcast_shapes(value.shape, dest.shape) == dest.shape
+                and not (dest.requires_grad and torch.is_grad_enabled())
+                and not (dest.is_inference() and not torch.is_inference_mode_enabled())
+                and not (value.is_complex() and not dest.is_complex())
+                and 0 not in [st for st, n in zip(dest.stride(), dest.shape) if n > 1]
+            ):
+                return None
+            source.set(key, value)
     except RuntimeError:
-        # a lazy stack whose members hold leaves of different shapes
+        # a lazy stack whose members hold leaves of different shapes, or a
+        # value that does not broadcast to its leaf
         return None
     return source
 
@@ -160,8 +179,9 @@ def _reverse_unflatten_keys(self, args, kwargs, out):
         sep = separator
     if not out.is_locked:
         return out.update(self.flatten_keys(sep), inplace=False)
+    flat = self.flatten_keys(sep)
     try:
-        return out.update_(self.flatten_keys(sep))
+        return out.update_(flat)
     except KeyError:
         if not (
             isinstance(separator, str)

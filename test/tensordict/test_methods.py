@@ -7070,6 +7070,25 @@ def test_unflatten_keys_context_manager_keyword_separator_locked_unchanged():
     with pytest.raises(KeyError, match="b.c"):
         with td.unflatten_keys(separator="/"):
             pass
+    # a write-back that update_ would reject raises the KeyError, with nothing
+    # written: a value of another shape, a Parameter leaf in grad mode
+    td = TensorDict({"b": {"c": torch.zeros(2)}, "a/z": torch.zeros(2)}, [2]).lock_()
+    with pytest.raises(KeyError, match="b.c"):
+        with td.unflatten_keys(separator="/") as f:
+            f.set(("b", "c"), torch.ones(2))
+            f.set(("a", "z"), torch.ones(2, 3))
+    assert (td["b", "c"] == 0).all()
+    params = TensorDictParams(
+        TensorDict({"b": {"c": torch.zeros(2)}, "a/z": torch.zeros(2)}, [2])
+    ).lock_()
+    with pytest.raises(KeyError, match="b.c"):
+        with params.unflatten_keys(separator="/"):
+            pass
+    # a key that collides with a nested one under "."
+    td = TensorDict({"b": {"c": torch.zeros(2)}, "b.c": torch.zeros(2)}, [2]).lock_()
+    with pytest.raises(KeyError, match="collide"):
+        with td.unflatten_keys(separator="/"):
+            pass
     # unlocked: the stray keys of the "." reversal are a separate bug
     td = TensorDict({"b": {"c": torch.zeros(2)}, "a/z": torch.zeros(2)}, [2])
     with td.unflatten_keys(separator="/"):
