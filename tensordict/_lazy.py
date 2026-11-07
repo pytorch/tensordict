@@ -736,6 +736,37 @@ def _collect_memory(data, memory: set) -> None:
         memory.add(id(data))
 
 
+def _is_plain_td(td) -> bool:
+    """Whether ``td`` is an exact TensorDict at every depth, with only tensor leaves, so that ``_get_tuple`` returns the stored leaf."""
+    return type(td) is TensorDict and all(
+        isinstance(value, Tensor) or _is_plain_td(value) for value in td.values()
+    )
+
+
+def _is_plain_leaf(tensor) -> bool:
+    """Whether ``tensor`` is a plain strided tensor that an in-place copy writes, or is read from, without raising."""
+    if not (
+        type(tensor) is Tensor
+        and tensor.layout is torch.strided
+        and not tensor.is_nested
+        and not tensor.is_quantized
+        and not tensor.is_inference()
+        and not (tensor.requires_grad and torch.is_grad_enabled())
+    ):
+        return False
+    # no expanded or internally overlapping dims
+    extent = 1
+    for stride, size in sorted(
+        (stride, size)
+        for stride, size in zip(tensor.stride(), tensor.shape)
+        if size > 1
+    ):
+        if stride < extent:
+            return False
+        extent += stride * (size - 1)
+    return True
+
+
 def _broadcasts(shape: torch.Size, other_shape: torch.Size) -> bool:
     try:
         torch.broadcast_shapes(shape, other_shape)
@@ -5463,11 +5494,26 @@ class LazyStackedTensorDict(TensorDictBase):
     ) -> Self:
         """Writes a value that a sliced ragged dim broadcasts into each member, for :meth:`_update_at_`.
 
-        Each member's piece is expanded to the rows the member selects. If a
-        piece does not fit its member, ``ragged_error`` is raised before any
-        member is written.
+        Each member's piece is expanded to the rows the member selects. The
+        write goes ahead only for exact TensorDict members and plain tensor
+        leaves that are known to take it; otherwise ``ragged_error`` is raised
+        before any member is written.
         """
+
+        def selected(key):
+            return keys_to_update is None or any(
+                key[: len(k)] == k for k in keys_to_update
+            )
+
         try:
+            if not all(_is_plain_td(td) for td in self.tensordicts):
+                raise ragged_error
+            sources = []
+            for key, leaf in value.items(True, True):
+                if selected(_unravel_key_to_tuple(key)):
+                    if not _is_plain_leaf(leaf):
+                        raise ragged_error
+                    sources.append(leaf)
             # a ragged dim gets size 1, which each piece expands
             value = value.expand(
                 torch.Size(
@@ -5476,42 +5522,28 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
             )
             plan = []
+            # the storage of each destination leaf
+            dests = {}
             for member, member_index, piece in self._split_value(idx, value):
                 td = self.tensordicts[member]
                 member_index = () if member_index is None else member_index
-                if not isinstance(td, TensorDict):
-                    raise ragged_error
-                selected = _getitem_batch_size(td.batch_size, member_index)
-                if piece.batch_size != selected:
-                    piece = piece.expand(selected)
+                rows = _getitem_batch_size(td.batch_size, member_index)
+                if piece.batch_size != rows:
+                    piece = piece.expand(rows)
                 for key, leaf in piece.items(True, True):
                     key = _unravel_key_to_tuple(key)
-                    if keys_to_update is not None and not any(
-                        key[: len(k)] == k for k in keys_to_update
-                    ):
+                    if not selected(key):
                         continue
                     dest = td._get_tuple(key, None)
-                    if not isinstance(leaf, Tensor) or not isinstance(dest, Tensor):
-                        raise ragged_error
-                    # the write may raise for these after it has written
-                    # the members before this one: keep the error instead
-                    if (
-                        leaf.dtype != dest.dtype
-                        or leaf.device != dest.device
-                        or (
-                            torch.is_grad_enabled()
-                            and (leaf.requires_grad or dest.requires_grad)
-                        )
-                        or (
-                            dest.is_inference()
-                            and not torch.is_inference_mode_enabled()
-                        )
-                        or any(
-                            stride == 0 and size > 1
-                            for stride, size in zip(dest.stride(), dest.shape)
-                        )
-                        or leaf.untyped_storage().data_ptr()
-                        == dest.untyped_storage().data_ptr()
+                    # write only where the write is known not to raise after
+                    # it has written the members before this one
+                    if not (
+                        _is_plain_leaf(dest)
+                        and type(leaf) is Tensor
+                        and leaf.dtype == dest.dtype
+                        and leaf.device == dest.device
+                        and dests.setdefault(dest.untyped_storage().data_ptr(), dest)
+                        is dest
                     ):
                         raise ragged_error
                     # indexing the entry checks the index against it
@@ -5519,6 +5551,9 @@ class LazyStackedTensorDict(TensorDictBase):
                     if torch.broadcast_shapes(leaf.shape, shape) != shape:
                         raise ragged_error
                 plan.append((td, member_index, piece))
+            for leaf in sources:
+                if dests.get(leaf.untyped_storage().data_ptr(), leaf) is not leaf:
+                    raise ragged_error
         except Exception:
             raise ragged_error from None
         kwargs = {} if keys_to_update is None else {"keys_to_update": keys_to_update}

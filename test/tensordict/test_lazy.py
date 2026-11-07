@@ -1042,12 +1042,34 @@ class TestLazyStackedTensorDict:
                 batch_size=bs,
             )
 
+        def make_inner_lazy(leaf):
+            # members whose sub-tensordict is a lazy stack, which reads a
+            # stacked copy of its leaves
+            tds = [
+                TensorDict(
+                    a=torch.zeros(*bs, 1),
+                    n=lazy_stack(
+                        [
+                            TensorDict(b=torch.zeros(bs[1:]), batch_size=bs[1:])
+                            for _ in range(bs[0])
+                        ]
+                    ),
+                    batch_size=bs,
+                )
+                for bs in ([2, 2], [3, 2], [1, 2])
+            ]
+            tds[-1]["n"].tensordicts[0].set("b", leaf, inplace=False)
+            return lazy_stack(tds)
+
         with torch.inference_mode():
             inference = torch.zeros(1)
+            inference2 = torch.zeros(2)
         with torch.no_grad():
             no_grad_view = torch.zeros(2)[:1]
         index = (slice(None), slice(0, 2))
         for ls, val, idx in (
+            (make_inner_lazy(torch.zeros(1).expand(2)), value(1), index),
+            (make_inner_lazy(inference2), value(1), index),
             (make("a", torch.zeros(1, 1, requires_grad=True)), value(1), index),
             (
                 make(("n", "b"), torch.zeros(1).expand(2), [[2], [3], [2]]),
