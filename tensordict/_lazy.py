@@ -1532,8 +1532,8 @@ class LazyStackedTensorDict(TensorDictBase):
     def numel(self) -> int:
         batch_size = self._batch_size
         if -1 not in batch_size:
-            # max(1, n) for n >= 0, without the cost of the builtin call
-            return batch_size.numel() or 1
+            # Not `n or 1`: bool() cannot be traced on an unbacked size
+            return max(1, batch_size.numel())
         numel = _ragged_numel(self)
         if numel is None:
             return max(1, batch_size.numel())
