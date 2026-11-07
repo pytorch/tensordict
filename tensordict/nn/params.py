@@ -924,8 +924,9 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
     def _from_converted(self, params: TensorDictBase) -> TensorDictParams:
         # Wraps what to(), cpu() or cuda() returned for self._param_td, keeping
         # the parameters and buffers of self and its no_convert.
-        # set_at_ and update_at_ can leave a NonTensorStack in _param_td: it
-        # holds no tensor to wrap (#3504).
+        # Row writes (set_at_, update_at_, __setitem__ by index), set and update
+        # can leave a NonTensorStack in _param_td: it holds no tensor to wrap
+        # (#3504).
         params = _apply_leaves(
             params, _wrap_like, self._param_td, non_tensor_stack_leaves=True
         )

@@ -7198,6 +7198,50 @@ class TestTensorDictParams:
         assert [name for name, _ in out.named_parameters()] == ["x"]
         assert [name for name, _ in out.named_buffers()] == ["i"]
 
+    @pytest.mark.parametrize(
+        "write,expected",
+        [
+            ("set", ["a", "b", "c"]),
+            ("setitem_key", ["a", "b", "c"]),
+            ("update", ["a", "b", "c"]),
+            ("setitem_index", ["zz", "old", "old"]),
+            ("setitem_slice", ["p", "q", "old"]),
+        ],
+    )
+    def test_to_after_non_tensor_stack_write(self, write, expected):
+        # #3504: to() also raised after set, __setitem__ or update put a
+        # NonTensorStack in the params
+        td = TensorDict(x=torch.zeros(3), i=torch.arange(3), batch_size=[3])
+        td.set_non_tensor("s", "old")
+        params = TensorDictParams(td)
+        with torch.no_grad():
+            if write == "set":
+                params.set("s", NonTensorStack("a", "b", "c"))
+            elif write == "setitem_key":
+                params["s"] = NonTensorStack("a", "b", "c")
+            elif write == "update":
+                params.update(
+                    TensorDict(s=NonTensorStack("a", "b", "c"), batch_size=[3])
+                )
+            elif write == "setitem_index":
+                params[0] = TensorDict(
+                    x=torch.ones(()), i=torch.ones((), dtype=torch.long), s="zz"
+                )
+            else:
+                params[0:2] = TensorDict(
+                    x=torch.ones(2),
+                    i=torch.ones(2, dtype=torch.long),
+                    s=NonTensorStack("p", "q"),
+                    batch_size=[2],
+                )
+        out = params.to(torch.float64)
+        assert type(out) is TensorDictParams
+        assert out.get("s").tolist() == expected
+        assert isinstance(out["x"], nn.Parameter)
+        assert out["x"].dtype == torch.float64
+        assert [name for name, _ in out.named_parameters()] == ["x"]
+        assert [name for name, _ in out.named_buffers()] == ["i"]
+
     def test_non_tensor_stack_constructor_raises(self):
         # #3504: the constructor still rejects a lazy stack, a NonTensorStack
         # included
