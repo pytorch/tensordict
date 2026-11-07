@@ -24,19 +24,16 @@ in your shell. tensordict is pure Python, so this needs no compiler.
 ## Formatting your code
 **Type annotation**
 
-tensordict is not strongly-typed, i.e. we do not enforce type hints, neither do we check that the ones that are present are valid. We rely on type hints purely for documentary purposes. Although this might change in the future, there is currently no need for this to be enforced at the moment.
-
-CI does run the [ty](https://docs.astral.sh/ty/) type checker, and fails when a
-change adds diagnostics to a file. To run the same check locally, from the
-repository root:
+tensordict does not enforce type hints at runtime, but they must be accurate: tensordict ships `py.typed`, so users' type checkers read them. CI type-checks a corpus of user code against them with mypy and pyright, and runs the [ty](https://docs.astral.sh/ty/) type checker on the package itself, which fails when a change adds diagnostics to a file. To run the ty check locally, from the repository root:
 ```
 uv venv --python 3.12 .ty-venv
 uv pip install --python .ty-venv/bin/python --torch-backend cpu \
     -c .github/ci-constraints.txt -r .github/ty-requirements.txt
 python .github/scripts/ty_ratchet.py
 ```
-If a new diagnostic is a ty false positive, `python .github/scripts/ty_ratchet.py --update`
-raises the baseline in `.github/ty-baseline.json`; say why in the PR.
+If a new diagnostic is a ty false positive, or a file was renamed or moved (its
+counts start again from 0 under the new path), `python .github/scripts/ty_ratchet.py --update`
+rewrites the baseline in `.github/ty-baseline.json`; say why in the PR.
 
 **Linting**
 

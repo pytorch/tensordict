@@ -114,9 +114,10 @@ def main() -> int:
                 if key(d) == k:
                     print(f"  {format_diagnostic(d)}")
         print(
-            "\nFix the new diagnostics. If one is a ty false positive, raise the "
-            "baseline with `python .github/scripts/ty_ratchet.py --update` and say "
-            "why in the PR."
+            "\nFix the new diagnostics. If one is a ty false positive, or the file "
+            "was renamed or moved (its counts start from 0 under the new path), "
+            "rewrite the baseline with `python .github/scripts/ty_ratchet.py "
+            "--update` and say why in the PR."
         )
         return 1
 
