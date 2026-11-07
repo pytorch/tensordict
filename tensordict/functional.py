@@ -400,6 +400,11 @@ def _pad_non_tensor(
                     break
         except (IndexError, ValueError):
             member_names = None
+        if member_names is not None:
+            # members that use a name twice (deprecated) are left as on main
+            named = [name for name in member_names if name is not None]
+            if len(set(named)) != len(named):
+                member_names = None
     result = _pad_non_tensor_rec(tensordict, pairs)
     try:
         names = tensordict._maybe_names()

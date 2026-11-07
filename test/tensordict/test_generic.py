@@ -17895,6 +17895,30 @@ class TestGeneric:
         assert stack.batch_size == (2, 4, 2)
         assert stack.names == ["x", "x", "z"]
 
+    def test_pad_nontensor_stack_inplace_names_member_dup_unchanged(self):
+        # #2187 leaves alone a stack whose members use a name twice (their
+        # stack dim name is also their leaves' name, which is deprecated):
+        # the in-place pad gives the same names and no warning, as before
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            mids = [
+                NonTensorStack(
+                    *[
+                        NonTensorData(f"{i}{j}", batch_size=[2], names=["z"])
+                        for j in range(3)
+                    ],
+                    stack_dim_name="z",
+                )
+                for i in range(2)
+            ]
+            stack = NonTensorStack(*mids, stack_dim_name="x")
+        assert stack.names == ["x", "z", "z"]
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            pad(stack, [1, 0, 1, 0, 1, 0], inplace=True)
+        assert stack.batch_size == (3, 4, 3)
+        assert stack.names == ["x", None, None]
+
 
 class TestPRClaims:
     """Behaviour that the descriptions of merged PRs promise and no other test covers.
