@@ -650,6 +650,7 @@ _ALLOWED_OVERRIDES = {
         "maybe_dense_stack": "the constructor that the method of TensorDictBase calls",
         "names": "the names of the members and of the stack dim",
         "non_tensor_items": "stacks the non-tensor leaves that every member holds",
+        "numel": "a ragged batch dim (-1) counts the rows of the members",
         "pop": "with a default, a deep key that keys(True) lacks is not read",
         "rename_key_": "renames in each member, which checks its lock and the keys",
         "zero_": "each member zeros itself: a file member writes zeros without reading",
