@@ -6594,6 +6594,53 @@ class TestTensorDictParams:
         assert params["s"] == "text"
 
     @staticmethod
+    def _params_with_extra_buffers():
+        params = TensorDictParams(TensorDict(a=torch.zeros(3)), no_convert=True)
+        params.register_buffer("unused", None)
+        params.register_buffer("np", torch.full((2,), 5.0), persistent=False)
+        return params
+
+    @pytest.mark.parametrize("assign", [True, False])
+    @pytest.mark.parametrize("strict", [True, False])
+    @pytest.mark.parametrize("none_values", [False, True])
+    def test_load_state_dict_none_buffer(self, none_values, strict, assign):
+        # #3541: as in nn.Module, a None buffer and a non-persistent buffer are
+        # not part of the state, and a None value for them reads as missing.
+        params = self._params_with_extra_buffers()
+        np_buffer = params._buffers["np"]
+        module = self._parent(params)
+        sd = {"params.a": torch.ones(3)}
+        if none_values:
+            sd.update({"params.unused": None, "params.np": None})
+        result = module.load_state_dict(sd, strict=strict, assign=assign)
+        assert result.missing_keys == result.unexpected_keys == []
+        assert (params["a"] == 1).all()
+        assert (params["a"].data_ptr() == sd["params.a"].data_ptr()) is assign
+        assert params._buffers["a"] is params["a"]
+        assert params.unused is None
+        assert params._buffers["np"] is np_buffer and (np_buffer == 5).all()
+
+    @pytest.mark.parametrize("assign", [True, False])
+    @pytest.mark.parametrize("strict", [True, False])
+    @pytest.mark.parametrize("name,shape", [("unused", 1), ("np", 2), ("np", 5)])
+    def test_load_state_dict_none_buffer_unexpected(self, name, shape, strict, assign):
+        # #3541: as in nn.Module, a value for a None buffer or a non-persistent
+        # buffer is an unexpected key.
+        params = self._params_with_extra_buffers()
+        module = self._parent(params)
+        sd = {"params.a": torch.ones(3), f"params.{name}": torch.ones(shape)}
+        if strict:
+            with pytest.raises(RuntimeError, match=f'Unexpected key.*"params.{name}"'):
+                module.load_state_dict(sd, strict=strict, assign=assign)
+            return
+        result = module.load_state_dict(sd, strict=strict, assign=assign)
+        assert result.missing_keys == []
+        assert result.unexpected_keys == [f"params.{name}"]
+        assert (params["a"] == 1).all()
+        assert params.unused is None
+        assert (params._buffers["np"] == 5).all()
+
+    @staticmethod
     def _apply_params(device=None):
         # A parameter, a nested parameter, a buffer, and a nested
         # TensorDictParams with a parameter and a buffer.
