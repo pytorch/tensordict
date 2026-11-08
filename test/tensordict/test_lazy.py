@@ -1176,6 +1176,78 @@ class TestLazyStackedTensorDict:
                 ls.update_at_(val, idx)
             assert (ls.detach() == before.detach()).all()
 
+    @pytest.mark.parametrize(
+        "index,written",
+        [
+            (0, [0]),
+            (-1, [2]),
+            (torch.tensor(0), [0]),
+            (slice(0, 2), [0, 1]),
+            (slice(None), [0, 1, 2]),
+            ([0, 2], [0, 2]),
+        ],
+    )
+    @pytest.mark.parametrize("nested", [False, True])
+    def test_ragged_update_at_keeps_ragged_dim(self, index, written, nested):
+        # #3528: a value without the ragged dim that the index keeps is
+        # broadcast over the rows of each member it selects
+        ls = lazy_stack(
+            [
+                TensorDict(
+                    a=torch.zeros(n, 2),
+                    n=TensorDict(b=torch.zeros(n), batch_size=[n]),
+                    batch_size=[n],
+                )
+                for n in (2, 3, 1)
+            ]
+        )
+        if nested:
+            value = TensorDict(
+                a=torch.ones(2),
+                n=TensorDict(b=torch.ones(()), batch_size=[]),
+                batch_size=[],
+            )
+        else:
+            value = TensorDict(a=torch.ones(2), batch_size=[])
+        ls.update_at_(value, index)
+        for i, td in enumerate(ls.tensordicts):
+            assert (td["a"] == float(i in written)).all()
+            assert (td["n", "b"] == float(nested and i in written)).all()
+
+    def test_ragged_update_at_keeps_ragged_dim_unchanged(self):
+        # #3528: a value that does not fit every selected member keeps the old
+        # error and writes nothing
+        def make(sizes=((2, 2), (3, 2), (1, 2))):
+            return lazy_stack(
+                [
+                    TensorDict(
+                        a=torch.zeros(n, f),
+                        n=TensorDict(b=torch.zeros(n), batch_size=[n]),
+                        batch_size=[n],
+                    )
+                    for n, f in sizes
+                ]
+            )
+
+        def value(a, b=()):
+            return TensorDict(
+                a=torch.ones(a),
+                n=TensorDict(b=torch.ones(b), batch_size=[]),
+                batch_size=[],
+            )
+
+        for ls, val, index in (
+            (make(), value(5), 0),
+            (make(), value(2, 5), 0),
+            (make(((2, 2), (3, 2), (1, 3))), value(2), slice(None)),
+            (make(((2, 2), (3, 2), (1, 3))), value(2), [0, 2]),
+            (make(), value(2).to(torch.float64), 0),
+        ):
+            before = ls.clone()
+            with pytest.raises(RuntimeError, match="expanded size of the tensor"):
+                ls.update_at_(val, index)
+            assert (ls == before).all()
+
     def test_to_dict_state_dict_exclusive_keys_raise(self):
         # to_dict and state_dict would silently drop the keys that are not in
         # every member, so they raise

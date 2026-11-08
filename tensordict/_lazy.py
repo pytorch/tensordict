@@ -5428,6 +5428,26 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         elif input_dict_or_td.batch_size != indexed_bs:
             lead = len(indexed_bs) - input_dict_or_td.batch_dims
+            if (
+                ragged_error is None
+                and lead > 0
+                and -1 in indexed_bs[:lead]
+                and isinstance(input_dict_or_td, TensorDictBase)
+            ):
+                # the index keeps a ragged dim that the value lacks, which
+                # expand cannot add: each member broadcasts the value
+                try:
+                    input_dict_or_td.expand(indexed_bs)
+                except RuntimeError as expand_error:
+                    return self._update_at_ragged_broadcast(
+                        input_dict_or_td,
+                        idx,
+                        indexed_bs,
+                        lead,
+                        expand_error,
+                        non_blocking=non_blocking,
+                        keys_to_update=keys_to_update,
+                    )
             if ragged_error is not None and lead >= 0:
                 # each member broadcasts the value over a sliced ragged dim
                 # that the value lacks or has with size 1. A member does not
@@ -5489,12 +5509,12 @@ class LazyStackedTensorDict(TensorDictBase):
         idx: IndexType,
         indexed_bs: torch.Size,
         lead: int,
-        ragged_error: ValueError,
+        ragged_error: Exception,
         *,
         non_blocking: bool,
         keys_to_update: list[tuple[str, ...]] | None,
     ) -> Self:
-        """Writes a value that a sliced ragged dim broadcasts into each member, for :meth:`_update_at_`.
+        """Writes a value that a ragged dim broadcasts into each member, for :meth:`_update_at_`.
 
         Each member's piece is expanded to the rows the member selects. The
         write goes ahead only for exact TensorDict members and plain tensor
