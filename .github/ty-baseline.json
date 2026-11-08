@@ -107,7 +107,7 @@
   "invalid-property-type-override": 6,
   "invalid-return-type": 37,
   "invalid-type-form": 5,
-  "no-matching-overload": 3,
+  "no-matching-overload": 2,
   "not-iterable": 2,
   "not-subscriptable": 1,
   "unresolved-attribute": 42,
@@ -162,7 +162,7 @@
   "invalid-argument-type": 2,
   "invalid-method-override": 2,
   "invalid-parameter-default": 5,
-  "invalid-type-form": 557
+  "invalid-type-form": 1
  },
  "tensordict/_torch_func.py": {
   "import-not-found": 1,
@@ -362,7 +362,7 @@
  },
  "tensordict/tensorclass.py": {
   "import-not-found": 1,
-  "invalid-argument-type": 31,
+  "invalid-argument-type": 29,
   "invalid-assignment": 7,
   "invalid-declaration": 1,
   "invalid-method-override": 9,
@@ -389,7 +389,7 @@
   "invalid-method-override": 2,
   "invalid-parameter-default": 5,
   "invalid-property-type-override": 2,
-  "invalid-type-form": 563
+  "invalid-type-form": 1
  },
  "tensordict/typedtensordict.py": {
   "call-non-callable": 1,
