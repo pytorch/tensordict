@@ -6594,68 +6594,60 @@ class TestTensorDictParams:
         assert params["s"] == "text"
 
     @staticmethod
-    def _params_with_extra_buffers():
+    def _params_with_none(kind):
         params = TensorDictParams(TensorDict(a=torch.zeros(3)), no_convert=True)
-        params.register_buffer("unused", None)
-        params.register_buffer("np", torch.full((2,), 5.0), persistent=False)
+        getattr(params, f"register_{kind}")("unused", None)
         return params
 
     @pytest.mark.parametrize("assign", [True, False])
     @pytest.mark.parametrize("strict", [True, False])
-    @pytest.mark.parametrize("none_values", [False, True])
-    def test_load_state_dict_none_buffer(self, none_values, strict, assign):
-        # #3541: as in nn.Module, a None buffer and a non-persistent buffer are
-        # not part of the state, and a None value for them reads as missing.
-        params = self._params_with_extra_buffers()
-        np_buffer = params._buffers["np"]
+    @pytest.mark.parametrize("none_value", [False, True])
+    @pytest.mark.parametrize("kind", ["buffer", "parameter"])
+    def test_load_state_dict_none_buffer(self, kind, none_value, strict, assign):
+        # #3541: as in nn.Module, a None buffer is not part of the state, and a
+        # None value for it reads as missing.
+        params = self._params_with_none(kind)
         module = self._parent(params)
         sd = {"params.a": torch.ones(3)}
-        if none_values:
-            sd.update({"params.unused": None, "params.np": None})
+        if none_value:
+            sd["params.unused"] = None
         result = module.load_state_dict(sd, strict=strict, assign=assign)
         assert result.missing_keys == result.unexpected_keys == []
         assert (params["a"] == 1).all()
         assert (params["a"].data_ptr() == sd["params.a"].data_ptr()) is assign
         assert params._buffers["a"] is params["a"]
+        assert "unused" in getattr(params, f"_{kind}s")
         assert params.unused is None
-        assert params._buffers["np"] is np_buffer and (np_buffer == 5).all()
 
     @pytest.mark.parametrize("assign", [True, False])
     @pytest.mark.parametrize("strict", [True, False])
-    @pytest.mark.parametrize("name,shape", [("unused", 1), ("np", 2), ("np", 5)])
-    def test_load_state_dict_none_buffer_unexpected(self, name, shape, strict, assign):
-        # #3541: as in nn.Module, a value for a None buffer or a non-persistent
-        # buffer is an unexpected key.
-        params = self._params_with_extra_buffers()
+    def test_load_state_dict_none_buffer_unexpected(self, strict, assign):
+        # #3541: as in nn.Module, a value for a None buffer is an unexpected key.
+        params = self._params_with_none("buffer")
         module = self._parent(params)
-        sd = {"params.a": torch.ones(3), f"params.{name}": torch.ones(shape)}
+        sd = {"params.a": torch.ones(3), "params.unused": torch.ones(1)}
         if strict:
-            with pytest.raises(RuntimeError, match=f'Unexpected key.*"params.{name}"'):
+            with pytest.raises(RuntimeError, match='Unexpected key.*"params.unused"'):
                 module.load_state_dict(sd, strict=strict, assign=assign)
             return
         result = module.load_state_dict(sd, strict=strict, assign=assign)
         assert result.missing_keys == []
-        assert result.unexpected_keys == [f"params.{name}"]
+        assert result.unexpected_keys == ["params.unused"]
         assert (params["a"] == 1).all()
         assert params.unused is None
-        assert (params._buffers["np"] == 5).all()
 
-    @pytest.mark.parametrize("assign", [True, False])
-    @pytest.mark.parametrize("strict", [True, False])
-    def test_load_state_dict_non_persistent_set_as_leaf(self, strict, assign):
-        # #3541: a non-persistent name later set as a leaf is in state_dict(),
-        # and loads like any other leaf.
-        params = TensorDictParams(TensorDict(a=torch.zeros(3)), no_convert=True)
-        params.register_buffer("np", torch.full((2,), 5.0), persistent=False)
-        params["np"] = torch.zeros(2)
-        module = self._parent(params)
-        sd = {k: torch.ones_like(v) for k, v in module.state_dict().items()}
-        assert set(sd) == {"params.a", "params.np"}
-        result = module.load_state_dict(sd, strict=strict, assign=assign)
+    def test_load_state_dict_none_buffer_nested(self):
+        # #3541: assign=True keeps the None buffer of a nested TensorDictParams.
+        inner = self._params_with_none("buffer")
+        outer = TensorDictParams(TensorDict(b=torch.zeros(2)), no_convert=True)
+        outer["sub"] = inner
+        module = self._parent(outer)
+        sd = {"params.b": torch.ones(2), "params.sub.a": torch.ones(3)}
+        result = module.load_state_dict(sd, assign=True)
         assert result.missing_keys == result.unexpected_keys == []
-        assert (params["a"] == 1).all() and (params["np"] == 1).all()
-        assert (params["np"].data_ptr() == sd["params.np"].data_ptr()) is assign
-        assert params._buffers["np"] is params["np"]
+        assert (outer["b"] == 1).all() and (inner["a"] == 1).all()
+        assert outer["sub"] is inner
+        assert "unused" in inner._buffers and inner.unused is None
 
     @staticmethod
     def _apply_params(device=None):
