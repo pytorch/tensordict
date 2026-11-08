@@ -1458,14 +1458,20 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         # Override: the leaves are registered under dotted names ("0.weight"),
         # which the base reads as submodules: it reports them as unexpected
         # keys, and its assign=True path cannot set them.
-        local_state = {**self._parameters, **self._buffers}
+        # As in the base, None entries are not part of the state.
+        names = {**self._parameters, **self._buffers}
+        local_state = {name: dest for name, dest in names.items() if dest is not None}
         keys = None
         # Where the base rejects an entry, keep the previous behaviour: None
         # reads as a missing key, and a number or a tensor of another shape
         # is written in place (broadcast, or _InplaceWriteError).
-        for name, dest in local_state.items():
+        for name, dest in names.items():
             val = state_dict.get(prefix + name, dest)
-            if isinstance(val, Tensor) and val.shape == dest.shape:
+            if dest is None:
+                # The base reports a value as an unexpected key.
+                if val is not None or prefix + name not in state_dict:
+                    continue
+            elif isinstance(val, Tensor) and val.shape == dest.shape:
                 continue
             if keys is None:
                 keys = self._leaf_keys()
@@ -1527,7 +1533,13 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                     non_blocking=False,
                 )
             for owner in owners:
+                # _reset_params only registers the leaves of _param_td: keep
+                # the None entries.
+                params = {k: v for k, v in owner._parameters.items() if v is None}
+                buffers = {k: v for k, v in owner._buffers.items() if v is None}
                 owner._reset_params()
+                owner._parameters.update(params)
+                owner._buffers.update(buffers)
         n = len(unexpected_keys)
         # The base now copies each entry into the (assigned) leaf, and reports
         # missing and unexpected keys.
