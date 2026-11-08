@@ -2211,6 +2211,65 @@ class TestNonTensorData:
         assert (td["x"] == 1).all()
         assert td["s"] == "hello"
 
+    @pytest.mark.parametrize(
+        "source",
+        [
+            ["p", "q", "r"],
+            ["p"],
+            [["p", "q"], ["p", "q"], ["p", "q"]],
+            [["p", "q", "r"], ["p", "q", "r"]],
+        ],
+    )
+    @pytest.mark.parametrize(
+        "write", ["update_", "copy_", "update", "update_inplace", "update_locked"]
+    )
+    def test_update__stack_row_count_mismatch_writes_nothing(self, source, write):
+        # #3531: a NonTensorStack updated from a NonTensorStack with another
+        # number of rows raises before it writes any row
+        nested = isinstance(source[0], list)
+        if nested:
+            s = NonTensorStack(NonTensorStack("a", "b"), NonTensorStack("c", "d"))
+            other = NonTensorStack(*[NonTensorStack(*row) for row in source])
+        else:
+            s = NonTensorStack("a", "b")
+            other = NonTensorStack(*source)
+        expected = s.tolist()
+        if write == "update_locked":
+            s.lock_()
+            write = "update_"
+        with pytest.raises(ValueError, match="Cannot update a NonTensorStack with 2"):
+            if write == "update_inplace":
+                s.update(other, inplace=True)
+            else:
+                getattr(s, write)(other)
+        assert s.tolist() == expected
+
+    def test_update__stack_row_count_mismatch_memmap_keeps_folder(self, tmp_path):
+        # #3531: the row-count check runs before the memmap folder is removed
+        td = TensorDict(s=NonTensorStack("a", "b"), batch_size=[2]).memmap_(tmp_path)
+        s = td.get("s")
+        with pytest.raises(ValueError, match="Cannot update a NonTensorStack with 2"):
+            s.update_(NonTensorStack("p", "q", "r"))
+        assert s.tolist() == ["a", "b"]
+        assert TensorDict.load_memmap(tmp_path).get("s").tolist() == ["a", "b"]
+
+    def test_update__stack_row_count_unchanged_cases(self):
+        # #3531: the cases next to the row-count check keep their behaviour
+        s = NonTensorStack("a", "b")
+        s.update_(NonTensorStack("p", "q"))
+        assert s.tolist() == ["p", "q"]
+        s.update_(NonTensorData("z"))
+        assert s.tolist() == ["z", "z"]
+        # a 1-d source broadcasts over the rows of a 2-d stack
+        s = NonTensorStack(NonTensorStack("a", "b"), NonTensorStack("c", "d"))
+        s.update_(NonTensorStack("p", "q"))
+        assert s.tolist() == [["p", "p"], ["q", "q"]]
+        # a locked non-inplace update keeps its lock error
+        s = NonTensorStack("a", "b").lock_()
+        with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
+            s.update(NonTensorStack("p", "q", "r"))
+        assert s.tolist() == ["a", "b"]
+
     @pytest.mark.parametrize("mode", ["shared", "memmap", "memmap_shared"])
     @pytest.mark.parametrize("stack", [False, True])
     @pytest.mark.parametrize("write", ["update_", "copy_"])

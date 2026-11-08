@@ -6,6 +6,7 @@ import contextlib
 import warnings
 
 import numpy as np
+import torch
 from tensordict.utils import (
     _parse_to,
     _user_stacklevel,
@@ -109,6 +110,101 @@ def _reverse_flatten_keys(self, args, kwargs, out):
 LAST_OP_MAPS["flatten_keys"] = _reverse_flatten_keys
 
 
+def _is_plain_td(td):
+    # A genuine circular import: tensordict.base imports this module before
+    # tensordict._td defines TensorDict.
+    from tensordict._td import TensorDict
+
+    # exact TensorDicts at every depth, so that _get_tuple returns the stored
+    # leaf, and no non-tensor leaf
+    return type(td) is TensorDict and all(
+        isinstance(value, torch.Tensor) or _is_plain_td(value) for value in td.values()
+    )
+
+
+def _is_plain_leaf(tensor):
+    if not (
+        type(tensor) is torch.Tensor
+        and tensor.layout is torch.strided
+        and not tensor.is_nested
+        and not tensor.is_quantized
+        and not tensor.is_inference()
+        and not tensor.is_meta
+        and not (tensor.requires_grad and torch.is_grad_enabled())
+    ):
+        return False
+    # no expanded or internally overlapping dims
+    extent = 1
+    for stride, size in sorted(
+        (stride, size)
+        for stride, size in zip(tensor.stride(), tensor.shape)
+        if size > 1
+    ):
+        if stride < extent:
+            return False
+        extent += stride * (size - 1)
+    return True
+
+
+def _storage_range(tensor):
+    storage = tensor.untyped_storage()
+    return storage.data_ptr(), storage.data_ptr() + storage.nbytes()
+
+
+def _unsplit_keys(self, out, separator):
+    """Returns the leaves of ``self`` under the keys of ``out`` they were split from.
+
+    Returns ``None`` unless splitting the keys of ``out`` at ``separator`` gives
+    the keys of ``self`` exactly, one for one, and ``out.update_`` takes every
+    leaf without raising, skipping or warning.
+    """
+    if not (_is_plain_td(self) and _is_plain_td(out)):
+        return None
+    keys = {}
+    for key in out.keys(True, True):
+        key = (key,) if isinstance(key, str) else key
+        # unflatten_keys splits the keys of the root only
+        keys[(*key[0].split(separator), *key[1:])] = key
+    self_keys = {
+        (key,) if isinstance(key, str) else key for key in self.keys(True, True)
+    }
+    if len(keys) != len(self_keys) or set(keys) != self_keys:
+        # the op made two keys of out one, or the block changed the keys
+        return None
+    pairs = []
+    for split_key, key in keys.items():
+        value = self._get_tuple(split_key, None)
+        dest = out._get_tuple(key, None)
+        # write nothing unless every pair is known to be safe for copy_
+        if not (
+            _is_plain_leaf(value)
+            and _is_plain_leaf(dest)
+            and value.shape == dest.shape
+            and value.device == dest.device
+            and not (value.is_complex() and not dest.is_complex())
+        ):
+            return None
+        pairs.append((key, value, dest))
+    # update_ copies one leaf at a time, so a value that shares memory with
+    # any entry, or an entry that shares memory with another, could be
+    # overwritten before it is read. Compare the byte ranges of the storages:
+    # from_numpy, from_dlpack or frombuffer can make a storage that starts
+    # inside another. Empty tensors can all have data_ptr 0.
+    ranges = sorted(_storage_range(dest) for _, _, dest in pairs if dest.numel())
+    if any(start < end for (_, end), (start, _) in zip(ranges, ranges[1:])):
+        return None
+    source = self.empty()
+    for key, value, dest in pairs:
+        if value is not dest and value.numel():
+            start, end = _storage_range(value)
+            if any(start < e and s < end for s, e in ranges):
+                return None
+        # a copy read before any write also covers memory that the address
+        # check cannot see shared, such as two mappings of one file
+        source.set(key, value if value is dest else value.clone())
+    return source
+
+
 def _reverse_unflatten_keys(self, args, kwargs, out):
     sep = args[0] if args else KEY_SEPARATOR
     separator = kwargs.get("separator", sep)
@@ -126,8 +222,24 @@ def _reverse_unflatten_keys(self, args, kwargs, out):
         sep = separator
     if not out.is_locked:
         return out.update(self.flatten_keys(sep), inplace=False)
-    else:
-        return out.update_(self.flatten_keys(sep))
+    flat = self.flatten_keys(sep)
+    try:
+        return out.update_(flat)
+    except KeyError:
+        if not (
+            isinstance(separator, str)
+            and separator
+            and separator != sep
+            and not _changed_in_place(self, out)
+        ):
+            raise
+        # #3517: out holds nested keys, which flatten_keys cannot tell from
+        # the keys that the op split. Where the block kept the keys that the
+        # op made, write each leaf back under its key in out.
+        source = _unsplit_keys(self, out, separator)
+        if source is None:
+            raise
+    return out.update_(source)
 
 
 LAST_OP_MAPS["unflatten_keys"] = _reverse_unflatten_keys

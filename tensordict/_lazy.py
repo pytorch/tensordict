@@ -1068,6 +1068,26 @@ def _dense_stack_build(td0, vals_by_key, n, dim):
     )
 
 
+def _ragged_numel(td) -> int | None:
+    """The number of elements of the batch of ``td``, whose dims may be ragged.
+
+    Returns ``None`` when they cannot be counted from the members: a ragged
+    member that is not a lazy stack, or a stack vmapped over its stack dim.
+    """
+    batch_size = td.batch_size
+    if -1 not in batch_size:
+        return batch_size.numel()
+    if not isinstance(td, LazyStackedTensorDict) or td._is_vmapped:
+        return None
+    total = 0
+    for member in td.tensordicts:
+        member_numel = _ragged_numel(member)
+        if member_numel is None:
+            return None
+        total += member_numel
+    return total
+
+
 class LazyStackedTensorDict(TensorDictBase):
     """A stack of tensordicts that keeps each input as a separate tensordict.
 
@@ -1507,6 +1527,18 @@ class LazyStackedTensorDict(TensorDictBase):
         if not self.tensordicts:
             return False
         return all(td._is_memmap for td in self.tensordicts)
+
+    # Override: a ragged batch dim has the size -1, for which the product of
+    # the batch size means nothing; the members count their own elements.
+    def numel(self) -> int:
+        batch_size = self._batch_size
+        if -1 not in batch_size:
+            # Not `n or 1`: bool() cannot be traced on an unbacked size
+            return max(1, batch_size.numel())
+        numel = _ragged_numel(self)
+        if numel is None:
+            return max(1, batch_size.numel())
+        return max(1, numel)
 
     @property
     @_cache_while_locked
@@ -5892,7 +5924,9 @@ class LazyStackedTensorDict(TensorDictBase):
                 return self._reshape_dense(shape)
             return result
         if has_neg_dim:
-            shape = _infer_size_impl(shape, self.numel())
+            # Not numel(): on a ragged stack it counts the rows of the
+            # members, while _regroup compares with the batch size product.
+            shape = _infer_size_impl(shape, max(1, self.batch_size.numel()))
         shape = torch.Size(shape)
         result = self._regroup(shape)
         if result is not None:

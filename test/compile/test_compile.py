@@ -1129,6 +1129,23 @@ class TestTD:
         assert result.stack_dim == 1
         assert (result == permute(data)).all()
 
+    @pytest.mark.parametrize("dynamic", [None, True])
+    def test_lazy_stack_numel_masked(self, dynamic, mode):
+        # #3442: numel() of a homogeneous stack with an unbacked batch size
+        def f(td, mask):
+            out = td[:, mask]
+            return out["a"].sum() * out.numel()
+
+        data = lazy_stack(
+            [TensorDict(a=torch.arange(4.0) + i, batch_size=[4]) for i in range(3)]
+        )
+        mask = torch.tensor([True, False, True, True])
+        with torch._dynamo.config.patch(
+            capture_dynamic_output_shape_ops=True, capture_scalar_outputs=True
+        ):
+            f_c = torch.compile(f, fullgraph=True, dynamic=dynamic, mode=mode)
+            torch.testing.assert_close(f_c(data, mask), f(data, mask))
+
     @pytest.mark.parametrize("dynamic", [False, True])
     def test_lazy_stack_get_through_leaf_default(self, dynamic, mode):
         # #2786: a key that runs through a tensor returns the default
