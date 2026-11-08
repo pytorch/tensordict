@@ -69,14 +69,28 @@ def run_ty(python: Path) -> list[dict]:
     return json.loads(result.stdout)
 
 
+# An attribute read on a value that may be None ("Attribute `x` is not defined
+# on `None` in union ..."): counted as a rule of its own, which fails the
+# check, because it can raise AttributeError at run time (#3541).
+NONE_ATTRIBUTE = "unresolved-attribute-on-none"
+
+
 def key(diagnostic: dict) -> tuple[str, str]:
-    return diagnostic["location"]["path"], diagnostic["check_name"]
+    rule = diagnostic["check_name"]
+    if (
+        rule == "unresolved-attribute"
+        and "is not defined on `None` in union" in (diagnostic["description"])
+    ):
+        rule = NONE_ATTRIBUTE
+    return diagnostic["location"]["path"], rule
 
 
 def format_diagnostic(diagnostic: dict) -> str:
     path, rule = key(diagnostic)
     begin = diagnostic["location"]["positions"]["begin"]
-    description = diagnostic["description"].removeprefix(f"{rule}: ")
+    description = diagnostic["description"].removeprefix(
+        f"{diagnostic['check_name']}: "
+    )
     return f"{path}:{begin['line']}:{begin['column']} {rule} {description}"
 
 

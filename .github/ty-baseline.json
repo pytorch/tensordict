@@ -4,7 +4,8 @@
   "unused-type-ignore-comment": 2
  },
  "tensordict/_archive.py": {
-  "unresolved-attribute": 2
+  "unresolved-attribute": 1,
+  "unresolved-attribute-on-none": 1
  },
  "tensordict/_arrow.py": {
   "import-not-found": 2
@@ -21,7 +22,8 @@
   "possibly-missing-submodule": 1,
   "too-many-positional-arguments": 1,
   "unknown-argument": 2,
-  "unresolved-attribute": 54,
+  "unresolved-attribute": 53,
+  "unresolved-attribute-on-none": 1,
   "unsupported-operator": 1
  },
  "tensordict/_base/device.py": {
@@ -40,7 +42,8 @@
   "invalid-return-type": 5,
   "invalid-type-form": 1,
   "not-subscriptable": 1,
-  "unresolved-attribute": 52,
+  "unresolved-attribute": 36,
+  "unresolved-attribute-on-none": 16,
   "unresolved-reference": 7
  },
  "tensordict/_base/pointwise.py": {
@@ -59,7 +62,8 @@
   "invalid-parameter-default": 29,
   "invalid-return-type": 4,
   "invalid-type-form": 12,
-  "unresolved-attribute": 59
+  "unresolved-attribute": 57,
+  "unresolved-attribute-on-none": 2
  },
  "tensordict/_base/serialization.py": {
   "invalid-argument-type": 11,
@@ -76,7 +80,8 @@
   "invalid-parameter-default": 1,
   "invalid-return-type": 9,
   "not-iterable": 1,
-  "unresolved-attribute": 215
+  "unresolved-attribute": 209,
+  "unresolved-attribute-on-none": 6
  },
  "tensordict/_base/unsupported.py": {
   "unresolved-attribute": 1
@@ -105,7 +110,8 @@
   "no-matching-overload": 3,
   "not-iterable": 2,
   "not-subscriptable": 1,
-  "unresolved-attribute": 49,
+  "unresolved-attribute": 42,
+  "unresolved-attribute-on-none": 7,
   "unsupported-operator": 10
  },
  "tensordict/_pytree.py": {
@@ -139,7 +145,8 @@
   "not-iterable": 1,
   "not-subscriptable": 1,
   "possibly-missing-submodule": 1,
-  "unresolved-attribute": 64,
+  "unresolved-attribute": 63,
+  "unresolved-attribute-on-none": 1,
   "unsupported-operator": 6
  },
  "tensordict/_td_functions.py": {
@@ -165,14 +172,16 @@
   "no-matching-overload": 1,
   "not-subscriptable": 4,
   "unknown-argument": 4,
-  "unresolved-attribute": 18,
+  "unresolved-attribute": 16,
+  "unresolved-attribute-on-none": 2,
   "unsupported-operator": 1
  },
  "tensordict/_ucxx.py": {
   "import-not-found": 2,
   "invalid-argument-type": 1,
   "invalid-return-type": 2,
-  "unresolved-attribute": 15
+  "unresolved-attribute": 11,
+  "unresolved-attribute-on-none": 4
  },
  "tensordict/_unbatched.py": {
   "call-non-callable": 1,
@@ -197,14 +206,16 @@
   "not-subscriptable": 3,
   "too-many-positional-arguments": 3,
   "unknown-argument": 5,
-  "unresolved-attribute": 115,
+  "unresolved-attribute": 105,
+  "unresolved-attribute-on-none": 10,
   "unresolved-reference": 1
  },
  "tensordict/functional.py": {
   "invalid-argument-type": 13,
   "invalid-assignment": 2,
   "invalid-return-type": 9,
-  "unresolved-attribute": 24
+  "unresolved-attribute": 18,
+  "unresolved-attribute-on-none": 6
  },
  "tensordict/memmap.py": {
   "invalid-argument-type": 8,
@@ -219,7 +230,7 @@
   "invalid-assignment": 1,
   "invalid-attribute-access": 3,
   "invalid-type-form": 2,
-  "unresolved-attribute": 1
+  "unresolved-attribute-on-none": 1
  },
  "tensordict/nn/cudagraphs.py": {
   "invalid-argument-type": 2,
@@ -269,7 +280,8 @@
   "invalid-yield": 2,
   "no-matching-overload": 1,
   "too-many-positional-arguments": 12,
-  "unresolved-attribute": 6
+  "unresolved-attribute": 3,
+  "unresolved-attribute-on-none": 3
  },
  "tensordict/nn/probabilistic.py": {
   "call-non-callable": 2,
@@ -365,7 +377,8 @@
   "redundant-condition": 1,
   "too-many-positional-arguments": 1,
   "unknown-argument": 1,
-  "unresolved-attribute": 54,
+  "unresolved-attribute": 47,
+  "unresolved-attribute-on-none": 7,
   "unsupported-base": 1,
   "unsupported-operator": 13,
   "unused-type-ignore-comment": 1
@@ -398,7 +411,8 @@
   "not-iterable": 1,
   "not-subscriptable": 1,
   "possibly-missing-submodule": 4,
-  "unresolved-attribute": 24,
+  "unresolved-attribute": 21,
+  "unresolved-attribute-on-none": 3,
   "unsupported-operator": 6
  }
 }
