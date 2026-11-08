@@ -51,6 +51,7 @@ from tensordict._indexing import (
     _ragged_getitem_batch_size,
     _read_element,
     _SLICE,
+    _slices_ragged_dim,
 )
 from tensordict._td import _SubTensorDict, _TensorDictKeysView, TensorDict
 from tensordict._td_memmap import _format_metadata
@@ -2527,6 +2528,13 @@ class LazyStackedTensorDict(TensorDictBase):
         ragged = False
         try:
             batch_size = _getitem_batch_size(self.batch_size, index)
+            if (
+                is_dynamo_compiling()
+                and -1 in self.batch_size
+                and _slices_ragged_dim(self.batch_size, index)
+            ):
+                # the ValueError that slice.indices raises in eager mode
+                raise ValueError("length should not be negative")
         except ValueError as err:
             if -1 not in self.batch_size or (
                 # the members may skip the non-tensor leaves of a tensordict
@@ -5380,6 +5388,13 @@ class LazyStackedTensorDict(TensorDictBase):
         ragged_error = None
         try:
             indexed_bs = _getitem_batch_size(self.batch_size, idx)
+            if (
+                is_dynamo_compiling()
+                and -1 in self.batch_size
+                and _slices_ragged_dim(self.batch_size, idx)
+            ):
+                # the ValueError that slice.indices raises in eager mode
+                raise ValueError("length should not be negative")
         except ValueError as err:
             if (
                 -1 not in self.batch_size
