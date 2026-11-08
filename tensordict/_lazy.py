@@ -2526,6 +2526,7 @@ class LazyStackedTensorDict(TensorDictBase):
         # give the value the batch dims of the result of the index, to which
         # it broadcasts
         ragged = False
+        dynamo_batch_size = None
         try:
             batch_size = _getitem_batch_size(self.batch_size, index)
             if (
@@ -2533,18 +2534,23 @@ class LazyStackedTensorDict(TensorDictBase):
                 and -1 in self.batch_size
                 and _slices_ragged_dim(self.batch_size, index)
             ):
-                # the ValueError that slice.indices raises in eager mode
+                # the ValueError that slice.indices raises in eager mode. A
+                # value that the ragged branch rejects keeps the batch size
+                # that Dynamo gives instead.
+                dynamo_batch_size = batch_size
                 raise ValueError("length should not be negative")
         except ValueError as err:
             if -1 not in self.batch_size or (
                 # the members may skip the non-tensor leaves of a tensordict
                 not converted and is_tensor_collection(value) and value._has_non_tensor
             ):
-                raise
-            # a slice of a ragged dim: each member checks its own piece
-            ragged = True
-            ragged_error = err
-            batch_size = _ragged_getitem_batch_size(self.batch_size, index)
+                if dynamo_batch_size is None:
+                    raise
+            else:
+                # a slice of a ragged dim: each member checks its own piece
+                ragged = True
+                ragged_error = err
+                batch_size = _ragged_getitem_batch_size(self.batch_size, index)
         if is_tensor_collection(value):
             if converted and is_tensorclass(value) and is_non_tensor(value):
                 # the data was converted to a NonTensorData with the batch
@@ -2560,7 +2566,9 @@ class LazyStackedTensorDict(TensorDictBase):
                     ragged
                     and -1 in batch_size[: max(0, len(batch_size) - value.batch_dims)]
                 ):
-                    raise ragged_error
+                    if dynamo_batch_size is None:
+                        raise ragged_error
+                    batch_size = dynamo_batch_size
                 value = value.expand(batch_size)
         else:
             entry, entry_batch_dims = self._member_entry(key)
@@ -5386,6 +5394,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 keys_to_update=keys_to_update,
             )
         ragged_error = None
+        dynamo_batch_size = None
         try:
             indexed_bs = _getitem_batch_size(self.batch_size, idx)
             if (
@@ -5393,7 +5402,10 @@ class LazyStackedTensorDict(TensorDictBase):
                 and -1 in self.batch_size
                 and _slices_ragged_dim(self.batch_size, idx)
             ):
-                # the ValueError that slice.indices raises in eager mode
+                # the ValueError that slice.indices raises in eager mode. A
+                # value that the ragged branch rejects keeps the batch size
+                # that Dynamo gives instead.
+                dynamo_batch_size = indexed_bs
                 raise ValueError("length should not be negative")
         except ValueError as err:
             if (
@@ -5402,10 +5414,12 @@ class LazyStackedTensorDict(TensorDictBase):
                 # the members may skip the non-tensor leaves of the value
                 or input_dict_or_td._has_non_tensor
             ):
-                raise
-            # a slice of a ragged dim: each member checks its own piece
-            ragged_error = err
-            indexed_bs = _ragged_getitem_batch_size(self.batch_size, idx)
+                if dynamo_batch_size is None:
+                    raise
+            else:
+                # a slice of a ragged dim: each member checks its own piece
+                ragged_error = err
+                indexed_bs = _ragged_getitem_batch_size(self.batch_size, idx)
         if not _is_tensor_collection(type(input_dict_or_td)):
             input_dict_or_td = TensorDict._from_dict_impl(
                 input_dict_or_td, batch_size=indexed_bs
@@ -5426,7 +5440,9 @@ class LazyStackedTensorDict(TensorDictBase):
                     _is_tensor_collection(type(value))
                     for value in input_dict_or_td.values()
                 ):
-                    raise ragged_error
+                    if dynamo_batch_size is None:
+                        raise ragged_error
+                    indexed_bs = dynamo_batch_size
                 if -1 in indexed_bs[:lead]:
                     # expand cannot add a leading dim of size -1: a ragged
                     # dim that the value does not have gets size 1

@@ -507,6 +507,49 @@ def test_lazy_write_at_slice_ragged_dim_compiles_unchanged():
 
 
 @pytest.mark.parametrize(
+    "write",
+    [
+        lambda ls: ls.update_at_(
+            TensorDict(
+                a=torch.ones(1),
+                n=TensorDict(b=torch.ones(()), batch_size=[]),
+                batch_size=[],
+            ),
+            (1, slice(0, 0)),
+        ),
+        lambda ls: ls.set_at_(
+            "n", TensorDict(b=torch.ones(()), batch_size=[]), (1, slice(0, 0))
+        ),
+    ],
+    ids=["update_at_", "set_at_"],
+)
+def test_lazy_write_at_empty_slice_ragged_dim_nested_compiles(write):
+    # #3527: compiled, a nested value at an empty slice of the ragged dim
+    # still writes no rows and returns
+    ls = lazy_stack(
+        [
+            TensorDict(
+                a=torch.zeros(k, 1),
+                n=TensorDict(b=torch.zeros(k), batch_size=[k]),
+                batch_size=[k],
+            )
+            for k in (2, 3, 1)
+        ]
+    )
+    torch.compile(write, fullgraph=True, backend="eager")(ls)
+    assert [m["a"].flatten().tolist() for m in ls.tensordicts] == [
+        [0.0, 0.0],
+        [0.0, 0.0, 0.0],
+        [0.0],
+    ]
+    assert [m["n", "b"].tolist() for m in ls.tensordicts] == [
+        [0.0, 0.0],
+        [0.0, 0.0, 0.0],
+        [0.0],
+    ]
+
+
+@pytest.mark.parametrize(
     "name", ["td == 0", "td != td", "td ^ True", "td.all(0)", "td.where(mask, 0)"]
 )
 def test_comparison_where_fullgraph(name):
