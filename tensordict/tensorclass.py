@@ -8811,6 +8811,20 @@ class NonTensorStack(LazyStackedTensorDict):
                 stack_dim=self.stack_dim,
             )
 
+        sources = None
+        # A locked non-inplace update keeps its lock error, raised before any write
+        if isinstance(input_dict_or_td, NonTensorStack) and (
+            inplace or not self.is_locked
+        ):
+            # Check the row count before any row is written or the memmap
+            # folder is removed
+            sources = input_dict_or_td.unbind(self.stack_dim)
+            if len(sources) != len(self.tensordicts):
+                raise ValueError(
+                    f"Cannot update a NonTensorStack with {len(self.tensordicts)} rows "
+                    f"along dim {self.stack_dim} from a NonTensorStack with {len(sources)}."
+                )
+
         memmap = False
         if self._is_memmap and hasattr(self, "_path_to_memmap"):
             if break_on_memmap is None:
@@ -8831,9 +8845,9 @@ class NonTensorStack(LazyStackedTensorDict):
 
         # update content
         if isinstance(input_dict_or_td, NonTensorStack):
-            for leaf_dest, leaf_src in _zip_strict(
-                self.tensordicts, input_dict_or_td.unbind(self.stack_dim)
-            ):
+            if sources is None:
+                sources = input_dict_or_td.unbind(self.stack_dim)
+            for leaf_dest, leaf_src in _zip_strict(self.tensordicts, sources):
                 leaf_dest._update(
                     leaf_src,
                     clone=clone,
