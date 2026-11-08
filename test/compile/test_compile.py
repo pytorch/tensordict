@@ -549,6 +549,32 @@ def test_lazy_write_at_empty_slice_ragged_dim_nested_compiles(write):
     ]
 
 
+@pytest.mark.parametrize("fullgraph", [True, False])
+def test_lazy_set_at_non_tensor_empty_slice_ragged_dim_compiles(fullgraph):
+    # #3527: compiled, set_at_ of a non-tensor value at an empty slice of the
+    # ragged dim still writes no rows and returns
+    ls = lazy_stack(
+        [
+            TensorDict(
+                a=torch.zeros(k, 1),
+                s=NonTensorData("z", batch_size=[k]),
+                batch_size=[k],
+            )
+            for k in (2, 3, 1)
+        ]
+    )
+    torch.compile(
+        lambda ls: ls.set_at_("s", "x", (1, slice(0, 0))),
+        fullgraph=fullgraph,
+        backend="eager",
+    )(ls)
+    assert [t.tolist() for t in ls.get("s", as_list=True)] == [
+        ["z", "z"],
+        ["z", "z", "z"],
+        ["z"],
+    ]
+
+
 @pytest.mark.parametrize(
     "name", ["td == 0", "td != td", "td ^ True", "td.all(0)", "td.where(mask, 0)"]
 )

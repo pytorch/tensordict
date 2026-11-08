@@ -2533,6 +2533,8 @@ class LazyStackedTensorDict(TensorDictBase):
                 is_dynamo_compiling()
                 and -1 in self.batch_size
                 and _slices_ragged_dim(self.batch_size, index)
+                # a converted non-tensor value keeps the path it takes on main
+                and not (converted and is_non_tensor(value))
             ):
                 # the ValueError that slice.indices raises in eager mode. A
                 # value that the ragged branch rejects keeps the batch size
