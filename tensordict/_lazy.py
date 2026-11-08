@@ -5507,13 +5507,6 @@ class LazyStackedTensorDict(TensorDictBase):
                 key[: len(k)] == k for k in keys_to_update
             )
 
-        selected_keys = () if keys_to_update is None else keys_to_update
-
-        def walked(key):
-            # the member writes into a sub-tensordict that is selected or
-            # holds a selected key
-            return selected(key) or any(k[: len(key)] == key for k in selected_keys)
-
         try:
             if not (
                 _is_plain_td(value) and all(_is_plain_td(td) for td in self.tensordicts)
@@ -5544,10 +5537,12 @@ class LazyStackedTensorDict(TensorDictBase):
                     piece = piece.expand(rows)
                 for key, entry in piece.items(True, False):
                     key = _unravel_key_to_tuple(key)
-                    if isinstance(entry, Tensor) or not walked(key):
+                    if isinstance(entry, Tensor):
                         continue
                     # an existing sub-tensordict of the batch size of the
-                    # entry, so that no key is created and no check raises
+                    # entry, so that no key is created and no check raises.
+                    # Every one is checked, selected or not: with
+                    # keys_to_update, update_ still walks the others
                     dest = td._get_tuple(key, None)
                     if not (
                         type(dest) is TensorDict

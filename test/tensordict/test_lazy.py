@@ -1176,6 +1176,25 @@ class TestLazyStackedTensorDict:
                 ls.update_at_(val, idx)
             assert (ls.detach() == before.detach()).all()
 
+        # with keys_to_update, a sub-tensordict of the value that is not
+        # selected, and that a member holds as a tensor, keeps the old error
+        ls = lazy_stack(
+            [
+                TensorDict(a=torch.zeros(*bs, 1), n=torch.zeros(*bs, 2), batch_size=bs)
+                for bs in ([2, 3], [3, 2], [1, 1])
+            ]
+        )
+        val = TensorDict(
+            a=torch.ones(1, 1),
+            n=TensorDict(b=torch.ones(1), batch_size=[1]),
+            batch_size=[1],
+        )
+        for keys in (["a"], ["zz"]):
+            before = ls.clone()
+            with pytest.raises(ValueError, match="length should not be negative"):
+                ls.update_at_(val, (1, slice(None)), keys_to_update=keys)
+            assert (ls == before).all()
+
     def test_to_dict_state_dict_exclusive_keys_raise(self):
         # to_dict and state_dict would silently drop the keys that are not in
         # every member, so they raise
