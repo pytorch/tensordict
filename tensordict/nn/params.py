@@ -1464,24 +1464,40 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         # which the base reads as submodules: it reports them as unexpected
         # keys, and its assign=True path cannot set them.
         # As in the base, None and non-persistent buffers are not part of the
-        # state.
+        # state, unless a non-persistent name was later set as a leaf: then
+        # state_dict() returns it, and the base skips it.
         names = {**self._parameters, **self._buffers}
+        leaf_np = {
+            name
+            for name in self._non_persistent_buffers_set
+            if name in self._param_td.keys()
+        }
         local_state = {
             name: dest
             for name, dest in names.items()
-            if dest is not None and name not in self._non_persistent_buffers_set
+            if dest is not None
+            and (name not in self._non_persistent_buffers_set or name in leaf_np)
         }
+        assign = (
+            local_metadata.get("assign_to_params_buffers", False)
+            and not torch.__future__.get_swap_module_params_on_conversion()
+        )
         keys = None
         # Where the base rejects an entry, keep the previous behaviour: None
         # reads as a missing key, and a number or a tensor of another shape
-        # is written in place (broadcast, or _InplaceWriteError).
+        # is written in place (broadcast, or _InplaceWriteError). Without
+        # assign, a leaf in leaf_np is written in place too.
         for name, dest in names.items():
             val = state_dict.get(prefix + name, dest)
             if name not in local_state:
                 # The base reports a value as an unexpected key.
                 if val is not None or prefix + name not in state_dict:
                     continue
-            elif isinstance(val, Tensor) and val.shape == dest.shape:
+            elif (
+                isinstance(val, Tensor)
+                and val.shape == dest.shape
+                and (assign or name not in leaf_np)
+            ):
                 continue
             if keys is None:
                 keys = self._leaf_keys()
@@ -1492,10 +1508,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             else:
                 data.set(keys[name], val, inplace=True)
                 state_dict[prefix + name] = dest
-        if (
-            local_metadata.get("assign_to_params_buffers", False)
-            and not torch.__future__.get_swap_module_params_on_conversion()
-        ):
+        if assign:
             local_metadata = {**local_metadata, "assign_to_params_buffers": False}
             if keys is None:
                 keys = self._leaf_keys()
@@ -1548,7 +1561,11 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                 extra = {
                     k: v
                     for k, v in owner._buffers.items()
-                    if v is None or k in owner._non_persistent_buffers_set
+                    if v is None
+                    or (
+                        k in owner._non_persistent_buffers_set
+                        and k not in owner._param_td.keys()
+                    )
                 }
                 owner._reset_params()
                 owner._buffers.update(extra)

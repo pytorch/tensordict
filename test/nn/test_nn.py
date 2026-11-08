@@ -6640,6 +6640,23 @@ class TestTensorDictParams:
         assert params.unused is None
         assert (params._buffers["np"] == 5).all()
 
+    @pytest.mark.parametrize("assign", [True, False])
+    @pytest.mark.parametrize("strict", [True, False])
+    def test_load_state_dict_non_persistent_set_as_leaf(self, strict, assign):
+        # #3541: a non-persistent name later set as a leaf is in state_dict(),
+        # and loads like any other leaf.
+        params = TensorDictParams(TensorDict(a=torch.zeros(3)), no_convert=True)
+        params.register_buffer("np", torch.full((2,), 5.0), persistent=False)
+        params["np"] = torch.zeros(2)
+        module = self._parent(params)
+        sd = {k: torch.ones_like(v) for k, v in module.state_dict().items()}
+        assert set(sd) == {"params.a", "params.np"}
+        result = module.load_state_dict(sd, strict=strict, assign=assign)
+        assert result.missing_keys == result.unexpected_keys == []
+        assert (params["a"] == 1).all() and (params["np"] == 1).all()
+        assert (params["np"].data_ptr() == sd["params.np"].data_ptr()) is assign
+        assert params._buffers["np"] is params["np"]
+
     @staticmethod
     def _apply_params(device=None):
         # A parameter, a nested parameter, a buffer, and a nested
