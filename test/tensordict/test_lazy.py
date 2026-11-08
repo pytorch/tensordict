@@ -1022,7 +1022,7 @@ class TestLazyStackedTensorDict:
         # batch size in a member, or a value that is not a plain TensorDict
         def with_entry(key, entry, *bs):
             td = value(*bs)
-            td._set_tuple(key, entry, inplace=False, validated=False)
+            td.set(key, entry)
             return td
 
         locked = make()
