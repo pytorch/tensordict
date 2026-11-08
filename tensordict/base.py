@@ -4647,7 +4647,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         The feature dimensions of the leaves do not count. The minimum is 1: a
         tensordict with batch size ``[]`` or ``[0]`` returns 1, unlike
-        :meth:`torch.Tensor.numel`, which returns 0 for a size of 0.
+        :meth:`torch.Tensor.numel`, which returns 0 for a size of 0. On a
+        :class:`~tensordict.LazyStackedTensorDict` with a ragged batch dim (of
+        size -1), it is the sum of the counts of its members.
 
         Examples:
             >>> import torch
