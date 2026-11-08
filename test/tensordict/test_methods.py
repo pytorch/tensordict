@@ -7019,6 +7019,173 @@ def test_flatten_keys_context_manager_keyword_separator_inplace(keyword):
     assert set(td.keys(True, True)) == {"a", ("b", "c"), stray}
 
 
+@pytest.mark.parametrize("nested_block", [False, True])
+@pytest.mark.parametrize("action", ["none", "set_", "set"])
+def test_unflatten_keys_context_manager_keyword_separator_locked_nested(
+    nested_block, action
+):
+    # #3517: on a locked tensordict that holds nested keys and keys with the
+    # separator in them, the exit of a with-block around
+    # unflatten_keys(separator=...) raised KeyError, also around a nested
+    # flatten_keys(separator=...) block, where v0.15.4 returned.
+    td = TensorDict({"b": {"c": torch.zeros(2)}, "a/z": torch.zeros(2)}, [2])
+    td.lock_()
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        with td.unflatten_keys(separator="/") as f:
+            if nested_block:
+                with f.flatten_keys(separator="/") as g:
+                    if action != "none":
+                        getattr(g, action)("a/z", torch.ones(2))
+                        getattr(g, action)("b/c", torch.ones(2))
+            elif action != "none":
+                getattr(f, action)(("a", "z"), torch.ones(2))
+                getattr(f, action)(("b", "c"), torch.ones(2))
+    assert td.is_locked
+    assert set(td.keys(True, True)) == {("b", "c"), "a/z"}
+    expected = 0.0 if action == "none" else 1.0
+    assert (td["a/z"] == expected).all()
+    assert (td["b", "c"] == expected).all()
+
+
+def test_unflatten_keys_context_manager_keyword_separator_locked_mapped(tmp_path):
+    # #3517: a value that shares memory with an entry through a second mapping
+    # of the same file, which an address check cannot see, is read before the
+    # entry is written
+    filename = str(tmp_path / "x.bin")
+    torch.tensor([1.0, 10.0, 2.0, 20.0]).numpy().tofile(filename)
+    x = torch.from_file(filename, shared=True, size=4).view(2, 2)
+    td = TensorDict({"b": {"c": x}, "a/z": torch.zeros(2, 2)}, [2]).lock_()
+    with td.unflatten_keys(separator="/") as f:
+        y = torch.from_file(filename, shared=True, size=4).view(2, 2)
+        f.set(("a", "z"), y)
+        f.set(("b", "c"), torch.full((2, 2), 7.0))
+    assert (td["a/z"] == torch.tensor([[1.0, 10.0], [2.0, 20.0]])).all()
+    assert (td["b", "c"] == 7).all()
+    assert (x == 7).all()
+
+
+def test_unflatten_keys_context_manager_keyword_separator_locked_unchanged():
+    # #3517 leaves these as they were: a key added in the block, and a lazy
+    # stack whose members hold leaves of different shapes, still raise.
+    # The write-back takes only exact TensorDicts with exact strided tensor
+    # leaves: anything else raises the KeyError with nothing written.
+    td = TensorDict({"b": {"c": torch.zeros(2)}, "a/z": torch.zeros(2)}, [2]).lock_()
+    with pytest.raises(KeyError, match="b.c"):
+        with td.unflatten_keys(separator="/") as f:
+            f.set(("n", "m"), torch.ones(2))
+    td = LazyStackedTensorDict(
+        TensorDict({"b": {"c": torch.zeros(3)}, "a/z": torch.zeros(2)}, []),
+        TensorDict({"b": {"c": torch.zeros(4)}, "a/z": torch.zeros(2)}, []),
+    ).lock_()
+    with pytest.raises(KeyError, match="b.c"):
+        with td.unflatten_keys(separator="/"):
+            pass
+    # a write-back that update_ would reject raises the KeyError, with nothing
+    # written: a value of another shape, a Parameter leaf in grad mode
+    td = TensorDict({"b": {"c": torch.zeros(2)}, "a/z": torch.zeros(2)}, [2]).lock_()
+    with pytest.raises(KeyError, match="b.c"):
+        with td.unflatten_keys(separator="/") as f:
+            f.set(("b", "c"), torch.ones(2))
+            f.set(("a", "z"), torch.ones(2, 3))
+    assert (td["b", "c"] == 0).all()
+    params = TensorDictParams(
+        TensorDict({"b": {"c": torch.zeros(2)}, "a/z": torch.zeros(2)}, [2])
+    ).lock_()
+    with pytest.raises(KeyError, match="b.c"):
+        with params.unflatten_keys(separator="/"):
+            pass
+    # a lazy stack whose members hold an inference tensor, a meta value, a
+    # jagged nested tensor leaf and a non-tensor leaf
+    with torch.inference_mode():
+        inference = torch.zeros(2)
+    td = LazyStackedTensorDict(
+        *[TensorDict({"b": {"c": torch.zeros(2)}, "a/z": inference}, [])] * 2
+    ).lock_()
+    with pytest.raises(KeyError, match="b.c"):
+        with td.unflatten_keys(separator="/") as f:
+            f.set(("b", "c"), torch.ones(2, 2))
+    assert (td["b", "c"] == 0).all()
+    td = TensorDict({"b": {"c": torch.zeros(2)}, "a/z": torch.zeros(2)}, [2]).lock_()
+    with pytest.raises(KeyError, match="b.c"):
+        with td.unflatten_keys(separator="/") as f:
+            f.set(("b", "c"), torch.ones(2))
+            f.set(("a", "z"), torch.zeros(2, device="meta"))
+    assert (td["b", "c"] == 0).all()
+    njt = torch.nested.nested_tensor(
+        [torch.zeros(2), torch.zeros(3)], layout=torch.jagged
+    )
+    td = TensorDict({"b": {"c": torch.zeros(2)}, "a/z": njt}, [2]).lock_()
+    with pytest.raises(KeyError, match="b.c"):
+        with td.unflatten_keys(separator="/") as f:
+            f.set(("b", "c"), torch.ones(2))
+    assert (td["b", "c"] == 0).all()
+    td = TensorDict({"b": {"c": torch.zeros(2)}, "a/z": torch.zeros(2)}, [2])
+    td["s/t"] = "hello"
+    td.lock_()
+    with pytest.raises(KeyError, match="b.c"):
+        with td.unflatten_keys(separator="/") as f:
+            f.set(("b", "c"), torch.ones(2))
+    assert (td["b", "c"] == 0).all()
+    # a block that gives one key the tensor of another, and one tensor
+    # stored under two keys: update_ would overwrite a value before it reads it
+    td = TensorDict({"b": {"c": torch.ones(2)}, "a/z": torch.full((2,), 2.0)}, [2])
+    td.lock_()
+    with pytest.raises(KeyError, match="b.c"):
+        with td.unflatten_keys(separator="/") as f:
+            bc, az = f.get(("b", "c")), f.get(("a", "z"))
+            f.set(("b", "c"), az)
+            f.set(("a", "z"), bc)
+    assert (td["b", "c"] == 1).all()
+    assert (td["a/z"] == 2).all()
+    td = TensorDict({"a/z": torch.full((2,), 2.0), "b": {"c": torch.ones(2)}}, [2])
+    td.lock_()
+    with pytest.raises(KeyError, match="b.c"):
+        with td.unflatten_keys(separator="/") as f:
+            f.set(("b", "c"), f.get(("a", "z")))
+            f.set(("a", "z"), torch.full((2,), 7.0))
+    assert (td["b", "c"] == 1).all()
+    assert (td["a/z"] == 2).all()
+    shared = torch.zeros(2)
+    td = TensorDict({"b": {"c": shared}, "a/z": shared}, [2]).lock_()
+    with pytest.raises(KeyError, match="b.c"):
+        with td.unflatten_keys(separator="/") as f:
+            f.set(("b", "c"), torch.ones(2))
+            f.set(("a", "z"), torch.full((2,), 3.0))
+    assert (shared == 0).all()
+    # values that share memory with an entry through a storage of their own,
+    # which starts inside the entry's storage
+    x = torch.tensor([[1.0, 10.0], [2.0, 20.0]])
+    for alias in (
+        lambda: torch.from_numpy(x.numpy()[:, 1:]),
+        lambda: torch.frombuffer(x.numpy(), dtype=x.dtype, offset=8).view(2, 1),
+    ):
+        td = TensorDict({"b": {"c": x}, "a/z": torch.zeros(2, 1)}, [2]).lock_()
+        with pytest.raises(KeyError, match="b.c"):
+            with td.unflatten_keys(separator="/") as f:
+                f.set(("a", "z"), alias())
+                f.set(("b", "c"), torch.full((2, 2), 7.0))
+        assert (x == torch.tensor([[1.0, 10.0], [2.0, 20.0]])).all()
+        assert (td["a/z"] == 0).all()
+    # a tensordict on the meta device
+    td = TensorDict(
+        {"b": {"c": torch.zeros(2)}, "a/z": torch.zeros(2)}, [2], device="meta"
+    ).lock_()
+    with pytest.raises(KeyError, match="b.c"):
+        with td.unflatten_keys(separator="/"):
+            pass
+    # a key that collides with a nested one under "."
+    td = TensorDict({"b": {"c": torch.zeros(2)}, "b.c": torch.zeros(2)}, [2]).lock_()
+    with pytest.raises(KeyError, match="collide"):
+        with td.unflatten_keys(separator="/"):
+            pass
+    # unlocked: the stray keys of the "." reversal are a separate bug
+    td = TensorDict({"b": {"c": torch.zeros(2)}, "a/z": torch.zeros(2)}, [2])
+    with td.unflatten_keys(separator="/"):
+        pass
+    assert set(td.keys(True, True)) == {("b", "c"), "a/z", "a.z", "b.c"}
+
+
 @pytest.mark.parametrize("device", get_available_devices())
 def test_cat_tensors_shape_mismatch_preserves_entries(device):
     # Last dims differ, and dim=1 is not that dim, so cat raises.
