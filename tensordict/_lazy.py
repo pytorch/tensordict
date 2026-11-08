@@ -736,6 +736,37 @@ def _collect_memory(data, memory: set) -> None:
         memory.add(id(data))
 
 
+def _is_plain_td(td) -> bool:
+    """Whether ``td`` is an exact TensorDict at every depth, with only tensor leaves, so that ``_get_tuple`` returns the stored leaf."""
+    return type(td) is TensorDict and all(
+        isinstance(value, Tensor) or _is_plain_td(value) for value in td.values()
+    )
+
+
+def _is_plain_leaf(tensor) -> bool:
+    """Whether ``tensor`` is a plain strided tensor that an in-place copy writes, or is read from, without raising."""
+    if not (
+        type(tensor) is Tensor
+        and tensor.layout is torch.strided
+        and not tensor.is_nested
+        and not tensor.is_quantized
+        and not tensor.is_inference()
+        and not (tensor.requires_grad and torch.is_grad_enabled())
+    ):
+        return False
+    # no expanded or internally overlapping dims
+    extent = 1
+    for stride, size in sorted(
+        (stride, size)
+        for stride, size in zip(tensor.stride(), tensor.shape)
+        if size > 1
+    ):
+        if stride < extent:
+            return False
+        extent += stride * (size - 1)
+    return True
+
+
 def _broadcasts(shape: torch.Size, other_shape: torch.Size) -> bool:
     try:
         torch.broadcast_shapes(shape, other_shape)
@@ -5443,7 +5474,20 @@ class LazyStackedTensorDict(TensorDictBase):
                     _is_tensor_collection(type(value))
                     for value in input_dict_or_td.values()
                 ):
-                    raise ragged_error
+                    # expand the piece of each member to the rows it selects,
+                    # as a stack without a ragged dim expands the value, and
+                    # check every piece before any member is written
+                    if not isinstance(input_dict_or_td, TensorDictBase):
+                        raise ragged_error
+                    return self._update_at_ragged_broadcast(
+                        input_dict_or_td,
+                        idx,
+                        indexed_bs,
+                        lead,
+                        ragged_error,
+                        non_blocking=non_blocking,
+                        keys_to_update=keys_to_update,
+                    )
                 if -1 in indexed_bs[:lead]:
                     # expand cannot add a leading dim of size -1: a ragged
                     # dim that the value does not have gets size 1
@@ -5469,6 +5513,110 @@ class LazyStackedTensorDict(TensorDictBase):
                 non_blocking=non_blocking,
                 **kwargs,
             )
+        return self
+
+    def _update_at_ragged_broadcast(
+        self,
+        value: TensorDictBase,
+        idx: IndexType,
+        indexed_bs: torch.Size,
+        lead: int,
+        ragged_error: ValueError,
+        *,
+        non_blocking: bool,
+        keys_to_update: list[tuple[str, ...]] | None,
+    ) -> Self:
+        """Writes a value that a sliced ragged dim broadcasts into each member, for :meth:`_update_at_`.
+
+        Each member's piece is expanded to the rows the member selects. The
+        write goes ahead only for exact TensorDict members and plain tensor
+        leaves that are known to take it; otherwise ``ragged_error`` is raised
+        before any member is written.
+        """
+
+        def selected(key):
+            return keys_to_update is None or any(
+                key[: len(k)] == k for k in keys_to_update
+            )
+
+        try:
+            if not (
+                _is_plain_td(value) and all(_is_plain_td(td) for td in self.tensordicts)
+            ):
+                raise ragged_error
+            for key, leaf in value.items(True, True):
+                if selected(_unravel_key_to_tuple(key)) and not _is_plain_leaf(leaf):
+                    raise ragged_error
+            # the members are written one after another, so a value leaf that
+            # reads a member's memory could be overwritten before it is read.
+            # A storage check cannot see every such leaf (from_numpy or
+            # frombuffer make a storage of their own over the same memory).
+            # A ragged dim gets size 1, which each piece expands.
+            value = value.clone().expand(
+                torch.Size(
+                    1 if size == -1 and dim < lead else size
+                    for dim, size in enumerate(indexed_bs)
+                )
+            )
+            plan = []
+            # the destination leaves, by identity
+            dests = {}
+            for member, member_index, piece in self._split_value(idx, value):
+                td = self.tensordicts[member]
+                member_index = () if member_index is None else member_index
+                rows = _getitem_batch_size(td.batch_size, member_index)
+                if piece.batch_size != rows:
+                    piece = piece.expand(rows)
+                for key, entry in piece.items(True, False):
+                    key = _unravel_key_to_tuple(key)
+                    if isinstance(entry, Tensor):
+                        continue
+                    # an existing sub-tensordict of the batch size of the
+                    # entry, so that no key is created and no check raises.
+                    # Every one is checked, selected or not: with
+                    # keys_to_update, update_ still walks the others
+                    dest = td._get_tuple(key, None)
+                    if not (
+                        type(dest) is TensorDict
+                        and dest[member_index].batch_size == entry.batch_size
+                    ):
+                        raise ragged_error
+                for key, leaf in piece.items(True, True):
+                    key = _unravel_key_to_tuple(key)
+                    if not selected(key):
+                        continue
+                    dest = td._get_tuple(key, None)
+                    # write only where the write is known not to raise after
+                    # it has written the members before this one
+                    if not (
+                        _is_plain_leaf(dest)
+                        and type(leaf) is Tensor
+                        and leaf.dtype == dest.dtype
+                        and leaf.device == dest.device
+                    ):
+                        raise ragged_error
+                    dests[id(dest)] = dest
+                    # indexing the entry checks the index against it
+                    shape = dest[member_index].shape
+                    if torch.broadcast_shapes(leaf.shape, shape) != shape:
+                        raise ragged_error
+                plan.append((td, member_index, piece))
+            # distinct destination leaves must not share memory: compare the
+            # byte ranges of their storages. Empty tensors write nothing, and
+            # can all have data_ptr 0.
+            ranges = sorted(
+                (storage.data_ptr(), storage.data_ptr() + storage.nbytes())
+                for storage in (
+                    dest.untyped_storage() for dest in dests.values() if dest.numel()
+                )
+            )
+            if any(start < end for (_, end), (start, _) in zip(ranges, ranges[1:])):
+                raise ragged_error
+        except Exception:
+            raise ragged_error from None
+        kwargs = {} if keys_to_update is None else {"keys_to_update": keys_to_update}
+        for td, member_index, piece in plan:
+            td.update_at_(piece, member_index, non_blocking=non_blocking, **kwargs)
         return self
 
     def _innermost_tensordicts(self) -> list[TensorDictBase]:
