@@ -520,8 +520,11 @@ def test_lazy_write_at_slice_ragged_dim_compiles_unchanged():
         lambda ls: ls.set_at_(
             "n", TensorDict(b=torch.ones(()), batch_size=[]), (1, slice(0, 0))
         ),
+        lambda ls: ls.set_at_(
+            "n", TensorDict(b=torch.ones(1), batch_size=[1]), (1, slice(0, 0))
+        ),
     ],
-    ids=["update_at_", "set_at_"],
+    ids=["update_at_", "set_at_", "set_at_-batch1"],
 )
 def test_lazy_write_at_empty_slice_ragged_dim_nested_compiles(write):
     # #3527: compiled, a nested value at an empty slice of the ragged dim
