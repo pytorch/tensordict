@@ -35,7 +35,10 @@ PACKAGE = "tensordict"
 # follow (is_tensor_collection checks, values that an earlier branch rules
 # out) or from mixins that read attributes of the class they are mixed into.
 # Replayed over the 40 merges to main before this check was added, these rules
-# account for every rise, and none of the new diagnostics was a bug.
+# account for the rises in 11 of the 12 merges that a check failing on every
+# rule would have failed, and none of those was a bug. The twelfth was an
+# attribute read on a value that may be None (#3541), which NONE_ATTRIBUTE
+# below counts as a rule of its own, one that fails the check.
 REPORT_ONLY = frozenset(
     {
         "import-not-found",
