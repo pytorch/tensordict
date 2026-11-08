@@ -972,6 +972,32 @@ class TestLazyStackedTensorDict:
             ls.update_at_(value(1), (slice(None), slice(0, 2)))
         got = [t.flatten().tolist() for t in ls.get("a", as_list=True)]
         assert got == [[1.0, 1.0], [1.0, 1.0, 0.0], [1.0]]
+        # a value leaf that reads a member's memory at an offset, through a
+        # storage of its own, writes what a copy of the value writes
+        results = []
+        for copy in (False, True):
+            ls = lazy_stack(
+                [
+                    TensorDict(
+                        a=torch.arange(3.0 * bs[0]).reshape(*bs, 3, 1) + 10 * i,
+                        n=TensorDict(b=torch.zeros(bs), batch_size=bs),
+                        batch_size=bs,
+                    )
+                    for i, bs in enumerate(([2], [3], [1]))
+                ]
+            )
+            a = ls.tensordicts[0]["a"].numpy().reshape(-1)[1:4]
+            val = TensorDict(
+                a=torch.from_numpy(a).reshape(1, 3, 1),
+                n=TensorDict(b=torch.ones(1), batch_size=[1]),
+                batch_size=[1],
+            )
+            if copy:
+                val = val.clone()
+            ls.update_at_(val, (slice(None), slice(0, 1)))
+            results.append([t.tolist() for t in ls.get("a", as_list=True)])
+        assert results[0] == results[1]
+        assert results[0][1][0] == [[1.0], [2.0], [3.0]]
 
     def test_ragged_update_at_nested_broadcast_unchanged(self):
         # #3503: a value that does not fit every member keeps the old error and
@@ -1062,6 +1088,20 @@ class TestLazyStackedTensorDict:
                 ls.update_at_(val, index)
             assert [set(td.keys(True)) for td in ls.tensordicts] == keys
             assert (ls == before).all()
+
+        # members whose leaves overlap in memory, through storages of their own
+        memory = np.zeros(8, dtype=np.float32)
+        ls = make()
+        ls.tensordicts[0].set(
+            "a", torch.from_numpy(memory[:2]).reshape(2, 1), inplace=False
+        )
+        ls.tensordicts[1].set(
+            "a", torch.from_numpy(memory[1:4]).reshape(3, 1), inplace=False
+        )
+        with pytest.raises(ValueError, match="length should not be negative"):
+            ls.update_at_(value(1), index)
+        assert not memory.any()
+        assert not ls.get(("n", "b"), as_list=True)[0].any()
 
     def test_ragged_update_at_nested_broadcast_failing_write_unchanged(self):
         # #3503: a leaf of the last member that the write would fail on keeps

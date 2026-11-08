@@ -5515,21 +5515,22 @@ class LazyStackedTensorDict(TensorDictBase):
                 _is_plain_td(value) and all(_is_plain_td(td) for td in self.tensordicts)
             ):
                 raise ragged_error
-            sources = []
             for key, leaf in value.items(True, True):
-                if selected(_unravel_key_to_tuple(key)):
-                    if not _is_plain_leaf(leaf):
-                        raise ragged_error
-                    sources.append(leaf)
-            # a ragged dim gets size 1, which each piece expands
-            value = value.expand(
+                if selected(_unravel_key_to_tuple(key)) and not _is_plain_leaf(leaf):
+                    raise ragged_error
+            # the members are written one after another, so a value leaf that
+            # reads a member's memory could be overwritten before it is read.
+            # A storage check cannot see every such leaf (from_numpy or
+            # frombuffer make a storage of their own over the same memory).
+            # A ragged dim gets size 1, which each piece expands.
+            value = value.clone().expand(
                 torch.Size(
                     1 if size == -1 and dim < lead else size
                     for dim, size in enumerate(indexed_bs)
                 )
             )
             plan = []
-            # the storage of each destination leaf
+            # the destination leaves, by identity
             dests = {}
             for member, member_index, piece in self._split_value(idx, value):
                 td = self.tensordicts[member]
@@ -5561,18 +5562,25 @@ class LazyStackedTensorDict(TensorDictBase):
                         and type(leaf) is Tensor
                         and leaf.dtype == dest.dtype
                         and leaf.device == dest.device
-                        and dests.setdefault(dest.untyped_storage().data_ptr(), dest)
-                        is dest
                     ):
                         raise ragged_error
+                    dests[id(dest)] = dest
                     # indexing the entry checks the index against it
                     shape = dest[member_index].shape
                     if torch.broadcast_shapes(leaf.shape, shape) != shape:
                         raise ragged_error
                 plan.append((td, member_index, piece))
-            for leaf in sources:
-                if dests.get(leaf.untyped_storage().data_ptr(), leaf) is not leaf:
-                    raise ragged_error
+            # distinct destination leaves must not share memory: compare the
+            # byte ranges of their storages. Empty tensors write nothing, and
+            # can all have data_ptr 0.
+            ranges = sorted(
+                (storage.data_ptr(), storage.data_ptr() + storage.nbytes())
+                for storage in (
+                    dest.untyped_storage() for dest in dests.values() if dest.numel()
+                )
+            )
+            if any(start < end for (_, end), (start, _) in zip(ranges, ranges[1:])):
+                raise ragged_error
         except Exception:
             raise ragged_error from None
         kwargs = {} if keys_to_update is None else {"keys_to_update": keys_to_update}
