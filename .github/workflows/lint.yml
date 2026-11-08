@@ -47,3 +47,26 @@ jobs:
             git --no-pager diff
             exit 1
           fi
+
+  ty-ratchet:
+    name: ty (diagnostic counts may only fall)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # ty's diagnostic counts change with the ty version and with the packages
+      # it resolves imports against, so the environment is pinned exactly and
+      # .github/ty-baseline.json is regenerated whenever a pin changes.
+      - name: Install ty and the pinned environment
+        run: |
+          bash .github/scripts/install_ci_tool.sh uv "$HOME/.local/bin"
+          export PATH="$HOME/.local/bin:$PATH"
+          uv venv --python 3.12 .ty-venv
+          uv pip install --python .ty-venv/bin/python --torch-backend cpu \
+            -c .github/ci-constraints.txt -r .github/ty-requirements.txt
+      - name: Compare ty's diagnostic counts with the baseline
+        run: python .github/scripts/ty_ratchet.py
