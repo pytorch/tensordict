@@ -7203,7 +7203,9 @@ class _PermutedTensorDict(_CustomOpTensorDict):
 
         list_permuted_items = []
         for item in list_item:
-            perm = list(inv_permute_dims) + list(
+            # tolist(): Python ints, since permute takes a single non-int
+            # argument to be a list of dims
+            perm = inv_permute_dims.tolist() + list(
                 range(self.batch_dims - 1, item.ndimension())
             )
             list_permuted_items.append(item.permute(*perm))

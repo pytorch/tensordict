@@ -388,6 +388,23 @@ def _pad_non_tensor(
     pairs = [(pad_size[2 * i], pad_size[2 * i + 1]) for i in range(len(pad_size) // 2)]
     if all(left == 0 and right == 0 for left, right in pairs):
         return tensordict
+    member_names = None
+    if inplace and isinstance(tensordict, NonTensorStack):
+        # the names that the members share, read before the pad swaps them
+        try:
+            for td in tensordict.tensordicts:
+                if member_names is None:
+                    member_names = td.names
+                elif td.names != member_names:
+                    member_names = None
+                    break
+        except (IndexError, ValueError):
+            member_names = None
+        if member_names is not None:
+            # members that use a name twice (deprecated) are left as on main
+            named = [name for name in member_names if name is not None]
+            if len(set(named)) != len(named):
+                member_names = None
     result = _pad_non_tensor_rec(tensordict, pairs)
     try:
         names = tensordict._maybe_names()
@@ -412,6 +429,21 @@ def _pad_non_tensor(
         new_tensordicts = result.unbind(tensordict.stack_dim)
     tensordict.tensordicts[:] = new_tensordicts
     tensordict._change_batch_size(result.batch_size)
+    if member_names is not None:
+        # The new members may be unnamed: give them the names of the members
+        # they replace, as an in-place pad of a dense tensordict keeps its
+        # names. Members that already have them are left as they are.
+        for td in tensordict.tensordicts:
+            try:
+                td_names = td.names
+            except (IndexError, ValueError):
+                # a new member may hold new, unnamed members itself
+                td_names = None
+            if td_names != member_names:
+                try:
+                    td.names = member_names
+                except (IndexError, ValueError):
+                    pass
     return tensordict
 
 

@@ -1769,7 +1769,8 @@ def __getattr__(name: str) -> Any: ...
     package.joinpath("_nestedkey.pyi").write_text(
         (_TENSORDICT_DIR / "_nestedkey.pyi").read_text()
     )
-    imports = """from collections.abc import Mapping
+    imports = """import builtins
+from collections.abc import Mapping
 from typing import (
     Any, Callable, Iterator, List, OrderedDict, overload, Self, Sequence, Tuple,
     Type, TypeAlias, TypeVar, Union,
@@ -2377,7 +2378,8 @@ def test_memmap_save_archive_static_types(tmp_path, monkeypatch):
     stubs = tmp_path / "stubs"
     package = stubs / "tensordict"
     package.mkdir(parents=True)
-    imports = """from pathlib import Path
+    imports = """import builtins
+from pathlib import Path
 from typing import Self
 """
     package.joinpath("__init__.pyi").write_text("")

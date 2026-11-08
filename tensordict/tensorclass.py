@@ -7494,7 +7494,18 @@ class NonTensorDataBase(TensorClass):
     def share_memory_(self):
         if self._tensordict._is_shared:
             return self
-        with self.unlock_():
+        td = self._tensordict
+        # A locked parent forbids the unlock, and the write needs none: it
+        # goes through __dict__ (#3505). Memmapped data keeps the unlock.
+        in_locked_graph = (
+            td._is_locked
+            and not td._is_memmap
+            and any(
+                parent is not None and parent._is_locked
+                for parent in (ref() for ref in td._lock_parents_weakrefs)
+            )
+        )
+        with contextlib.nullcontext() if in_locked_graph else self.unlock_():
             self.__dict__["_non_tensordict"]["data"] = _share_memory_nontensor(
                 self.data, manager=_mp_manager()
             )
@@ -8219,7 +8230,7 @@ class TensorAttrs(TensorClass):
             >>> attrs.tgt_dtype, attrs.tgt_shape
             (torch.float32, None)
         """
-        kwargs = {}
+        kwargs: dict[str, Any] = {}
         if "device" in fields:
             kwargs["tgt_device"] = tensor.device
         if "dtype" in fields:
