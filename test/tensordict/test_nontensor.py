@@ -755,6 +755,18 @@ class TestNonTensorData:
         assert d_expand.tolist() == [[0 for _ in range(3)] for _ in range(2)]
         assert isinstance(d_expand, NonTensorStack)
 
+    @pytest.mark.parametrize(
+        "batch_size,shape", [([1], [0]), ([2], [0, 2]), ([1, 2], [0, -1])]
+    )
+    def test_expand_empty(self, batch_size, shape):
+        data = NonTensorData("value", batch_size=batch_size)
+        result = data.expand(*shape)
+        expected = torch.empty(batch_size).expand(*shape)
+        assert result.batch_size == expected.shape
+        assert result.tolist() == expected.tolist()
+        assert data.data == "value"
+        assert data.batch_size == torch.Size(batch_size)
+
     def test_expand_nested(self):
         d = TensorDict(foo=NonTensorData(0, batch_size=(3,)), batch_size=(3,))
         d_expand = d.expand((2, 3)).get("foo")

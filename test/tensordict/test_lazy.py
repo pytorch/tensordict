@@ -844,6 +844,25 @@ class TestLazyStackedTensorDict:
         dense.update_at_(TensorDict(a=torch.ones(1, 1), batch_size=[1]), (0, ...))
         assert dense[0]["a"].flatten().tolist() == [1.0, 1.0, 1.0]
 
+    @pytest.mark.parametrize("member", [0, 1, 2])
+    def test_ragged_set_at_non_tensor_empty_slice(self, member):
+        sizes = (2, 3, 1)
+        ls = lazy_stack(
+            [
+                TensorDict(
+                    a=torch.zeros(k, 1),
+                    s=NonTensorData("z", batch_size=[k]),
+                    batch_size=[k],
+                )
+                for k in sizes
+            ]
+        )
+        assert ls.set_at_("s", "x", (member, slice(0, 0))) is ls
+        assert [td.get("s").tolist() for td in ls.tensordicts] == [
+            ["z"] * k for k in sizes
+        ]
+        assert all(td["a"].eq(0).all() for td in ls.tensordicts)
+
     def test_ragged_set_at_tensordict_broadcast_slice_ragged_dim(self):
         # #3500: set_at_ of a tensordict value that broadcasts over a sliced
         # ragged dim either raises and writes nothing, or writes the rows

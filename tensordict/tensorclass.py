@@ -7845,6 +7845,9 @@ class NonTensorData(NonTensorDataBase):
                 stacklevel=2,
             )
 
+        if 0 in shape and _expands_to(self.batch_size, shape):
+            return self.empty(batch_size=shape)
+
         # Replicate self until we have the appropriate batch size
         out = self
         for i, s in enumerate(reversed(shape)):
