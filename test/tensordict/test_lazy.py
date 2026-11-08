@@ -58,6 +58,7 @@ if os.getenv("PYTORCH_TEST_FBCODE"):
         decompose,
         get_available_devices,
         is_npu_available,
+        legacy_lazy_mode,
         streaming_dataset,
     )
 else:
@@ -65,6 +66,7 @@ else:
         decompose,
         get_available_devices,
         is_npu_available,
+        legacy_lazy_mode,
         streaming_dataset,
     )
 
@@ -3879,6 +3881,25 @@ class TestLazyStackedTensorDict:
         for td, ptr in zip(tds, ptrs):
             assert td["a"].data_ptr() == ptr
             assert (td["a"] == torch.arange(3.0)).all()
+
+    @pytest.mark.parametrize("batch_size", [[3, 4], [3, 4, 5]])
+    @pytest.mark.parametrize("nested", [False, True])
+    def test_stack_onto_legacy_permuted_view(self, batch_size, nested):
+        # torch.stack(..., out=view) into a legacy permuted view writes the
+        # stacked values back into the source. With two batch dims the inverse
+        # permutation has a single numpy int, which permute took for a list
+        # of dims (#3536).
+        source = {"a": torch.zeros(*batch_size, 2)}
+        if nested:
+            source["b"] = {"c": torch.zeros(*batch_size)}
+        td = TensorDict(source, batch_size=batch_size)
+        dims = list(range(len(batch_size)))[::-1]
+        expected = td.clone().apply(lambda x: torch.rand_like(x))
+        with legacy_lazy_mode():
+            view = td.permute(*dims)
+            pieces = list(expected.permute(*dims).unbind(0))
+            assert torch.stack(pieces, 0, out=view) is view
+        assert (td == expected).all()
 
     def test_create_names_with_members_warns(self):
         # With members, the constructor ignores names until 0.17 (#2559).

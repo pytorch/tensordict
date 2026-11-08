@@ -91,6 +91,11 @@ def _apply_leaves(data, fn, *others):
                 )
         return data
     elif isinstance(data, LazyStackedTensorDict):
+        if fn is _wrap_like and is_non_tensor(data):
+            # Row writes (set_at_, update_at_, __setitem__ by index), set and
+            # update can leave a NonTensorStack in _param_td: it holds no
+            # tensor to wrap (#3504)
+            return fn(data, *others)
         # this is currently not implemented as the registration of params will only work
         # with plain TensorDict. The solution will be using pytree to get each independent
         # leaf
