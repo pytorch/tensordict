@@ -5443,7 +5443,7 @@ class LazyStackedTensorDict(TensorDictBase):
                     if dynamo_batch_size is None:
                         raise ragged_error
                     indexed_bs = dynamo_batch_size
-                if -1 in indexed_bs[:lead]:
+                elif -1 in indexed_bs[:lead]:
                     # expand cannot add a leading dim of size -1: a ragged
                     # dim that the value does not have gets size 1
                     indexed_bs = torch.Size(
