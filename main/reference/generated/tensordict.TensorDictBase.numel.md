@@ -6,7 +6,9 @@ Returns the number of elements in the batch, which is the product of `batch_size
 
 The feature dimensions of the leaves do not count. The minimum is 1: a
 tensordict with batch size `[]` or `[0]` returns 1, unlike
-[`torch.Tensor.numel()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.numel.html#torch.Tensor.numel), which returns 0 for a size of 0.
+[`torch.Tensor.numel()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.numel.html#torch.Tensor.numel), which returns 0 for a size of 0. On a
+[`LazyStackedTensorDict`](tensordict.LazyStackedTensorDict.html#tensordict.LazyStackedTensorDict) with a ragged batch dim (of
+size -1), it is the sum of the counts of its members.
 
 Examples
 

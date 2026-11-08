@@ -216,12 +216,10 @@ torch.Size([2, -1])
 torch.Size([4])
 ```
 
-`numel()` of such a stack returns 1, whatever its members hold. To count
-the elements of the batch, add up the counts of the members (at each level,
-for a stack of lazy stacks):
+`numel()` of such a stack counts the elements of its members:
 
 ```
->>> sum(member.numel() for member in ragged.tensordicts)
+>>> ragged.numel()
 6
 ```
 
