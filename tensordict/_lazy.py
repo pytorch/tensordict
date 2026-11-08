@@ -5445,6 +5445,8 @@ class LazyStackedTensorDict(TensorDictBase):
                     # expand the piece of each member to the rows it selects,
                     # as a stack without a ragged dim expands the value, and
                     # check every piece before any member is written
+                    if not isinstance(input_dict_or_td, TensorDictBase):
+                        raise ragged_error
                     return self._update_at_ragged_broadcast(
                         input_dict_or_td,
                         idx,
@@ -5505,10 +5507,12 @@ class LazyStackedTensorDict(TensorDictBase):
                 key[: len(k)] == k for k in keys_to_update
             )
 
+        selected_keys = () if keys_to_update is None else keys_to_update
+
         def walked(key):
             # the member writes into a sub-tensordict that is selected or
             # holds a selected key
-            return selected(key) or any(k[: len(key)] == key for k in keys_to_update)
+            return selected(key) or any(k[: len(key)] == key for k in selected_keys)
 
         try:
             if not (
