@@ -777,6 +777,42 @@ class TestNonTensorData:
         assert stack.expand(4, -1, -1).tolist() == [[[0] * 3, [1] * 3]] * 4
         assert stack.broadcast_to((4, -1, 3)).shape == (4, 2, 3)
 
+    def test_expand_empty_shape(self):
+        # #3551: expanding to a shape with a 0 raised on an empty list in
+        # torch.cat or torch.stack
+        for batch_size, shape in [
+            ((1,), (0,)),
+            ((1,), (2, 0)),
+            ((1,), (0, 3)),
+            ((), (0,)),
+            ((), (0, 2)),
+            ((2,), (0, 2)),
+            ((1, 3), (0, -1)),
+            ((0,), (0, 0)),
+        ]:
+            expected = torch.empty(batch_size).expand(shape)
+            d = NonTensorData("v", batch_size=batch_size)
+            td = TensorDict(s=d, batch_size=batch_size)
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                results = [d.expand(*shape), td.expand(*shape).get("s")]
+            for result in results:
+                assert result.batch_size == expected.shape
+                assert result.tolist() == expected.tolist()
+        stack = NonTensorStack(NonTensorData("v"), NonTensorData("v"))
+        assert stack.expand(0, 2).batch_size == (0, 2)
+        assert stack.expand(0, 2).tolist() == []
+
+    def test_expand_empty_shape_unchanged(self):
+        # #3551: a -1 in a new leading dim still raises, and an empty entry
+        # expanded to new dims is still a NonTensorStack
+        with pytest.raises(ValueError):
+            NonTensorData("v", batch_size=[1]).expand(-1, 0)
+        result = NonTensorData("v", batch_size=[0]).expand(2, 0)
+        assert isinstance(result, NonTensorStack)
+        assert result.batch_size == (2, 0)
+        assert result.tolist() == [[], []]
+
     def test_expand_rejected_shape_warns(self):
         # The shapes that torch.Tensor.expand rejects warn, and give the same
         # result as before, until they raise in 0.17 (#2175)

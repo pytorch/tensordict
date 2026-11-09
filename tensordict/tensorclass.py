@@ -7835,7 +7835,8 @@ class NonTensorData(NonTensorDataBase):
         shape = _get_shape_from_args(*args, **kwargs)
         if -1 in shape:
             shape = _resolve_expand_shape(shape, self.batch_size)
-        if not _expands_to(self.batch_size, shape):
+        valid = _expands_to(self.batch_size, shape)
+        if not valid:
             warnings.warn(
                 "Expanding a NonTensorData to a shape that torch.Tensor.expand "
                 "rejects does not raise today. Starting with "
@@ -7851,7 +7852,10 @@ class NonTensorData(NonTensorDataBase):
             j = -i - 1
             if i < self.ndim and self.batch_size[j] == s:
                 continue
-            elif i < self.ndim and self.batch_size[j] == 1:
+            if s == 0 and valid and min(shape) >= 0:
+                # torch.cat and torch.stack reject an empty list
+                return self.empty(batch_size=shape)
+            if i < self.ndim and self.batch_size[j] == 1:
                 out = torch.cat([out.copy() for _ in range(s)], j)
             else:
                 out = torch.stack([out.copy() for _ in range(s)])
