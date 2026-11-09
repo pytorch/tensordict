@@ -294,7 +294,7 @@ if _HAS_WRAPPER_SUBCLASS_FIX:
 
         _pass_through = True
 
-        __torch_function__ = torch._C._disabled_torch_function_impl
+        __torch_function__ = torch._C._disabled_torch_function_impl  # ty: ignore[invalid-method-override]  # torch's subclass protocol
 
         @staticmethod
         def __new__(cls, data, batch_size=None):
@@ -352,7 +352,7 @@ if _HAS_WRAPPER_SUBCLASS_FIX:
             return hashlib.blake2b(pickle.dumps(cache_data), digest_size=16).hexdigest()
 
         @classmethod
-        def __torch_dispatch__(cls, func, types, args=(), kwargs=None):
+        def __torch_dispatch__(cls, func, types, args=(), kwargs=None):  # ty: ignore[invalid-method-override]  # torch's subclass protocol
             if kwargs is None:
                 kwargs = {}
             batch_size = cls._batch_size_from_args(args, kwargs)

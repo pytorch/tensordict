@@ -75,7 +75,7 @@ def implements_for_lazy_td(torch_function: Callable) -> Callable[[Callable], Cal
 
 
 @implements_for_td(torch.unbind)
-def _unbind(td: T, *args: Any, **kwargs: Any) -> tuple[T, ...]:
+def _unbind(td: T, *args: Any, **kwargs: Any) -> tuple[TensorDictBase, ...]:
     return td.unbind(*args, **kwargs)
 
 
@@ -189,7 +189,7 @@ def _gather(
     *,
     sparse_grad: bool = False,
     out: T | None = None,
-) -> T:
+) -> TensorDictBase:
     if sparse_grad:
         raise NotImplementedError(
             "sparse_grad=True not implemented for torch.gather(tensordict, ...)"
@@ -393,7 +393,7 @@ def _cat(
     dim: int = 0,
     device: DeviceType | None = None,
     out: T | None = None,
-) -> T:
+) -> TensorDictBase:
     if not len(list_of_tensordicts):
         raise RuntimeError("list_of_tensordicts cannot be empty")
     if any(isinstance(td, LazyStackedTensorDict) for td in list_of_tensordicts) and (
@@ -506,7 +506,7 @@ def _lazy_cat(
     list_of_tensordicts: Sequence[TensorDictBase],
     dim: int = 0,
     out: LazyStackedTensorDict | None = None,
-) -> LazyStackedTensorDict:
+) -> TensorDictBase:
     # why aren't they feeding you?
     if not len(list_of_tensordicts):
         raise RuntimeError("list_of_tensordicts cannot be empty")
@@ -665,7 +665,7 @@ def _stack(
     strict: bool = False,
     contiguous: bool = False,
     maybe_dense_stack: bool | None = None,
-) -> T:
+) -> TensorDictBase:
     if not len(list_of_tensordicts):
         raise RuntimeError("list_of_tensordicts cannot be empty")
     if maybe_dense_stack is None:
@@ -942,7 +942,7 @@ def _stack(
 @implements_for_td(torch.split)
 def _split(
     td: TensorDict, split_size_or_sections: int | list[int], dim: int = 0
-) -> list[TensorDictBase]:
+) -> tuple[TensorDictBase, ...]:
     return td.split(split_size_or_sections, dim)
 
 
@@ -956,7 +956,7 @@ def _tensor_split(
     sections: int | None = None,
     indices: Sequence[int] | None = None,
     tensor_indices_or_sections: Tensor | None = None,
-) -> tuple[T, ...]:
+) -> tuple[TensorDictBase, ...]:
     # torch.tensor_split names this argument after its type: sections (int),
     # indices (sequence of ints) or tensor_indices_or_sections (tensor)
     if indices_or_sections is None:
@@ -970,7 +970,7 @@ def _tensor_split(
 
 
 @implements_for_td(torch.chunk)
-def _chunk(td: T, chunks: int, dim: int = 0) -> tuple[T, ...]:
+def _chunk(td: T, chunks: int, dim: int = 0) -> tuple[TensorDictBase, ...]:
     return td.chunk(chunks, dim)
 
 

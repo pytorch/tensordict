@@ -875,6 +875,29 @@ class TestLazyStackedTensorDict:
             b = [[0.0, 0.0], [1.0, 1.0, 0.0], [0.0]]
         assert state() == ([[0.0] * k for k in sizes], b)
 
+    def test_ragged_set_at_non_tensor_empty_slice_ragged_dim(self):
+        # #3551: set_at_ of a non-tensor value at an empty slice of a ragged
+        # dim raised ValueError; it writes nothing, as for a tensor value
+        sizes = (2, 3, 1)
+        ls = lazy_stack(
+            [
+                TensorDict(
+                    a=torch.zeros(k, 1),
+                    s=NonTensorData("z", batch_size=[k]),
+                    batch_size=[k],
+                )
+                for k in sizes
+            ]
+        )
+        ls.set_at_("a", torch.ones(0, 1), (1, slice(0, 0)))
+        ls.set_at_("s", "x", (1, slice(0, 0)))
+        assert [t.flatten().tolist() for t in ls.get("a", as_list=True)] == [
+            [0.0] * k for k in sizes
+        ]
+        assert [t.tolist() for t in ls.get("s", as_list=True)] == [
+            ["z"] * k for k in sizes
+        ]
+
     def test_ragged_update_at_nested_broadcast_slice_ragged_dim(self):
         # #3500: a value with a nested tensordict that the members would
         # broadcast over a sliced ragged dim either raises and leaves every

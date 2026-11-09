@@ -253,7 +253,7 @@ class CompositeDistribution(d.Distribution, Mapping):
 
         return self
 
-    def sample(self, shape=None) -> TensorDictBase:
+    def sample(self, shape=None) -> TensorDictBase:  # ty: ignore[invalid-method-override]  # one entry per component, in a tensordict
         """Draws a sample from each component and returns them in a tensordict.
 
         Args:
@@ -388,7 +388,7 @@ class CompositeDistribution(d.Distribution, Mapping):
     def __repr__(self):
         return f"{type(self).__name__}({self.dists})"
 
-    def rsample(self, shape=None) -> TensorDictBase:
+    def rsample(self, shape=None) -> TensorDictBase:  # ty: ignore[invalid-method-override]  # one entry per component, in a tensordict
         """Draws a reparameterized sample from each component and returns them in a tensordict.
 
         Every component must support ``rsample``.
@@ -493,7 +493,7 @@ class CompositeDistribution(d.Distribution, Mapping):
             slp = slp + lp
         return sample, slp
 
-    def log_prob(self, sample: TensorDictBase) -> torch.Tensor | TensorDictBase:
+    def log_prob(self, sample: TensorDictBase) -> torch.Tensor | TensorDictBase:  # ty: ignore[invalid-method-override]  # can return a tensordict, one entry per component
         """Computes the log-probability of a sample.
 
         Args:
@@ -616,7 +616,7 @@ class CompositeDistribution(d.Distribution, Mapping):
         else:
             return sample.empty(recurse=True).update(d).filter_empty_()
 
-    def entropy(
+    def entropy(  # ty: ignore[invalid-method-override]  # can return a tensordict, one entry per component
         self,
         samples_mc: int = 1,
         *,
@@ -758,7 +758,7 @@ class CompositeDistribution(d.Distribution, Mapping):
             self.batch_shape,
         )
 
-    def cdf(self, sample: TensorDictBase) -> TensorDictBase:
+    def cdf(self, sample: TensorDictBase) -> TensorDictBase:  # ty: ignore[invalid-method-override]  # one entry per component, in a tensordict
         """Computes the cumulative distribution function (CDF) of each component and writes it into ``sample``.
 
         The CDF of the component at ``key`` is written at ``<key>_cdf``, with
@@ -798,7 +798,7 @@ class CompositeDistribution(d.Distribution, Mapping):
         sample.update(cdfs)
         return sample
 
-    def icdf(self, sample: TensorDictBase) -> TensorDictBase:
+    def icdf(self, sample: TensorDictBase) -> TensorDictBase:  # ty: ignore[invalid-method-override]  # one entry per component, in a tensordict
         """Computes the inverse CDF of each component and writes it into ``sample``.
 
         For the component at ``key``, the method reads the probability at

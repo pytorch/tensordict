@@ -512,7 +512,7 @@ class _set_dispatch_td_nn_modules(_DecoratorContextManager):
 class _StrEnum(str, Enum):
     # As in enum.StrEnum, str() and format() give the value, not the name.
     __str__ = str.__str__
-    __format__ = str.__format__
+    __format__ = str.__format__  # ty: ignore[invalid-method-override]  # as in enum.StrEnum
 
     def __new__(cls, *values):
         if len(values) > 3:
@@ -534,7 +534,7 @@ class _StrEnum(str, Enum):
         member._value_ = value
         return member
 
-    def _generate_next_value_(name, start, count, last_values):
+    def _generate_next_value_(name, start, count, last_values):  # ty: ignore[invalid-method-override]  # the Enum hook, as its docs write it
         return name.lower()
 
 

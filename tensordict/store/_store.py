@@ -1533,7 +1533,7 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
 
     # ---- Keys / structure ----
 
-    def keys(
+    def keys(  # ty: ignore[invalid-method-override]  # tensordict's own keys view, not a KeysView
         self,
         include_nested: bool = False,
         leaves_only: bool = False,
@@ -1793,7 +1793,7 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
                 ).auto_batch_size_(batch_dims=batch_dims)
                 batch_size = input_dict.batch_size
 
-        connect_kwargs = {}
+        connect_kwargs: dict[str, Any] = {}
         if unix_socket_path is not None:
             connect_kwargs["unix_socket_path"] = unix_socket_path
         else:
@@ -1883,7 +1883,7 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
         if device is None:
             device = td.device
 
-        connect_kwargs = {}
+        connect_kwargs: dict[str, Any] = {}
         if unix_socket_path is not None:
             connect_kwargs["unix_socket_path"] = unix_socket_path
         else:
