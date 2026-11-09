@@ -227,7 +227,7 @@ print("TensorDict from stream", td)
 ```
 
 ```
-TensorDict from stream TensorDict(batch_size=[5], fields={bucket0: i64[j4], bucket1: i64[j3]})
+TensorDict from stream TensorDict(batch_size=[5], fields={bucket0: i64[j3], bucket1: i64[j4]})
 ```
 
 Print the data of both streams. Each stream counts up from 0, so the values
