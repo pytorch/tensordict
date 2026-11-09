@@ -8869,7 +8869,7 @@ class NonTensorStack(LazyStackedTensorDict):
         return self
 
     # Override: an advanced index copies the entries, as it does for tensors.
-    def __getitem__(self, index: IndexType) -> NonTensorStack | NonTensorDataBase | Any:
+    def __getitem__(self, index: IndexType) -> NonTensorStack | NonTensorDataBase | Any:  # ty: ignore[invalid-method-override]  # an int index returns the element
         cls = type(index)
         if cls is not int and cls is not slice:
             # perf: a 1-D index tensor, array or list (or a 1-tuple of one,

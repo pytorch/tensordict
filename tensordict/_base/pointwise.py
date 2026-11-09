@@ -226,7 +226,7 @@ class _PointwiseOps:
         """
         return self.neg()
 
-    def __ne__(self, other: Any) -> Self | bool:
+    def __ne__(self, other: Any) -> Self | bool:  # ty: ignore[invalid-method-override]  # compares leaf by leaf, returns a tensordict
         """Compares the tensordict with ``other`` leaf by leaf with ``!=``.
 
         Works as :meth:`~.__eq__`, except that an ``other`` of another type
@@ -345,7 +345,7 @@ class _PointwiseOps:
 
     __rand__ = __and__
 
-    def __eq__(self, other: Any) -> Self | bool:
+    def __eq__(self, other: Any) -> Self | bool:  # ty: ignore[invalid-method-override]  # compares leaf by leaf, returns a tensordict
         """Compares the tensordict with ``other`` leaf by leaf with ``==``.
 
         ``other`` can be a tensordict or a ``dict`` with the same keys, paired
