@@ -797,9 +797,11 @@ class TestNonTensorData:
                 warnings.simplefilter("error")
                 results = [d.expand(*shape), td.expand(*shape).get("s")]
             for result in results:
+                assert isinstance(result, NonTensorData)
                 assert result.batch_size == expected.shape
                 assert result.tolist() == expected.tolist()
         stack = NonTensorStack(NonTensorData("v"), NonTensorData("v"))
+        assert isinstance(stack.expand(0, 2), NonTensorStack)
         assert stack.expand(0, 2).batch_size == (0, 2)
         assert stack.expand(0, 2).tolist() == []
 

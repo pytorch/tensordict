@@ -7814,7 +7814,9 @@ class NonTensorData(NonTensorDataBase):
         """Returns the entry expanded to a new batch size, as :meth:`torch.Tensor.expand` does.
 
         If the batch size changes, the result is a
-        :class:`~tensordict.NonTensorStack` whose elements share the value.
+        :class:`~tensordict.NonTensorStack` whose elements share the value,
+        unless a dimension that changes has size 0: the result is then an
+        empty :class:`~tensordict.NonTensorData`.
         A shape that :meth:`torch.Tensor.expand` rejects (fewer sizes than
         batch dimensions, or a size that differs from a batch dimension that
         is not 1) warns, and the batch size of the result can differ from the
