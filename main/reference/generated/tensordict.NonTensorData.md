@@ -203,7 +203,9 @@ expand(**args*, ***kwargs*) → T
 Returns the entry expanded to a new batch size, as [`torch.Tensor.expand()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.expand.html#torch.Tensor.expand) does.
 
 If the batch size changes, the result is a
-[`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack) whose elements share the value.
+[`NonTensorStack`](tensordict.NonTensorStack.html#tensordict.NonTensorStack) whose elements share the value,
+unless a dimension that changes has size 0: the result is then an
+empty `NonTensorData`.
 A shape that [`torch.Tensor.expand()`](https://docs.pytorch.org/docs/stable/generated/torch.Tensor.expand.html#torch.Tensor.expand) rejects (fewer sizes than
 batch dimensions, or a size that differs from a batch dimension that
 is not 1) warns, and the batch size of the result can differ from the
