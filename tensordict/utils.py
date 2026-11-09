@@ -436,7 +436,7 @@ def _canonicalize_tensor(tensor: Tensor) -> Tensor:
     return out
 
 
-def _is_shared(tensor: Tensor) -> bool:
+def _is_shared(tensor: Tensor) -> bool | None:
     if isinstance(tensor, Tensor):
         if torch._C._functorch.is_batchedtensor(tensor):
             return None

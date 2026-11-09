@@ -17,6 +17,7 @@ from typing import (
     Callable,
     Iterable,
     Iterator,
+    KeysView,
     Sequence,
     Tuple,
     Type,
@@ -138,6 +139,8 @@ from torch.nn.modules.module import _EXTRA_STATE_KEY_SUFFIX
 from torch.utils._pytree import tree_map
 
 if TYPE_CHECKING:
+    from types import EllipsisType
+
     from typing_extensions import Self
 else:
     Self = Any
@@ -512,7 +515,7 @@ class TensorDict(TensorDictBase):
         is_shared: bool = False,
         is_memmap: bool = False,
         **kwargs: Any,
-    ) -> TensorDict:
+    ) -> Self:
         is_eager = not is_compiling()
         if not is_eager and cls is TensorDict:
             # If the cls is not TensorDict, we must escape this to keep the same class.
@@ -977,7 +980,9 @@ class TensorDict(TensorDictBase):
         return out
 
     @_cache_while_locked
-    def _remove_batch_dim(self, vmap_level: int, batch_size: int, out_dim: int) -> Self:
+    def _remove_batch_dim(
+        self, vmap_level: int, batch_size: int, out_dim: int
+    ) -> TensorDict:
         new_batch_size = list(self.batch_size)
         new_batch_size.insert(out_dim, batch_size)
         names = self._maybe_names()
@@ -1011,7 +1016,7 @@ class TensorDict(TensorDictBase):
     @_cache_while_locked
     def _maybe_remove_batch_dim(
         self, funcname: str, vmap_level: int, batch_size: int, out_dim: int
-    ) -> Self:
+    ) -> TensorDict:
         new_batch_size = list(self.batch_size)
         new_batch_size.insert(out_dim, batch_size)
         names = self._maybe_names()
@@ -2247,10 +2252,10 @@ class TensorDict(TensorDictBase):
         # Subclasses keep the generic walk, which calls their _get_str and
         # _default_get, without going through the _get_tuple below.
         if cls._get_tuple is TensorDict._get_tuple:
-            cls._get_tuple = TensorDictBase._get_tuple
+            cls._get_tuple = TensorDictBase._get_tuple  # ty: ignore[invalid-assignment]  # same method, read from the base
         # and ask their keys view in `key in td`
         if cls._contains_key is TensorDict._contains_key:
-            cls._contains_key = TensorDictBase._contains_key
+            cls._contains_key = TensorDictBase._contains_key  # ty: ignore[invalid-assignment]  # same method, read from the base
 
     # Override: reads the levels that are exact TensorDicts from their dicts,
     # without a _get_str and a _get_tuple call per level.
@@ -2308,7 +2313,7 @@ class TensorDict(TensorDictBase):
     def _memmap_(
         self,
         *,
-        prefix: str | None,
+        prefix: str | Path | None,
         copy_existing: bool,
         executor,
         futures,
@@ -2441,7 +2446,7 @@ class TensorDict(TensorDictBase):
     @classmethod
     def _load_memmap(
         cls,
-        prefix: str,
+        prefix: Path,
         metadata: dict,
         device: torch.device | None = None,
         out=None,
@@ -3084,7 +3089,7 @@ class TensorDict(TensorDictBase):
         return result
 
     # @_cache_while_locked
-    def keys(
+    def keys(  # ty: ignore[invalid-method-override]  # Mapping.keys takes extra filters
         self,
         include_nested: bool = False,
         leaves_only: bool = False,
@@ -3477,7 +3482,7 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
         return names
 
     # Override: a view cannot rename the dims of its source.
-    def _set_names(self, names: Sequence[str] | None):
+    def _set_names(self, names: Sequence[str | None] | None):
         if names is None:
             names = [None] * self.batch_dims
         if names[: self.batch_dims] == self.names:
@@ -3677,7 +3682,7 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
         return self
 
     # @_cache_while_locked
-    def keys(
+    def keys(  # ty: ignore[invalid-method-override]  # Mapping.keys takes extra filters
         self,
         include_nested: bool = False,
         leaves_only: bool = False,
@@ -4061,7 +4066,7 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
         share_non_tensor,
         existsok,
         robust_key,
-    ) -> Self:
+    ) -> _SubTensorDict:
         if prefix is not None:
 
             def save_metadata(prefix=prefix, self=self):
@@ -4426,7 +4431,7 @@ class _TensorDictKeysView:
             )
         raise NotImplementedError(type(tensordict))
 
-    def _keys(self) -> _TensorDictKeysView:
+    def _keys(self) -> KeysView[str]:
         return self.tensordict._tensordict.keys()
 
     def __contains__(self, key: NestedKey) -> bool:
@@ -4513,7 +4518,7 @@ def _index_to_str(index: IndexType) -> Any:
     return index
 
 
-def _str_to_index(index: Any) -> IndexType:
+def _str_to_index(index: Any) -> IndexType | range | EllipsisType:
     if isinstance(index, (tuple, list)):
         if not len(index):
             return ()
