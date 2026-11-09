@@ -448,6 +448,24 @@ def _ragged_getitem_batch_size(batch_size, index):
     return torch.Size(out)
 
 
+def _slices_ragged_dim(batch_size, index):
+    """Whether ``index``, made of ints and slices only, slices a ragged dim of ``batch_size``, of size ``-1``.
+
+    For such an index, :func:`_getitem_batch_size` raises ``ValueError`` in
+    eager mode, from ``slice.indices``. Under Dynamo, :func:`_slice_length`
+    gives the slice the length 0 instead.
+    """
+    if not isinstance(index, tuple):
+        if not isinstance(index, slice) or index == slice(None):
+            # _getitem_batch_size returns the batch size of slice(None)
+            return False
+        index = (index,)
+    return all(type(element) in (int, slice) for element in index) and any(
+        type(element) is slice and size == -1
+        for element, size in zip(index, batch_size)
+    )
+
+
 def _mask_to_indices(index, batch_size, device):
     """Turn the index ``(mask,)`` of ``td[mask]`` into the indices of the mask.
 

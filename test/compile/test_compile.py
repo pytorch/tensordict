@@ -441,6 +441,144 @@ def test_lazy_update_reordered_ragged_compiles():
 
 
 @pytest.mark.parametrize(
+    "write",
+    [
+        lambda ls: ls.update_at_(
+            TensorDict(a=torch.ones(2, 1), batch_size=[2]), (1, slice(0, 2))
+        ),
+        lambda ls: ls.update_at_(
+            TensorDict(a=torch.ones(1), batch_size=[]), (1, slice(None))
+        ),
+        lambda ls: ls.update_at_(
+            TensorDict(a=torch.ones(1, 1), batch_size=[1]),
+            (slice(0, 2), slice(0, 1)),
+        ),
+        lambda ls: ls.set_at_("a", torch.ones(2, 1), (1, slice(0, 2))),
+        lambda ls: ls.set_at_("a", torch.ones(3, 1), (1, slice(None))),
+        lambda ls: ls.set_at_("a", torch.ones(2, 1, 1), (slice(0, 2), slice(0, 1))),
+        lambda ls: ls.__setitem__((1, slice(0, 2)), torch.ones(2, 1)),
+    ],
+    ids=[
+        "update_at_-1,0:2",
+        "update_at_-1,:",
+        "update_at_-0:2,0:1",
+        "set_at_-1,0:2",
+        "set_at_-1,:",
+        "set_at_-0:2,0:1",
+        "setitem_tensor-1,0:2",
+    ],
+)
+def test_lazy_write_at_slice_ragged_dim_compiles(write):
+    # #3527: compiled, update_at_, set_at_ and the setitem of a tensor by a
+    # slice of the ragged dim raised and wrote nothing, where eager mode
+    # writes the rows
+    def make():
+        return lazy_stack(
+            [TensorDict(a=torch.zeros(k, 1), batch_size=[k]) for k in (2, 3, 1)]
+        )
+
+    def rows(ls):
+        return [t.flatten().tolist() for t in ls.get("a", as_list=True)]
+
+    expected = make()
+    write(expected)
+    ls = make()
+    torch.compile(write, fullgraph=True, backend="eager")(ls)
+    assert rows(ls) == rows(expected)
+
+
+def test_lazy_write_at_slice_ragged_dim_compiles_unchanged():
+    # #3527: the other compiled calls on a ragged dim keep their result
+    ls = lazy_stack(
+        [TensorDict(a=torch.zeros(k, 1), batch_size=[k]) for k in (2, 3, 1)]
+    )
+    out = torch.compile(lambda ls: ls[1, 0:2], fullgraph=True, backend="eager")(ls)
+    assert out.batch_size == (2,)
+    value = TensorDict(a=torch.ones(2, 1), batch_size=[2])
+    with pytest.raises(RuntimeError, match="indexed destination"):
+        torch.compile(
+            lambda ls: ls.__setitem__((1, slice(0, 2)), value), backend="eager"
+        )(ls)
+    assert [t.flatten().tolist() for t in ls.get("a", as_list=True)] == [
+        [0.0, 0.0],
+        [0.0, 0.0, 0.0],
+        [0.0],
+    ]
+
+
+@pytest.mark.parametrize(
+    "write",
+    [
+        lambda ls: ls.update_at_(
+            TensorDict(
+                a=torch.ones(1),
+                n=TensorDict(b=torch.ones(()), batch_size=[]),
+                batch_size=[],
+            ),
+            (1, slice(0, 0)),
+        ),
+        lambda ls: ls.set_at_(
+            "n", TensorDict(b=torch.ones(()), batch_size=[]), (1, slice(0, 0))
+        ),
+        lambda ls: ls.set_at_(
+            "n", TensorDict(b=torch.ones(1), batch_size=[1]), (1, slice(0, 0))
+        ),
+    ],
+    ids=["update_at_", "set_at_", "set_at_-batch1"],
+)
+def test_lazy_write_at_empty_slice_ragged_dim_nested_compiles(write):
+    # #3527: compiled, a nested value at an empty slice of the ragged dim
+    # still writes no rows and returns
+    ls = lazy_stack(
+        [
+            TensorDict(
+                a=torch.zeros(k, 1),
+                n=TensorDict(b=torch.zeros(k), batch_size=[k]),
+                batch_size=[k],
+            )
+            for k in (2, 3, 1)
+        ]
+    )
+    torch.compile(write, fullgraph=True, backend="eager")(ls)
+    assert [m["a"].flatten().tolist() for m in ls.tensordicts] == [
+        [0.0, 0.0],
+        [0.0, 0.0, 0.0],
+        [0.0],
+    ]
+    assert [m["n", "b"].tolist() for m in ls.tensordicts] == [
+        [0.0, 0.0],
+        [0.0, 0.0, 0.0],
+        [0.0],
+    ]
+
+
+@pytest.mark.parametrize("fullgraph", [True, False])
+def test_lazy_set_at_non_tensor_empty_slice_ragged_dim_compiles(fullgraph):
+    # #3527: compiled, set_at_ of a non-tensor value at an empty slice of the
+    # ragged dim still writes no rows and returns
+    ls = lazy_stack(
+        [
+            TensorDict(
+                a=torch.zeros(k, 1),
+                s=NonTensorData("z", batch_size=[k]),
+                batch_size=[k],
+            )
+            for k in (2, 3, 1)
+        ]
+    )
+    torch.compile(
+        lambda ls: ls.set_at_("s", "x", (1, slice(0, 0))),
+        fullgraph=fullgraph,
+        backend="eager",
+    )(ls)
+    assert [t.tolist() for t in ls.get("s", as_list=True)] == [
+        ["z", "z"],
+        ["z", "z", "z"],
+        ["z"],
+    ]
+
+
+@pytest.mark.parametrize(
     "name", ["td == 0", "td != td", "td ^ True", "td.all(0)", "td.where(mask, 0)"]
 )
 def test_comparison_where_fullgraph(name):
