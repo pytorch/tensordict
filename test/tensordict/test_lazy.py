@@ -1227,6 +1227,7 @@ class TestLazyStackedTensorDict:
             (slice(0, 2), [0, 1]),
             (slice(None), [0, 1, 2]),
             ([0, 2], [0, 2]),
+            (torch.tensor([True, False, True]), [0, 2]),
         ],
     )
     @pytest.mark.parametrize("nested", [False, True])
@@ -1255,6 +1256,39 @@ class TestLazyStackedTensorDict:
         for i, td in enumerate(ls.tensordicts):
             assert (td["a"] == float(i in written)).all()
             assert (td["n", "b"] == float(nested and i in written)).all()
+
+    def test_ragged_update_at_keeps_ragged_dim_keys_and_two_dims(self):
+        # #3528: keys_to_update writes only the selected leaf, and a stack
+        # with two ragged dims broadcasts a value that has neither
+        ls = lazy_stack(
+            [
+                TensorDict(
+                    a=torch.zeros(n, 2),
+                    n=TensorDict(b=torch.zeros(n), batch_size=[n]),
+                    batch_size=[n],
+                )
+                for n in (2, 3, 1)
+            ]
+        )
+        value = TensorDict(
+            a=torch.ones(2),
+            n=TensorDict(b=torch.ones(()), batch_size=[]),
+            batch_size=[],
+        )
+        ls.update_at_(value, 0, keys_to_update=["a"])
+        for i, td in enumerate(ls.tensordicts):
+            assert (td["a"] == float(i == 0)).all()
+            assert (td["n", "b"] == 0).all()
+        ls = lazy_stack(
+            [
+                TensorDict(a=torch.zeros(1, 2), batch_size=[1, 2]),
+                TensorDict(a=torch.zeros(2, 3), batch_size=[2, 3]),
+            ]
+        )
+        assert ls.batch_size == torch.Size([2, -1, -1])
+        ls.update_at_(TensorDict(a=torch.tensor(5.0)), slice(None))
+        for td in ls.tensordicts:
+            assert (td["a"] == 5).all()
 
     def test_ragged_update_at_keeps_ragged_dim_unchanged(self):
         # #3528: a value that does not fit every selected member keeps the old
