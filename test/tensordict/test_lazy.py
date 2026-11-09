@@ -1290,6 +1290,32 @@ class TestLazyStackedTensorDict:
         for td in ls.tensordicts:
             assert (td["a"] == 5).all()
 
+    @pytest.mark.parametrize(
+        "index,keys_to_update",
+        [
+            (slice(0, 0), None),
+            ([], None),
+            (torch.tensor([False, False, False]), None),
+            (0, ["b"]),
+        ],
+    )
+    def test_ragged_update_at_keeps_ragged_dim_writes_nothing(
+        self, index, keys_to_update
+    ):
+        # #3528: an empty selection, or a keys_to_update that selects no leaf
+        # of the value, returns and writes nothing, as on a stack without a
+        # ragged dim
+        ls = lazy_stack(
+            [TensorDict(a=torch.zeros(n, 2), batch_size=[n]) for n in (2, 3, 1)]
+        )
+        value = TensorDict(a=torch.ones(2), batch_size=[])
+        if keys_to_update is None:
+            assert ls.update_at_(value, index) is ls
+        else:
+            assert ls.update_at_(value, index, keys_to_update=keys_to_update) is ls
+        for td in ls.tensordicts:
+            assert (td["a"] == 0).all()
+
     def test_ragged_update_at_keeps_ragged_dim_unchanged(self):
         # #3528: a value that does not fit every selected member keeps the old
         # error and writes nothing
