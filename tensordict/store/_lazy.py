@@ -485,7 +485,7 @@ class _StoreStackElementView(_StoreUnsupported, TensorDictBase):
 
     # ---- keys ----
 
-    def keys(
+    def keys(  # ty: ignore[invalid-method-override]  # tensordict's own keys view, not a KeysView
         self,
         include_nested: bool = False,
         leaves_only: bool = False,
@@ -1956,7 +1956,7 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
             raise KeyError(f"key {key} not found in {type(self).__name__}")
         return tensor
 
-    def keys(
+    def keys(  # ty: ignore[invalid-method-override]  # tensordict's own keys view, not a KeysView
         self,
         include_nested: bool = False,
         leaves_only: bool = False,
@@ -2165,7 +2165,7 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
         stack_dim = lazy_td.stack_dim
         inner_batch_size = lazy_td.tensordicts[0].batch_size
 
-        connect_kwargs = {}
+        connect_kwargs: dict[str, Any] = {}
         if unix_socket_path is not None:
             connect_kwargs["unix_socket_path"] = unix_socket_path
         else:
