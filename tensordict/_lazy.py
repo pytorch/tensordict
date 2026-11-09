@@ -5483,6 +5483,7 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         elif input_dict_or_td.batch_size != indexed_bs:
             lead = len(indexed_bs) - input_dict_or_td.batch_dims
+            expanded = None
             if (
                 ragged_error is None
                 and lead > 0
@@ -5494,7 +5495,7 @@ class LazyStackedTensorDict(TensorDictBase):
                 # expand cannot add: each member broadcasts the value. Under
                 # Dynamo, such a value keeps the path below.
                 try:
-                    input_dict_or_td.expand(indexed_bs)
+                    expanded = input_dict_or_td.expand(indexed_bs)
                 except RuntimeError as expand_error:
                     return self._update_at_ragged_broadcast(
                         input_dict_or_td,
@@ -5552,7 +5553,11 @@ class LazyStackedTensorDict(TensorDictBase):
                 and input_dict_or_td.batch_size[0] == 1
             ):
                 input_dict_or_td = input_dict_or_td.squeeze(0)
-            input_dict_or_td = input_dict_or_td.expand(indexed_bs)
+            if expanded is None:
+                input_dict_or_td = input_dict_or_td.expand(indexed_bs)
+            else:
+                # the expand above did not raise: nothing changed since
+                input_dict_or_td = expanded
         # the members of a NonTensorStack take no keys_to_update
         kwargs = {} if keys_to_update is None else {"keys_to_update": keys_to_update}
         for member, member_index, piece in self._split_value(idx, input_dict_or_td):
