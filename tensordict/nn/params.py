@@ -1467,6 +1467,9 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         names = {**self._parameters, **self._buffers}
         local_state = {name: dest for name, dest in names.items() if dest is not None}
         keys = None
+        # The keys of non-persistent buffers that are not leaves, where the
+        # leaf lookup below would raise: the base reports them as unexpected.
+        unexpected = set()
         # Where the base rejects an entry, keep the previous behaviour: None
         # reads as a missing key, and a number or a tensor of another shape
         # is written in place (broadcast, or _InplaceWriteError).
@@ -1484,6 +1487,10 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                 state_dict = dict(state_dict)
             if val is None:
                 del state_dict[prefix + name]
+            elif name not in keys and name in self._non_persistent_buffers_set:
+                # The base reports it as an unexpected key.
+                unexpected.add(prefix + name)
+                continue
             else:
                 data.set(keys[name], val, inplace=True)
                 state_dict[prefix + name] = dest
@@ -1500,6 +1507,9 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             for name, dest in local_state.items():
                 val = state_dict.get(prefix + name)
                 if val is None or val is dest:
+                    continue
+                if name not in keys and name in self._non_persistent_buffers_set:
+                    unexpected.add(prefix + name)
                     continue
                 *path, last = _unravel_key_to_tuple(keys[name])
                 parent = self
@@ -1539,9 +1549,17 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                 )
             for owner in owners:
                 # _reset_params only registers the leaves of _param_td: keep
-                # the None entries.
+                # the None entries and the non-persistent buffers that are not
+                # leaves.
+                kept = owner._non_persistent_buffers_set
+                if kept:
+                    kept = kept.difference(
+                        keys if owner is self else owner._leaf_keys()
+                    )
                 params = {k: v for k, v in owner._parameters.items() if v is None}
-                buffers = {k: v for k, v in owner._buffers.items() if v is None}
+                buffers = {
+                    k: v for k, v in owner._buffers.items() if v is None or k in kept
+                }
                 owner._reset_params()
                 owner._parameters.update(params)
                 owner._buffers.update(buffers)
@@ -1559,7 +1577,9 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             error_msgs,
         )
         unexpected_keys[n:] = [
-            key for key in unexpected_keys[n:] if key[len(prefix) :] not in local_state
+            key
+            for key in unexpected_keys[n:]
+            if key in unexpected or key[len(prefix) :] not in local_state
         ]
 
     def _leaf_keys(self) -> dict[str, NestedKey]:
