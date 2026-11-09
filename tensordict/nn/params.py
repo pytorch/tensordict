@@ -1484,6 +1484,11 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                 state_dict = dict(state_dict)
             if val is None:
                 del state_dict[prefix + name]
+            elif name not in keys:
+                # #3546: as in the base, a registered buffer that is not a
+                # leaf of the tensordict is not loaded here. The base reports
+                # the state dict entry as an unexpected key.
+                continue
             else:
                 data.set(keys[name], val, inplace=True)
                 state_dict[prefix + name] = dest
@@ -1500,6 +1505,12 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             for name, dest in local_state.items():
                 val = state_dict.get(prefix + name)
                 if val is None or val is dest:
+                    continue
+                if name not in keys:
+                    # #3546: a registered buffer that is not a leaf is not
+                    # part of the load here: the base reports a state dict
+                    # that names it as unexpected, and the keep-dict below
+                    # restores it after _reset_params.
                     continue
                 *path, last = _unravel_key_to_tuple(keys[name])
                 parent = self
@@ -1539,9 +1550,16 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                 )
             for owner in owners:
                 # _reset_params only registers the leaves of _param_td: keep
-                # the None entries.
+                # the None entries (#3541), and the buffers that are not
+                # leaves, persistent or not (#3546). A restored name is never
+                # a leaf name, so this cannot clobber a leaf that the load
+                # just assigned.
                 params = {k: v for k, v in owner._parameters.items() if v is None}
-                buffers = {k: v for k, v in owner._buffers.items() if v is None}
+                buffers = {
+                    k: v
+                    for k, v in owner._buffers.items()
+                    if v is None or k not in owner._leaf_keys()
+                }
                 owner._reset_params()
                 owner._parameters.update(params)
                 owner._buffers.update(buffers)
@@ -1558,9 +1576,20 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             unexpected_keys,
             error_msgs,
         )
-        unexpected_keys[n:] = [
-            key for key in unexpected_keys[n:] if key[len(prefix) :] not in local_state
-        ]
+        if len(unexpected_keys) > n:
+            # The base reads the dotted names of the leaves ("0.weight") as
+            # submodules and counts them as unexpected. Undo the entries the
+            # module holds, and leave the rest as the base reported, as in
+            # nn.Module: a registered buffer that is not a leaf of the
+            # tensordict stays an unexpected key of a state dict that names
+            # it (#3546).
+            leaf_names = keys.keys() if keys is not None else self._leaf_keys()
+            unexpected_keys[n:] = [
+                key
+                for key in unexpected_keys[n:]
+                if (name := key[len(prefix) :]) not in local_state
+                or name not in leaf_names
+            ]
 
     def _leaf_keys(self) -> dict[str, NestedKey]:
         # Maps each registered name to the key of its leaf in _param_td.

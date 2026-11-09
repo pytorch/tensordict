@@ -6650,6 +6650,74 @@ class TestTensorDictParams:
         assert "unused" in inner._buffers and inner.unused is None
 
     @staticmethod
+    def _params_with_np_buffer():
+        # A parameter, and a module buffer that is not a leaf of the
+        # tensordict.
+        params = TensorDictParams(TensorDict(a=torch.zeros(3)), no_convert=True)
+        params.register_buffer("np", torch.full((2,), 5.0), persistent=False)
+        return params
+
+    @pytest.mark.parametrize("assign", [True, False])
+    def test_load_state_dict_nonpersistent_buffer_kept(self, assign):
+        # #3546: assign=True rebuilds the module state and loses a registered
+        # buffer that is not a leaf of the tensordict; the buffer has to stay.
+        params = self._params_with_np_buffer()
+        buffer = params._buffers["np"]
+        module = self._parent(params)
+        module.load_state_dict({"params.a": torch.ones(3)}, assign=assign)
+        assert (params["a"] == 1).all()
+        assert params._buffers.get("np") is buffer
+        assert (params.np == 5).all()
+
+    @pytest.mark.parametrize("assign", [True, False])
+    @pytest.mark.parametrize("strict", [True, False])
+    def test_load_state_dict_nonpersistent_buffer_unexpected(self, strict, assign):
+        # #3546: as in nn.Module, a state dict that names a registered buffer
+        # that is not a leaf of the tensordict reports it as an unexpected key.
+        module = self._parent(self._params_with_np_buffer())
+        sd = {"params.a": torch.ones(3), "params.np": torch.ones(2)}
+        if strict:
+            with pytest.raises(RuntimeError, match='Unexpected key.*"params.np"'):
+                module.load_state_dict(sd, strict=strict, assign=assign)
+            return
+        result = module.load_state_dict(sd, strict=strict, assign=assign)
+        assert result.missing_keys == []
+        assert result.unexpected_keys == ["params.np"]
+        assert (module.params["a"] == 1).all()
+        assert (module.params.np == 5).all()
+
+    @pytest.mark.parametrize("assign", [True, False])
+    def test_load_state_dict_nonpersistent_name_becomes_leaf(self, assign):
+        # #3546: once the name is set in the tensordict, it is a leaf like any
+        # other: the load writes it, and without it a strict load reports it
+        # as missing.
+        params = TensorDictParams(TensorDict(a=torch.zeros(3)))
+        params.register_buffer("np", torch.full((2,), 5.0), persistent=False)
+        params["np"] = torch.zeros(3)
+        module = self._parent(params)
+        module.load_state_dict(
+            {"params.a": torch.ones(3), "params.np": torch.ones(3)}, assign=assign
+        )
+        assert (params["a"] == 1).all() and (params["np"] == 1).all()
+        with pytest.raises(RuntimeError, match='Missing key.*"params.np"'):
+            module.load_state_dict({"params.a": torch.ones(3)}, strict=True)
+
+    def test_load_state_dict_nonpersistent_buffer_nested(self):
+        # #3546: assign=True keeps the non-persistent buffers of a nested
+        # TensorDictParams too.
+        inner = self._params_with_np_buffer()
+        outer = TensorDictParams(TensorDict(b=torch.zeros(2)), no_convert=True)
+        outer["sub"] = inner
+        module = self._parent(outer)
+        module.load_state_dict(
+            {"params.b": torch.ones(2), "params.sub.a": torch.ones(3)}, assign=True
+        )
+        assert (outer["b"] == 1).all() and (inner["a"] == 1).all()
+        assert outer["sub"] is inner
+        assert inner._buffers.get("np") is not None
+        assert (inner.np == 5).all()
+
+    @staticmethod
     def _apply_params(device=None):
         # A parameter, a nested parameter, a buffer, and a nested
         # TensorDictParams with a parameter and a buffer.
