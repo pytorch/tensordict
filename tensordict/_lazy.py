@@ -5487,10 +5487,12 @@ class LazyStackedTensorDict(TensorDictBase):
                 ragged_error is None
                 and lead > 0
                 and -1 in indexed_bs[:lead]
+                and not is_dynamo_compiling()
                 and isinstance(input_dict_or_td, TensorDictBase)
             ):
                 # the index keeps a ragged dim that the value lacks, which
-                # expand cannot add: each member broadcasts the value
+                # expand cannot add: each member broadcasts the value. Under
+                # Dynamo, such a value keeps the path below.
                 try:
                     input_dict_or_td.expand(indexed_bs)
                 except RuntimeError as expand_error:
