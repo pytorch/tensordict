@@ -149,7 +149,11 @@ def _partition(
 
 
 def _parse_input_nodes(
-    in_keys: list[NestedKey], nodes, td: TensorDictBase, inputs: tuple[Any, ...], env
+    in_keys: list[NestedKey],
+    nodes,
+    td: TensorDictBase,
+    inputs: dict[NestedKey, Any],
+    env,
 ):
     for in_key, node in zip(in_keys, nodes):
         if in_key in inputs:

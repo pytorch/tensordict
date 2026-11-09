@@ -3751,7 +3751,7 @@ class LazyStackedTensorDict(TensorDictBase):
             kwargs,
         )
 
-    def keys(
+    def keys(  # ty: ignore[invalid-method-override]  # Mapping.keys takes extra filters
         self,
         include_nested: bool = False,
         leaves_only: bool = False,
@@ -6669,7 +6669,7 @@ class _CustomOpTensorDict(TensorDictBase):
         )
 
     # @_cache_while_locked
-    def keys(
+    def keys(  # ty: ignore[invalid-method-override]  # Mapping.keys takes extra filters
         self,
         include_nested: bool = False,
         leaves_only: bool = False,
