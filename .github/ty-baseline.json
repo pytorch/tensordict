@@ -1,18 +1,14 @@
 {
  "tensordict/__init__.py": {
-  "import-not-found": 1,
   "unused-type-ignore-comment": 2
  },
  "tensordict/_archive.py": {
   "unresolved-attribute": 1,
   "unresolved-attribute-on-none": 1
  },
- "tensordict/_arrow.py": {
-  "import-not-found": 2
- },
  "tensordict/_base/convert.py": {
   "call-non-callable": 1,
-  "import-not-found": 5,
+  "import-not-found": 3,
   "invalid-argument-type": 8,
   "invalid-assignment": 5,
   "invalid-return-type": 4,
@@ -27,7 +23,6 @@
   "unsupported-operator": 1
  },
  "tensordict/_base/device.py": {
-  "empty-body": 19,
   "invalid-argument-type": 2,
   "invalid-assignment": 1,
   "invalid-type-form": 27,
@@ -49,7 +44,6 @@
  "tensordict/_base/pointwise.py": {
   "call-non-callable": 2,
   "invalid-argument-type": 46,
-  "invalid-method-override": 2,
   "invalid-parameter-default": 1,
   "invalid-return-type": 23,
   "no-matching-overload": 4,
@@ -66,7 +60,7 @@
   "unresolved-attribute-on-none": 2
  },
  "tensordict/_base/serialization.py": {
-  "invalid-argument-type": 11,
+  "invalid-argument-type": 10,
   "invalid-assignment": 5,
   "invalid-return-type": 7,
   "not-subscriptable": 1,
@@ -87,7 +81,6 @@
   "unresolved-attribute": 1
  },
  "tensordict/_datasets.py": {
-  "import-not-found": 1,
   "invalid-return-type": 1,
   "unresolved-attribute": 1,
   "unresolved-reference": 1
@@ -102,7 +95,7 @@
   "call-non-callable": 4,
   "invalid-argument-type": 67,
   "invalid-assignment": 27,
-  "invalid-method-override": 27,
+  "invalid-method-override": 25,
   "invalid-parameter-default": 6,
   "invalid-property-type-override": 6,
   "invalid-return-type": 37,
@@ -126,28 +119,24 @@
   "unresolved-attribute": 2
  },
  "tensordict/_safetensors.py": {
-  "import-not-found": 2,
   "unresolved-attribute": 1
  },
  "tensordict/_tabular.py": {
-  "import-not-found": 9,
   "invalid-assignment": 1,
   "invalid-return-type": 1
  },
  "tensordict/_td.py": {
-  "invalid-argument-type": 42,
-  "invalid-assignment": 10,
-  "invalid-method-override": 28,
+  "invalid-argument-type": 41,
+  "invalid-assignment": 6,
+  "invalid-method-override": 25,
   "invalid-property-type-override": 3,
-  "invalid-return-type": 21,
-  "invalid-yield": 1,
+  "invalid-return-type": 11,
   "no-matching-overload": 1,
   "not-iterable": 1,
-  "not-subscriptable": 1,
   "possibly-missing-submodule": 1,
-  "unresolved-attribute": 63,
+  "unresolved-attribute": 62,
   "unresolved-attribute-on-none": 1,
-  "unsupported-operator": 6
+  "unsupported-operator": 2
  },
  "tensordict/_td_functions.py": {
   "invalid-argument-type": 2,
@@ -158,7 +147,6 @@
   "unresolved-attribute": 1
  },
  "tensordict/_tensorcollection.pyi": {
-  "import-not-found": 1,
   "invalid-argument-type": 2,
   "invalid-method-override": 2,
   "invalid-parameter-default": 5,
@@ -168,7 +156,7 @@
   "import-not-found": 1,
   "invalid-argument-type": 6,
   "invalid-assignment": 12,
-  "invalid-return-type": 16,
+  "invalid-return-type": 5,
   "no-matching-overload": 1,
   "not-subscriptable": 4,
   "unknown-argument": 4,
@@ -177,7 +165,6 @@
   "unsupported-operator": 1
  },
  "tensordict/_ucxx.py": {
-  "import-not-found": 2,
   "invalid-argument-type": 1,
   "invalid-return-type": 2,
   "unresolved-attribute": 11,
@@ -186,17 +173,17 @@
  "tensordict/_unbatched.py": {
   "call-non-callable": 1,
   "invalid-argument-type": 9,
-  "invalid-method-override": 6,
+  "invalid-method-override": 4,
   "no-matching-overload": 1,
   "too-many-positional-arguments": 1,
   "unresolved-attribute": 7
  },
  "tensordict/base.py": {
   "call-non-callable": 4,
-  "import-not-found": 3,
+  "import-not-found": 2,
   "invalid-argument-type": 70,
   "invalid-assignment": 16,
-  "invalid-method-override": 26,
+  "invalid-method-override": 21,
   "invalid-parameter-default": 18,
   "invalid-return-type": 25,
   "invalid-super-argument": 2,
@@ -239,7 +226,6 @@
  },
  "tensordict/nn/distributions/composite.py": {
   "invalid-argument-type": 5,
-  "invalid-method-override": 6,
   "invalid-property-type-override": 2,
   "invalid-return-type": 3,
   "possibly-missing-submodule": 1,
@@ -268,7 +254,6 @@
   "invalid-assignment": 3
  },
  "tensordict/nn/params.py": {
-  "empty-body": 33,
   "invalid-argument-type": 4,
   "invalid-assignment": 4,
   "invalid-attribute-override": 7,
@@ -281,7 +266,7 @@
   "no-matching-overload": 1,
   "too-many-positional-arguments": 12,
   "unresolved-attribute": 3,
-  "unresolved-attribute-on-none": 3
+  "unresolved-attribute-on-none": 1
  },
  "tensordict/nn/probabilistic.py": {
   "call-non-callable": 2,
@@ -310,43 +295,37 @@
  },
  "tensordict/nn/utils.py": {
   "invalid-argument-type": 1,
-  "invalid-method-override": 4,
+  "invalid-method-override": 2,
   "invalid-return-type": 1
  },
  "tensordict/persistent.py": {
-  "import-not-found": 19,
-  "invalid-argument-type": 4,
-  "invalid-assignment": 1,
-  "invalid-method-override": 28,
-  "invalid-return-type": 1,
+  "invalid-argument-type": 3,
+  "invalid-method-override": 23,
   "possibly-missing-submodule": 2,
-  "unresolved-attribute": 11,
-  "unsupported-operator": 3
+  "unresolved-attribute": 10
  },
  "tensordict/prototype/fx.py": {
-  "invalid-argument-type": 13,
-  "invalid-assignment": 1,
+  "invalid-argument-type": 8,
   "unresolved-attribute": 1
  },
  "tensordict/store/_connection.py": {
-  "import-not-found": 3,
   "invalid-argument-type": 1,
   "not-iterable": 1,
   "not-subscriptable": 1,
   "unresolved-attribute": 7
  },
  "tensordict/store/_lazy.py": {
-  "invalid-argument-type": 22,
-  "invalid-method-override": 38,
+  "invalid-argument-type": 17,
+  "invalid-method-override": 36,
   "invalid-return-type": 2,
   "not-iterable": 1,
   "too-many-positional-arguments": 2,
   "unresolved-attribute": 4
  },
  "tensordict/store/_store.py": {
-  "invalid-argument-type": 17,
+  "invalid-argument-type": 7,
   "invalid-assignment": 2,
-  "invalid-method-override": 18,
+  "invalid-method-override": 17,
   "invalid-return-type": 2,
   "not-iterable": 1,
   "possibly-missing-submodule": 1,
@@ -365,7 +344,7 @@
   "invalid-argument-type": 29,
   "invalid-assignment": 7,
   "invalid-declaration": 1,
-  "invalid-method-override": 9,
+  "invalid-method-override": 8,
   "invalid-parameter-default": 1,
   "invalid-property-type-override": 1,
   "invalid-return-type": 20,
@@ -384,7 +363,6 @@
   "unused-type-ignore-comment": 1
  },
  "tensordict/tensorclass.pyi": {
-  "import-not-found": 1,
   "invalid-argument-type": 2,
   "invalid-method-override": 2,
   "invalid-parameter-default": 5,
@@ -406,7 +384,7 @@
   "invalid-argument-type": 8,
   "invalid-assignment": 9,
   "invalid-method-override": 3,
-  "invalid-return-type": 4,
+  "invalid-return-type": 3,
   "no-matching-overload": 2,
   "not-iterable": 1,
   "not-subscriptable": 1,
