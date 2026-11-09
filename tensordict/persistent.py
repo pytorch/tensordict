@@ -1167,7 +1167,7 @@ class PersistentTensorDict(
 
     if TYPE_CHECKING:
         # save, dumps, memmap and memmap_like return a TensorDict (#3320).
-        def save(  # type: ignore[override]
+        def save(  # type: ignore[override]  # ty: ignore[invalid-method-override]  # returns a TensorDict (#3320)
             self,
             prefix: str | Path | None = None,
             copy_existing: bool = False,
@@ -1181,7 +1181,7 @@ class PersistentTensorDict(
             atomic: bool = False,
         ) -> TensorDict: ...
 
-        def dumps(  # type: ignore[override]
+        def dumps(  # type: ignore[override]  # ty: ignore[invalid-method-override]  # returns a TensorDict (#3320)
             self,
             prefix: str | Path | None = None,
             copy_existing: bool = False,
@@ -1195,7 +1195,7 @@ class PersistentTensorDict(
             atomic: bool = False,
         ) -> TensorDict: ...
 
-        def memmap(  # type: ignore[override]
+        def memmap(  # type: ignore[override]  # ty: ignore[invalid-method-override]  # returns a TensorDict (#3320)
             self,
             prefix: str | Path | None = None,
             copy_existing: bool = False,
@@ -1210,7 +1210,7 @@ class PersistentTensorDict(
             atomic: bool = False,
         ) -> TensorDict: ...
 
-        def memmap_like(  # type: ignore[override]
+        def memmap_like(  # type: ignore[override]  # ty: ignore[invalid-method-override]  # returns a TensorDict (#3320)
             self,
             prefix: str | Path | None = None,
             copy_existing: bool = False,
@@ -1911,7 +1911,7 @@ class PersistentTensorDict(
         sub_td.update(value, inplace=True)
 
     # @_cache_while_locked
-    def keys(
+    def keys(  # ty: ignore[invalid-method-override]  # tensordict's own keys view, not a KeysView
         self,
         include_nested: bool = False,
         leaves_only: bool = False,
@@ -2107,10 +2107,10 @@ class PersistentTensorDict(
             )
         return self
 
-    def _memmap_(
+    def _memmap_(  # ty: ignore[invalid-method-override]  # returns a TensorDict, as memmap does (#3320)
         self,
         *,
-        prefix: str | None,
+        prefix: str | Path | None,
         copy_existing: bool,
         executor,
         futures,
@@ -2119,7 +2119,7 @@ class PersistentTensorDict(
         share_non_tensor,
         existsok,
         robust_key,
-    ) -> T:
+    ) -> TensorDict:
         if inplace:
             raise RuntimeError(
                 "Cannot build a memmap TensorDict in-place from a PersistentTensorDict. "
