@@ -145,3 +145,28 @@ version_scheme = "post-release"
 # Local scheme is handled by setup.py (appends +g<sha> unless on release/v<version> branch)
 local_scheme = "no-local-version"
 version_file = "tensordict/_version.py"
+
+[tool.ty.analysis]
+# Optional dependencies, imported lazily or behind a find_spec guard, and the
+# version file that setuptools_scm writes at build time. The type-checking
+# environment (.github/ty-requirements.txt) installs none of them.
+allowed-unresolved-imports = [
+    "h5py.**",
+    "packaging.**",
+    "pandas.**",
+    "pyarrow.**",
+    "redis.**",
+    "safetensors.**",
+    "streaming.**",
+    "tensordict._version",
+    "tqdm.**",
+    "ucxx.**",
+    "zarr.**",
+]
+
+[[tool.ty.overrides]]
+# The decorators of these methods (_make_dtype_promotion, _unlock_and_set,
+# _fallback, ...) build the method without calling its body, so the bodies
+# are left empty.
+include = ["tensordict/_base/device.py", "tensordict/nn/params.py"]
+rules = { empty-body = "ignore" }

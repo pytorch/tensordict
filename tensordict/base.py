@@ -3770,7 +3770,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         # take __eq__ from Mapping (bool) and unbind, chunk and split from the
         # TensorCollection stub (TensorCollection pieces). These declarations
         # give them what the mixins return (#3269, #3270).
-        def __eq__(self, other: object) -> Self: ...  # type: ignore[override]
+        def __eq__(self, other: object) -> Self: ...  # type: ignore[override]  # ty: ignore[invalid-method-override]  # leaf-by-leaf comparison
 
         def unbind(self, dim: int) -> tuple[TensorDictBase, ...]: ...
 
@@ -6674,7 +6674,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """
         return _shape(self.get(key, NO_DEFAULT))
 
-    def update(
+    def update(  # ty: ignore[invalid-method-override]  # returns self, takes extra options
         self,
         input_dict_or_td: Mapping[Any, Any] | T | None = None,
         clone: bool = False,
@@ -8118,7 +8118,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         return True
 
     # Dict features: setdefault, items, values, keys, ...
-    def setdefault(
+    def setdefault(  # ty: ignore[invalid-method-override]  # an entry cannot be None
         self, key: NestedKey, default: CompatibleType | Any, inplace: bool = False
     ) -> CompatibleType:
         """Returns the entry at ``key``, after writing ``default`` there if the key is missing.
@@ -8153,7 +8153,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             self.set(key, default, inplace=inplace)
         return self.get(key)
 
-    def items(
+    def items(  # ty: ignore[invalid-method-override]  # takes extra filters, returns an iterator
         self,
         include_nested: bool = False,
         leaves_only: bool = False,
@@ -8329,7 +8329,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             )
         )
 
-    def values(
+    def values(  # ty: ignore[invalid-method-override]  # takes extra filters, returns an iterator
         self,
         include_nested: bool = False,
         leaves_only: bool = False,
