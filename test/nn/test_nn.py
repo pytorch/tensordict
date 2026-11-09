@@ -6650,6 +6650,104 @@ class TestTensorDictParams:
         assert "unused" in inner._buffers and inner.unused is None
 
     @staticmethod
+    def _params_with_non_persistent(no_convert):
+        params = TensorDictParams(TensorDict(a=torch.zeros(3)), no_convert=no_convert)
+        params.register_buffer("np", torch.full((2,), 5.0), persistent=False)
+        return params
+
+    @pytest.mark.parametrize("assign", [True, False])
+    @pytest.mark.parametrize("strict", [True, False])
+    @pytest.mark.parametrize("value", ["absent", "tensor", "shape", "number"])
+    @pytest.mark.parametrize("no_convert", [True, False])
+    def test_load_state_dict_non_persistent_buffer(
+        self, no_convert, value, strict, assign
+    ):
+        # #3546: a non-persistent buffer that is not a leaf is kept, and a
+        # value for it is dropped, as main drops it with assign=False.
+        params = self._params_with_non_persistent(no_convert)
+        buffer = params.np
+        module = self._parent(params)
+        sd = {"params.a": torch.ones(3)}
+        if value != "absent":
+            sd["params.np"] = {
+                "tensor": torch.ones(2),
+                "shape": torch.ones(3),
+                "number": 7.0,
+            }[value]
+        result = module.load_state_dict(sd, strict=strict, assign=assign)
+        assert result.missing_keys == result.unexpected_keys == []
+        assert (params["a"] == 1).all()
+        assert (params["a"].data_ptr() == sd["params.a"].data_ptr()) is assign
+        assert params._buffers["np"] is buffer
+        assert (buffer == 5).all()
+        assert "np" in params._non_persistent_buffers_set
+        assert set(module.state_dict()) == {"params.a"}
+        result = module.load_state_dict(module.state_dict(), assign=assign)
+        assert result.missing_keys == result.unexpected_keys == []
+        assert params._buffers["np"] is buffer
+
+    def test_load_state_dict_non_persistent_buffer_nested(self):
+        # #3546: assign=True keeps the non-persistent buffer of a nested
+        # TensorDictParams.
+        inner = self._params_with_non_persistent(True)
+        buffer = inner.np
+        outer = TensorDictParams(TensorDict(b=torch.zeros(2)), no_convert=True)
+        outer["sub"] = inner
+        module = self._parent(outer)
+        sd = {"params.b": torch.ones(2), "params.sub.a": torch.ones(3)}
+        result = module.load_state_dict(sd, assign=True)
+        assert result.missing_keys == result.unexpected_keys == []
+        assert (outer["b"] == 1).all() and (inner["a"] == 1).all()
+        assert outer["sub"] is inner
+        assert inner._buffers["np"] is buffer
+
+    @pytest.mark.parametrize("assign", [True, False])
+    @pytest.mark.parametrize("named", [True, False])
+    @pytest.mark.parametrize("no_convert", [True, False])
+    def test_load_state_dict_non_persistent_name_set_as_leaf(
+        self, no_convert, named, assign
+    ):
+        # #3546: a non-persistent name later set as a leaf still loads as a
+        # leaf, and assign=True does not put the old buffer back.
+        params = self._params_with_non_persistent(no_convert)
+        params["np"] = torch.zeros(2)
+        module = self._parent(params)
+        assert set(module.state_dict()) == {"params.a", "params.np"}
+        sd = {"params.a": torch.ones(3)}
+        if named:
+            sd["params.np"] = torch.ones(2)
+        result = module.load_state_dict(sd, strict=False, assign=assign)
+        # nn.Module skips the non-persistent name for a buffer, not for a
+        # Parameter.
+        missing = [] if named or no_convert else ["params.np"]
+        assert result.missing_keys == missing
+        assert result.unexpected_keys == []
+        leaf = params["np"]
+        assert isinstance(leaf, nn.Parameter) is not no_convert
+        registered = params._buffers if no_convert else params._parameters
+        assert registered["np"] is leaf
+        if not named:
+            assert (leaf == 0).all()
+        elif assign:
+            assert leaf.data_ptr() == sd["params.np"].data_ptr()
+        elif not no_convert:
+            assert (leaf == 1).all()
+
+    @pytest.mark.parametrize("no_convert", [True, False])
+    def test_load_state_dict_persistent_buffer_round_trip(self, no_convert):
+        # #3546: a persistent buffer that is not a leaf is not in state_dict();
+        # an assign=True round trip still returns, and a strict load after it
+        # too.
+        params = TensorDictParams(TensorDict(a=torch.zeros(3)), no_convert=no_convert)
+        params.register_buffer("pb", torch.full((2,), 5.0))
+        module = self._parent(params)
+        assert set(module.state_dict()) == {"params.a"}
+        result = module.load_state_dict(module.state_dict(), assign=True)
+        assert result.missing_keys == result.unexpected_keys == []
+        result = module.load_state_dict(module.state_dict())
+        assert result.missing_keys == result.unexpected_keys == []
+
+    @staticmethod
     def _apply_params(device=None):
         # A parameter, a nested parameter, a buffer, and a nested
         # TensorDictParams with a parameter and a buffer.

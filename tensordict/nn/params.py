@@ -1484,6 +1484,9 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                 state_dict = dict(state_dict)
             if val is None:
                 del state_dict[prefix + name]
+            elif name not in keys and name in self._non_persistent_buffers_set:
+                # The base skips a non-persistent buffer that is not a leaf.
+                continue
             else:
                 data.set(keys[name], val, inplace=True)
                 state_dict[prefix + name] = dest
@@ -1500,6 +1503,8 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             for name, dest in local_state.items():
                 val = state_dict.get(prefix + name)
                 if val is None or val is dest:
+                    continue
+                if name not in keys and name in self._non_persistent_buffers_set:
                     continue
                 *path, last = _unravel_key_to_tuple(keys[name])
                 parent = self
@@ -1539,9 +1544,17 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                 )
             for owner in owners:
                 # _reset_params only registers the leaves of _param_td: keep
-                # the None entries.
+                # the None entries and the non-persistent buffers that are not
+                # leaves.
+                kept = owner._non_persistent_buffers_set
+                if kept:
+                    kept = kept.difference(
+                        keys if owner is self else owner._leaf_keys()
+                    )
                 params = {k: v for k, v in owner._parameters.items() if v is None}
-                buffers = {k: v for k, v in owner._buffers.items() if v is None}
+                buffers = {
+                    k: v for k, v in owner._buffers.items() if v is None or k in kept
+                }
                 owner._reset_params()
                 owner._parameters.update(params)
                 owner._buffers.update(buffers)
