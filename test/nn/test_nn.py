@@ -6662,8 +6662,9 @@ class TestTensorDictParams:
     def test_load_state_dict_non_persistent_buffer(
         self, no_convert, value, strict, assign
     ):
-        # #3546: a non-persistent buffer that is not a leaf is kept, and a
-        # value for it is dropped, as main drops it with assign=False.
+        # #3546: a non-persistent buffer that is not a leaf is kept. A value
+        # for it is an unexpected key, as in nn.Module, except a tensor of the
+        # same shape with assign=False, which is dropped as before.
         params = self._params_with_non_persistent(no_convert)
         buffer = params.np
         module = self._parent(params)
@@ -6674,8 +6675,17 @@ class TestTensorDictParams:
                 "shape": torch.ones(3),
                 "number": 7.0,
             }[value]
-        result = module.load_state_dict(sd, strict=strict, assign=assign)
-        assert result.missing_keys == result.unexpected_keys == []
+        unexpected = value != "absent" and (assign or value != "tensor")
+        if unexpected and strict:
+            with pytest.raises(
+                RuntimeError,
+                match=r'Unexpected key\(s\) in state_dict: "params.np"\. $',
+            ):
+                module.load_state_dict(sd, strict=strict, assign=assign)
+        else:
+            result = module.load_state_dict(sd, strict=strict, assign=assign)
+            assert result.missing_keys == []
+            assert result.unexpected_keys == (["params.np"] if unexpected else [])
         assert (params["a"] == 1).all()
         assert (params["a"].data_ptr() == sd["params.a"].data_ptr()) is assign
         assert params._buffers["np"] is buffer
@@ -6685,6 +6695,25 @@ class TestTensorDictParams:
         result = module.load_state_dict(module.state_dict(), assign=assign)
         assert result.missing_keys == result.unexpected_keys == []
         assert params._buffers["np"] is buffer
+
+    @pytest.mark.parametrize("assign", [True, False])
+    def test_load_state_dict_non_persistent_buffer_missing(self, assign):
+        # #3546: with a missing key, strict=True reports both keys, as
+        # nn.Module does.
+        params = self._params_with_non_persistent(True)
+        buffer = params.np
+        module = self._parent(params)
+        with pytest.raises(
+            RuntimeError,
+            match=r'Missing key\(s\) in state_dict: "params.a"\. \n\t'
+            r'Unexpected key\(s\) in state_dict: "params.np"\. $',
+        ):
+            module.load_state_dict({"params.np": 7.0}, assign=assign)
+        result = module.load_state_dict({"params.np": 7.0}, strict=False, assign=assign)
+        assert result.missing_keys == ["params.a"]
+        assert result.unexpected_keys == ["params.np"]
+        assert params._buffers["np"] is buffer
+        assert (buffer == 5).all()
 
     def test_load_state_dict_non_persistent_buffer_nested(self):
         # #3546: assign=True keeps the non-persistent buffer of a nested

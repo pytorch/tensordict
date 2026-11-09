@@ -1467,6 +1467,9 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         names = {**self._parameters, **self._buffers}
         local_state = {name: dest for name, dest in names.items() if dest is not None}
         keys = None
+        # The keys of non-persistent buffers that are not leaves, where the
+        # leaf lookup below would raise: the base reports them as unexpected.
+        unexpected = set()
         # Where the base rejects an entry, keep the previous behaviour: None
         # reads as a missing key, and a number or a tensor of another shape
         # is written in place (broadcast, or _InplaceWriteError).
@@ -1485,7 +1488,8 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             if val is None:
                 del state_dict[prefix + name]
             elif name not in keys and name in self._non_persistent_buffers_set:
-                # The base skips a non-persistent buffer that is not a leaf.
+                # The base reports it as an unexpected key.
+                unexpected.add(prefix + name)
                 continue
             else:
                 data.set(keys[name], val, inplace=True)
@@ -1505,6 +1509,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                 if val is None or val is dest:
                     continue
                 if name not in keys and name in self._non_persistent_buffers_set:
+                    unexpected.add(prefix + name)
                     continue
                 *path, last = _unravel_key_to_tuple(keys[name])
                 parent = self
@@ -1572,7 +1577,9 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             error_msgs,
         )
         unexpected_keys[n:] = [
-            key for key in unexpected_keys[n:] if key[len(prefix) :] not in local_state
+            key
+            for key in unexpected_keys[n:]
+            if key in unexpected or key[len(prefix) :] not in local_state
         ]
 
     def _leaf_keys(self) -> dict[str, NestedKey]:
