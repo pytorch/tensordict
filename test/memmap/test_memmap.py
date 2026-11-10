@@ -435,6 +435,165 @@ class TestIndexing:
         assert y.shape == torch.Size([1])
         assert t.shape == torch.Size([10])
 
+    @staticmethod
+    def _check_view(parent, view, expected):
+        # the view is on the file or the shared memory of its parent
+        assert type(view) is MemoryMappedTensor
+        assert view._filename == parent._filename
+        assert view._handler is parent._handler
+        assert view._mode == parent._mode
+        assert torch.as_tensor(view._parent_shape).equal(
+            torch.as_tensor(parent._parent_shape)
+        )
+        assert view.shape == expected.shape
+        assert (view == expected).all()
+        if parent._filename is None:
+            with pytest.raises(RuntimeError, match="no file associated"):
+                view.filename
+            if os.name == "nt":
+                # the handler pickles through a fd
+                return
+            loaded = pickle.loads(ForkingPickler.dumps(view))
+        else:
+            assert view.filename == parent.filename
+            # the form that the filename setter stores
+            assert view._filename == str(Path(view._filename).absolute())
+            loaded = pickle.loads(pickle.dumps(view))
+        assert type(loaded) is MemoryMappedTensor
+        assert loaded._filename == parent._filename
+        assert loaded._mode == parent._mode
+        assert loaded.shape == expected.shape
+        assert (loaded == expected).all()
+
+    @pytest.mark.parametrize(
+        "make_view",
+        [
+            lambda t: t[1],
+            lambda t: t[1:3],
+            lambda t: t[1, :, 1],
+            lambda t: t[..., 0],
+            lambda t: t[None],
+            lambda t: t[::2],
+            lambda t: t[1:][0][1:],
+            lambda t: t.unbind(0)[2],
+            lambda t: t.unbind(1)[1],
+            lambda t: t.chunk(2, dim=1)[1],
+            lambda t: t.split(1, dim=2)[1],
+            lambda t: t[1:].unbind(1)[0],
+            lambda t: t[:, 1:].chunk(2)[1],
+            lambda t: t.split(3)[0][2],
+        ],
+        ids=[
+            "int",
+            "slice",
+            "tuple",
+            "ellipsis",
+            "none",
+            "step",
+            "view-of-view",
+            "unbind",
+            "unbind-dim1",
+            "chunk",
+            "split",
+            "slice-unbind",
+            "slice-chunk",
+            "split-int",
+        ],
+    )
+    @pytest.mark.parametrize(
+        "source",
+        ["file", "anonymous", "r", "r+", "unpickled", "td", "loaded-td", "atomic-td"],
+    )
+    def test_view_keeps_file(self, make_view, source, tmp_path):
+        # #3570: a view takes the file name of its parent as it is, and it has
+        # the file, the handler and the mode that it had through the setter
+        data = torch.arange(24).view(4, 3, 2)
+        if source == "anonymous":
+            t = MemoryMappedTensor.from_tensor(data)
+        elif source in ("td", "loaded-td", "atomic-td"):
+            if source == "atomic-td" and sys.platform == "win32":
+                pytest.skip("atomic=True is not supported on Windows")
+            td = TensorDict(a=data, batch_size=[4])
+            td = td.memmap(tmp_path / "td", atomic=source == "atomic-td")
+            if source == "loaded-td":
+                td = TensorDict.load_memmap(tmp_path / "td")
+            t = td["a"]
+        else:
+            filename = tmp_path / "tensor.memmap"
+            t = MemoryMappedTensor.from_tensor(data, filename=filename)
+            if source == "unpickled":
+                t = pickle.loads(pickle.dumps(t))
+            elif source != "file":
+                t = MemoryMappedTensor.from_filename(
+                    filename, data.dtype, data.shape, mode=source
+                )
+        assert (t._filename is None) == (source == "anonymous")
+        self._check_view(t, make_view(t), make_view(data))
+
+    @pytest.mark.parametrize("with_filename", [False, True])
+    def test_view_keeps_file_nested(self, with_filename, tmp_path):
+        # #3570: the same for the views of a nested tensor
+        tensors = [torch.arange(6).view(2, 3), torch.arange(8).view(2, 4)]
+        filename = tmp_path / "nested.memmap" if with_filename else None
+        t = MemoryMappedTensor.from_tensor(
+            torch.nested.nested_tensor(tensors), filename=filename
+        )
+        assert (t._filename is None) == (not with_filename)
+        self._check_view(t, t[1], tensors[1])
+        self._check_view(t, t[1][1:], tensors[1][1:])
+        self._check_view(t, t.unbind(0)[0][:, 1], tensors[0][:, 1])
+        self._check_view(t, t[..., 0][1], tensors[1][:, 0])
+
+    def test_view_keeps_file_after_chdir(self, tmp_path, monkeypatch):
+        # #3570: the file name of a view is absolute, like its parent's: it
+        # does not follow the working directory
+        (tmp_path / "saved").mkdir()
+        (tmp_path / "other").mkdir()
+        monkeypatch.chdir(tmp_path / "saved")
+        data = torch.arange(6).view(2, 3)
+        t = MemoryMappedTensor.from_tensor(data, filename="tensor.memmap")
+        td = TensorDict(a=data, batch_size=[2]).memmap("td")
+        filename = t.filename
+        td_filename = td["a"].filename
+        assert os.path.isabs(filename)
+        assert os.path.isabs(td_filename)
+        assert os.path.samefile(filename, tmp_path / "saved" / "tensor.memmap")
+        assert os.path.samefile(td_filename, tmp_path / "saved" / "td" / "a.memmap")
+        monkeypatch.chdir(tmp_path / "other")
+        views = (t[1], t[:1], t[1:][0], *t.unbind(0), *t.chunk(2), *t.split(1), *t)
+        for view in views:
+            assert view.filename == filename
+        assert pickle.loads(pickle.dumps(t[1])).filename == filename
+        assert (pickle.loads(pickle.dumps(t[1])) == data[1]).all()
+        for sub in (td[1], td[:1], *td.unbind(0)):
+            assert sub["a"].filename == td_filename
+        assert not os.listdir(tmp_path / "other")
+
+    def test_view_does_not_call_pathlib(self, tmp_path, monkeypatch):
+        # #3570: a view has the file name of its parent, which is absolute
+        # already, so only opening a file goes through pathlib
+        data = torch.arange(24).view(4, 3, 2)
+        t = MemoryMappedTensor.from_tensor(data, filename=tmp_path / "tensor.memmap")
+        td = TensorDict(a=data, b=data + 1, batch_size=[4]).memmap(tmp_path / "td")
+        calls = []
+
+        def counting_path(*args):
+            calls.append(args)
+            return Path(*args)
+
+        # tensordict.memmap is also a function of the package
+        monkeypatch.setattr(sys.modules["tensordict.memmap"], "Path", counting_path)
+        views = [t[1], t[1:3], t[1][0], t[..., 0], *t]
+        views += [*t.unbind(1), *t.chunk(2), *t.split(1, dim=2)]
+        views += [td[1]["a"], td[1:3]["b"], *(sub["a"] for sub in td.unbind(0))]
+        for view in views:
+            assert type(view) is MemoryMappedTensor
+            assert view.filename in (t.filename, td["a"].filename, td["b"].filename)
+        assert not calls
+        loaded = MemoryMappedTensor.from_filename(t.filename, data.dtype, data.shape)
+        assert loaded.filename == t.filename
+        assert calls
+
     @pytest.mark.parametrize(
         "make_view",
         [

@@ -1313,7 +1313,10 @@ class MemoryMappedTensor(torch.Tensor):
             return tensor
         tensor = MemoryMappedTensor(tensor)
         tensor._handler = getattr(self, "_handler", None)
-        tensor.filename = getattr(self, "_filename", None)
+        filename = getattr(self, "_filename", None)
+        if filename is not None:
+            # Already what the filename setter stores: skip its pathlib call
+            tensor._filename = filename
         tensor._mode = self._mode
         tensor._index = item
         tensor._index_chain = (self._index_chain, item)
