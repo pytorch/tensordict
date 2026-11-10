@@ -347,21 +347,22 @@ def _raise_if_entry_missing(td, key):
 
 
 def _node_at(root, path, nodes, owners):
-    # The tensordict at path under root, for load_state_dict(assign=True): one
+    # The tensordict at path under root, for load_state_dict(assign=True),
+    # walked from the deepest tensordict on the path that nodes holds: one
     # _get_str per tensordict, not one per leaf and level. nodes keeps each
-    # one by its path, and owners the TensorDictParams among them. A function
-    # of the module and not a closure, which would refer to itself and so
-    # keep root alive until the next garbage collection.
-    node = nodes.get(path)
+    # tensordict by its path, and owners the TensorDictParams among them.
+    depth = len(path)
+    node = None
+    while depth and node is None:
+        depth -= 1
+        node = nodes.get(path[:depth])
     if node is None:
-        if path:
-            node = _node_at(root, path[:-1], nodes, owners)
-            node = node._get_str(path[-1], NO_DEFAULT)
-            if isinstance(node, TensorDictParams):
-                owners.add(node)
-        else:
-            node = root
-        nodes[path] = node
+        node = nodes[()] = root
+    for i in range(depth, len(path)):
+        node = node._get_str(path[i], NO_DEFAULT)
+        if isinstance(node, TensorDictParams):
+            owners.add(node)
+        nodes[path[: i + 1]] = node
     return node
 
 
@@ -1533,9 +1534,10 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                     unexpected.add(prefix + name)
                     continue
                 key = _unravel_key_to_tuple(keys[name])
-                parent = nodes.get(key[:-1])
+                path = key[:-1]
+                parent = nodes.get(path)
                 if parent is None:
-                    parent = _node_at(self, key[:-1], nodes, owners)
+                    parent = _node_at(self, path, nodes, owners)
                 if isinstance(parent, TensorDictParams):
                     parent = parent._param_td
                 # Cast before wrapping: the cast of a Parameter is a plain
@@ -1588,7 +1590,9 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         # that hold those.
         for td in nodes.values():
             while True:
-                if not isinstance(td, TensorDictBase):
+                # Most of them are TensorDicts, which need neither check.
+                plain = type(td) is TensorDict
+                if not plain and not isinstance(td, TensorDictBase):
                     # A tensorclass: the cache is in the tensordict it wraps.
                     td = td._tensordict
                 # An empty cache is left alone: a tensordict below another
@@ -1602,7 +1606,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                         holder = ref()
                         if holder is not None and holder._cache is not None:
                             holder._erase_cache()
-                if not isinstance(td, TensorDictParams):
+                if plain or not isinstance(td, TensorDictParams):
                     break
                 td = td._param_td
         n = len(unexpected_keys)

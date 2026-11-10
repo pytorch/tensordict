@@ -6972,6 +6972,7 @@ class TestTensorDictParams:
         # #3572: the load keeps no reference to the TensorDictParams, which is
         # freed when its last reference is dropped, without the garbage
         # collector.
+        enabled = gc.isenabled()
         gc.disable()
         try:
             params = TensorDictParams(
@@ -6986,7 +6987,8 @@ class TestTensorDictParams:
             del module, params
             assert ref() is None
         finally:
-            gc.enable()
+            if enabled:
+                gc.enable()
 
     @staticmethod
     def _apply_params(device=None):
