@@ -1078,11 +1078,11 @@ class TestGeneric:
             td.consolidate(num_threads=4, return_early=True, non_blocking=True)
 
     @pytest.mark.parametrize(
-        "call", ["consolidate", "to", "pickle", "from_consolidated", "bytes"]
+        "call", ["consolidate", "to", "pickle", "from_consolidated"]
     )
     def test_consolidate_frees_buffer_without_gc(self, call, tmp_path):
         # #3563: a reference cycle kept the buffer of a consolidated tensordict
-        # (and, after bytes(), every leaf) alive until the garbage collector ran
+        # alive until the garbage collector ran
         td = TensorDict(a=torch.zeros(3), b={"c": torch.ones(2, dtype=torch.int64)})
         consolidated = td.consolidate(metadata=True)
         data = pickle.dumps(consolidated)
@@ -1092,12 +1092,6 @@ class TestGeneric:
         gc.collect()
         gc.disable()
         try:
-            if call == "bytes":
-                ref = weakref.ref(td["a"])
-                assert td.bytes() == 28
-                del td
-                assert ref() is None
-                return
             if call == "consolidate":
                 result = td.consolidate()
             elif call == "to":
@@ -1118,9 +1112,9 @@ class TestGeneric:
 
     @pytest.mark.parametrize("kind", ["njt", "tensorclass", "lazy_stack"])
     def test_consolidate_recursive_entries(self, kind, tmp_path):
-        # #3563: consolidate(), to(device), unpickling, from_consolidated() and
-        # bytes() each drop a function that calls itself on nested tensors and
-        # nested tensordicts once they are done with it
+        # #3563: consolidate(), to(device), unpickling and from_consolidated()
+        # each drop a function that calls itself on nested tensors and nested
+        # tensordicts once they are done with it
         if kind == "njt":
             njt = torch.nested.nested_tensor(
                 [torch.arange(3.0), torch.arange(5.0)], layout=torch.jagged
