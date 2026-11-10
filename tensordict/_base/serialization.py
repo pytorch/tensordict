@@ -1152,13 +1152,14 @@ class _Serialization:
                     stride = v.stride()
                     # reshape(-1) may return a view that is not stride-1,
                     # e.g. for x[:, :1], which cannot be viewed as bytes.
-                    # With a filename, a leaf with a storage offset is copied
-                    # first, as a leaf that needs padding is below.
+                    # With a filename or return_early, a leaf with a storage
+                    # offset is copied first, as a leaf that needs padding
+                    # is below.
                     if (
                         (stride and stride[-1] != 1)
                         or (
                             v.storage_offset()
-                            and (filename is not None or is_compiling())
+                            and (filename is not None or return_early or is_compiling())
                         )
                         or not v.is_contiguous()
                     ):
@@ -1174,11 +1175,13 @@ class _Serialization:
                     pad = offsets[idx + 1] - offsets[idx] - flat_view.numel()
                     if not pad:
                         flat_views.append((flat_view,))
-                    elif filename is not None or is_compiling():
+                    elif filename is not None or return_early or is_compiling():
                         # A leaf can be a view of the file that is being
                         # written. If that file could not be replaced, it
                         # changes during the copies: this copy of the leaf
-                        # is made before. Compiled calls keep their graph.
+                        # is made before. With return_early, it is made
+                        # before the caller gets the leaf back and can write
+                        # to it. Compiled calls keep their graph.
                         flat_views.append(
                             (torch.cat([flat_view, flat_view.new_zeros(pad)]),)
                         )

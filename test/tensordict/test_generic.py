@@ -1110,7 +1110,7 @@ class TestGeneric:
         ],
     )
     def test_consolidate_offset_view_single_copy(self, view, clones, num_threads):
-        # #3571: a contiguous leaf that does not start at the beginning of
+        # #3592: a contiguous leaf that does not start at the beginning of
         # its storage, such as a leaf of td[1:] or of a row of a batch, was
         # cloned before it was copied into the storage: two copies of the
         # leaf. It can be viewed as bytes as it is. A leaf that is not
@@ -1154,6 +1154,50 @@ class TestGeneric:
         # the result does not share memory with the source
         td_c._consolidated["storage"].zero_()
         assert (source == expected).all()
+
+    @pytest.mark.parametrize("num_threads", [2, 4])
+    @pytest.mark.parametrize("share_memory", [False, True])
+    @pytest.mark.parametrize("view", ["padding", "slice", "row"])
+    def test_consolidate_return_early_source_reuse(
+        self, view, share_memory, num_threads
+    ):
+        # #3571, #3592: with return_early=True the workers copy after
+        # consolidate has returned, so a leaf that needs padding or that has
+        # a storage offset keeps its copy on the calling thread: a caller
+        # that reuses its buffers before it calls result() gets the values
+        # of the call. The workers are held busy until the buffers are
+        # rewritten, so that no copy can start before.
+        if view == "padding":
+            buffers = [torch.ones(3), torch.ones(5, dtype=torch.int32)]
+            source = TensorDict(a=buffers[0], nested={"b": buffers[1]})
+        else:
+            buffers = [torch.ones(8, 2), torch.ones(8, 2, dtype=torch.int64)]
+            td = TensorDict(a=buffers[0], nested={"b": buffers[1]}, batch_size=[8])
+            source = td[4:] if view == "slice" else td.unbind(0)[2]
+        expected = source.clone()
+        executor = tensordict.utils._get_shared_executor(num_threads)
+        release = threading.Event()
+        started = [threading.Event() for _ in range(num_threads)]
+
+        def hold(event):
+            event.set()
+            release.wait()
+
+        for event in started:
+            executor.submit(hold, event)
+        try:
+            for event in started:
+                assert event.wait(60)
+            future = source.consolidate(
+                num_threads=num_threads, return_early=True, share_memory=share_memory
+            )
+            for buffer in buffers:
+                buffer.fill_(-1)
+        finally:
+            release.set()
+        td_c = future.result()
+        assert (td_c == expected).all()
+        assert (source == -1).all()
 
     @pytest.mark.parametrize("use_file", [False, True])
     def test_consolidate_many_leaves_num_threads(self, use_file, tmpdir):
