@@ -2789,6 +2789,9 @@ class PersistentTensorDict(
         # and the cache is rebuilt on demand (gh-2920)
         state["_last_op"] = None
         state["_cache"] = None
+        # the records of the with blocks that self is in hold weakrefs too,
+        # and the copy is in no block
+        state.pop("_last_op_queue", None)
         return state
 
     # Override: reopens the file, and reads the pickles of TensorDict 0.14.

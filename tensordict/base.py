@@ -4208,6 +4208,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         result = dict(self.__dict__)
         for key in (
             "_last_op",
+            # the records of the with blocks that self is in: they hold
+            # weakrefs, and the copy is in no block
+            "_last_op_queue",
             "_cache",
             "__lock_parents_weakrefs",
         ):
