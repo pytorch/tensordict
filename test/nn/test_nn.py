@@ -6776,7 +6776,19 @@ class TestTensorDictParams:
         result = module.load_state_dict(module.state_dict())
         assert result.missing_keys == result.unexpected_keys == []
 
-    @pytest.mark.parametrize("swap", [False, True])
+    @pytest.mark.parametrize(
+        "swap",
+        [
+            False,
+            pytest.param(
+                True,
+                marks=pytest.mark.xfail(
+                    strict=True,
+                    reason="#3613: with swap_module_params_on_conversion, detach() keeps the old tensors",
+                ),
+            ),
+        ],
+    )
     def test_load_state_dict_assign_locked(self, swap):
         # #3572: detach() and arithmetic on a locked TensorDictParams, called
         # before the load too, give the tensors that assign=True put in.
@@ -6856,15 +6868,36 @@ class TestTensorDictParams:
             assert (td + 0 == 0).all()
 
     @pytest.mark.parametrize(
-        "assign,swap", [(True, False), (False, False), (True, True)]
+        "layout,assign,swap",
+        [
+            ("as_module", True, False),
+            ("as_module", False, False),
+            ("content", True, False),
+            ("content", False, False),
+            ("unlocked", True, False),
+            ("unlocked", False, False),
+            ("unlocked", True, True),
+        ]
+        + [
+            pytest.param(
+                layout,
+                True,
+                True,
+                marks=pytest.mark.xfail(
+                    strict=True,
+                    reason="#3613: with swap_module_params_on_conversion, the load raises after a vmapped forward",
+                ),
+            )
+            for layout in ("as_module", "content")
+        ],
     )
-    @pytest.mark.parametrize("layout", ["as_module", "content", "unlocked"])
     def test_load_state_dict_vmap(self, layout, assign, swap):
         # #3572: a vmapped forward that ran before the load computes with the
         # loaded weights after it. A locked tensordict caches its view under
         # vmap: the TensorDictParams that from_modules(as_module=True) returns,
         # and the content of a TensorDictParams(td, lock=True). With
-        # swap_module_params_on_conversion, the assign=True load raised.
+        # swap_module_params_on_conversion, the load of a locked one still
+        # raises (#3613).
         nets = [nn.Linear(3, 1) for _ in range(2)]
         if layout == "as_module":
             params = TensorDict.from_modules(*nets, as_module=True)

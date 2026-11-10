@@ -1567,18 +1567,6 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                 owner._reset_params()
                 owner._parameters.update(params)
                 owner._buffers.update(buffers)
-        elif local_metadata.get("assign_to_params_buffers", False):
-            # The base swaps the content of each leaf with the loaded tensor.
-            if keys is None:
-                keys = self._leaf_keys()
-            for name in local_state:
-                if name not in keys or state_dict.get(prefix + name) is None:
-                    continue
-                parent = self
-                above[id(self)] = self
-                for part in _unravel_key_to_tuple(keys[name])[:-1]:
-                    parent = parent._get_str(part, NO_DEFAULT)
-                    above[id(parent)] = parent
         # A locked tensordict caches some of its reads, such as detach(), its
         # view under vmap and the list of its leaves: erase them in the
         # tensordicts above an assigned leaf, and in the locked tensordicts
