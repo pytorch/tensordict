@@ -5483,6 +5483,29 @@ class LazyStackedTensorDict(TensorDictBase):
             )
         elif input_dict_or_td.batch_size != indexed_bs:
             lead = len(indexed_bs) - input_dict_or_td.batch_dims
+            expanded = None
+            if (
+                ragged_error is None
+                and lead > 0
+                and -1 in indexed_bs[:lead]
+                and not is_dynamo_compiling()
+                and isinstance(input_dict_or_td, TensorDictBase)
+            ):
+                # the index keeps a ragged dim that the value lacks, which
+                # expand cannot add: each member broadcasts the value. Under
+                # Dynamo, such a value keeps the path below.
+                try:
+                    expanded = input_dict_or_td.expand(indexed_bs)
+                except RuntimeError as expand_error:
+                    return self._update_at_ragged_broadcast(
+                        input_dict_or_td,
+                        idx,
+                        indexed_bs,
+                        lead,
+                        expand_error,
+                        non_blocking=non_blocking,
+                        keys_to_update=keys_to_update,
+                    )
             if ragged_error is not None and lead >= 0:
                 # each member broadcasts the value over a sliced ragged dim
                 # that the value lacks or has with size 1. A member does not
@@ -5530,7 +5553,11 @@ class LazyStackedTensorDict(TensorDictBase):
                 and input_dict_or_td.batch_size[0] == 1
             ):
                 input_dict_or_td = input_dict_or_td.squeeze(0)
-            input_dict_or_td = input_dict_or_td.expand(indexed_bs)
+            if expanded is None:
+                input_dict_or_td = input_dict_or_td.expand(indexed_bs)
+            else:
+                # the expand above did not raise: nothing changed since
+                input_dict_or_td = expanded
         # the members of a NonTensorStack take no keys_to_update
         kwargs = {} if keys_to_update is None else {"keys_to_update": keys_to_update}
         for member, member_index, piece in self._split_value(idx, input_dict_or_td):
@@ -5548,12 +5575,12 @@ class LazyStackedTensorDict(TensorDictBase):
         idx: IndexType,
         indexed_bs: torch.Size,
         lead: int,
-        ragged_error: ValueError,
+        ragged_error: Exception,
         *,
         non_blocking: bool,
         keys_to_update: list[tuple[str, ...]] | None,
     ) -> Self:
-        """Writes a value that a sliced ragged dim broadcasts into each member, for :meth:`_update_at_`.
+        """Writes a value that a ragged dim broadcasts into each member, for :meth:`_update_at_`.
 
         Each member's piece is expanded to the rows the member selects. The
         write goes ahead only for exact TensorDict members and plain tensor
