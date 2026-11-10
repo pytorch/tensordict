@@ -1142,10 +1142,12 @@ class _Serialization:
                 # is cheap but GIL-bound, so running it inside the workers
                 # only adds contention. The workers then execute one fused,
                 # GIL-releasing copy per chunk.
+                # flat_views[idx] holds the pieces that make up leaf idx in
+                # the storage: its bytes and, if it needs any, its padding
                 flat_views = []
                 for idx, v in enumerate(values):
                     if v.is_nested:
-                        flat_views.append(None)
+                        flat_views.append(())
                         continue
                     stride = v.stride()
                     # reshape(-1) may return a view that is not stride-1,
@@ -1165,16 +1167,27 @@ class _Serialization:
                         v = v.resolve_conj().resolve_neg()
                         flat_view = v.reshape(-1).view(torch.uint8)
                     pad = offsets[idx + 1] - offsets[idx] - flat_view.numel()
-                    if pad:
-                        flat_view = torch.cat([flat_view, flat_view.new_zeros(pad)])
-                    flat_views.append(flat_view)
+                    if not pad:
+                        flat_views.append((flat_view,))
+                    elif filename is not None or is_compiling():
+                        # A leaf can be a view of the file that is being
+                        # written. If that file could not be replaced, it
+                        # changes during the copies: this copy of the leaf
+                        # is made before. Compiled calls keep their graph.
+                        flat_views.append(
+                            (torch.cat([flat_view, flat_view.new_zeros(pad)]),)
+                        )
+                    else:
+                        # the padding is its own piece: concatenating it to
+                        # the leaf would copy the leaf a second time
+                        flat_views.append((flat_view, flat_view.new_zeros(pad)))
 
                 def _copy_chunk(start_idx, stop_idx):
                     """Copies values[start_idx:stop_idx] into their storage slices."""
                     items = [
-                        flat_view
-                        for flat_view in flat_views[start_idx:stop_idx]
-                        if flat_view is not None
+                        piece
+                        for pieces in flat_views[start_idx:stop_idx]
+                        for piece in pieces
                     ]
                     if items:
                         torch.cat(
@@ -1253,12 +1266,20 @@ class _Serialization:
 
             def _view_and_pad(tensor):
                 result = tensor.reshape(-1).view(torch.uint8)
-                # result must always have a multiple of 8 elements
+                # each leaf must take a multiple of 8 bytes of the storage
                 pad = 0
                 if need_padding:
                     pad = result.numel() % 8
                     if pad != 0:
-                        result = torch.cat([result, result.new_zeros(8 - pad)])
+                        pad = 8 - pad
+                        if filename is not None or is_compiling():
+                            # A leaf can be a view of the file that is being
+                            # written. If that file could not be replaced, it
+                            # changes during the final copy: this copy of the
+                            # leaf is made before. Compiled calls keep their
+                            # graph.
+                            result = torch.cat([result, result.new_zeros(pad)])
+                            pad = 0
                 return result, pad
 
             items = []
@@ -1285,6 +1306,10 @@ class _Serialization:
                         raise
                     v, pad = _view_and_pad(v.resolve_conj().resolve_neg())
                 items.append(v)
+                if pad:
+                    # the padding is its own item: concatenating it to the
+                    # leaf first would copy the leaf a second time
+                    items.append(v.new_zeros(pad))
             if non_blocking and (device is None or device.type != "cuda"):
                 # sync if needed
                 self._sync_all()

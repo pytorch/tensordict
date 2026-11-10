@@ -1019,6 +1019,83 @@ class TestGeneric:
         transposed.sum().backward()
         assert torch.equal(base.grad, torch.ones_like(base))
 
+    @pytest.mark.parametrize("num_threads", [0, 2, 4])
+    @pytest.mark.parametrize(
+        "dtype",
+        [
+            torch.float32,
+            torch.float16,
+            torch.int32,
+            torch.int16,
+            torch.uint8,
+            torch.bool,
+            torch.float64,
+            torch.complex64,
+        ],
+    )
+    def test_consolidate_padding(self, dtype, num_threads, tmp_path):
+        # #3571: each leaf takes a multiple of 8 bytes of the storage: its
+        # bytes, then zeros. Leaves of 0 to 8 elements need every pad length
+        # that the dtype can need.
+        td = TensorDict(
+            {f"key{n}": torch.arange(1, n + 1).to(dtype) for n in range(9)},
+            batch_size=[],
+        )
+        td["nested", "leaf"] = torch.arange(1, 4).to(dtype)
+        leaves = list(td.values(True, True))
+        expected = torch.cat(
+            [
+                piece
+                for leaf in leaves
+                for piece in (
+                    leaf.view(torch.uint8),
+                    torch.zeros(-leaf.nbytes % 8, dtype=torch.uint8),
+                )
+            ]
+        )
+        td_c = td.consolidate(num_threads=num_threads)
+        assert torch.equal(td_c._consolidated["storage"], expected)
+        td_f = td.consolidate(filename=tmp_path / "td.bin", num_threads=num_threads)
+        assert torch.equal(td_f._consolidated["storage"], expected)
+        for out in (
+            td_c,
+            td_f,
+            pickle.loads(pickle.dumps(td_c)),
+            TensorDict.from_consolidated(tmp_path / "td.bin"),
+        ):
+            assert list(out.keys(True, True)) == list(td.keys(True, True))
+            for actual, leaf in zip(out.values(True, True), leaves, strict=True):
+                assert actual.dtype == leaf.dtype
+                assert torch.equal(actual, leaf)
+
+    @pytest.mark.parametrize("num_threads", [0, 2, 4])
+    @pytest.mark.parametrize("batch", [32, 33])
+    def test_consolidate_padding_single_copy(self, batch, num_threads):
+        # #3571: a leaf whose size in bytes is not a multiple of 8 was
+        # concatenated with its padding into a new tensor, then copied into
+        # the storage: two copies of the leaf. Every byte must go through
+        # torch.cat once.
+        td = TensorDict(
+            {
+                "obs": torch.randn(batch, 3),
+                "reward": torch.randn(batch, 1),
+                "done": torch.zeros(batch, 1, dtype=torch.bool),
+                "nested": {"action": torch.randn(batch, dtype=torch.float16)},
+            },
+            batch_size=[batch],
+        )
+        cat = torch.cat
+        cat_bytes = []
+
+        def counting_cat(tensors, *args, **kwargs):
+            cat_bytes.append(sum(tensor.nbytes for tensor in tensors))
+            return cat(tensors, *args, **kwargs)
+
+        with mock.patch.object(torch, "cat", counting_cat):
+            td_c = td.consolidate(num_threads=num_threads)
+        assert sum(cat_bytes) == td_c._consolidated["storage"].numel()
+        assert (td_c == td).all()
+
     @pytest.mark.parametrize("use_file", [False, True])
     def test_consolidate_many_leaves_num_threads(self, use_file, tmpdir):
         # Exercises the chunked multithreaded copy path with enough leaves
@@ -1616,6 +1693,47 @@ class TestGeneric:
         assert_allclose_td(saved, expected)
         assert filename.stat().st_size == size
         assert [p.name for p in tmp_path.iterdir()] == ["td.bin"]
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS, reason="simulates the in-place write of Windows with a mock"
+    )
+    @pytest.mark.parametrize(
+        "num_threads,return_early", [(0, False), (2, False), (2, True)]
+    )
+    @pytest.mark.parametrize("moved", ["padded", "offset"])
+    def test_consolidated_file_in_place_source_view(
+        self, tmp_path, moved, num_threads, return_early
+    ):
+        # #3571: a source made of views into the file it overwrites, when the
+        # file cannot be replaced and is written in place. The leaves that
+        # need padding, and those that do not start at the beginning of the
+        # file, are copied before the file changes: writing to a file keeps
+        # the copies that consolidate() no longer makes in memory.
+        filename = tmp_path / "td.bin"
+        if moved == "padded":
+            # the first leaf of the file needs padding and moves
+            TensorDict(a=torch.zeros(3), b=torch.ones(3), batch_size=[3]).consolidate(
+                filename=filename
+            )
+            original = TensorDict.from_consolidated(filename)
+            source = TensorDict(a=original["b"], b=original["a"], batch_size=[3])
+        else:
+            # two leaves that do not start at the beginning of the file swap
+            TensorDict(
+                a=torch.zeros(4), b=torch.ones(4), c=torch.full((4,), 2.0)
+            ).consolidate(filename=filename)
+            original = TensorDict.from_consolidated(filename)
+            source = TensorDict(a=original["a"], b=original["c"], c=original["b"])
+        expected = source.clone()
+        with mock.patch("os.replace", side_effect=PermissionError):
+            saved = source.consolidate(
+                filename=filename, num_threads=num_threads, return_early=return_early
+            )
+            if return_early:
+                saved = saved.result()
+        loaded = TensorDict.from_consolidated(filename)
+        assert_allclose_td(saved, expected)
+        assert_allclose_td(loaded, expected)
 
     def test_consolidated_lazy_stack_names_serialized(self):
         td = lazy_stack(
