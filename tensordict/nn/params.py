@@ -1504,6 +1504,8 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                 state_dict = dict(state_dict)
             # The TensorDictParams on the path of each leaf register it again.
             owners = {self}
+            # The tensordicts on the path of each assigned leaf, by id.
+            above = {}
             for name, dest in local_state.items():
                 val = state_dict.get(prefix + name)
                 if val is None or val is dest:
@@ -1513,8 +1515,10 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                     continue
                 *path, last = _unravel_key_to_tuple(keys[name])
                 parent = self
+                above[id(self)] = self
                 for part in path:
                     parent = parent._get_str(part, NO_DEFAULT)
+                    above[id(parent)] = parent
                     if isinstance(parent, TensorDictParams):
                         owners.add(parent)
                 if isinstance(parent, TensorDictParams):
@@ -1563,6 +1567,18 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                 owner._reset_params()
                 owner._parameters.update(params)
                 owner._buffers.update(buffers)
+            # A locked tensordict caches some of its reads, such as detach()
+            # and the list of its leaves: erase them in the tensordicts above
+            # an assigned leaf, and in the locked tensordicts that hold those.
+            for td in above.values():
+                tds = (td, td._param_td) if isinstance(td, TensorDictParams) else (td,)
+                for td in tds:
+                    td._erase_cache()
+                    if td.is_locked:
+                        for ref in td._lock_parents_weakrefs:
+                            holder = ref()
+                            if holder is not None:
+                                holder._erase_cache()
         n = len(unexpected_keys)
         # The base now copies each entry into the (assigned) leaf, and reports
         # missing and unexpected keys.

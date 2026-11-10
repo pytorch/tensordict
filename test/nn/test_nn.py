@@ -6776,6 +6776,79 @@ class TestTensorDictParams:
         result = module.load_state_dict(module.state_dict())
         assert result.missing_keys == result.unexpected_keys == []
 
+    def test_load_state_dict_assign_locked(self):
+        # #3572: detach() and arithmetic on a locked TensorDictParams, called
+        # before the load too, give the tensors that assign=True put in.
+        params = TensorDictParams(TensorDict(w=torch.zeros(3)))
+        module = self._parent(params)
+        params.lock_()
+        params.detach(), params + 0
+        sd = {"params.w": torch.ones(3)}
+        module.load_state_dict(sd, assign=True)
+        assert params["w"].data_ptr() == sd["params.w"].data_ptr()
+        assert params.detach()["w"].data_ptr() == sd["params.w"].data_ptr()
+        assert ((params + 0)["w"] == 1).all()
+
+    @pytest.mark.parametrize("assign", [True, False])
+    @pytest.mark.parametrize("lock", [None, "lock_", "content", "parent"])
+    def test_load_state_dict_locked_reads(self, lock, assign):
+        # #3572: a locked tensordict caches reads such as detach() and the list
+        # of its leaves. After assign=True, the reads of the TensorDictParams,
+        # of its nested tensordicts and of a locked tensordict that holds it
+        # give the assigned tensors. Unlocked (lock=None) or with assign=False,
+        # they already did.
+        params = TensorDictParams(
+            TensorDict(
+                w=torch.zeros(3),
+                n=TensorDict(v=torch.zeros(2)),
+                sub=TensorDictParams(TensorDict(u=torch.zeros(2))),
+            ),
+            lock=lock == "content",
+        )
+        module = self._parent(params)
+        root = TensorDict(p=params) if lock == "parent" else params
+        if lock in ("lock_", "parent"):
+            root.lock_()
+        tds = [root, params, params["n"], params["sub"]]
+        for td in tds:
+            # the reads that fill the caches of a locked tensordict
+            td.detach(), td + 0, td.flatten_keys(), td.zero_grad()
+            td.requires_grad_()
+        sd = {key: torch.ones_like(val) for key, val in module.state_dict().items()}
+        module.load_state_dict(sd, assign=assign)
+        live = dict(module.named_parameters())
+        assert set(live) == {"params.w", "params.n.v", "params.sub.u"}
+        for name, param in live.items():
+            assert (param.data_ptr() == sd[name].data_ptr()) is assign
+            assert params.get(tuple(name.split(".")[1:])) is param
+        pointers = {param.data_ptr() for param in live.values()}
+        for td in tds:
+            detached = td.detach()
+            assert {leaf.data_ptr() for leaf in detached.values(True, True)} <= pointers
+            assert (detached == 1).all()
+            assert (td + 0 == 1).all()
+            assert all(
+                any(leaf is p for p in live.values())
+                for leaf in td.flatten_keys().values()
+            )
+        # zero_grad and requires_grad_ reach the live parameters
+        sum(param.sum() for param in live.values()).backward()
+        params["n"].zero_grad()
+        assert live["params.n.v"].grad is None
+        assert live["params.w"].grad is not None
+        root.zero_grad()
+        assert all(param.grad is None for param in live.values())
+        root.requires_grad_(False)
+        assert not any(param.requires_grad for param in live.values())
+        root.requires_grad_(True)
+        # an optimizer step shows in the reads
+        optim = torch.optim.SGD(module.parameters(), lr=1.0)
+        sum(param.sum() for param in module.parameters()).backward()
+        optim.step()
+        for td in tds:
+            assert (td.detach() == 0).all()
+            assert (td + 0 == 0).all()
+
     @staticmethod
     def _apply_params(device=None):
         # A parameter, a nested parameter, a buffer, and a nested
