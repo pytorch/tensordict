@@ -9,6 +9,7 @@ import os
 import pickle
 import stat
 import sys
+import time
 from contextlib import nullcontext
 from multiprocessing.reduction import ForkingPickler
 from pathlib import Path
@@ -860,6 +861,85 @@ def test_pickle_handler_complex():
     loaded = pickle.loads(ForkingPickler.dumps(mt))
     assert loaded.dtype == torch.complex64
     assert (loaded == tensor[1]).all()
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="counts /proc/self/fd")
+def test_pickle_handler_closes_fd():
+    # #3565: a tensor without a file that is received from another process
+    # closes the descriptor it received when it is dropped
+    def round_trip():
+        td = TensorDict(obs=torch.zeros(8, 3), reward=torch.zeros(8, 1), batch_size=[8])
+        td.memmap_()
+        loaded = pickle.loads(ForkingPickler.dumps(td))
+        assert (loaded["obs"] == 0).all()
+
+    def open_fds():
+        return len(os.listdir("/proc/self/fd"))
+
+    # the first round trip starts the thread that sends the descriptors
+    round_trip()
+    gc.collect()
+    start = open_fds()
+    for _ in range(50):
+        round_trip()
+    gc.collect()
+    # That thread closes its own copy of a descriptor after the receiver has
+    # it: wait for it. A leak is 100 descriptors.
+    for _ in range(200):
+        if open_fds() <= start:
+            break
+        time.sleep(0.01)
+    assert open_fds() <= start
+
+
+def _recv_write_and_send_on(queue_out, queue_in):
+    t = queue_in.get(timeout=TIMEOUT)
+    assert isinstance(t, MemoryMappedTensor)
+    assert (t == 0).all()
+    queue_out.put("received")
+    assert queue_in.get(timeout=TIMEOUT) == "written"
+    assert (t == 1).all()
+    t[1] = 2
+    # the second hop, of a view: this process drops its tensors once they are sent
+    queue_out.put(t[1:])
+    del t
+    gc.collect()
+    assert queue_in.get(timeout=TIMEOUT) == "done"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="the handler pickles through a fd")
+def test_pickle_handler_shares_memory_across_procs():
+    # #3565: a received tensor reads and writes the sender's memory, also after
+    # it is sent on and the tensors that it came from are dropped
+    t = MemoryMappedTensor.from_tensor(torch.zeros(10))
+    queue_in = mp.Queue(1)
+    queue_out = mp.Queue(1)
+    p = mp.Process(target=_recv_write_and_send_on, args=(queue_in, queue_out))
+    p.start()
+    try:
+        queue_out.put(t, block=True)
+        assert queue_in.get(timeout=TIMEOUT) == "received"
+        t.fill_(1.0)
+        queue_out.put("written", block=True)
+        t2 = queue_in.get(timeout=TIMEOUT)
+        queue_out.put("done", block=True)
+    finally:
+        p.join()
+    assert p.exitcode == 0
+    assert isinstance(t2, MemoryMappedTensor)
+    assert t2.tolist() == [2.0] + [1.0] * 8
+    assert t[1] == 2
+    t2[1] = 3
+    assert t[2] == 3
+    # a third hop, after the process and the tensor of the second hop are gone
+    t3 = pickle.loads(ForkingPickler.dumps(t2))
+    del t2
+    gc.collect()
+    assert isinstance(t3, MemoryMappedTensor)
+    t[3] = 4
+    assert t3.tolist() == [2.0, 3.0, 4.0] + [1.0] * 6
+    t3[3] = 5
+    assert t.tolist() == [1.0, 2.0, 3.0, 4.0, 5.0] + [1.0] * 5
 
 
 def test_pickle_filename(tmp_path):
