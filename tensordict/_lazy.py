@@ -2060,11 +2060,11 @@ class LazyStackedTensorDict(TensorDictBase):
         stack_dim = self.stack_dim
 
         # This runs for every member of every stack that is built. In eager mode,
-        # a stack whose first member is a TensorDict takes the first loop, which
-        # reads the batch size and the device of each member that is a TensorDict
-        # from its attributes: they are what the two properties return. The
-        # checks that follow the reads are the same in both loops: keep them
-        # identical.
+        # a stack whose first member's type is exactly TensorDict takes the first
+        # loop, which reads the batch size and the device of each member whose
+        # type is exactly TensorDict from its attributes: they are what the two
+        # properties return. The checks that follow the reads are the same in
+        # both loops: keep them identical.
         if num_tds > 1:
             if type(td0) is TensorDict and not is_compiling():
                 for td in tensordicts[1:]:

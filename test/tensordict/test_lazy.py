@@ -390,7 +390,7 @@ class _SubTensor(torch.Tensor):
     pass
 
 
-class _SubTensorDict3574(TensorDict):
+class _TensorDictSubclass3574(TensorDict):
     pass
 
 
@@ -8143,7 +8143,7 @@ class TestLazyStackedTensorDict:
         ]
         assert all(type(td) is TensorDict for td in tensordicts)
         others = [
-            member(cls=_SubTensorDict3574),
+            member(cls=_TensorDictSubclass3574),
             member(cls=_CpuTensorDict3574),
             member((2, 3))._get_sub_tensordict(0),
             lazy_stack([member(()) for _ in range(3)]),
@@ -8213,7 +8213,7 @@ class TestLazyStackedTensorDict:
             assert lazy_stack(tds, 1).batch_size == (3, 8)
             assert check.call_count == 0
             # a member of another type is checked as before
-            tds[3] = _SubTensorDict3574(a=torch.zeros(3), batch_size=[3])
+            tds[3] = _TensorDictSubclass3574(a=torch.zeros(3), batch_size=[3])
             assert LazyStackedTensorDict(*tds).batch_size == (8, 3)
             assert check.call_count == 1
             # and so is every member while torch.compile traces the call
