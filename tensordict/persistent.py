@@ -2663,13 +2663,14 @@ class PersistentTensorDict(
                 non_blocking=non_blocking,
             )
         elif key[0] in self.keys():
-            return self._get_str(key[0], NO_DEFAULT)._set_tuple(
+            self._get_str(key[0], NO_DEFAULT)._set_tuple(
                 key[1:],
                 value,
                 inplace=inplace,
                 validated=validated,
                 non_blocking=non_blocking,
             )
+            return self
         # the path in the file, which a KeyError shows
         inplace = self._convert_inplace(inplace, self._process_key(key))
         return self._set(

@@ -69,6 +69,30 @@ _ZARR_DTYPES = [
 
 @pytest.mark.skipif(not _has_zarr, reason="zarr>=3.0 not found.")
 class TestZarrRoundTrip:
+    @pytest.mark.parametrize("key", [("n", "y"), ("n", "m", "y")])
+    @pytest.mark.parametrize("method", ["set", "set_"])
+    def test_nested_set_returns_root(self, tmp_path, key, method):
+        source = TensorDict(
+            n=TensorDict(
+                y=torch.zeros(3),
+                m=TensorDict(y=torch.zeros(3), batch_size=[3]),
+                batch_size=[3],
+            ),
+            batch_size=[3],
+        )
+        td = PersistentTensorDict.from_dict(
+            source, filename=tmp_path / "nested.zarr", backend="zarr"
+        )
+        try:
+            result = getattr(td, method)(key, torch.ones(3))
+            assert result is td
+            result.set("z", torch.full((3,), 2.0))
+            torch.testing.assert_close(td[key], torch.ones(3))
+            torch.testing.assert_close(td["z"], torch.full((3,), 2.0))
+            assert "z" not in td["n"].keys()
+        finally:
+            td.close()
+
     def test_to_from_zarr(self, tmp_path):
         td = TensorDict(
             {
