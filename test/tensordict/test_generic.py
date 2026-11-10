@@ -1096,6 +1096,65 @@ class TestGeneric:
         assert sum(cat_bytes) == td_c._consolidated["storage"].numel()
         assert (td_c == td).all()
 
+    @pytest.mark.parametrize("num_threads", [0, 2])
+    @pytest.mark.parametrize(
+        "view,clones",
+        [
+            ("slice", 0),
+            ("row", 0),
+            ("unbind", 0),
+            ("split", 0),
+            ("row of rows", 0),
+            ("step", 3),
+            ("column", 1),
+        ],
+    )
+    def test_consolidate_offset_view_single_copy(self, view, clones, num_threads):
+        # #3571: a contiguous leaf that does not start at the beginning of
+        # its storage, such as a leaf of td[1:] or of a row of a batch, was
+        # cloned before it was copied into the storage: two copies of the
+        # leaf. It can be viewed as bytes as it is. A leaf that is not
+        # contiguous, or whose last stride is not 1, is still cloned.
+        td = TensorDict(
+            {
+                "obs": torch.randn(6, 3),
+                "done": torch.zeros(6, 1, dtype=torch.bool),
+                "nested": {"action": torch.arange(6)},
+            },
+            batch_size=[6],
+        )
+        if view == "slice":
+            source = td[1:]
+        elif view == "row":
+            source = td[3]
+        elif view == "unbind":
+            source = td.unbind(0)[2]
+        elif view == "split":
+            source = td.split(2)[1]
+        elif view == "row of rows":
+            source = td.unflatten(0, (3, 2))[1][1]
+        elif view == "step":
+            source = td[1::2]
+        else:
+            source = TensorDict(column=td["obs"][:, 1:2], batch_size=[6])
+        expected = source.clone()
+        assert all(leaf.storage_offset() for leaf in source.values(True, True))
+        clone = torch.Tensor.clone
+        calls = []
+
+        def counting_clone(tensor, *args, **kwargs):
+            calls.append(tensor.shape)
+            return clone(tensor, *args, **kwargs)
+
+        with mock.patch.object(torch.Tensor, "clone", counting_clone):
+            td_c = source.consolidate(num_threads=num_threads)
+        assert len(calls) == clones
+        assert (td_c == expected).all()
+        assert td_c.batch_size == expected.batch_size
+        # the result does not share memory with the source
+        td_c._consolidated["storage"].zero_()
+        assert (source == expected).all()
+
     @pytest.mark.parametrize("use_file", [False, True])
     def test_consolidate_many_leaves_num_threads(self, use_file, tmpdir):
         # Exercises the chunked multithreaded copy path with enough leaves

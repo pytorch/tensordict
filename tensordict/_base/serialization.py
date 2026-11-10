@@ -1151,10 +1151,15 @@ class _Serialization:
                         continue
                     stride = v.stride()
                     # reshape(-1) may return a view that is not stride-1,
-                    # e.g. for x[:, :1], which cannot be viewed as bytes
+                    # e.g. for x[:, :1], which cannot be viewed as bytes.
+                    # With a filename, a leaf with a storage offset is copied
+                    # first, as a leaf that needs padding is below.
                     if (
                         (stride and stride[-1] != 1)
-                        or v.storage_offset()
+                        or (
+                            v.storage_offset()
+                            and (filename is not None or is_compiling())
+                        )
                         or not v.is_contiguous()
                     ):
                         v = v.clone(memory_format=torch.contiguous_format)
@@ -1294,7 +1299,9 @@ class _Serialization:
                         v = v.clone(memory_format=torch.contiguous_format)
                 elif (
                     (stride and stride[-1] != 1)
-                    or v.storage_offset()
+                    # with a filename, a leaf with a storage offset is copied
+                    # first, as a leaf that needs padding is below
+                    or (filename is not None and v.storage_offset())
                     or not v.is_contiguous()
                 ):
                     v = v.clone(memory_format=torch.contiguous_format)
