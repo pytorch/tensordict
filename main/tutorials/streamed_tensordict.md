@@ -89,7 +89,7 @@ print("lengths of stream0:", data_cont["stream0"].offsets().diff())
 ```
 
 ```
-TensorDict(batch_size=[2], fields={stream0: f32[j2], stream1: f32[j1]})
+TensorDict(batch_size=[2], fields={stream0: f32[j1], stream1: f32[j2]})
 lengths of stream0: tensor([5, 4])
 ```
 
