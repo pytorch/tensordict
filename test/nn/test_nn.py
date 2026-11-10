@@ -7,6 +7,7 @@ import argparse
 import contextlib
 import copy
 import functools
+import gc
 import importlib
 import inspect
 import os
@@ -6964,6 +6965,28 @@ class TestTensorDictParams:
         module.load_state_dict({"params.n.v": torch.ones(2)}, assign=assign)
         assert not params.is_locked
         assert (holder.detach()["x", "v"] == 1).all()
+
+    @pytest.mark.parametrize("assign", [True, False])
+    @pytest.mark.parametrize("lock", [True, False])
+    def test_load_state_dict_freed(self, lock, assign):
+        # #3572: the load keeps no reference to the TensorDictParams, which is
+        # freed when its last reference is dropped, without the garbage
+        # collector.
+        gc.disable()
+        try:
+            params = TensorDictParams(
+                TensorDict(w=torch.zeros(3), n=TensorDict(v=torch.zeros(2)))
+            )
+            module = self._parent(params)
+            if lock:
+                params.lock_()
+            state_dict = {k: torch.ones_like(v) for k, v in module.state_dict().items()}
+            module.load_state_dict(state_dict, assign=assign)
+            ref = weakref.ref(params)
+            del module, params
+            assert ref() is None
+        finally:
+            gc.enable()
 
     @staticmethod
     def _apply_params(device=None):

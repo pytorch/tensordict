@@ -346,6 +346,25 @@ def _raise_if_entry_missing(td, key):
         td = entry
 
 
+def _node_at(root, path, nodes, owners):
+    # The tensordict at path under root, for load_state_dict(assign=True): one
+    # _get_str per tensordict, not one per leaf and level. nodes keeps each
+    # one by its path, and owners the TensorDictParams among them. A function
+    # of the module and not a closure, which would refer to itself and so
+    # keep root alive until the next garbage collection.
+    node = nodes.get(path)
+    if node is None:
+        if path:
+            node = _node_at(root, path[:-1], nodes, owners)
+            node = node._get_str(path[-1], NO_DEFAULT)
+            if isinstance(node, TensorDictParams):
+                owners.add(node)
+        else:
+            node = root
+        nodes[path] = node
+    return node
+
+
 def _apply_on_data_and_non_tensor(func):
     # As _apply_on_data, on a .data that holds the non-tensor leaves of the
     # wrapped tensordict, which .data rebuilds: the writes reach them (#2263).
@@ -1506,20 +1525,6 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                 state_dict = dict(state_dict)
             # The TensorDictParams on the path of each leaf register it again.
             owners = {self}
-
-            def node_at(path):
-                # One _get_str per tensordict, not one per leaf and level.
-                node = nodes.get(path)
-                if node is None:
-                    if path:
-                        node = node_at(path[:-1])._get_str(path[-1], NO_DEFAULT)
-                        if isinstance(node, TensorDictParams):
-                            owners.add(node)
-                    else:
-                        node = self
-                    nodes[path] = node
-                return node
-
             for name, dest in local_state.items():
                 val = state_dict.get(prefix + name)
                 if val is None or val is dest:
@@ -1530,7 +1535,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                 key = _unravel_key_to_tuple(keys[name])
                 parent = nodes.get(key[:-1])
                 if parent is None:
-                    parent = node_at(key[:-1])
+                    parent = _node_at(self, key[:-1], nodes, owners)
                 if isinstance(parent, TensorDictParams):
                     parent = parent._param_td
                 # Cast before wrapping: the cast of a Parameter is a plain
