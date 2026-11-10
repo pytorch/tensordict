@@ -6730,6 +6730,128 @@ class TestGeneric:
         assert read[0] is wide
         assert read[1] is wide.get("g0")
 
+    @pytest.mark.parametrize(
+        "call",
+        [
+            lambda td: td.keys(True),
+            lambda td: td.keys(True, True),
+            lambda td: td.keys(leaves_only=True),
+            lambda td: list(td.keys(True, True)),
+            lambda td: ("next", "obs") in td.keys(True),
+            lambda td: len(td.keys(True)),
+            lambda td: td.depth,
+        ],
+        ids=[
+            "keys(True)",
+            "keys(True, True)",
+            "keys(leaves_only=True)",
+            "list(keys(True, True))",
+            "key in keys(True)",
+            "len(keys(True))",
+            "depth",
+        ],
+    )
+    def test_keys_nested_locked_freed(self, call):
+        # #3564: a locked tensordict whose nested keys were listed is freed
+        # when its last reference is dropped, without the garbage collector.
+        gc.disable()
+        try:
+            td = TensorDict(obs=torch.zeros(3), next={"obs": torch.zeros(3)}).lock_()
+            leaf = weakref.ref(td["obs"])
+            call(td)
+            del td
+            assert leaf() is None
+        finally:
+            gc.enable()
+
+    def test_keys_nested_locked_is_leaf_no_cache_entry(self):
+        # #3564: listing the keys of a locked tensordict with a new is_leaf
+        # callable on each call leaves no entry per call in the tensordict.
+        td = TensorDict(obs=torch.zeros(3), next={"obs": torch.zeros(3)}).lock_()
+
+        def cached():
+            return sum(len(entries) for entries in (td._cache or {}).values())
+
+        assert list(td.keys(True, True, is_leaf=lambda cls: True)) == [
+            "obs",
+            ("next", "obs"),
+            "next",
+        ]
+        before = cached()
+        for _ in range(1000):
+            td.keys(True, True, is_leaf=lambda cls: True)
+        assert cached() == before
+
+    @pytest.mark.parametrize("container", ["tensordict", "tensorclass", "params"])
+    @pytest.mark.parametrize("sort", [False, True])
+    @pytest.mark.parametrize("include_nested", [False, True])
+    @pytest.mark.parametrize("leaves_only", [False, True])
+    @pytest.mark.parametrize("is_leaf_name", ["default", "nontensor", "all"])
+    def test_keys_locked_same_as_unlocked(
+        self, container, sort, include_nested, leaves_only, is_leaf_name
+    ):
+        # #3564: a locked tensordict lists the keys that its unlocked copy
+        # lists, in the same order, on the first call and on the next ones.
+        @tensorclass
+        class MyClass:
+            a: torch.Tensor
+            nested: TensorDict
+            nt: str
+
+        td = TensorDict(
+            a=torch.zeros(3),
+            nested=TensorDict(
+                b=torch.zeros(3),
+                c=TensorDict(d=torch.zeros(3, 2), batch_size=[3]),
+                empty=TensorDict(batch_size=[3]),
+                batch_size=[3],
+            ),
+            nt=NonTensorData("a string", batch_size=[3]),
+            batch_size=[3],
+        )
+        if container == "tensorclass":
+            td = MyClass.from_tensordict(td)
+        elif container == "params":
+            td = TensorDictParams(td)
+        unlocked = td.copy()
+        td.lock_()
+        assert td.is_locked and not unlocked.is_locked
+        is_leaf = {
+            "default": None,
+            "nontensor": is_leaf_nontensor,
+            "all": lambda cls: True,
+        }[is_leaf_name]
+
+        def keys(td):
+            return td.keys(include_nested, leaves_only, is_leaf=is_leaf, sort=sort)
+
+        expected = list(keys(unlocked))
+        assert len(expected) > 0
+        for _ in range(2):
+            assert list(keys(td)) == expected
+            assert len(keys(td)) == len(expected)
+            if not sort:
+                # sort=True returns a list for the top-level keys
+                assert all(key in keys(td) for key in expected)
+                assert "missing" not in keys(td)
+        if include_nested and not sort:
+            assert ("nested", "c", "d") in keys(td)
+            assert ("nested", "missing") not in keys(td)
+
+    def test_keys_nested_locked_view_is_live(self):
+        # #3564: a nested keys view taken from a locked tensordict shows the
+        # keys that are set after the tensordict is unlocked.
+        td = TensorDict(obs=torch.zeros(3), next={"obs": torch.zeros(3)}).lock_()
+        keys = td.keys(True, True)
+        assert list(keys) == ["obs", ("next", "obs")]
+        td.unlock_()
+        td["next", "reward"] = torch.zeros(1)
+        del td["obs"]
+        assert list(keys) == [("next", "obs"), ("next", "reward")]
+        td.lock_()
+        assert list(keys) == list(td.keys(True, True))
+        assert ("next", "reward") in keys
+
     @pytest.mark.parametrize("stack", [False, True])
     def test_items_nested_deep(self, stack):
         # items(True) builds each key from the keys of the level below.
