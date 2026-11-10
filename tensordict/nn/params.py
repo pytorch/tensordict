@@ -1586,28 +1586,25 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         # view under vmap and the list of its leaves: erase them in the
         # tensordicts above an assigned leaf, and in the locked tensordicts
         # that hold those.
-        holders = {}
         for td in nodes.values():
             while True:
                 if not isinstance(td, TensorDictBase):
                     # A tensorclass: the cache is in the tensordict it wraps.
                     td = td._tensordict
-                # Setting an attribute of a TensorDictParams, an nn.Module,
-                # costs more than this check.
+                # An empty cache is left alone: a tensordict below another
+                # one lists the same parents again, and setting an attribute
+                # of a TensorDictParams, an nn.Module, costs more than the
+                # check.
                 if td._cache is not None:
                     td._erase_cache()
                 if td.is_locked:
-                    # A tensordict below another one lists the same weak
-                    # references: keep each one once.
                     for ref in td._lock_parents_weakrefs:
-                        holders[id(ref)] = ref
+                        holder = ref()
+                        if holder is not None and holder._cache is not None:
+                            holder._erase_cache()
                 if not isinstance(td, TensorDictParams):
                     break
                 td = td._param_td
-        for ref in holders.values():
-            holder = ref()
-            if holder is not None and holder._cache is not None:
-                holder._erase_cache()
         n = len(unexpected_keys)
         # The base now copies each entry into the (assigned) leaf, and reports
         # missing and unexpected keys.
