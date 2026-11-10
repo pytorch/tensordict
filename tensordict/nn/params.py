@@ -1494,8 +1494,8 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             else:
                 data.set(keys[name], val, inplace=True)
                 state_dict[prefix + name] = dest
-        # The tensordicts on the path of each assigned leaf, by id.
-        above = {}
+        # The tensordicts above the assigned leaves, by path.
+        nodes = {}
         if (
             local_metadata.get("assign_to_params_buffers", False)
             and not torch.__future__.get_swap_module_params_on_conversion()
@@ -1506,6 +1506,20 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                 state_dict = dict(state_dict)
             # The TensorDictParams on the path of each leaf register it again.
             owners = {self}
+
+            def node_at(path):
+                # One _get_str per tensordict, not one per leaf and level.
+                node = nodes.get(path)
+                if node is None:
+                    if path:
+                        node = node_at(path[:-1])._get_str(path[-1], NO_DEFAULT)
+                        if isinstance(node, TensorDictParams):
+                            owners.add(node)
+                    else:
+                        node = self
+                    nodes[path] = node
+                return node
+
             for name, dest in local_state.items():
                 val = state_dict.get(prefix + name)
                 if val is None or val is dest:
@@ -1513,14 +1527,10 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                 if name not in keys and name in self._non_persistent_buffers_set:
                     unexpected.add(prefix + name)
                     continue
-                *path, last = _unravel_key_to_tuple(keys[name])
-                parent = self
-                above[id(self)] = self
-                for part in path:
-                    parent = parent._get_str(part, NO_DEFAULT)
-                    above[id(parent)] = parent
-                    if isinstance(parent, TensorDictParams):
-                        owners.add(parent)
+                key = _unravel_key_to_tuple(keys[name])
+                parent = nodes.get(key[:-1])
+                if parent is None:
+                    parent = node_at(key[:-1])
                 if isinstance(parent, TensorDictParams):
                     parent = parent._param_td
                 # Cast before wrapping: the cast of a Parameter is a plain
@@ -1543,7 +1553,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                 # The base's copy_ of a tensor into itself is a no-op.
                 state_dict[prefix + name] = val
                 parent._set_str(
-                    last,
+                    key[-1],
                     val,
                     inplace=False,
                     # The shapes match: only a device may need a cast.
@@ -1571,20 +1581,28 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         # view under vmap and the list of its leaves: erase them in the
         # tensordicts above an assigned leaf, and in the locked tensordicts
         # that hold those.
-        for td in above.values():
+        holders = {}
+        for td in nodes.values():
             while True:
                 if not isinstance(td, TensorDictBase):
                     # A tensorclass: the cache is in the tensordict it wraps.
                     td = td._tensordict
-                td._erase_cache()
+                # Setting an attribute of a TensorDictParams, an nn.Module,
+                # costs more than this check.
+                if td._cache is not None:
+                    td._erase_cache()
                 if td.is_locked:
+                    # A tensordict below another one lists the same weak
+                    # references: keep each one once.
                     for ref in td._lock_parents_weakrefs:
-                        holder = ref()
-                        if holder is not None:
-                            holder._erase_cache()
+                        holders[id(ref)] = ref
                 if not isinstance(td, TensorDictParams):
                     break
                 td = td._param_td
+        for ref in holders.values():
+            holder = ref()
+            if holder is not None and holder._cache is not None:
+                holder._erase_cache()
         n = len(unexpected_keys)
         # The base now copies each entry into the (assigned) leaf, and reports
         # missing and unexpected keys.
