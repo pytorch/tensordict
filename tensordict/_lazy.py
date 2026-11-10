@@ -6303,6 +6303,15 @@ class LazyStackedTensorDict(TensorDictBase):
                 # torch broadcasts a 0-d or one-element repeats to the size of dim
                 repeats = [repeats.tolist()] if repeats.ndim == 0 else repeats.tolist()
                 repeats = repeats * num_members
+            elif (
+                not isinstance(repeats, torch.Tensor)
+                and isinstance(repeats, np.integer)
+                and operator.index(repeats) != 0
+            ):
+                # torch reads a NumPy integer as an int. A count of 0 keeps
+                # its TypeError: the stack would keep no members, and with
+                # them no inner batch dims or keys.
+                repeats = [operator.index(repeats)] * num_members
             else:
                 repeats = repeats.tolist()
                 if len(repeats) != num_members:
