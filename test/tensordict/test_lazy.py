@@ -23,6 +23,7 @@ import torch
 from tensordict import (
     is_leaf_nontensor,
     is_non_tensor,
+    is_tensor_collection,
     lazy_stack,
     LazyStackedTensorDict,
     MemoryMappedTensor,
@@ -387,6 +388,17 @@ class _Pair(TensorClass):
 
 class _SubTensor(torch.Tensor):
     pass
+
+
+class _SubTensorDict3574(TensorDict):
+    pass
+
+
+class _CpuTensorDict3574(TensorDict):
+    # the device property reports another device than the _device attribute
+    @property
+    def device(self):
+        return torch.device("cpu")
 
 
 class TestLazyStackedTensorDict:
@@ -8107,6 +8119,108 @@ class TestLazyStackedTensorDict:
 
         td["a", "c"] = td["a", "c"] + 1
         assert (td["a", "c"] == torch.tensor([[3], [4]], device=td.device)).all()
+
+    @pytest.mark.parametrize("strict_shape", [False, True])
+    def test_stack_member_checks_match_properties(self, strict_shape, tmp_path):
+        # #3574: a stack reads the batch size and the device of a member that
+        # is a TensorDict from its attributes. The batch size, the device and
+        # the errors are those that the batch_size and device properties of
+        # the members give, wherever the members of another type are.
+        def member(batch_size=(3,), cls=TensorDict, **kwargs):
+            return cls(a=torch.zeros(*batch_size, 2), batch_size=batch_size, **kwargs)
+
+        tensordicts = [
+            member(),
+            member(device="cpu"),
+            member((4,)),
+            member((3, 4)),
+            member(()),
+            member(names=["x"]),
+            member().lock_(),
+            member().share_memory_(),
+            member().memmap_(tmp_path / "memmap"),
+            member((2, 3))[0],
+        ]
+        assert all(type(td) is TensorDict for td in tensordicts)
+        others = [
+            member(cls=_SubTensorDict3574),
+            member(cls=_CpuTensorDict3574),
+            member((2, 3))._get_sub_tensordict(0),
+            lazy_stack([member(()) for _ in range(3)]),
+            _Pair(x=torch.zeros(3), y=torch.zeros(3), batch_size=[3]),
+            TensorDictParams(member()),
+        ]
+        if _has_h5py:
+            others.append(
+                PersistentTensorDict.from_dict(member(), filename=tmp_path / "td.h5")
+            )
+        assert not any(type(td) is TensorDict for td in others)
+        not_tensordicts = [torch.zeros(3), {"a": torch.zeros(3, 2)}, None]
+
+        def reference(members):
+            batch_size, device = members[0].batch_size, members[0].device
+            for td in members[1:]:
+                if not is_tensor_collection(td):
+                    return TypeError, (
+                        "Expected all inputs to be TensorDictBase instances but got "
+                        f"{type(td)} instead."
+                    )
+                if td.device != device:
+                    return RuntimeError, f"devices differ, got {device} and {td.device}"
+                bs = td.batch_size
+                if bs != batch_size:
+                    if strict_shape or len(bs) != len(batch_size):
+                        return RuntimeError, (
+                            "batch sizes in tensordicts differs, LazyStackedTensorDict "
+                            f"cannot be created. Got td[0].batch_size={batch_size} "
+                            f"and td[i].batch_size={bs}. If the length match and you "
+                            "wish to stack these tensordicts, set strict_shape to False."
+                        )
+                    batch_size = torch.Size(
+                        [s if s == o else -1 for s, o in zip(batch_size, bs)]
+                    )
+            return torch.Size([len(members), *batch_size]), device
+
+        def outcome(members):
+            try:
+                stack = LazyStackedTensorDict(*members, strict_shape=strict_shape)
+            except (TypeError, RuntimeError) as err:
+                return type(err), str(err)
+            return stack.batch_size, stack.device
+
+        try:
+            collections = tensordicts + others
+            everything = collections + not_tensordicts
+            for first in collections:
+                for second in everything:
+                    for third in everything:
+                        members = [first, second, third]
+                        assert outcome(members) == reference(members), [
+                            type(td).__name__ for td in members
+                        ]
+        finally:
+            if _has_h5py:
+                others[-1].close()
+
+    def test_stack_member_checks_without_calls(self):
+        # #3574: building a stack of TensorDicts does not call
+        # is_tensor_collection for each member
+        tds = [TensorDict(a=torch.zeros(3), batch_size=[3]) for _ in range(8)]
+        with mock.patch(
+            "tensordict._lazy.is_tensor_collection", side_effect=is_tensor_collection
+        ) as check:
+            assert LazyStackedTensorDict(*tds).batch_size == (8, 3)
+            assert lazy_stack(tds, 1).batch_size == (3, 8)
+            assert check.call_count == 0
+            # a member of another type is checked as before
+            tds[3] = _SubTensorDict3574(a=torch.zeros(3), batch_size=[3])
+            assert LazyStackedTensorDict(*tds).batch_size == (8, 3)
+            assert check.call_count == 1
+            # and so is every member while torch.compile traces the call
+            check.reset_mock()
+            with mock.patch("tensordict._lazy.is_compiling", return_value=True):
+                assert LazyStackedTensorDict(*tds).batch_size == (8, 3)
+            assert check.call_count == 7
 
     def test_strict_shape(self):
         td0 = TensorDict(batch_size=[3, 4])
