@@ -1117,6 +1117,15 @@ def test_lazy_stack_get_nested(benchmark, size, key):
     benchmark(td.get, key)
 
 
+@pytest.mark.parametrize("members", [4, 32])
+def test_lazy_stack_get_leaf(benchmark, members):
+    # a top-level leaf read from a lazy stack
+    td = LazyStackedTensorDict.lazy_stack(
+        [_rl_step_td(32, 4) for _ in range(members)], 0
+    )
+    benchmark(td.get, "obs")
+
+
 def test_select(benchmark, td, c):
     def exec_select():
         tdc = td.clone()

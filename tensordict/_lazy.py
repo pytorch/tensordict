@@ -2897,8 +2897,37 @@ class LazyStackedTensorDict(TensorDictBase):
         padding_value: float | int | bool = 0.0,
     ) -> CompatibleType:
         # we can handle the case where the key is a tuple of length 1
+        tensordicts = self.tensordicts
         tensors = []
-        for td in self.tensordicts:
+        # The first members that are TensorDict instances and hold the key as
+        # a plain tensor are read from their dicts: their _get_str would
+        # return that leaf. The general path below reads the members that
+        # are left, and stacks. Member 0 first: most keys that do not
+        # qualify stop there.
+        if tensordicts:
+            first = tensordicts[0]
+            if (
+                type(first) is TensorDict
+                and key in first._tensordict
+                and type(first._tensordict[key]) is Tensor
+                and as_list is False
+                and as_padded_tensor is False
+                and as_nested_tensor is False
+                and self._hook_out is None
+                and not is_compiling()
+                and type(self) is LazyStackedTensorDict
+                and self._hook_in is None
+                and not self._is_vmapped
+            ):
+                for td in tensordicts:
+                    if type(td) is not TensorDict:
+                        break
+                    leaf = td._tensordict.get(key)
+                    if type(leaf) is not Tensor:
+                        break
+                    tensors.append(leaf)
+                tensordicts = islice(tensordicts, len(tensors), None)
+        for td in tensordicts:
             # tensors.append(td._get_str(key, default=default))
             tensors.append(
                 td._get_str(

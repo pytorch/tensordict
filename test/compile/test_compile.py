@@ -5231,6 +5231,37 @@ class TestGuardCount:
             assert miss is None
         assert counter.frame_count == 1, f"Recompilation: {counter.frame_count} frames"
 
+    def test_lazy_stack_get_leaf_no_recompile(self):
+        # #3573: eager code stacks the members' entries for a leaf read of a
+        # lazy stack; a compiled read returns the same result and is traced
+        # once
+        def fn(td):
+            return td.get("observation") + 1, td["observation"], td.get("zz", None)
+
+        counter = CompileCounterWithBackend("eager")
+        compiled = torch.compile(fn, backend=counter, fullgraph=True)
+        for _ in range(2):
+            td = lazy_stack(
+                [
+                    TensorDict(
+                        {
+                            "observation": torch.randn(3, 4),
+                            "next": {"r": torch.ones(3)},
+                        },
+                        batch_size=[3],
+                    )
+                    for _ in range(4)
+                ]
+            )
+            out, item, miss = compiled(td)
+            expected = torch.stack([member["observation"] for member in td.tensordicts])
+            assert type(item) is torch.Tensor
+            assert (item == expected).all()
+            assert (item == td.get("observation")).all()
+            assert (out == expected + 1).all()
+            assert miss is None
+        assert counter.frame_count == 1, f"Recompilation: {counter.frame_count} frames"
+
     @pytest.mark.parametrize("variant", ["flat", "nested", "tensorclass"])
     def test_get_missing_key_guards(self, variant):
         # gh-2980: a get that misses guards on the key being absent, so the
