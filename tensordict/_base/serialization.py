@@ -837,6 +837,12 @@ class _Serialization:
             is_leaf=_NESTED_TENSORS_AS_LISTS_NONTENSOR,
             filter_empty=True,
         )
+        if not is_compiling():
+            # assign calls itself, so it is in a reference cycle with its
+            # closure, which holds flat_key_values: break the cycle, or the
+            # leaves would stay alive until the garbage collector runs. Not
+            # under torch.compile, which cannot always trace this del.
+            del assign
         return metadata_dict, flat_key_values, flat_size, need_padding
 
     def consolidate(
@@ -2657,6 +2663,12 @@ class _Serialization:
             out=out,
             checked=True,
         )
+        if not is_compiling():
+            # set_ calls itself, so it is in a reference cycle with its
+            # closure, which holds the new storage: break the cycle, or the
+            # storage would outlive the result until the garbage collector
+            # runs. Not under torch.compile, which cannot always trace this del.
+            del set_
         if inplace:
             # A lazy stack returns a new stack of its rebound tensordicts
             result = self
@@ -2670,6 +2682,9 @@ class _Serialization:
                 }
 
             result._consolidated["metadata"] = copy_dict(consolidated["metadata"])
+            if not is_compiling():
+                # copy_dict calls itself too
+                del copy_dict
         # Ensure the result remains locked to maintain consolidated state integrity
         result.lock_()
         if non_blocking in (False, None):

@@ -389,6 +389,12 @@ class _DeviceOps:
         vals = self._values_list(True, True)
         for v in vals:
             count_bytes(v)
+        if not is_compiling():
+            # count_bytes calls itself, so it is in a reference cycle with its
+            # closure, which holds the leaves: break the cycle, or the leaves
+            # would stay alive until the garbage collector runs. Not under
+            # torch.compile, which cannot always trace this del.
+            del count_bytes
         total = 0
         for tensor in set_of_tensors:
             total += tensor.numel() * tensor.dtype.itemsize
