@@ -153,6 +153,12 @@ def test_plain_set_nested(benchmark):
     benchmark(lambda: td.set(key, tensor))
 
 
+def test_plain_set_scalar(benchmark):
+    # a Python scalar: the class of the value is checked against the accepted classes
+    td = TensorDict(a=torch.zeros(3))
+    benchmark(lambda: td.set("x", 1.0))
+
+
 def test_plain_set_stack_nested(benchmark):
     td = big_nested_stacked_td()[0][0]
     key = tuple(str(j) for j in range(20, 0, -1))
