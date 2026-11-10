@@ -2220,6 +2220,111 @@ class TestTDSequence:
         seq.reset_out_keys()
         assert seq.out_keys == ["y", "z"]
 
+    @pytest.mark.parametrize("how", ["select_out_keys", "selected_out_keys"])
+    @pytest.mark.parametrize("operation", ["call", "replace", "delete"])
+    def test_reset_out_keys_clears_selection(self, how, operation):
+        # #3588: after reset_out_keys(), a sequence behaves as one that never
+        # had a selection. It accepts an edit that removes a formerly selected
+        # key, and returns every entry that its modules write.
+        def make(reset):
+            modules = (
+                TensorDictModule(lambda x: x + 1, ["x"], ["y"]),
+                TensorDictModule(lambda y: y + 1, ["y"], ["z"]),
+                # a function declares no out_keys
+                lambda td: td.set("w", td["y"] * 2),
+            )
+            if not reset:
+                return TensorDictSequential(*modules)
+            if how == "selected_out_keys":
+                seq = TensorDictSequential(*modules, selected_out_keys=["z"])
+            else:
+                seq = TensorDictSequential(*modules).select_out_keys("z")
+            assert seq.out_keys == ["z"]
+            assert seq.reset_out_keys() is seq
+            return seq
+
+        seq, twin = make(True), make(False)
+        for sequence in (seq, twin):
+            if operation == "replace":
+                sequence[1] = TensorDictModule(lambda y: y * 10, ["y"], ["u"])
+            elif operation == "delete":
+                del sequence[1]
+        assert seq.in_keys == twin.in_keys
+        assert seq.out_keys == seq.out_keys_source == twin.out_keys
+        td = TensorDict(x=torch.tensor(1.0))
+        result = seq(td)
+        expected = twin(TensorDict(x=torch.tensor(1.0)))
+        # the sequence writes into its input again, as its twin does
+        assert result is td
+        assert "w" in result
+        assert list(result.keys()) == list(expected.keys())
+        assert (result == expected).all()
+
+    def test_prob_reset_out_keys_clears_selection(self):
+        # #3588: ProbabilisticTensorDictSequential shares reset_out_keys.
+        def make(reset):
+            seq = ProbabilisticTensorDictSequential(
+                TensorDictModule(
+                    lambda x: (x, torch.ones_like(x)), ["x"], ["loc", "scale"]
+                ),
+                TensorDictModule(lambda loc: loc + 1, ["loc"], ["v"]),
+                lambda td: td.set("w", td["loc"] * 2),
+                ProbabilisticTensorDictModule(
+                    in_keys=["loc", "scale"],
+                    out_keys=["action"],
+                    distribution_class=torch.distributions.Normal,
+                ),
+            )
+            if reset:
+                seq.select_out_keys("v", "action").reset_out_keys()
+            return seq
+
+        seq, twin = make(True), make(False)
+        for delete in (False, True):
+            if delete:
+                del seq[1]
+                del twin[1]
+            assert seq.out_keys == seq.out_keys_source == twin.out_keys
+            td = TensorDict(x=torch.ones(3), batch_size=[3])
+            with set_interaction_type(InteractionType.DETERMINISTIC):
+                result = seq(td)
+                expected = twin(td.clone())
+            assert result is td
+            assert "w" in result
+            assert list(result.keys()) == list(expected.keys())
+            assert (result == expected).all()
+
+    def test_selection_survives_other_calls(self):
+        # #3588: only reset_out_keys() ends a selection. A sequence that has
+        # one still refuses an edit that removes a selected key, and a
+        # sequence that selects again after a reset has a selection again.
+        a = TensorDictModule(lambda x: x + 1, ["x"], ["y"])
+        b = TensorDictModule(lambda y: y + 1, ["y"], ["z"])
+        message = re.escape(
+            "The edit would remove the selected out_keys ['z']. Call "
+            "reset_out_keys() before the edit, or select other keys."
+        )
+        for seq in (
+            TensorDictSequential(a, b).select_out_keys("z"),
+            TensorDictSequential(a, b, selected_out_keys=["z"]),
+            TensorDictSequential(a, b)
+            .select_out_keys("y")
+            .reset_out_keys()
+            .select_out_keys("z"),
+        ):
+            with pytest.raises(ValueError, match=message):
+                del seq[1]
+            with pytest.raises(ValueError, match=message):
+                seq[1] = TensorDictModule(lambda y: y * 10, ["y"], ["u"])
+            assert seq[1] is b
+            assert seq.out_keys == ["z"]
+            assert seq.out_keys_source == ["y", "z"]
+            td = TensorDict(x=torch.tensor(1.0))
+            result = seq(td)
+            assert result is td
+            assert list(result.keys()) == ["x", "z"]
+            torch.testing.assert_close(result["z"], torch.tensor(3.0))
+
     @pytest.mark.parametrize("named", [True, False])
     def test_prob_sequence_mutation_rebuilds_det_part(self, named):
         def params(loc_shift):
