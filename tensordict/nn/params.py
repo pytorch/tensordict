@@ -1494,6 +1494,8 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             else:
                 data.set(keys[name], val, inplace=True)
                 state_dict[prefix + name] = dest
+        # The tensordicts on the path of each assigned leaf, by id.
+        above = {}
         if (
             local_metadata.get("assign_to_params_buffers", False)
             and not torch.__future__.get_swap_module_params_on_conversion()
@@ -1504,8 +1506,6 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                 state_dict = dict(state_dict)
             # The TensorDictParams on the path of each leaf register it again.
             owners = {self}
-            # The tensordicts on the path of each assigned leaf, by id.
-            above = {}
             for name, dest in local_state.items():
                 val = state_dict.get(prefix + name)
                 if val is None or val is dest:
@@ -1567,18 +1567,36 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                 owner._reset_params()
                 owner._parameters.update(params)
                 owner._buffers.update(buffers)
-            # A locked tensordict caches some of its reads, such as detach()
-            # and the list of its leaves: erase them in the tensordicts above
-            # an assigned leaf, and in the locked tensordicts that hold those.
-            for td in above.values():
-                tds = (td, td._param_td) if isinstance(td, TensorDictParams) else (td,)
-                for td in tds:
-                    td._erase_cache()
-                    if td.is_locked:
-                        for ref in td._lock_parents_weakrefs:
-                            holder = ref()
-                            if holder is not None:
-                                holder._erase_cache()
+        elif local_metadata.get("assign_to_params_buffers", False):
+            # The base swaps the content of each leaf with the loaded tensor.
+            if keys is None:
+                keys = self._leaf_keys()
+            for name in local_state:
+                if name not in keys or state_dict.get(prefix + name) is None:
+                    continue
+                parent = self
+                above[id(self)] = self
+                for part in _unravel_key_to_tuple(keys[name])[:-1]:
+                    parent = parent._get_str(part, NO_DEFAULT)
+                    above[id(parent)] = parent
+        # A locked tensordict caches some of its reads, such as detach(), its
+        # view under vmap and the list of its leaves: erase them in the
+        # tensordicts above an assigned leaf, and in the locked tensordicts
+        # that hold those.
+        for td in above.values():
+            while True:
+                if not isinstance(td, TensorDictBase):
+                    # A tensorclass: the cache is in the tensordict it wraps.
+                    td = td._tensordict
+                td._erase_cache()
+                if td.is_locked:
+                    for ref in td._lock_parents_weakrefs:
+                        holder = ref()
+                        if holder is not None:
+                            holder._erase_cache()
+                if not isinstance(td, TensorDictParams):
+                    break
+                td = td._param_td
         n = len(unexpected_keys)
         # The base now copies each entry into the (assigned) leaf, and reports
         # missing and unexpected keys.
