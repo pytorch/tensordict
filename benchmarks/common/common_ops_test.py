@@ -723,6 +723,25 @@ def test_getitem_rl_step(benchmark, index, size):
     benchmark(td.__getitem__, index)
 
 
+@pytest.mark.parametrize("index", ["int", "slice"])
+def test_getitem_memmap_on_disk(benchmark, tmp_path, index):
+    # rows of a replay buffer saved to disk (about 50 kB): 10 leaves, 5 of them
+    # nested, each returned as a view of its file
+    def step():
+        return {
+            "observation": torch.zeros(1000, 4),
+            "reward": torch.zeros(1000, 1),
+            "done": torch.zeros(1000, 1, dtype=torch.bool),
+            "terminated": torch.zeros(1000, 1, dtype=torch.bool),
+            "truncated": torch.zeros(1000, 1, dtype=torch.bool),
+        }
+
+    td = TensorDict({**step(), "next": step()}, batch_size=[1000])
+    td = td.memmap_like(tmp_path)
+    index = {"int": 5, "slice": slice(10, 42)}[index]
+    benchmark(td.__getitem__, index)
+
+
 @pytest.mark.parametrize(
     "device", [None, "cpu"] + (["cuda"] if torch.cuda.is_available() else [])
 )
