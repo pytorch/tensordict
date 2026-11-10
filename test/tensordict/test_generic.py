@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import contextlib
 import dis
 import enum
@@ -2298,6 +2299,126 @@ class TestGeneric:
 
         # The consolidated TensorDict should no longer be consolidated
         assert not a_consolidated.is_consolidated()
+
+    _CONTEXT_MANAGER_OPS = (
+        "unlock_",
+        "lock_",
+        "to_module",
+        "flatten_keys",
+        "view",
+        "to",
+        "unsqueeze",
+        "tensorclass_unlock_",
+        "tensorclass_view",
+    )
+
+    @staticmethod
+    def _context_manager_writes_back(op, exc_type):
+        # Runs ``with <op> as result:`` with a body that writes to ``result``
+        # and then raises ``exc_type``, unless it is None. Checks that
+        # ``exc_type`` leaves the block and that to_module, lock_ and unlock_
+        # are undone. Returns whether the write shows in the source.
+        class Sample(TensorClass):
+            a: torch.Tensor
+
+        td = TensorDict(
+            a=torch.zeros(3, 1), b={"c": torch.zeros(3, 1)}, batch_size=[3, 1]
+        )
+        if op.startswith("tensorclass"):
+            td = Sample(a=torch.zeros(3, 1), batch_size=[3, 1])
+        module = torch.nn.Linear(2, 2)
+        weight, bias = module.weight, module.bias
+        zeros = TensorDict.from_module(module).data.clone().zero_()
+        if op.endswith("unlock_"):
+            block = td.lock_().unlock_()
+        elif op == "lock_":
+            block = td.lock_()
+        elif op == "to_module":
+            block = zeros.to_module(module)
+        elif op == "flatten_keys":
+            block = td.flatten_keys()
+        elif op.endswith("view"):
+            block = td.view(-1)
+        elif op == "to":
+            block = td.to(torch.float64)
+        elif op == "unsqueeze":
+            block = td.unsqueeze(0)
+        was_locked = op.endswith("unlock_")
+        with contextlib.nullcontext() if exc_type is None else pytest.raises(exc_type):
+            with block as result:
+                if op == "to_module":
+                    assert (module.weight == 0).all()
+                elif op.endswith("lock_"):
+                    assert td.is_locked is not was_locked
+                else:
+                    result.set("a", result.get("a") + 1)
+                if exc_type is not None:
+                    raise exc_type
+        assert td.is_locked is was_locked
+        assert module.weight is weight
+        assert module.bias is bias
+        queue = block._tensordict if op.startswith("tensorclass") else block
+        assert not queue._last_op_queue
+        assert td.batch_size == torch.Size([3, 1])
+        assert td.get("a").dtype == torch.float32
+        return bool((td.get("a") == 1).all())
+
+    @pytest.mark.parametrize(
+        "exc_type",
+        [KeyboardInterrupt, SystemExit, GeneratorExit, asyncio.CancelledError],
+    )
+    @pytest.mark.parametrize("op", _CONTEXT_MANAGER_OPS)
+    def test_context_manager_base_exception(self, op, exc_type):
+        # #3577: Ctrl-C, sys.exit() and the other exceptions that are not an
+        # Exception leave a with block as they are, not as a RuntimeError, and
+        # the block ends as it does for an Exception: to_module, lock_ and
+        # unlock_ are undone, and the other ops do not write back
+        assert not self._context_manager_writes_back(op, exc_type)
+
+    @pytest.mark.parametrize("op", _CONTEXT_MANAGER_OPS)
+    def test_context_manager_exception_and_normal_exit(self, op):
+        # #3577: the with blocks that already work keep their behaviour. No op
+        # writes back after an Exception, and the ops that write back do so
+        # when the block ends normally
+        assert not self._context_manager_writes_back(op, ValueError)
+        writes_back = op in (
+            "flatten_keys",
+            "view",
+            "to",
+            "unsqueeze",
+            "tensorclass_view",
+        )
+        assert self._context_manager_writes_back(op, None) is writes_back
+
+    def test_context_manager_generator_close(self):
+        # #3577: a generator that is suspended in a with block can be closed,
+        # and the block is undone
+        td = TensorDict(a=torch.zeros(3), batch_size=[3]).lock_()
+
+        def rows():
+            with td.unlock_():
+                yield
+
+        generator = rows()
+        next(generator)
+        assert not td.is_locked
+        generator.close()
+        assert td.is_locked
+        assert not td._last_op_queue
+
+    def test_context_manager_sys_exit_code(self):
+        # #3577: sys.exit() in a with block exits with its own code, not with
+        # the code 1 of an uncaught RuntimeError
+        code = (
+            "import sys, torch, tensordict\n"
+            "td = tensordict.TensorDict(a=torch.zeros(3), batch_size=[3]).lock_()\n"
+            "with td.unlock_():\n"
+            "    sys.exit(3)\n"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code], capture_output=True, text=True, timeout=120
+        )
+        assert result.returncode == 3, result.stderr
 
     def test_construct_from_kwargs(self):
         with pytest.raises(ValueError, match="not both"):
