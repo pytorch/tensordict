@@ -5763,6 +5763,108 @@ class TestLazyStackedTensorDict:
             assert (key in keys) == (key in listed), key
             assert (key in keys) == (key in td.keys(True, is_leaf=is_leaf)), key
 
+    @pytest.mark.parametrize("layout", ["lazy_of_lazy", "lazy_in_td", "lazy_in_tc"])
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize("ragged", [True, False])
+    def test_lazy_stacked_keys_ragged_nested(self, layout, stack_dim, ragged):
+        # #3580: the keys view reads the class of an entry by stacking it,
+        # which raised for a ragged entry of a lazy stack inside a lazy stack,
+        # in a membership test and when keys(leaves_only=True) is listed.
+        # ragged=False pins the answers of the same stacks with entries of one
+        # shape.
+        class MC(TensorClass):
+            obs: torch.Tensor
+            nest: TensorDict
+
+        def inner():
+            cls = MC if layout == "lazy_in_tc" else TensorDict
+            return lazy_stack(
+                [
+                    cls(
+                        obs=torch.zeros(2, n),
+                        nest=TensorDict(x=torch.zeros(2, n), batch_size=[2]),
+                        batch_size=[2],
+                    )
+                    for n in ((3, 5) if ragged else (3, 3))
+                ],
+                stack_dim,
+            )
+
+        if layout == "lazy_of_lazy":
+            td = lazy_stack([inner(), inner()], stack_dim)
+            prefix = ()
+            top_leaves = ["obs"]
+        else:
+            td = lazy_stack(
+                [
+                    TensorDict(agents=inner(), done=torch.zeros(2, 1), batch_size=[2])
+                    for _ in range(2)
+                ],
+                stack_dim,
+            )
+            prefix = ("agents",)
+            top_leaves = ["done"]
+        obs = "obs" if not prefix else (*prefix, "obs")
+        x = (*prefix, "nest", "x")
+        keys = td.keys(True, True)
+        assert set(keys) == {obs, x, *(["done"] if prefix else [])}
+        assert obs in keys
+        assert x in keys
+        leaves = td.keys(leaves_only=True)
+        assert list(leaves) == top_leaves
+        assert len(leaves) == 1
+        assert list(td.keys(leaves_only=True, sort=True)) == top_leaves
+        assert repr(top_leaves[0]) in repr(leaves)
+        assert ("obs" in leaves) == (not prefix)
+        # keys that are absent, and the keys of the nested tensordicts
+        for key in ["absent", (*prefix, "absent"), (*prefix, "nest"), *prefix]:
+            assert key not in keys, key
+            assert key not in leaves, key
+        if ragged:
+            # get() still cannot stack the entry
+            with pytest.raises(RuntimeError, match="Failed to stack tensors"):
+                td.get(obs)
+        else:
+            assert td.get(obs).shape == (2, 2, 2, 3)
+
+    @pytest.mark.parametrize("leaf", ["tensor", "parameter", "memmap"])
+    def test_lazy_stacked_keys_ragged_nested_is_leaf(self, leaf):
+        # #3580: for a ragged entry of a lazy stack inside a lazy stack, the
+        # keys view tests is_leaf on the class of the first leaf, as it does
+        # when the nested keys are listed and in a one-level lazy stack, so
+        # membership agrees with the listed keys for every is_leaf
+        make, leaf_class = {
+            "tensor": (torch.zeros, torch.Tensor),
+            "parameter": (
+                lambda n: torch.nn.Parameter(torch.zeros(n)),
+                torch.nn.Parameter,
+            ),
+            "memmap": (
+                lambda n: MemoryMappedTensor.from_tensor(torch.zeros(n)),
+                MemoryMappedTensor,
+            ),
+        }[leaf]
+        one_level = lazy_stack([TensorDict(a=make(n)) for n in (3, 2)])
+        td = lazy_stack(
+            [
+                lazy_stack([TensorDict(a=make(n)) for n in (3, 2)]),
+                lazy_stack([TensorDict(a=make(n)) for n in (4, 4)]),
+            ]
+        )
+        for is_leaf in (
+            None,
+            is_leaf_nontensor,
+            lambda cls: cls is torch.nn.Parameter,
+            lambda cls: cls is torch.Tensor,
+        ):
+            expected = ["a"] if is_leaf is None or is_leaf(leaf_class) else []
+            for include_nested in (False, True):
+                for stack in (one_level, td):
+                    keys = stack.keys(include_nested, True, is_leaf=is_leaf)
+                    assert list(keys) == expected
+                    assert len(keys) == len(expected)
+                    assert ("a" in keys) == bool(expected)
+
     def test_lazy_stack_keys_tc(self):
         class MC(TensorClass):
             a: torch.Tensor
