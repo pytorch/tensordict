@@ -33,10 +33,12 @@ from tensordict import (
     lazy_stack,
     LazyStackedTensorDict,
     MemoryMappedTensor,
+    PersistentTensorDict,
     set_capture_non_tensor_stack,
     TensorClass,
     tensorclass,
     TensorDict,
+    TensorDictParams,
     UnbatchedTensor,
 )
 from tensordict._utils_options import _set_capture_non_tensor_stack
@@ -2241,13 +2243,277 @@ class TestNonTensorData:
         )
 
     def test_update__stack_into_data_still_skipped(self):
-        # A NonTensorStack in the source stays skipped where the destination
-        # holds a NonTensorData
+        # A NonTensorStack in the source writes its rows where the destination
+        # holds a NonTensorData (#3501)
         td = TensorDict(x=torch.zeros(2), s=NonTensorData("hello"), batch_size=[2])
         source = TensorDict(x=torch.ones(2), s=NonTensorStack("a", "b"), batch_size=[2])
         td.update_(source)
         assert (td["x"] == 1).all()
-        assert td["s"] == "hello"
+        assert td.get("s").tolist() == ["a", "b"]
+
+    @pytest.mark.parametrize("write", ["update_", "copy_", "update_at_", "dict"])
+    @pytest.mark.parametrize("nested", [False, True])
+    @pytest.mark.parametrize("locked", [False, True])
+    def test_update__stack_into_data_writes_rows(self, write, nested, locked):
+        # #3501: update_, copy_ and update_at_(value, ()) write a NonTensorStack
+        # into a NonTensorData of the same batch size, one value per row, as
+        # td[:] = value does, instead of keeping the old value
+        key = ("n", "s") if nested else "s"
+        td = TensorDict(x=torch.zeros(3), n=TensorDict(batch_size=[3]), batch_size=[3])
+        td.set_non_tensor(key, "old")
+        source = TensorDict(
+            x=torch.ones(3), n=TensorDict(batch_size=[3]), batch_size=[3]
+        )
+        source.set(key, NonTensorStack("a", "b", "c"))
+        if locked:
+            td.lock_()
+        if write == "update_at_":
+            td.update_at_(source, ())
+        elif write == "dict":
+            td.update_(dict(source.items()))
+        else:
+            getattr(td, write)(source)
+        assert (td["x"] == 1).all()
+        assert td.get(key).tolist() == ["a", "b", "c"]
+
+    def test_lazy_update_at__member_writes_non_tensor(self):
+        # #3501: update_at_ at an index that selects a whole member expands the
+        # value to the batch size of the member, one value per row
+        def member():
+            td = TensorDict(a=torch.zeros(3), batch_size=[3])
+            td.set_non_tensor("s", "x")
+            return td
+
+        ls = lazy_stack([member(), member()])
+        ls.update_at_(TensorDict(a=torch.ones(()), s=NonTensorData("y")), 1)
+        assert ls["a"].tolist() == [[0.0] * 3, [1.0] * 3]
+        assert ls.get("s").tolist() == [["x"] * 3, ["y"] * 3]
+
+    def test_update__stack_into_data_equal_rows_keeps_entry(self):
+        # #3501: a NonTensorStack whose rows all equal the NonTensorData leaves
+        # the entry as it is
+        td = TensorDict(x=torch.zeros(3), batch_size=[3])
+        td.set_non_tensor("s", "old")
+        entry = td.get("s")
+        source = TensorDict(
+            x=torch.ones(3), s=NonTensorStack("old", "old", "old"), batch_size=[3]
+        )
+        td.update_(source)
+        assert (td["x"] == 1).all()
+        assert td.get("s") is entry
+
+    @pytest.mark.parametrize("route", ["no_tensor", "keys_to_update"])
+    def test_update__stack_into_data_raises_on_other_routes(self, route):
+        # #3501: the routes of update_ that raise for a NonTensorStack into a
+        # NonTensorData still raise
+        td = TensorDict(x=torch.zeros(3), batch_size=[3])
+        td.set_non_tensor("s", "old")
+        source = TensorDict(
+            x=torch.ones(3), s=NonTensorStack("a", "b", "c"), batch_size=[3]
+        )
+        with pytest.raises(
+            RuntimeError,
+            match="Cannot update a NonTensorDataBase with a NonTensorStack",
+        ):
+            if route == "no_tensor":
+                td.exclude("x").update_(source.exclude("x"))
+            else:
+                td.update_(source, keys_to_update=["s"])
+        assert td["s"] == "old"
+
+    @pytest.mark.parametrize("write", ["update_", "copy_", "update_at_"])
+    @pytest.mark.parametrize("dest", ["h5", "zarr", "lazy_h5"])
+    def test_update__stack_into_data_persistent(self, dest, write, tmp_path):
+        # #3501: on a PersistentTensorDict, or a lazy stack of them, the call
+        # writes every tensor without an error, and the non-tensor entry keeps
+        # its value or holds the rows of the source
+        if dest == "zarr":
+            pytest.importorskip("zarr", minversion="3")
+        else:
+            pytest.importorskip("h5py")
+        backend = "zarr" if dest == "zarr" else "h5"
+
+        def member(i):
+            td = TensorDict(x=torch.zeros(3), batch_size=[3])
+            td.set_non_tensor("s", "old")
+            return PersistentTensorDict.from_dict(
+                td, filename=tmp_path / f"{i}.{backend}", backend=backend
+            )
+
+        rows = ["a", "b", "c"]
+        if dest == "lazy_h5":
+            td = lazy_stack([member(0), member(1)])
+            source = TensorDict(x=torch.ones(2, 3), batch_size=[2, 3])
+            source.set("s", NonTensorStack(*[NonTensorStack(*rows)] * 2))
+            rows = [rows] * 2
+        else:
+            td = member(0)
+            source = TensorDict(x=torch.ones(3), batch_size=[3])
+            source.set("s", NonTensorStack(*rows))
+        with warnings.catch_warnings():
+            # the h5 backend reads a string back as bytes
+            warnings.simplefilter("ignore", FutureWarning)
+            if write == "update_at_":
+                td.update_at_(source, ())
+            else:
+                getattr(td, write)(source)
+            assert (td["x"] == 1).all()
+            values = td.get("s").tolist()
+        values = torch.utils._pytree.tree_map(
+            lambda v: v.decode() if isinstance(v, bytes) else v, values
+        )
+        old = torch.utils._pytree.tree_map(lambda v: "old", rows)
+        assert values in (old, rows)
+
+    @pytest.mark.parametrize("write", ["update_", "copy_", "update_at_"])
+    @pytest.mark.parametrize("kind", ["metadata", "typed_metadata", "subclass"])
+    def test_update__stack_into_data_subclass(self, kind, write):
+        # #3501: a MetaData, typed or not, or an entry of another subclass of
+        # NonTensorData either keeps its type and its value or holds the rows
+        # of the source, and the tensors are written without an error
+        class NonTensorDataSubclass(NonTensorData):
+            pass
+
+        cls = {
+            "metadata": MetaData,
+            "typed_metadata": MetaData[str],
+            "subclass": NonTensorDataSubclass,
+        }[kind]
+        td = TensorDict(x=torch.zeros(3), batch_size=[3])
+        td.set("s", cls("old", batch_size=[3]))
+        source = TensorDict(
+            x=torch.ones(3), s=NonTensorStack("a", "b", "c"), batch_size=[3]
+        )
+        if write == "update_at_":
+            td.update_at_(source, ())
+        else:
+            getattr(td, write)(source)
+        assert (td["x"] == 1).all()
+        entry = td.get("s")
+        if type(entry) is cls:
+            assert entry.tolist() == ["old"] * 3
+        else:
+            assert entry.tolist() == ["a", "b", "c"]
+
+    @pytest.mark.parametrize("write", ["update_", "copy_", "update_at_"])
+    def test_update__stack_into_data_params_root(self, write):
+        # #3501: a TensorDictParams gets its tensors written without an error
+        # and can still be moved and cast afterwards; the non-tensor entry
+        # keeps its value or holds the rows of the source
+        td = TensorDict(x=torch.zeros(3), batch_size=[3])
+        td.set_non_tensor("s", "old")
+        params = TensorDictParams(td)
+        source = TensorDict(
+            x=torch.ones(3), s=NonTensorStack("a", "b", "c"), batch_size=[3]
+        )
+        if write == "update_at_":
+            params.update_at_(source, ())
+        else:
+            getattr(params, write)(source)
+        assert (params["x"] == 1).all()
+        assert params.get("s").tolist() in (["old"] * 3, ["a", "b", "c"])
+        params.to("cpu")
+        params.cpu()
+        params.to(torch.float64)
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "array",
+            "nan",
+            "float32_nan",
+            "float16_nan",
+            "complex_nan",
+            "dict_nan",
+            "list_nan",
+            "nat",
+            "dataclass_nan",
+            "np_str",
+        ],
+    )
+    def test_update__stack_into_data_equal_rows_not_comparable(self, value):
+        # #3501: rows that equal the value but may not compare equal through ==
+        # (copies of a NumPy array, NaN, NaN inside a container, NumPy
+        # scalars) leave the entry as it is
+        @dataclass
+        class Box:
+            v: float
+
+        def make():
+            return {
+                "array": lambda: np.array([1, 2]),
+                "nan": lambda: float("nan"),
+                "float32_nan": lambda: np.float32("nan"),
+                "float16_nan": lambda: np.float16("nan"),
+                "complex_nan": lambda: complex("nan"),
+                "dict_nan": lambda: {"a": float("nan")},
+                "list_nan": lambda: [float("nan"), 1],
+                "nat": lambda: np.datetime64("NaT", "ns"),
+                "dataclass_nan": lambda: Box(float("nan")),
+                "np_str": lambda: np.str_("a"),
+            }[value]()
+
+        td = TensorDict(x=torch.zeros(3), batch_size=[3])
+        td.set_non_tensor("s", make())
+        source = TensorDict(
+            x=torch.ones(3),
+            s=NonTensorStack(make(), make(), make()),
+            batch_size=[3],
+        )
+        td.update_(source)
+        assert (td["x"] == 1).all()
+        entry = td.get("s")
+        assert type(entry) is NonTensorData
+        assert type(entry.data) is type(make())
+        assert repr(entry.data) == repr(make())
+
+    @pytest.mark.parametrize(
+        "stored,rows",
+        [
+            (None, ["a", "b", "c"]),
+            (1, [1, 2, 3]),
+            ("a", [b"a", b"b", b"c"]),
+            (1.0, [float("nan")] * 3),
+        ],
+    )
+    def test_update__stack_into_data_builtin_rows_written(self, stored, rows):
+        # #3501: strings, bytes, numbers and None that differ from the stored
+        # value are written
+        td = TensorDict(x=torch.zeros(3), batch_size=[3])
+        td.set_non_tensor("s", stored)
+        source = TensorDict(x=torch.ones(3), s=NonTensorStack(*rows), batch_size=[3])
+        td.update_(source)
+        assert (td["x"] == 1).all()
+        assert type(td.get("s")) is NonTensorStack
+        assert repr(td.get("s").tolist()) == repr(rows)
+
+    @pytest.mark.parametrize("value", ["dict", "list", "array", "tensor", "plain"])
+    def test_update__stack_into_data_other_rows(self, value):
+        # #3501: rows of other types do not raise, the tensors are written, and
+        # the entry holds its old value or the rows
+        class Plain:
+            def __init__(self, n):
+                self.n = n
+
+            def __repr__(self):
+                return f"Plain({self.n})"
+
+        def make(n):
+            return {
+                "dict": lambda: {"k": n},
+                "list": lambda: [n],
+                "array": lambda: np.array([n, n]),
+                "tensor": lambda: torch.full((2,), float(n)),
+                "plain": lambda: Plain(n),
+            }[value]()
+
+        td = TensorDict(x=torch.zeros(3), batch_size=[3])
+        td.set_non_tensor("s", make(0))
+        rows = [make(1), make(2), make(3)]
+        source = TensorDict(x=torch.ones(3), s=NonTensorStack(*rows), batch_size=[3])
+        td.update_(source)
+        assert (td["x"] == 1).all()
+        assert repr(td.get("s").tolist()) in (repr([make(0)] * 3), repr(rows))
 
     @pytest.mark.parametrize(
         "source",
