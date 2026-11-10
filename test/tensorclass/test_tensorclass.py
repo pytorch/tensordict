@@ -8536,6 +8536,25 @@ class _ValidatingRagged(TensorClass):
             raise ValueError("last offset must be len(indices)")
 
 
+class _ArchivedSample(TensorClass):
+    # Module level, so that loading an archive resolves this class whatever
+    # the test order.
+    x: torch.Tensor
+    td: TensorDict
+    name: str
+
+
+class _ArchivedShadow(TensorClass["shadow"]):
+    # A field that hides TensorDictBase.values
+    values: torch.Tensor
+    name: str
+
+
+class _ArchivedShadowHolder(TensorClass):
+    shadow: _ArchivedShadow
+    x: torch.Tensor
+
+
 class TestMemmap:
     def test_empty_tensor_roundtrip(self, tmp_path):
         @tensorclass
@@ -8899,6 +8918,146 @@ class TestMemmap:
             assert_allclose_td(result, data)
             adj = result["adj"] if nested else result
             assert isinstance(adj, Ragged)
+
+    @staticmethod
+    def _archived_sample():
+        return _ArchivedSample(
+            x=torch.arange(3.0),
+            td=TensorDict(y=torch.ones(3, 2), batch_size=[3]),
+            name="hello",
+            batch_size=[3],
+        )
+
+    @staticmethod
+    def _check_archived_sample(result):
+        assert type(result) is _ArchivedSample
+        assert result.batch_size == torch.Size([3])
+        assert (result.x == torch.arange(3.0)).all()
+        assert type(result.td) is TensorDict
+        assert (result.td["y"] == torch.ones(3, 2)).all()
+        assert result.name == "hello"
+
+    @pytest.mark.parametrize("how", ["memmap_", "memmap", "save"])
+    def test_save_archive_memmapped_tensorclass(self, tmp_path, how):
+        # #3585: the archive of a memory-mapped tensorclass held its
+        # tensordict only, and loaded back as a TensorDict.
+        mapped = getattr(self._archived_sample(), how)(tmp_path / "dir")
+        assert mapped.is_memmap()
+        archive = tmp_path / "data.tdz"
+        self._check_archived_sample(mapped.save(archive))
+        for load in (
+            TensorDict.load,
+            TensorDict.load_memmap,
+            _ArchivedSample.load_memmap,
+        ):
+            self._check_archived_sample(load(archive))
+        # the same entries as the archive of the object saved from memory
+        self._archived_sample().save(tmp_path / "in_memory.tdz")
+        with (
+            zipfile.ZipFile(archive) as zf,
+            zipfile.ZipFile(tmp_path / "in_memory.tdz") as zf_in_memory,
+        ):
+            assert zf.namelist() == zf_in_memory.namelist()
+            for name in zf.namelist():
+                assert zf.read(name) == zf_in_memory.read(name)
+
+    def test_save_archive_memmapped_tensorclass_nested_tensor(self, tmp_path):
+        # #3585: a memory-mapped tensorclass with a nested tensor is written
+        # through a copy of its files, whatever copy_existing says.
+        @tensorclass
+        class Ragged:
+            x: torch.Tensor
+            ragged: torch.Tensor
+
+        with warnings.catch_warnings():
+            # the strided layout is a prototype
+            warnings.simplefilter("ignore", UserWarning)
+            data = Ragged(
+                x=torch.arange(2.0),
+                ragged=torch.nested.nested_tensor([torch.zeros(2), torch.ones(3)]),
+                batch_size=[2],
+            )
+            mapped = data.memmap(tmp_path / "dir")
+            for result in (
+                mapped.save(tmp_path / "data.tdz"),
+                TensorDict.load(tmp_path / "data.tdz"),
+            ):
+                assert type(result) is Ragged
+                assert (result.x == torch.arange(2.0)).all()
+                first, second = result.ragged.unbind(0)
+                assert (first == torch.zeros(2)).all()
+                assert (second == torch.ones(3)).all()
+
+    def test_save_archive_in_memory_tensorclass(self, tmp_path):
+        # #3585: pins the archive of a tensorclass saved from memory
+        archive = tmp_path / "data.tdz"
+        self._check_archived_sample(self._archived_sample().save(archive))
+        for load in (
+            TensorDict.load,
+            TensorDict.load_memmap,
+            _ArchivedSample.load_memmap,
+        ):
+            self._check_archived_sample(load(archive))
+
+    def test_save_archive_memmapped_tensordict_with_tensorclass(self, tmp_path):
+        # #3585: pins the archive of a memory-mapped TensorDict, which packs
+        # its directory and keeps the class of a tensorclass entry.
+        td = TensorDict(entry=self._archived_sample(), a=torch.zeros(3), batch_size=[3])
+        mapped = td.memmap_(tmp_path / "dir")
+        archive = tmp_path / "data.tdz"
+        for result in (mapped.save(archive), TensorDict.load(archive)):
+            assert type(result) is TensorDict
+            assert (result["a"] == 0).all()
+            self._check_archived_sample(result["entry"])
+        with zipfile.ZipFile(archive) as zf:
+            assert sorted(zf.namelist()) == sorted(
+                path.relative_to(tmp_path / "dir").as_posix()
+                for path in (tmp_path / "dir").rglob("*")
+                if path.is_file()
+            )
+
+    def test_save_archive_memmapped_shadow_tensorclass(self, tmp_path):
+        # #3585: pins the archive of a memory-mapped shadow tensorclass, whose
+        # directory is still packed: it holds the fields without the class.
+        data = _ArchivedShadow(values=torch.arange(3.0), name="hello", batch_size=[3])
+        mapped = data.memmap(tmp_path / "dir")
+        archive = tmp_path / "data.tdz"
+        for result in (mapped.save(archive), TensorDict.load(archive)):
+            assert type(result) is TensorDict
+            assert (result["values"] == torch.arange(3.0)).all()
+            assert result["name"] == "hello"
+        with zipfile.ZipFile(archive) as zf:
+            assert sorted(zf.namelist()) == [
+                "meta.json",
+                "name/meta.json",
+                "values.memmap",
+            ]
+
+    def test_save_archive_memmapped_tensorclass_holding_shadow(self, tmp_path):
+        # #3585: pins the archive of a memory-mapped tensorclass with a shadow
+        # tensorclass field, whose directory is still packed.
+        data = _ArchivedShadowHolder(
+            shadow=_ArchivedShadow(
+                values=torch.arange(3.0), name="hello", batch_size=[3]
+            ),
+            x=torch.ones(3),
+            batch_size=[3],
+        )
+        mapped = data.memmap_(tmp_path / "dir")
+        archive = tmp_path / "data.tdz"
+        for result in (mapped.save(archive), TensorDict.load(archive)):
+            assert type(result) is TensorDict
+            assert (result["x"] == 1).all()
+            assert type(result["shadow"]) is _ArchivedShadow
+            assert (result["shadow"].values == torch.arange(3.0)).all()
+            assert result["shadow"].name == "hello"
+        with zipfile.ZipFile(archive) as zf:
+            prefix = tmp_path / "dir" / "_tensordict"
+            assert sorted(zf.namelist()) == sorted(
+                path.relative_to(prefix).as_posix()
+                for path in prefix.rglob("*")
+                if path.is_file()
+            )
 
     def test_memmap_reserved_entry_name_warns(self, tmp_path):
         # #3455: load_memmap does not restore an entry named shape or device,
