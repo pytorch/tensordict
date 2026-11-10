@@ -32,6 +32,16 @@ import numpy as np
 import torch
 from torch.compiler import is_compiling, is_dynamo_compiling
 
+# torch.jit.trace records the per-leaf conversion of a list index; a torch
+# without TorchScript tracing has nothing to record.
+try:
+    from torch.jit import is_tracing as _is_jit_tracing
+except ImportError:
+
+    def _is_jit_tracing() -> bool:
+        return False
+
+
 # The kinds of index elements, see _read_element
 _INT = 0
 _SLICE = 1
@@ -489,6 +499,36 @@ def _mask_to_indices(index, batch_size, device):
     if mask.ndim == 1:
         return (mask.nonzero().squeeze(-1),)
     return mask.nonzero(as_tuple=True)
+
+
+# The shortest list of ints that td[list] turns into an index tensor. Building
+# the tensor has a fixed cost (about 3.5 us with a CUDA build of torch, 0.4 us
+# with a CPU build), which a shorter list does not always earn back when two
+# or three leaves read it.
+_LIST_INDEX_MIN_LEN = 64
+
+
+def _list_to_indices(lst):
+    """Turn the list ``lst`` of ``td[lst]`` into the index tensor that torch makes of it, or return ``None``.
+
+    Torch reads a list of ints in an index as an int64 index tensor, and builds
+    that tensor once per leaf it indexes: this builds it once. The caller
+    checks that ``lst`` is a ``list`` of at least ``_LIST_INDEX_MIN_LEN``
+    elements that starts with an ``int`` and that the first two entries are
+    tensors on the CPU, so that the other calls pay next to nothing for this.
+    Returns ``None``, and the leaves then take the list, when ``lst`` holds
+    anything but plain ints (torch reads a bool, a nested list or a tensor in
+    a list otherwise), when an int does not fit int64, so that indexing raises
+    the same error, and under ``torch.jit.trace``, where ``torch.tensor``
+    warns and the traced graph would change.
+    """
+    if _is_jit_tracing() or set(map(type, lst)) != {int}:
+        return None
+    try:
+        # on the CPU, as the index torch makes, whatever the default device
+        return torch.tensor(lst, device="cpu")
+    except (ValueError, RuntimeError, OverflowError):
+        return None
 
 
 def _getitem_names(names, index):

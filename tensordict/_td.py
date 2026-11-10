@@ -4226,6 +4226,7 @@ class _SubTensorDict(_NoShapeOps, _StateFromSource, TensorDictBase):
         index: IndexType,
         new_batch_size: torch.Size | None = None,
         names: Sequence[str] | None = None,
+        list_index: Tensor | None = None,
     ) -> _SubTensorDict:
         # we ignore the names and new_batch_size which are only provided for
         # efficiency purposes
