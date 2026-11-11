@@ -251,6 +251,15 @@ def _propagate_lock_dense(td, lock_parents_weakrefs):
             value._propagate_lock(lock_parents_weakrefs, is_compiling=False)
 
 
+def _is_exporting() -> bool:
+    # Whether torch.export is running. A function of its own, so that
+    # TensorDict._clone names no torch module: after a graph break, Dynamo
+    # skips a frame that holds no tensor and names none, and runs it eagerly.
+    # The flag is read rather than torch.compiler.is_exporting() called because
+    # Dynamo in torch 2.11 answers True to the call under torch.compile.
+    return torch.compiler._is_exporting_flag
+
+
 class TensorDict(TensorDictBase):
     """A dictionary of tensors that share a batch size.
 
@@ -2841,9 +2850,8 @@ class TensorDict(TensorDictBase):
             # copies, one for each member of a nested lazy stack.
             # torch.export keeps the plain TensorDict for a subclass too: an
             # exported program cannot return a subclass, which is not a pytree
-            # node. The flag is read rather than is_exporting() called because
-            # Dynamo in torch 2.11 answers True to the call under torch.compile.
-            if TensorDict is type(self) or torch.compiler._is_exporting_flag:
+            # node.
+            if TensorDict is type(self) or _is_exporting():
                 result = TensorDict(
                     batch_size=self.batch_size,
                     device=self.device,

@@ -5884,7 +5884,7 @@ class TestGuardCount:
 
         with_check = leaf_guards()
         source = textwrap.dedent(inspect.getsource(TensorDict._clone))
-        check = "if TensorDict is type(self) or torch.compiler._is_exporting_flag:"
+        check = "if TensorDict is type(self) or _is_exporting():"
         assert source.count(check) == 1
         module = sys.modules[TensorDict.__module__]
         namespace = {}
@@ -5892,6 +5892,38 @@ class TestGuardCount:
         exec(code, vars(module), namespace)
         monkeypatch.setattr(TensorDict, "_clone", namespace["_clone"])
         assert leaf_guards() == with_check
+
+    @pytest.mark.parametrize("recurse", [True, False])
+    def test_clone_after_graph_break_not_compiled(self, recurse):
+        # #3673: pins that a clone made after a graph break, in a function that
+        # only handles tensordicts, runs eagerly. Dynamo skips a frame that
+        # holds no tensor and whose code names no torch module, so _clone must
+        # name none. Compiled as a frame of its own, it is guarded on
+        # everything the tensordict holds, and a deep clone() of a TensorDict
+        # with a non-tensor entry recompiles for each new instance.
+        from torch._dynamo.eval_frame import _debug_get_cache_entry_list
+
+        def graph_break():
+            torch._dynamo.graph_break()
+
+        def helper(td):
+            graph_break()
+            return td.clone(recurse)
+
+        def make():
+            return TensorDict(
+                a=torch.zeros(3), o=NonTensorData({"x": 1}), batch_size=[3]
+            )
+
+        torch._dynamo.reset()
+        helper_c = torch.compile(lambda td: helper(td), backend="eager")
+        out = helper_c(make())
+        assert type(out) is TensorDict
+        assert _debug_get_cache_entry_list(TensorDict._clone.__code__) == []
+        with torch._dynamo.config.patch(error_on_recompile=True):
+            out = helper_c(make())
+        assert type(out) is TensorDict
+        assert out["o"] == {"x": 1}
 
     def test_getitem_str_key_guards(self):
         """``td["k"]`` guards little more than reading the entry from the dict."""
