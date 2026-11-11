@@ -11074,7 +11074,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             if not is_tc
             else self._tensordict._last_op_queue.pop()
         )
-        if exc_type is not None and issubclass(exc_type, Exception):
+        if exc_type is not None:
+            # Any exception, a KeyboardInterrupt or a SystemExit included.
             # to_module, lock_ and unlock_ change the original object on entry:
             # undo the change. The other ops do not write back after an error.
             if _last_op is not None and _last_op[0] in _UNDO_ON_ERROR_OPS:

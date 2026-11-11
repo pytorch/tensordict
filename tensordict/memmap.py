@@ -1344,7 +1344,10 @@ class MemoryMappedTensor(torch.Tensor):
             return tensor
         tensor = MemoryMappedTensor(tensor)
         tensor._handler = getattr(self, "_handler", None)
-        tensor.filename = getattr(self, "_filename", None)
+        filename = getattr(self, "_filename", None)
+        if filename is not None:
+            # Already what the filename setter stores: skip its pathlib call
+            tensor._filename = filename
         tensor._mode = self._mode
         tensor._index = item
         tensor._index_chain = (self._index_chain, item)
@@ -1475,6 +1478,11 @@ else:
                 os.unlink(name)
                 util.Finalize(self, os.close, (self.fd,))
                 os.ftruncate(self.fd, size)
+            else:
+                # A descriptor received from another process (_rebuild_handler)
+                # belongs to this handler too. The buffer keeps its own
+                # duplicate, so the mapping does not need this one.
+                util.Finalize(self, os.close, (self.fd,))
             self.buffer = mmap.mmap(self.fd, self.size)
 
         def _choose_dir(self, size):
