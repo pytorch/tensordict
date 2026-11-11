@@ -9848,6 +9848,30 @@ class _ShadowLock(TensorClass["shadow"]):
     lock_: torch.Tensor
 
 
+@tensorclass(shadow=True)
+class _ShadowMemmapDecorated:
+    indices: torch.Tensor
+    memmap: torch.Tensor
+
+
+class _ShadowMemmapAny(TensorClass["shadow"]):
+    indices: torch.Tensor
+    memmap: Any
+
+
+# the calls of the callable value below
+_MEMMAP_CALLS = []
+
+
+class _RecordedCall(TensorClass):
+    # a callable value for a field, which records its calls
+    answer: torch.Tensor
+
+    def __call__(self, *args, **kwargs):
+        _MEMMAP_CALLS.append(kwargs)
+        return "called"
+
+
 class TestShadow:
     def test_no_shadow(self):
         with pytest.raises(AttributeError):
@@ -10445,6 +10469,76 @@ class TestShadow:
         for i, result in enumerate(results):
             assert type(result) is cls
             assert (getattr(result, name) == (i != 2)).all()
+
+    @pytest.mark.parametrize("target", ["data", "data.tdz", None])
+    @pytest.mark.parametrize("function", ["save", "memmap"])
+    @pytest.mark.parametrize(
+        "cls", [_ShadowMemmap, _ShadowMemmapDecorated, _ShadowApply]
+    )
+    def test_shadow_field_save_function(self, cls, function, target, tmp_path):
+        # #3730: tensordict.save(obj, path) and tensordict.memmap(obj, path)
+        # called the shadow field named memmap. A field named apply already
+        # saved: its cases pin what a save gives.
+        name = "apply" if cls is _ShadowApply else "memmap"
+        c = cls(indices=torch.arange(3), **{name: torch.ones(3)}, batch_size=[3])
+        function = getattr(tensordict, function)
+        if target is None:
+            results = [function(c)]
+        else:
+            results = [function(c, tmp_path / target)]
+            results += [tensordict.load(tmp_path / target)]
+        for result in results:
+            assert type(result) is cls
+            assert result is not c
+            assert result.batch_size == torch.Size([3])
+            assert (result.indices == torch.arange(3)).all()
+            assert (result._tensordict[name] == 1).all()
+        assert results[0].is_locked is (target != "data.tdz")
+        # the source keeps its tensors
+        assert not c.is_locked
+        assert not isinstance(c._tensordict[name], MemoryMappedTensor)
+
+    @pytest.mark.parametrize("function", ["save", "memmap"])
+    def test_shadow_field_save_function_options(self, function, tmp_path):
+        # #3730: the same with threads and atomic=True, and c.memmap is still
+        # the field
+        c = _ShadowMemmap(indices=torch.arange(3), memmap=torch.ones(3), batch_size=[3])
+        function = getattr(tensordict, function)
+        results = [
+            function(c, tmp_path / "atomic", atomic=True),
+            function(c, tmp_path / "threads", num_threads=2),
+            tensordict.load(tmp_path / "atomic"),
+            tensordict.load(tmp_path / "threads"),
+        ]
+        for result in results:
+            assert type(result) is _ShadowMemmap
+            assert (result.indices == torch.arange(3)).all()
+            assert (result._tensordict["memmap"] == 1).all()
+        assert (c.memmap == 1).all()
+        assert not isinstance(c.memmap, MemoryMappedTensor)
+
+    @pytest.mark.parametrize("function", ["save", "memmap"])
+    def test_shadow_field_save_function_callable(self, function, tmp_path):
+        # #3730: tensordict.save and tensordict.memmap called a callable in the
+        # field named memmap and returned its result. As c.save(path) since
+        # #3695, they save the object, or raise as for any other field
+        del _MEMMAP_CALLS[:]
+        c = _ShadowMemmapAny(
+            indices=torch.arange(3),
+            memmap=_RecordedCall(answer=torch.ones(3), batch_size=[3]),
+            batch_size=[3],
+        )
+        function = getattr(tensordict, function)
+        saved = function(c, tmp_path / "data")
+        loaded = tensordict.load(tmp_path / "data")
+        for result in (saved, loaded):
+            assert type(result) is _ShadowMemmapAny
+            assert (result.indices == torch.arange(3)).all()
+            assert (result.get("memmap").answer == 1).all()
+        with pytest.raises(NotImplementedError, match="return_early is not supported"):
+            function(c, tmp_path / "data.tdz", return_early=True)
+        assert not (tmp_path / "data.tdz").exists()
+        assert not _MEMMAP_CALLS
 
     # A TensorClass subclass inherits TensorClass methods and properties, which
     # dataclass() used to take as the defaults of fields with the same name.
