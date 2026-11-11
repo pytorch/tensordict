@@ -7,6 +7,7 @@ import argparse
 import contextlib
 import copy
 import functools
+import gc
 import importlib
 import inspect
 import os
@@ -6775,6 +6776,219 @@ class TestTensorDictParams:
         assert result.missing_keys == result.unexpected_keys == []
         result = module.load_state_dict(module.state_dict())
         assert result.missing_keys == result.unexpected_keys == []
+
+    @pytest.mark.parametrize(
+        "swap",
+        [
+            False,
+            pytest.param(
+                True,
+                marks=pytest.mark.xfail(
+                    strict=True,
+                    reason="#3613: with swap_module_params_on_conversion, detach() keeps the old tensors",
+                ),
+            ),
+        ],
+    )
+    def test_load_state_dict_assign_locked(self, swap):
+        # #3572: detach() and arithmetic on a locked TensorDictParams, called
+        # before the load too, give the tensors that assign=True put in.
+        params = TensorDictParams(TensorDict(w=torch.zeros(3)))
+        module = self._parent(params)
+        params.lock_()
+        params.detach(), params + 0
+        sd = {"params.w": torch.ones(3)}
+        prev = torch.__future__.get_swap_module_params_on_conversion()
+        torch.__future__.set_swap_module_params_on_conversion(swap)
+        try:
+            module.load_state_dict(sd, assign=True)
+        finally:
+            torch.__future__.set_swap_module_params_on_conversion(prev)
+        assert params["w"].data_ptr() == sd["params.w"].data_ptr()
+        assert params.detach()["w"].data_ptr() == sd["params.w"].data_ptr()
+        assert ((params + 0)["w"] == 1).all()
+
+    @pytest.mark.parametrize("assign", [True, False])
+    @pytest.mark.parametrize("lock", [None, "lock_", "content", "parent"])
+    def test_load_state_dict_locked_reads(self, lock, assign):
+        # #3572: a locked tensordict caches reads such as detach() and the list
+        # of its leaves. After assign=True, the reads of the TensorDictParams,
+        # of its nested tensordicts and of a locked tensordict that holds it
+        # give the assigned tensors. Unlocked (lock=None) or with assign=False,
+        # they already did.
+        params = TensorDictParams(
+            TensorDict(
+                w=torch.zeros(3),
+                n=TensorDict(v=torch.zeros(2)),
+                sub=TensorDictParams(TensorDict(u=torch.zeros(2))),
+            ),
+            lock=lock == "content",
+        )
+        module = self._parent(params)
+        root = TensorDict(p=params) if lock == "parent" else params
+        if lock in ("lock_", "parent"):
+            root.lock_()
+        tds = [root, params, params["n"], params["sub"]]
+        for td in tds:
+            # the reads that fill the caches of a locked tensordict
+            td.detach(), td + 0, td.flatten_keys(), td.zero_grad()
+            td.requires_grad_()
+        sd = {key: torch.ones_like(val) for key, val in module.state_dict().items()}
+        module.load_state_dict(sd, assign=assign)
+        live = dict(module.named_parameters())
+        assert set(live) == {"params.w", "params.n.v", "params.sub.u"}
+        for name, param in live.items():
+            assert (param.data_ptr() == sd[name].data_ptr()) is assign
+            assert params.get(tuple(name.split(".")[1:])) is param
+        pointers = {param.data_ptr() for param in live.values()}
+        for td in tds:
+            detached = td.detach()
+            assert {leaf.data_ptr() for leaf in detached.values(True, True)} <= pointers
+            assert (detached == 1).all()
+            assert (td + 0 == 1).all()
+            assert all(
+                any(leaf is p for p in live.values())
+                for leaf in td.flatten_keys().values()
+            )
+        # zero_grad and requires_grad_ reach the live parameters
+        sum(param.sum() for param in live.values()).backward()
+        params["n"].zero_grad()
+        assert live["params.n.v"].grad is None
+        assert live["params.w"].grad is not None
+        root.zero_grad()
+        assert all(param.grad is None for param in live.values())
+        root.requires_grad_(False)
+        assert not any(param.requires_grad for param in live.values())
+        root.requires_grad_(True)
+        # an optimizer step shows in the reads
+        optim = torch.optim.SGD(module.parameters(), lr=1.0)
+        sum(param.sum() for param in module.parameters()).backward()
+        optim.step()
+        for td in tds:
+            assert (td.detach() == 0).all()
+            assert (td + 0 == 0).all()
+
+    @pytest.mark.parametrize(
+        "layout,assign,swap",
+        [
+            ("as_module", True, False),
+            ("as_module", False, False),
+            ("content", True, False),
+            ("content", False, False),
+            ("unlocked", True, False),
+            ("unlocked", False, False),
+            ("unlocked", True, True),
+        ]
+        + [
+            pytest.param(
+                layout,
+                True,
+                True,
+                marks=pytest.mark.xfail(
+                    strict=True,
+                    reason="#3613: with swap_module_params_on_conversion, the load raises after a vmapped forward",
+                ),
+            )
+            for layout in ("as_module", "content")
+        ],
+    )
+    def test_load_state_dict_vmap(self, layout, assign, swap):
+        # #3572: a vmapped forward that ran before the load computes with the
+        # loaded weights after it. A locked tensordict caches its view under
+        # vmap: the TensorDictParams that from_modules(as_module=True) returns,
+        # and the content of a TensorDictParams(td, lock=True). With
+        # swap_module_params_on_conversion, the load of a locked one still
+        # raises (#3613).
+        nets = [nn.Linear(3, 1) for _ in range(2)]
+        if layout == "as_module":
+            params = TensorDict.from_modules(*nets, as_module=True)
+        else:
+            stacked = TensorDict(
+                weight=torch.randn(2, 1, 3), bias=torch.randn(2, 1), batch_size=[2]
+            )
+            params = TensorDictParams(stacked, lock=layout == "content")
+        assert params.is_locked is (layout == "as_module")
+        assert params._param_td.is_locked is (layout != "unlocked")
+        module = self._parent(params)
+
+        def call(params, x):
+            with params.to_module(nets[0]):
+                return nets[0](x)
+
+        forward = torch.vmap(call, (0, None))
+        x = torch.ones(4, 3)
+        assert forward(params, x).shape == (2, 4, 1)
+        params.detach()
+        sd = {key: torch.ones_like(val) for key, val in module.state_dict().items()}
+        prev = torch.__future__.get_swap_module_params_on_conversion()
+        torch.__future__.set_swap_module_params_on_conversion(swap)
+        try:
+            module.load_state_dict(sd, assign=assign)
+        finally:
+            torch.__future__.set_swap_module_params_on_conversion(prev)
+        assert all((param == 1).all() for param in module.parameters())
+        assert (forward(params, x) == 4).all()
+        assert (params.detach() == 1).all()
+
+    @pytest.mark.parametrize("assign", [True, False])
+    @pytest.mark.parametrize("lock", [False, True])
+    @pytest.mark.parametrize("root", [False, True])
+    def test_load_state_dict_tensorclass(self, root, lock, assign):
+        # #3572: with a tensorclass in the TensorDictParams, nested or as its
+        # content, the load does not warn, and the cached reads give the
+        # loaded tensors.
+        data = InputTensorClass(a=torch.zeros(2), b=torch.zeros(2))
+        params = TensorDictParams(data if root else TensorDict(t=data))
+        module = self._parent(params)
+        if lock:
+            params.lock_()
+        tc = params if root else params["t"]
+        params.detach(), tc.detach()
+        sd = {key: torch.ones_like(val) for key, val in module.state_dict().items()}
+        assert len(sd) == 2
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            module.load_state_dict(sd, assign=assign)
+        key = "params.a" if root else "params.t.a"
+        assert (tc.get("a").data_ptr() == sd[key].data_ptr()) is assign
+        assert all((leaf == 1).all() for leaf in params.detach().values(True, True))
+        assert (tc.detach().get("b") == 1).all()
+
+    @pytest.mark.parametrize("assign", [True, False])
+    def test_load_state_dict_nested_holder(self, assign):
+        # #3572: a locked tensordict that holds only a nested tensordict of a
+        # TensorDictParams that was never locked.
+        params = TensorDictParams(TensorDict(n=TensorDict(v=torch.zeros(2))))
+        module = self._parent(params)
+        holder = TensorDict(x=params["n"]).lock_()
+        holder.detach()
+        module.load_state_dict({"params.n.v": torch.ones(2)}, assign=assign)
+        assert not params.is_locked
+        assert (holder.detach()["x", "v"] == 1).all()
+
+    @pytest.mark.parametrize("assign", [True, False])
+    @pytest.mark.parametrize("lock", [True, False])
+    def test_load_state_dict_freed(self, lock, assign):
+        # #3572: the load keeps no reference to the TensorDictParams, which is
+        # freed when its last reference is dropped, without the garbage
+        # collector.
+        enabled = gc.isenabled()
+        gc.disable()
+        try:
+            params = TensorDictParams(
+                TensorDict(w=torch.zeros(3), n=TensorDict(v=torch.zeros(2)))
+            )
+            module = self._parent(params)
+            if lock:
+                params.lock_()
+            state_dict = {k: torch.ones_like(v) for k, v in module.state_dict().items()}
+            module.load_state_dict(state_dict, assign=assign)
+            ref = weakref.ref(params)
+            del module, params
+            assert ref() is None
+        finally:
+            if enabled:
+                gc.enable()
 
     @staticmethod
     def _apply_params(device=None):
