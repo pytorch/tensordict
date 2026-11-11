@@ -611,9 +611,13 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
     ``class State(TypedTensorDict, frozen=True)``. Subclasses inherit them.
 
     - ``shadow``: allows a field to have the name of a
-      :class:`~tensordict.TensorDictBase` attribute (``batch_size``,
+      :class:`~tensordict.TensorDictBase` attribute (``data``,
       ``sum``, ...), which it then hides. Without it, such a field raises an
-      ``AttributeError`` when the class is defined.
+      ``AttributeError`` when the class is defined. The field hides the
+      attribute from the methods of the object too, so a name that other
+      methods use does not work: a field ``keys`` breaks printing and
+      arithmetic, and the constructor cannot take a field ``batch_size``,
+      ``device`` or ``names``.
     - ``frozen``: the constructor locks the instance.
 
     The ``autocast``, ``nocast`` and ``tensor_only`` options of
