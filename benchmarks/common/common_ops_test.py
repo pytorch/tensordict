@@ -1180,6 +1180,17 @@ def test_lazy_stack_get_leaf(benchmark, members):
     benchmark(td.get, "obs")
 
 
+@pytest.mark.parametrize("members", [8, 256])
+@pytest.mark.parametrize("op", ["build", "slice"])
+def test_lazy_stack_build_slice(benchmark, op, members):
+    # building a lazy stack of tensordicts, and slicing one
+    tds = [_rl_step_td(32, 4) for _ in range(members)]
+    if op == "build":
+        benchmark(LazyStackedTensorDict.lazy_stack, tds, 0)
+    else:
+        benchmark(LazyStackedTensorDict.lazy_stack(tds, 0).__getitem__, slice(1, None))
+
+
 def test_select(benchmark, td, c):
     def exec_select():
         tdc = td.clone()
