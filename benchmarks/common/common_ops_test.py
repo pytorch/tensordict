@@ -649,6 +649,17 @@ def test_clone_device(benchmark, td):
     benchmark(td.to("cpu").clone)
 
 
+@pytest.mark.parametrize("source", ["padding", "offset"])
+def test_consolidate(benchmark, source):
+    # 20 float32 leaves, about 2 MiB: each has an odd number of elements and
+    # needs padding to a multiple of 8 bytes, or has a storage offset (td[1:])
+    if source == "padding":
+        td = _rl_step_td(4097, 9)
+    else:
+        td = _rl_step_td(4097, 8)[1:]
+    benchmark(td.consolidate)
+
+
 @pytest.mark.parametrize(
     "index",
     [
