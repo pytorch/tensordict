@@ -1743,6 +1743,9 @@ class TestGeneric:
         with pytest.raises(ValueError, match=match):
             points.apply(fn, out=dense)
         assert (dense.x == torch.tensor([[0.0], [1.0]])).all()
+        # a tensorclass class, which has no _tensordict
+        with pytest.raises(ValueError, match=match):
+            points.apply(fn, out=_LazyStackPoint)
         # another tensordict as out, a copy included
         for call in ("apply", "_fast_apply"):
             out = td.clone()

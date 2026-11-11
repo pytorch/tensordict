@@ -4282,7 +4282,7 @@ class LazyStackedTensorDict(TensorDictBase):
             if (
                 not isinstance(out, LazyStackedTensorDict)
                 and is_tensorclass(out)
-                and out._tensordict is self
+                and getattr(out, "_tensordict", None) is self
             ):
                 # The in-place walk of a lazy stack of tensorclasses: out is
                 # the tensorclass over this stack
