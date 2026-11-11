@@ -11546,7 +11546,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         """
         expanded = {}
         for item in self.values():
-            item.masked_fill_(_expand_as_right_by_shape(expanded, mask, item), value)
+            mask_expand = _expand_as_right_by_shape(expanded, mask, item)
+            item.masked_fill_(mask_expand, value)
         return self
 
     def masked_fill(self, mask: Tensor, value: float | bool) -> Self:
