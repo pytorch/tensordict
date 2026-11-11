@@ -42,6 +42,7 @@ from tensordict.base import (
     Self,
 )
 from tensordict.utils import (
+    _expand_as_right_by_shape,
     _foreach,
     _is_unbatched,
     _maybe_correct_neg_dim,
@@ -492,8 +493,11 @@ class _PointwiseOps:
             if other.shape != shape:
                 other = other.expand(shape)
             if isinstance(other, Tensor):
+                expanded = {}
                 return self_expand._fast_apply(
-                    lambda x: getattr(x, op)(expand_as_right(other, x))
+                    lambda x: getattr(x, op)(
+                        _expand_as_right_by_shape(expanded, other, x)
+                    )
                 )
             return getattr(self_expand, op)(other)
         compare = getattr(operator, op)
@@ -2571,6 +2575,7 @@ class _PointwiseOps:
         (and a tensordict or batch-shaped tensor ``other``) along the stack dim,
         runs :meth:`where` on each member and stacks the results lazily.
         """
+        expanded = {}
         if _is_tensor_collection(type(other)):
 
             def func(tensor, _other, key):
@@ -2594,9 +2599,9 @@ class _PointwiseOps:
                         raise KeyError(
                             f"Key {key} not found and no pad value provided."
                         )
-                    cond = expand_as_right(condition, tensor)
+                    cond = _expand_as_right_by_shape(expanded, condition, tensor)
                 else:
-                    cond = expand_as_right(condition, tensor)
+                    cond = _expand_as_right_by_shape(expanded, condition, tensor)
                 return torch.where(
                     condition=cond,
                     input=tensor,
@@ -2644,7 +2649,7 @@ class _PointwiseOps:
 
             def func(tensor):
                 return torch.where(
-                    condition=expand_as_right(condition, tensor),
+                    condition=_expand_as_right_by_shape(expanded, condition, tensor),
                     input=tensor,
                     other=other,
                 )

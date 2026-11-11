@@ -1556,6 +1556,20 @@ def test_pointwise_nested(benchmark, op):
     benchmark(fn, td)
 
 
+def test_where_nested(benchmark):
+    # two RL steps merged by a mask over the rows, as in a partial reset: 20
+    # leaves of two shapes in two levels
+    def level():
+        obs = {f"obs{i}": torch.randn(32, 4) for i in range(8)}
+        return {**obs, "reward": torch.randn(32, 1), "value": torch.randn(32, 1)}
+
+    td, other = (
+        TensorDict({**level(), "next": level()}, batch_size=[32]) for _ in range(2)
+    )
+    mask = torch.rand(32) < 0.5
+    benchmark(td.where, mask, other)
+
+
 @pytest.mark.parametrize(
     "op", ["reshape", "view_flatten", "unsqueeze", "unbind", "clone", "eq_all"]
 )

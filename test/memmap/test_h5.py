@@ -1769,6 +1769,195 @@ class TestH5Serialization:
         assert (h5td.__getitems__(("n", "y")) == h5td["n", "y"]).all()
         h5td.close()
 
+    @pytest.mark.parametrize("mode", ["w", "w-", "x", "a", "r+"])
+    @pytest.mark.parametrize("op", ["copy", "to", "replace", "pickle", "clone"])
+    def test_copy_keeps_file_data(self, tmp_path, mode, op):
+        # #3606: a copy opened the file again with the mode of the original,
+        # and "w", "w-" and "x" raised (the unpickling of a closed "w" file
+        # emptied it). "a" and "r+" pin the modes that worked.
+        path = tmp_path / "s.h5"
+        if mode == "r+":
+            PersistentTensorDict(filename=path, mode="w").close()
+        h5td = PersistentTensorDict(filename=path, mode=mode, batch_size=[3])
+        h5td["a"] = torch.arange(3.0)
+        h5td["n", "b"] = torch.ones(3, 2)
+        if op == "copy":
+            out = h5td.copy()
+        elif op == "to":
+            out = h5td.to("cpu")
+        elif op == "replace":
+            out = h5td.replace(c=torch.zeros(3))
+        elif op == "pickle":
+            out = pickle.loads(pickle.dumps(h5td))
+        else:
+            out = h5td.clone(newfile=tmp_path / "clone.h5")
+        assert out.mode == mode
+        for td in (out, h5td):
+            assert (td["a"] == torch.arange(3.0)).all()
+            assert (td["n", "b"] == 1).all()
+        # the copy is as writable as the original, and shares its file
+        out["d"] = torch.full((3,), 2.0)
+        assert ("d" in h5td.keys()) is (op != "clone")
+        out.close()
+        h5td.close()
+        stored = PersistentTensorDict(filename=path, mode="r", batch_size=[3])
+        assert (stored["a"] == torch.arange(3.0)).all()
+        assert (stored["n", "b"] == 1).all()
+        stored.close()
+
+    @pytest.mark.parametrize("mode", ["w", "x", "a"])
+    def test_unpickle_after_close_keeps_file_data(self, tmp_path, mode):
+        # #3606: unpickling a tensordict made with mode="w" emptied the file
+        # once the writer had closed it, and one made with "x" raised
+        path = tmp_path / "s.h5"
+        h5td = PersistentTensorDict(filename=path, mode=mode, batch_size=[3])
+        h5td["a"] = torch.arange(3.0)
+        payload = pickle.dumps(h5td)
+        h5td.close()
+        out = pickle.loads(payload)
+        assert (out["a"] == torch.arange(3.0)).all()
+        out.close()
+        stored = PersistentTensorDict(filename=path, mode="r", batch_size=[3])
+        assert (stored["a"] == torch.arange(3.0)).all()
+        stored.close()
+
+    @classmethod
+    def unpickle_and_hold(cls, payload, q1, q2):
+        out = pickle.loads(payload)
+
+        def read():
+            try:
+                return out["a"].tolist()
+            except Exception as err:
+                return repr(err)
+
+        q1.put(read())
+        assert q2.get(timeout=TIMEOUT) == "loaded"
+        q1.put(read())
+        out.close()
+
+    def test_unpickle_while_another_process_holds_file(self, tmp_path):
+        # #3606: a second load of the pickle of a mode="w" tensordict, while
+        # another process holds the file that it loaded, fails on the lock of
+        # that process; it must not empty the file, which that process reads
+        path = tmp_path / "s.h5"
+        h5td = PersistentTensorDict(filename=path, mode="w", batch_size=[3])
+        h5td["a"] = torch.arange(3.0)
+        payload = pickle.dumps(h5td)
+        h5td.close()
+        q1 = mp.Queue(1)
+        q2 = mp.Queue(1)
+        p = mp.Process(target=self.unpickle_and_hold, args=(payload, q1, q2))
+        p.start()
+        try:
+            first = q1.get(timeout=TIMEOUT)
+            try:
+                out = pickle.loads(payload)
+            except BlockingIOError:
+                locked = True
+            else:
+                locked = False
+                out.close()
+            q2.put("loaded")
+            second = q1.get(timeout=TIMEOUT)
+        finally:
+            p.join()
+        if not locked:
+            pytest.skip("h5py does not lock files here")
+        assert first == [0.0, 1.0, 2.0]
+        assert second == [0.0, 1.0, 2.0]
+        stored = PersistentTensorDict(filename=path, mode="r", batch_size=[3])
+        assert (stored["a"] == torch.arange(3.0)).all()
+        stored.close()
+
+    @pytest.mark.parametrize("mode", ["w", "x", "a"])
+    def test_unpickle_after_file_removed(self, tmp_path, mode):
+        # #3606: pins that unpickling creates a file that was removed: the
+        # copy of a "w" or "x" tensordict tries "r+", which cannot open a
+        # missing file, and then opens it with its own mode, as it did before
+        path = tmp_path / "s.h5"
+        h5td = PersistentTensorDict(filename=path, mode=mode, batch_size=[3])
+        h5td["a"] = torch.arange(3.0)
+        payload = pickle.dumps(h5td)
+        h5td.close()
+        path.unlink()
+        out = pickle.loads(payload)
+        assert out.mode == mode
+        assert not list(out.keys())
+        out["d"] = torch.zeros(3)
+        out.close()
+        assert path.exists()
+
+    @pytest.mark.parametrize("mode", ["w", "w-", "x"])
+    @pytest.mark.parametrize(
+        "content,op",
+        [
+            ("truncated", "copy"),
+            ("truncated", "pickle"),
+            ("not_h5", "copy"),
+            ("not_h5", "pickle"),
+            ("other_batch_size", "copy"),
+        ],
+    )
+    def test_copy_of_unreadable_file_follows_mode(self, tmp_path, mode, content, op):
+        # #3606: pins what a copy does with a file that "r+" cannot open. The
+        # mode of the original decides, as it did before the copy tried "r+":
+        # "w" replaces the file, and "w-" and "x" refuse it. With
+        # "other_batch_size", "r+" opens the file and the copy then refuses
+        # its arrays: the file must be closed again before "w" replaces it.
+        path = tmp_path / "s.h5"
+        h5td = PersistentTensorDict(filename=path, mode=mode, batch_size=[3])
+        h5td["a"] = torch.arange(3.0)
+        payload = pickle.dumps(h5td)
+        h5td.close()
+        if content == "truncated":
+            with open(path, "r+b") as f:
+                f.truncate(path.stat().st_size // 2)
+        elif content == "not_h5":
+            path.write_bytes(b"not an h5 file\n")
+        else:
+            with h5py.File(path, "w") as f:
+                f["a"] = np.arange(5.0)
+
+        def reopen():
+            return h5td.copy() if op == "copy" else pickle.loads(payload)
+
+        if mode == "w":
+            out = reopen()
+            assert out.mode == mode
+            assert not list(out.keys())
+            out["d"] = torch.zeros(3)
+            out.close()
+            stored = PersistentTensorDict(filename=path, mode="r", batch_size=[3])
+            assert list(stored.keys()) == ["d"]
+            stored.close()
+        else:
+            with pytest.raises(FileExistsError) as excinfo:
+                reopen()
+            assert type(excinfo.value) is FileExistsError
+            assert excinfo.value.__context__ is None
+
+    @pytest.mark.parametrize("op", ["copy", "to", "pickle"])
+    def test_copy_of_read_only_file_refuses_writes(self, tmp_path, op):
+        # #3606: a copy of a read-only tensordict stays read-only
+        path = tmp_path / "s.h5"
+        h5td = PersistentTensorDict(filename=path, mode="w", batch_size=[3])
+        h5td["a"] = torch.arange(3.0)
+        h5td.close()
+        h5td = PersistentTensorDict(filename=path, mode="r", batch_size=[3])
+        if op == "copy":
+            out = h5td.copy()
+        elif op == "to":
+            out = h5td.to("cpu")
+        else:
+            out = pickle.loads(pickle.dumps(h5td))
+        assert out.mode == "r"
+        assert (out["a"] == torch.arange(3.0)).all()
+        with pytest.raises(ValueError):
+            out["d"] = torch.zeros(3)
+        out.close()
+        h5td.close()
+
     @pytest.mark.parametrize(
         "dtype", [torch.bfloat16, torch.complex32, torch.float8_e4m3fn], ids=str
     )
