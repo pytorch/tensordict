@@ -387,12 +387,12 @@ Train the model for one epoch, and test it once:
     -------------------------
     loss: 2.305311 [    0/60000]
     loss: 2.275867 [19200/60000]
-    loss: 2.230498 [38400/60000]
+    loss: 2.230499 [38400/60000]
     loss: 2.172683 [57600/60000]
     Test Error: 
-     Accuracy: 49.5%, Avg loss: 2.162513 
+     Accuracy: 49.5%, Avg loss: 2.162514 
 
-    Tensorclass training done! time:  1.6705 s
+    Tensorclass training done! time:  1.7652 s
 
 
 
@@ -422,7 +422,7 @@ Further reading
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.169 seconds)
+   **Total running time of the script:** (0 minutes 4.129 seconds)
 
 
 .. _sphx_glr_download_tutorials_tensorclass_fashion.py:

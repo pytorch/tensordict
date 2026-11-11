@@ -247,12 +247,12 @@ Epoch 1
 -------------------------
 loss: 2.305311 [ 0/60000]
 loss: 2.275867 [19200/60000]
-loss: 2.230498 [38400/60000]
+loss: 2.230499 [38400/60000]
 loss: 2.172683 [57600/60000]
 Test Error:
- Accuracy: 49.5%, Avg loss: 2.162513
+ Accuracy: 49.5%, Avg loss: 2.162514
 
-Tensorclass training done! time: 1.6705 s
+Tensorclass training done! time: 1.7652 s
 ```
 
 ## Conclusion
@@ -273,7 +273,7 @@ share it between processes.
 - [Batched data loading with tensorclasses](tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) applies random
 transforms to whole batches, for a larger image dataset.
 
-**Total running time of the script:** (0 minutes 4.169 seconds)
+**Total running time of the script:** (0 minutes 4.129 seconds)
 
 [`Download Jupyter notebook: tensorclass_fashion.ipynb`](../_downloads/5a8f2d6b38b250cbfadc2a295255dde6/tensorclass_fashion.ipynb)
 
