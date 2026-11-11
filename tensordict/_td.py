@@ -1208,7 +1208,7 @@ class TensorDict(TensorDictBase):
 
             # we only want to squeeze dimensions lower than the batch dim, and view
             # is the perfect op for this
-            def _squeeze(tensor):
+            def _squeeze(tensor, batch_dims=self.batch_dims, checked=[]):  # noqa: B006
                 from tensordict import LazyStackedTensorDict
 
                 if (
@@ -1216,7 +1216,27 @@ class TensorDict(TensorDictBase):
                     and tensor.shape[tensor.stack_dim] == 1
                 ):
                     return tensor.tensordicts[0]
-                return tensor.view(*batch_size, *tensor.shape[self.batch_dims :])
+                shape = (*batch_size, *tensor.shape[batch_dims:])
+                if shape or not isinstance(tensor, Tensor):
+                    return tensor.view(*shape)
+                # tensor.view() raises for an empty shape (#3647). Unless every
+                # entry is a strided, non-nested tensor or a TensorDict, the
+                # call keeps raising: the lazy stack shortcut above can leave
+                # an entry with a wrong batch size. `checked` is a new list on
+                # each call: once the check passes, the other leaves skip it.
+                if not checked:
+                    if not all(
+                        type(value) is TensorDict
+                        or (
+                            isinstance(value, Tensor)
+                            and value.layout is torch.strided
+                            and not value.is_nested
+                        )
+                        for value in self.values(True)
+                    ):
+                        return tensor.view(*shape)
+                    checked.append(True)
+                return tensor.view(())
 
             return self._fast_apply(
                 _squeeze,
