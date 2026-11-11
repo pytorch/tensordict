@@ -9763,6 +9763,39 @@ class _ShadowItems(TensorClass["shadow"]):
     items: torch.Tensor
 
 
+# the calls of the archive writer to the methods of the classes below
+_ARCHIVE_CALLS = []
+
+
+class _ShadowOwnMemmapLike(TensorClass["shadow"]):
+    x: torch.Tensor
+
+    def memmap_like(self, *args, **kwargs):
+        _ARCHIVE_CALLS.append("memmap_like")
+        return TensorDictBase.memmap_like(self, *args, **kwargs)
+
+
+class _ShadowMemmapLikeChild(_ShadowMemmapLike):
+    # not a tensorclass of its own: this method comes before the parent's field
+    def memmap_like(self, *args, **kwargs):
+        _ARCHIVE_CALLS.append("memmap_like")
+        return TensorDictBase.memmap_like(self, *args, **kwargs)
+
+
+class _ShadowValuesMethod(TensorClass["shadow"]):
+    indices: torch.Tensor
+    values: torch.Tensor
+
+
+def _recorded_values(self, *args, **kwargs):
+    _ARCHIVE_CALLS.append("values")
+    return self._tensordict.values(*args, **kwargs)
+
+
+# set after the class is built: this method comes before the field
+_ShadowValuesMethod.values = _recorded_values
+
+
 class TestShadow:
     def test_no_shadow(self):
         with pytest.raises(AttributeError):
@@ -10131,7 +10164,7 @@ class TestShadow:
 
     def test_shadow_field_items_save_archive(self, tmp_path):
         # #3676: a field that hides a method that the archive writer does not
-        # call was saved before the fix too
+        # call for a regular tensor was saved before the fix too
         c = _ShadowItems(indices=torch.arange(3), items=torch.ones(3), batch_size=[3])
         for method in ("save", "memmap", "dumps", "memmap_like"):
             saved = getattr(c, method)(tmp_path / f"{method}.tdz")
@@ -10143,20 +10176,34 @@ class TestShadow:
     def test_save_archive_calls_overridden_method(self, tmp_path):
         # #3676: the archive writer still calls the class's own memmap_like
         # when no field shadows it
-        calls = []
-
-        class MyClass(TensorClass["shadow"]):
-            x: torch.Tensor
-
-            def memmap_like(self, *args, **kwargs):
-                calls.append("memmap_like")
-                return TensorDictBase.memmap_like(self, *args, **kwargs)
-
-        c = MyClass(x=torch.arange(3), batch_size=[3])
+        c = _ShadowOwnMemmapLike(x=torch.arange(3), batch_size=[3])
+        del _ARCHIVE_CALLS[:]
         saved = c.save(tmp_path / "data.tdz")
-        assert calls == ["memmap_like"]
-        assert type(saved) is MyClass
+        assert _ARCHIVE_CALLS == ["memmap_like"]
+        assert type(saved) is _ShadowOwnMemmapLike
         assert (saved.x == torch.arange(3)).all()
+
+    def test_save_archive_calls_method_over_field(self, tmp_path):
+        # #3676: where the attribute lookup finds a method before a field of
+        # the same name, the archive writer calls the method, as before the fix
+        c = _ShadowValuesMethod(
+            indices=torch.arange(3), values=torch.ones(3), batch_size=[3]
+        )
+        del _ARCHIVE_CALLS[:]
+        saved = c.save(tmp_path / "method.tdz")
+        assert "values" in _ARCHIVE_CALLS
+        assert type(saved) is _ShadowValuesMethod
+        assert (saved._tensordict["values"] == 1).all()
+        # a plain subclass with a method over a field of its parent
+        c = _ShadowMemmapLikeChild(
+            indices=torch.arange(3), memmap_like=torch.ones(3), batch_size=[3]
+        )
+        del _ARCHIVE_CALLS[:]
+        with contextlib.suppress(RuntimeError):
+            # the class of a plain subclass is not found when the archive is
+            # read back
+            c.save(tmp_path / "child.tdz")
+        assert "memmap_like" in _ARCHIVE_CALLS
 
     # A TensorClass subclass inherits TensorClass methods and properties, which
     # dataclass() used to take as the defaults of fields with the same name.

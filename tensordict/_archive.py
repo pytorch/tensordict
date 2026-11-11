@@ -37,7 +37,6 @@ import numpy as np
 import torch
 from tensordict.memmap import _raise_if_jagged, MemoryMappedTensor
 from tensordict.utils import (
-    _is_tensorclass,
     _is_unbatched,
     _SKIP_TENSORCLASS_POST_INIT,
     _warn_unbatched_saved_as_plain,
@@ -864,7 +863,13 @@ def _td_method(td, name: str):
     after (#3676).
     """
     cls = type(td)
-    if _is_tensorclass(cls) and name in cls.__expected_keys__:
+    if (
+        # a tensorclass of its own, not a plain subclass of one, which can
+        # define a method over a field of its parent
+        "_is_tensorclass" in vars(cls)
+        and name in cls.__expected_keys__
+        and not callable(getattr(cls, name, None))
+    ):
         if name in ("memmap", "memmap_like"):
             # circular import: base imports this module
             from tensordict.base import TensorDictBase
