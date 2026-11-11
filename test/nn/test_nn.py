@@ -7391,6 +7391,35 @@ class TestTensorDictParams:
             assert result.missing_keys == result.unexpected_keys == []
             assert registry["extra"] is extra
 
+    @pytest.mark.parametrize("strict", [True, False])
+    def test_load_state_dict_not_a_leaf_no_key_non_persistent_leaves(self, strict):
+        # #3728: nn.Module reports no non-persistent leaf as missing, so with
+        # only such leaves the kept entry is the one missing key. The strict
+        # assign=True load now raises on it, as assign=False does and as 0.15.4
+        # did: it used to return, having dropped the entry.
+        params, registry = self._params_with_extra("buffer", no_convert=True)
+        extra = registry["extra"]
+        params.register_buffer("a", registry["a"], persistent=False)
+        module = self._parent(params)
+        if strict:
+            with pytest.raises(
+                RuntimeError,
+                match=r'Missing key\(s\) in state_dict: "params.extra"\. $',
+            ):
+                module.load_state_dict({}, assign=True)
+        else:
+            result = module.load_state_dict({}, strict=False, assign=True)
+            assert result.missing_keys == ["params.extra"]
+            assert result.unexpected_keys == []
+        assert list(registry) == ["a", "extra"]
+        assert registry["extra"] is extra
+        assert (extra == 5).all()
+        assert params._non_persistent_buffers_set == {"a"}
+        # The load of the own state dict sees the entry that this one kept.
+        result = module.load_state_dict(module.state_dict(), assign=True)
+        assert result.missing_keys == result.unexpected_keys == []
+        assert registry["extra"] is extra
+
     @pytest.mark.parametrize("assign", [True, False])
     @pytest.mark.parametrize("where", ["outer", "inner", "both"])
     def test_load_state_dict_not_a_leaf_no_key_nested(self, where, assign):
