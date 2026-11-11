@@ -215,6 +215,11 @@ class _AppendMemmapRows:
     label: str
 
 
+@tensorclass
+class _LazyStackPoint:
+    x: torch.Tensor
+
+
 def _save_and_load(data, save):
     # A copy of data made with pickle, with torch.save, or with the pickler of
     # the multiprocessing queues and pipes (test_pickle_in_*_block)
@@ -1620,6 +1625,127 @@ class TestGeneric:
         }
         assert len(devices) == 1
         assert td.device is None or td.device == devices.pop()
+
+    @staticmethod
+    def _td_with_lazy_stack_of_tensorclasses():
+        points = lazy_stack(
+            [_LazyStackPoint(x=torch.zeros(3)), _LazyStackPoint(x=torch.ones(3))]
+        )
+        return TensorDict(
+            a=torch.arange(2.0), points=points, z=torch.ones(2), batch_size=[2]
+        )
+
+    @pytest.mark.parametrize("num_threads", [None, 1, 4])
+    @pytest.mark.parametrize("target", ["meta", torch.float64])
+    def test_to_inplace_lazy_stack_of_tensorclasses(self, target, num_threads):
+        # #3684: to(device or dtype, inplace=True) raised when an entry was a
+        # lazy stack of tensorclasses, after it had cast the entries before
+        # the stack. It gives the result of the call without inplace.
+        td = self._td_with_lazy_stack_of_tensorclasses()
+        ref = self._td_with_lazy_stack_of_tensorclasses().to(
+            target, num_threads=num_threads
+        )
+        result = td.to(target, inplace=True, num_threads=num_threads)
+        assert result is td
+        assert td.device == ref.device
+        assert not td.is_locked
+        points = td["points"]
+        assert type(points) is _LazyStackPoint
+        assert type(points._tensordict) is LazyStackedTensorDict
+        assert points.device == ref["points"].device
+        leaves = [td["a"], points[0].x, points[1].x, td["z"]]
+        ref_leaves = [ref["a"], ref["points"][0].x, ref["points"][1].x, ref["z"]]
+        for leaf, ref_leaf in zip(leaves, ref_leaves, strict=True):
+            assert leaf.device == ref_leaf.device
+            assert leaf.dtype == ref_leaf.dtype
+            assert leaf.shape == ref_leaf.shape
+            if target != "meta":
+                assert (leaf == ref_leaf).all()
+
+    def test_consolidate_to_inplace_lazy_stack_of_tensorclasses(self):
+        # #3684: the consolidated tensordict was also left unlocked and no
+        # longer consolidated
+        td = self._td_with_lazy_stack_of_tensorclasses().consolidate()
+        result = td.to("meta", inplace=True)
+        assert result is td
+        assert td.device == torch.device("meta")
+        assert td.is_consolidated()
+        assert td.is_locked
+        points = td["points"]
+        assert type(points) is _LazyStackPoint
+        assert points.is_locked
+        storage = td._consolidated["storage"]
+        assert storage.device == torch.device("meta")
+        for leaf in (td["a"], points[0].x, points[1].x, td["z"]):
+            assert leaf.device == torch.device("meta")
+            assert leaf.untyped_storage().data_ptr() == storage.data_ptr()
+        assert points[1].x.shape == (3,)
+
+    @pytest.mark.parametrize("call", ["apply", "named_apply", "_fast_apply"])
+    def test_apply_out_lazy_stack_of_tensorclasses(self, call):
+        # #3684: apply(fn, out=out) raised for the same tensordict, after it
+        # had written the entries before the stack into out. It gives the
+        # result of the call on a lazy stack of TensorDicts with the same data.
+        def run(td, out):
+            if call == "named_apply":
+                return td.named_apply(lambda name, x: x + 1, out=out)
+            return getattr(td, call)(lambda x: x + 1, out=out)
+
+        td = self._td_with_lazy_stack_of_tensorclasses()
+        out = td.clone()
+        assert run(td, out) is out
+        twin = td.clone()
+        twin["points"] = lazy_stack(
+            [TensorDict(x=torch.zeros(3)), TensorDict(x=torch.ones(3))]
+        )
+        twin_out = run(twin, twin.clone())
+        points = out["points"]
+        assert type(points) is _LazyStackPoint
+        assert type(points._tensordict) is LazyStackedTensorDict
+        assert (out["a"] == twin_out["a"]).all()
+        assert (out["a"] == torch.tensor([1.0, 2.0])).all()
+        assert (out["z"] == 2).all()
+        for i in range(2):
+            assert (points[i].x == twin_out["points"][i]["x"]).all()
+            assert (points[i].x == i + 1).all()
+            # the source is left as it was
+            assert (td["points"][i].x == i).all()
+        assert (td["a"] == torch.arange(2.0)).all()
+
+    def test_apply_out_lazy_stack_of_tensorclasses_still_raises(self):
+        # #3684: the calls that keep raising as they did
+        td = self._td_with_lazy_stack_of_tensorclasses()
+        points = td["points"]
+        # a tensorclass that is not over a lazy stack
+        dense = torch.stack([points[0], points[1]])
+        with pytest.raises(ValueError, match="out must be a LazyStackedTensorDict"):
+            points.apply(lambda x: x + 1, out=dense)
+        assert (dense.x == torch.tensor([[0.0], [1.0]])).all()
+        # the walk with threads, which returns a tensorclass without its class
+        out = td.clone()
+        with pytest.raises(ValueError, match="out must be a LazyStackedTensorDict"):
+            td._fast_apply(lambda x: x + 1, out=out, num_threads=2)
+        assert type(out["points"]) is _LazyStackPoint
+        assert (out["points"][1].x == 1).all()
+
+    def test_apply_out_lazy_stack_of_tensorclasses_locked(self):
+        # #3684: a locked out raises as it does for a lazy stack of TensorDicts
+        points = self._td_with_lazy_stack_of_tensorclasses().consolidate()["points"]
+        with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
+            points.apply(lambda x: x + 1, out=points)
+        assert (points[1].x == 1).all()
+
+    @pytest.mark.parametrize("num_threads", [1, 4])
+    def test_consolidate_to_inplace_num_threads_keeps_tensorclass(self, num_threads):
+        # #3684: with num_threads, a consolidated tensordict that holds a lazy
+        # stack of tensorclasses is not moved, and the stack keeps its class
+        td = self._td_with_lazy_stack_of_tensorclasses().consolidate()
+        try:
+            td.to("meta", inplace=True, num_threads=num_threads)
+        except (RuntimeError, ValueError):
+            pass
+        assert type(td["points"]) is _LazyStackPoint
+        assert type(td["points"][0]) is _LazyStackPoint
 
     def test_consolidate_to_inplace_locked_raises(self):
         # A tensordict that the user locked keeps raising

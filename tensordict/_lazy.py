@@ -4278,7 +4278,11 @@ class LazyStackedTensorDict(TensorDictBase):
                 f"batch_size={batch_size}, device={device}, names={names}, constructor_kwargs={constructor_kwargs}"
             )
         if out is not None:
-            out_tensordicts = self._apply_out_tensordicts(out)
+            out_td = out
+            if not isinstance(out, LazyStackedTensorDict) and is_tensorclass(out):
+                # A lazy stack of tensorclasses is a tensorclass over a lazy stack
+                out_td = out._tensordict
+            out_tensordicts = self._apply_out_tensordicts(out_td)
             if out_tensordicts is None and not inplace:
                 result = self._apply_nest(
                     fn,
