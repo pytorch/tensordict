@@ -179,12 +179,33 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
         # entry_class() reads every member for non-tensor and tensorclass
         # entries. The default is_leaf rejects every tensor collection, so with
         # it the entry of the first member decides.
-        if self.is_leaf is _default_is_leaf:
-            data_type = _first_entry_class(self.tensordict.tensordicts[0], key)
-            if _is_tensor_collection(data_type):
-                return LazyStackedTensorDict
-            return data_type
-        return self.tensordict.entry_class(key)
+        try:
+            if self.is_leaf is _default_is_leaf:
+                data_type = _first_entry_class(self.tensordict.tensordicts[0], key)
+                if _is_tensor_collection(data_type):
+                    return LazyStackedTensorDict
+                return data_type
+            return self.tensordict.entry_class(key)
+        except RuntimeError as err:
+            if not str(err).startswith(_STACK_ERROR):
+                raise
+            # Both read the class with get(), which cannot stack the leaves of
+            # a lazy stack on the path of the key when their shapes differ.
+            # The first leaf then gives the class, as it does when the nested
+            # keys are listed and in a one-level lazy stack (#3580). Any other
+            # key keeps the stack error.
+            td = self.tensordict
+            for subkey in _unravel_key_to_tuple(key):
+                while isinstance(td := _unwrap(td), LazyStackedTensorDict):
+                    td = td.tensordicts[0]
+                if not _is_tensor_collection(type(td)):
+                    # the key goes through a leaf
+                    raise
+                td = td._get_str(subkey, None)
+            if td is None or _is_tensor_collection(type(td)):
+                # not a leaf
+                raise
+            return type(td)
 
     def _iter_leaves(self) -> Iterator[str]:
         for key in self._keys():

@@ -13,6 +13,7 @@ from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import TensorDict
 from tensordict.tensorclass import NonTensorData, NonTensorStack
 from tensordict.utils import _is_tensorclass, _LockedSchema, _STR_DTYPE_TO_DTYPE
+from torch.compiler import is_compiling
 
 CLS_MAP = {
     "TensorDict": TensorDict,
@@ -118,7 +119,14 @@ def _rebuild_tensordict_files_consolidated(
             result._consolidated = consolidated
         return result
 
-    return from_metadata()
+    result = from_metadata()
+    if not is_compiling():
+        # from_metadata calls itself, so it is in a reference cycle with its
+        # closure, which holds the storage: break the cycle, or the storage
+        # would outlive the result until the garbage collector runs. Not under
+        # torch.compile, which cannot always trace this del.
+        del from_metadata
+    return result
 
 
 def _make_td(cls, state):
