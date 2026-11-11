@@ -2836,12 +2836,36 @@ class TensorDict(TensorDictBase):
                 _dst[key] = _clone_value(_src[key], recurse=False)
             return result
 
-        result = self._new_unsafe(
-            source={key: _clone_value(value, recurse) for key, value in self.items()},
-            batch_size=self.batch_size,
-            device=self.device,
-            names=self._maybe_names(),
-        )
+        source: dict[NestedKey, CompatibleType]
+        if recurse:
+            source = {key: _clone_value(value, True) for key, value in self.items()}
+        else:
+            # perf: a shallow copy keeps an exact Tensor as it is, as
+            # _clone_value does, without a call per leaf (#3575).
+            source = {
+                key: value if type(value) is Tensor else _clone_value(value, False)
+                for key, value in self.items()
+            }
+        # perf: the values come out of a tensordict, so none is a dict for
+        # _new_unsafe to convert (#3575). Only for an exact TensorDict: a
+        # subclass gets the call it always got, as its _new_unsafe may not
+        # take `nested`. So does a result without entries, which has nothing
+        # to gain.
+        if source and type(self) is TensorDict:
+            result = self._new_unsafe(
+                source=source,
+                batch_size=self.batch_size,
+                device=self.device,
+                names=self._maybe_names(),
+                nested=False,
+            )
+        else:
+            result = self._new_unsafe(
+                source=source,
+                batch_size=self.batch_size,
+                device=self.device,
+                names=self._maybe_names(),
+            )
         # If this is uncommented, a shallow copy of a shared/memmap will be shared and locked too
         # This may be undesirable, not sure if this should be the default behaviour
         # (one usually does a copy to modify it).
@@ -3012,13 +3036,23 @@ class TensorDict(TensorDictBase):
         if names is not None:
             names = list(names)
 
-        result = self._new_unsafe(
-            device=self.device,
-            batch_size=self.batch_size,
-            source=source,
-            # names=self.names if self._has_names() else None,
-            names=names,
-        )
+        # perf: one pass for an exact TensorDict, as in _clone (#3575).
+        if source and type(self) is TensorDict:
+            result = self._new_unsafe(
+                device=self.device,
+                batch_size=self.batch_size,
+                source=source,
+                names=names,
+                nested=False,
+            )
+        else:
+            result = self._new_unsafe(
+                device=self.device,
+                batch_size=self.batch_size,
+                source=source,
+                # names=self.names if self._has_names() else None,
+                names=names,
+            )
         if inplace:
             self._tensordict = result._tensordict
             if hasattr(self, "_consolidated"):
@@ -3075,12 +3109,22 @@ class TensorDict(TensorDictBase):
             if hasattr(self, "_consolidated"):
                 self._mark_consolidated_stale()
             return self
-        result = self._new_unsafe(
-            _tensordict,
-            batch_size=self.batch_size,
-            device=self.device,
-            names=self.names if self._has_names() else None,
-        )
+        # perf: one pass for an exact TensorDict, as in _clone (#3575).
+        if _tensordict and type(self) is TensorDict:
+            result = self._new_unsafe(
+                _tensordict,  # ty: ignore[invalid-argument-type]  # as the call below
+                batch_size=self.batch_size,
+                device=self.device,
+                names=self.names if self._has_names() else None,
+                nested=False,
+            )
+        else:
+            result = self._new_unsafe(
+                _tensordict,
+                batch_size=self.batch_size,
+                device=self.device,
+                names=self.names if self._has_names() else None,
+            )
         # If this is uncommented, a shallow copy of a shared/memmap will be shared and locked too
         # This may be undesirable, not sure if this should be the default behaviour
         # (one usually does a copy to modify it).

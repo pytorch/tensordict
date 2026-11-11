@@ -651,6 +651,16 @@ def test_clone(benchmark, td):
     benchmark(td.clone)
 
 
+@pytest.mark.parametrize("kind", ["rl_step", "flat100"])
+def test_shallow_copy(benchmark, kind):
+    # copy() is clone(False): a new tensordict that holds the same leaves
+    if kind == "rl_step":
+        td = _rl_step_td(32, 4)
+    else:
+        td = TensorDict({f"x{i}": torch.zeros(3) for i in range(100)}, batch_size=[3])
+    benchmark(td.copy)
+
+
 def test_clone_device(benchmark, td):
     benchmark(td.to("cpu").clone)
 
