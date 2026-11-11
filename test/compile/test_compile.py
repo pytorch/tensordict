@@ -3524,7 +3524,8 @@ class TestNN:
         torch.testing.assert_close(sample, td["loc"])
         with set_interaction_type(InteractionType.RANDOM):
             sample = prob_mod_c(td.copy())["sample"]
-        assert (sample != td["loc"]).all()
+        # not .all(): about one draw of 1000 values in 13,000 holds an exact 0.0
+        assert (sample != td["loc"]).float().mean() > 0.99
         with set_interaction_type(InteractionType.MEAN):
             sample = prob_mod_c(td.copy())["sample"]
         torch.testing.assert_close(sample, td["loc"])
@@ -3545,12 +3546,12 @@ class TestNN:
             torch.testing.assert_close(sample, td["loc"])
             with set_interaction_type(InteractionType.RANDOM, thread_local=True):
                 sample = prob_mod_c(td.copy())["sample"]
-            assert (sample != td["loc"]).all()
+            assert (sample != td["loc"]).float().mean() > 0.99
             sample = prob_mod_c(td.copy())["sample"]
             torch.testing.assert_close(sample, td["loc"])
             with set_interaction_type(InteractionType.RANDOM, thread_local=True):
                 sample = prob_mod_c(td.copy())["sample"]
-            assert (sample != td["loc"]).all()
+            assert (sample != td["loc"]).float().mean() > 0.99
 
     @pytest.mark.parametrize("method", [False, True])
     def test_tdparams_gather(self, mode, method):
