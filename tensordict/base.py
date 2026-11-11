@@ -195,6 +195,31 @@ try:
     )
 except ImportError:
     _get_eval_frame_callback = None
+# torch.jit.trace records the stack that update_ from a lazy stack makes;
+# a torch without TorchScript tracing has nothing to record.
+try:
+    from torch.jit import is_tracing as _is_jit_tracing
+except ImportError:
+
+    def _is_jit_tracing() -> bool:
+        return False
+
+
+# Private torch functions that update_ and copy_ from a lazy stack check before
+# they skip the stack of its leaves (#3593). Without them, the walk is kept.
+try:
+    from torch._C import (
+        _is_any_autocast_enabled,
+        _len_torch_dispatch_stack,
+        _len_torch_function_stack,
+    )
+    from torch._C._functorch import (
+        is_functorch_wrapped_tensor as _is_functorch_wrapped_tensor,
+    )
+
+    _HAS_STACK_GATES = True
+except ImportError:
+    _HAS_STACK_GATES = False
 
 T = TypeVar("T", bound="TensorCollection")
 
@@ -3219,6 +3244,7 @@ def _has_typed_tensordict(td: TensorDictBase) -> bool:
 
     No data of a file or a store is read: they cannot hold one.
     """
+    from tensordict._lazy import LazyStackedTensorDict
     from tensordict.typedtensordict import TypedTensorDict
 
     while _is_tensorclass(type(td)):
@@ -3227,10 +3253,108 @@ def _has_typed_tensordict(td: TensorDictBase) -> bool:
         return True
     if td._reads_return_copies:
         return False
+    if (
+        type(td) is LazyStackedTensorDict
+        and td._hook_out is None
+        # torch.compile, also a frame that Dynamo runs eagerly, and
+        # torch.jit.trace keep the walk, so that what they record does not
+        # change. This frame must not name the torch module: Dynamo would
+        # then trace it where it runs it eagerly.
+        and not is_compiling()
+        and _get_eval_frame_callback is not None
+        and _get_eval_frame_callback() is None
+        and not _is_jit_tracing()
+        # autocast and the torch modes change what torch.stack does, or see
+        # its calls: they keep the walk too. torch.set_default_device sets a
+        # torch function mode.
+        and _HAS_STACK_GATES
+        and not _is_any_autocast_enabled()
+        and not _len_torch_dispatch_stack()
+        and not _len_torch_function_stack()
+        and all(type(member) is _TENSORDICT_TYPE for member in td.tensordicts)
+    ):
+        # values() stacks the leaves of the members, which takes time and
+        # memory: read only the keys whose stack may not be a tensor (#3593)
+        members = [member._tensordict for member in td.tensordicts]
+        dim = td.stack_dim
+        values = (
+            td._get_str(key, NO_DEFAULT)
+            for key in td.keys()
+            if not _stack_is_tensor([member[key] for member in members], dim)
+        )
+    else:
+        values = td.values()
     return any(
         _has_typed_tensordict(value)
-        for value in td.values()
+        for value in values
         if _is_tensor_collection(type(value)) and not _is_non_tensor(type(value))
+    )
+
+
+# The classes and dtypes of the leaves that _stack_is_tensor takes. torch.stack
+# treats a Parameter and a MemoryMappedTensor as a tensor, and it raises for
+# some of the other dtypes (the quantized and the sub-byte ones).
+_STACK_CLASSES = (Tensor, nn.Parameter, MemoryMappedTensor)
+_STACK_DTYPES = frozenset(
+    {
+        torch.bool,
+        torch.uint8,
+        torch.uint16,
+        torch.uint32,
+        torch.uint64,
+        torch.int8,
+        torch.int16,
+        torch.int32,
+        torch.int64,
+        torch.float16,
+        torch.bfloat16,
+        torch.float32,
+        torch.float64,
+        torch.complex64,
+        torch.complex128,
+    }
+)
+# torch.stack raises for a tensor with named dims. torch 2.15 has no named
+# tensors, and no Tensor.has_names: remove this once the minimum torch is 2.15.
+_TENSOR_HAS_NAMES = getattr(Tensor, "has_names", None)
+
+
+def _stack_is_tensor(tensors: list, dim: int) -> bool:
+    """Whether ``torch.stack(tensors, dim)`` is sure to return a tensor, without an error or a warning.
+
+    That is the case for dense tensors of one shape and dtype on one device,
+    outside autocast and the torch dispatch and function modes.
+    Called by ``_has_typed_tensordict``, which does not call it there, and
+    which reads the other entries of a lazy stack as before, so that they give
+    the same result or error.
+    """
+    first = tensors[0]
+    if type(first) not in _STACK_CLASSES:
+        return False
+    # the dtypes first: a key with two dtypes that torch.stack promotes is
+    # stacked as before, and should pay for little else
+    dtype = first.dtype
+    if dtype not in _STACK_DTYPES:
+        return False
+    for tensor in tensors:
+        if type(tensor) not in _STACK_CLASSES or tensor.dtype is not dtype:
+            return False
+    # the shape of a nested tensor cannot be read
+    if first.is_nested:
+        return False
+    shape = first.shape
+    device = first.device
+    # one lookup of the global per key; None on a torch without named dims
+    has_names = _TENSOR_HAS_NAMES
+    return -len(shape) - 1 <= dim <= len(shape) and all(
+        tensor.layout is torch.strided
+        and not tensor.is_nested
+        and tensor.shape == shape
+        and tensor.device == device
+        and not (has_names is not None and has_names(tensor))
+        # a leaf that outlived a torch.func transform
+        and not _is_functorch_wrapped_tensor(tensor)
+        for tensor in tensors
     )
 
 

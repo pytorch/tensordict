@@ -24,6 +24,7 @@ from tensordict import (
     is_leaf_nontensor,
     is_non_tensor,
     is_tensor_collection,
+    is_tensorclass,
     lazy_stack,
     LazyStackedTensorDict,
     MemoryMappedTensor,
@@ -43,6 +44,7 @@ from tensordict._td import _SubTensorDict, _TensorDictKeysView
 from tensordict._torch_func import _stack as stack_td
 from tensordict.base import (
     _default_is_leaf,
+    _has_typed_tensordict,
     _NESTED_TENSORS_AS_LISTS,
     TensorDictBase,
 )
@@ -54,6 +56,7 @@ from tensordict.utils import (
     set_list_to_stack,
 )
 from torch.overrides import resolve_name, TorchFunctionMode
+from torch.utils._python_dispatch import TorchDispatchMode
 
 if os.getenv("PYTORCH_TEST_FBCODE"):
     from pytorch.tensordict.test._utils_internal import (
@@ -9183,6 +9186,286 @@ class TestLazyStackedTensorDict:
             assert (member.get("obs") == 1).all()
             if non_tensor:
                 assert member.get_non_tensor("s") == "new"
+
+    @staticmethod
+    def _update_source_members(nested, leaf=lambda tensor: tensor):
+        def member(i):
+            td = TensorDict(
+                a=leaf(torch.full((3, 2), float(i))),
+                b=leaf(torch.full((3,), float(i))),
+                batch_size=[3],
+            )
+            if nested:
+                td["n"] = TensorDict(
+                    c=leaf(torch.full((3, 4), float(i))), batch_size=[3]
+                )
+            return td
+
+        return [member(i) for i in range(1, 5)]
+
+    @pytest.mark.parametrize(
+        "leaf",
+        [
+            lambda tensor: tensor,
+            functools.partial(torch.nn.Parameter, requires_grad=False),
+            MemoryMappedTensor.from_tensor,
+        ],
+        ids=["tensor", "parameter", "memmap"],
+    )
+    @pytest.mark.parametrize("nested", [False, True])
+    @pytest.mark.parametrize("op", ["update_", "copy_"])
+    def test_update__dense_from_lazy_no_stack(self, op, nested, leaf):
+        # #3593: update_ and copy_ from a lazy stack first stacked every leaf
+        # of the stack into a temporary tensor that they did not use
+        members = self._update_source_members(nested, leaf)
+        source = lazy_stack(members)
+        expected = torch.stack(members)
+        dest = expected.clone().zero_()
+        stack = torch.stack
+        calls = []
+
+        def counting_stack(tensors, *args, **kwargs):
+            calls.append(len(tensors))
+            return stack(tensors, *args, **kwargs)
+
+        with mock.patch.object(torch, "stack", counting_stack):
+            assert getattr(dest, op)(source) is dest
+        assert calls == []
+        assert sorted(dest.keys(True, True), key=str) == sorted(
+            expected.keys(True, True), key=str
+        )
+        assert (dest == expected).all()
+
+    @pytest.mark.parametrize("nested", [False, True])
+    @pytest.mark.parametrize("op", ["update_", "copy_"])
+    def test_update__dense_from_typed_over_lazy(self, op, nested):
+        # #3593: a TypedTensorDict over a lazy stack, also one that a
+        # tensordict holds, still writes every leaf (#2774)
+        class TypedAB(TypedTensorDict):
+            a: torch.Tensor
+            b: torch.Tensor
+
+        members = self._update_source_members(False)
+        expected = torch.stack(members)
+        source = TypedAB.from_tensordict(lazy_stack(members))
+        if nested:
+            expected = TensorDict(n=expected, batch_size=[4])
+            source = TensorDict(n=source, batch_size=[4])
+        dest = expected.clone().zero_()
+        assert getattr(dest, op)(source) is dest
+        assert (dest == expected).all()
+
+    def test_update__dense_from_lazy_exclusive_key(self):
+        # #3593: a key that only some members of the source hold is written
+        # at those members, and the keys that every member holds at all
+        members = self._update_source_members(False)
+        expected = torch.stack(members)
+        members[1]["only"] = torch.ones(3)
+        dest = expected.clone().zero_()
+        dest["only"] = torch.zeros(4, 3)
+        assert dest.update_(lazy_stack(members)) is dest
+        assert (dest.exclude("only") == expected).all()
+        assert (dest["only"][1] == 1).all()
+        assert (dest["only"][[0, 2, 3]] == 0).all()
+
+    def test_has_typed_tensordict_lazy_stack(self):
+        # #3593: _has_typed_tensordict reads only the entries of a lazy stack
+        # that are not tensors of one shape and dtype. It gives the answer of
+        # the walk of values() that it replaced.
+        def reference(td):
+            while is_tensorclass(td):
+                td = td._tensordict
+            if isinstance(td, TypedTensorDict):
+                return True
+            if td._reads_return_copies:
+                return False
+            return any(
+                reference(value)
+                for value in td.values()
+                if is_tensor_collection(value) and not is_non_tensor(value)
+            )
+
+        def outcome(fn, td):
+            try:
+                return fn(td)
+            except Exception as err:
+                return type(err), str(err)
+
+        class TypedA(TypedTensorDict):
+            a: torch.Tensor
+
+        def plain(i=0, shape=(3,)):
+            return TensorDict(a=torch.full(shape, float(i)), batch_size=shape[:1])
+
+        def typed(i=0):
+            return TypedA.from_tensordict(plain(i))
+
+        def stack(make, **kwargs):
+            return lazy_stack([make(i, **kwargs) for i in range(2)])
+
+        def holding(make):
+            return lambda i: TensorDict(a=torch.zeros(3), n=make(i), batch_size=[3])
+
+        sources = {
+            "plain members": stack(plain),
+            "nested members": stack(holding(plain)),
+            "typed members": stack(typed),
+            "members holding typed": stack(holding(typed)),
+            "members holding typed, twice": stack(holding(holding(typed))),
+            "members holding typed over lazy": stack(
+                lambda i: TensorDict(
+                    n=TypedA.from_tensordict(stack(plain)), batch_size=[2]
+                )
+            ),
+            "typed over lazy": TypedA.from_tensordict(stack(plain)),
+            "holding typed over lazy": TensorDict(
+                n=TypedA.from_tensordict(stack(plain)), batch_size=[2]
+            ),
+            "tensorclass members": stack(
+                lambda i: _NestedGetTC(a=torch.zeros(3), batch_size=[3])
+            ),
+            "tensorclass holding typed": stack(
+                lambda i: _NestedGetTC(a=typed(i), batch_size=[3])
+            ),
+            "lazy stack of lazy stacks": lazy_stack([stack(plain), stack(plain)]),
+            "lazy stack of lazy stacks of typed": lazy_stack(
+                [stack(holding(typed)), stack(holding(typed))]
+            ),
+            "exclusive typed": lazy_stack(
+                [plain(), TensorDict(a=torch.zeros(3), n=typed(), batch_size=[3])]
+            ),
+            "non-tensor": stack(
+                lambda i: plain(i).set_non_tensor("s", f"s{i}"),
+            ),
+            "parameters": stack(
+                lambda i: TensorDict(a=torch.nn.Parameter(torch.zeros(3)))
+            ),
+            "memory-mapped": stack(
+                lambda i: TensorDict(a=MemoryMappedTensor.from_tensor(torch.zeros(3)))
+            ),
+            "tensor subclass": stack(
+                lambda i: TensorDict(a=torch.zeros(3).as_subclass(_SubTensor))
+            ),
+            "dtypes": lazy_stack([plain(), plain().int()]),
+            "sparse": stack(lambda i: TensorDict(a=torch.zeros(3, 3).to_sparse())),
+            "no leaf": lazy_stack([TensorDict(batch_size=[3]) for _ in range(2)]),
+        }
+        answers = {}
+        for name, source in sources.items():
+            answers[name] = outcome(_has_typed_tensordict, source)
+            assert answers[name] == outcome(reference, source), name
+        # the members of a lazy stack are not searched, only their stack
+        assert not answers["typed members"] and not answers["members holding typed"]
+        assert answers["typed over lazy"] and answers["holding typed over lazy"]
+
+    def test_has_typed_tensordict_lazy_stack_stacks(self):
+        # #3593: _has_typed_tensordict skips a key of a lazy stack only where
+        # torch.stack of its leaves is sure to return a tensor, without an
+        # error or a warning. It stacks the leaves of any other key, as before.
+        def stack_calls(tensors, stack_dim=0):
+            source = lazy_stack([TensorDict(a=tensor) for tensor in tensors])
+            source.stack_dim = stack_dim
+            stack = torch.stack
+            calls = []
+
+            def counting_stack(*args, **kwargs):
+                calls.append(args)
+                return stack(*args, **kwargs)
+
+            with (
+                mock.patch.object(torch, "stack", counting_stack),
+                warnings.catch_warnings(),
+            ):
+                warnings.simplefilter("ignore")
+                try:
+                    assert not _has_typed_tensordict(source)
+                except (RuntimeError, IndexError):
+                    # torch.stack rejects some of the leaves that are stacked
+                    assert calls
+            return len(calls)
+
+        a = torch.zeros(3, 2)
+        skipped = {
+            "tensors": [a, a + 1],
+            "one tensor": [a],
+            "no dim": [torch.zeros(()), torch.ones(())],
+            "no element": [torch.zeros(3, 0), torch.zeros(3, 0)],
+            "integers": [a.int(), a.int() + 1],
+            "booleans": [a.bool(), a.bool()],
+            "complex": [a.cfloat(), a.cfloat().conj()],
+            "parameters": [torch.nn.Parameter(a), torch.nn.Parameter(a + 1)],
+            "memory-mapped": [MemoryMappedTensor.from_tensor(a) for _ in range(2)],
+            "classes": [a, torch.nn.Parameter(a), MemoryMappedTensor.from_tensor(a)],
+            "requires grad": [a.clone().requires_grad_(), a],
+            "expanded": [torch.zeros(1, 2).expand(3, 2), a],
+            "meta": [torch.zeros(3, 2, device="meta") for _ in range(2)],
+        }
+        for name, tensors in skipped.items():
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                assert type(torch.stack(tensors)) is torch.Tensor, name
+            assert stack_calls(tensors) == 0, name
+        read = {
+            "shapes": [a, torch.zeros(3, 1)],
+            "dtypes": [a, a.int()],
+            "dtypes that torch does not promote": [a.to(torch.uint16), a.long()],
+            "another dtype": [torch.ones(3, 2, dtype=torch.float8_e5m2)] * 2,
+            "devices": [a, torch.zeros(3, 2, device="meta")],
+            "sparse": [a.to_sparse(), a.to_sparse()],
+            "sparse and dense": [a, a.to_sparse()],
+            "nested": [torch.nested.nested_tensor([torch.zeros(2), torch.zeros(3)])]
+            * 2,
+            "nested and dense": [a, torch.nested.nested_tensor([a[0], a[1], a[2]])],
+            "tensor subclass": [a, a.as_subclass(_SubTensor)],
+        }
+        for name, tensors in read.items():
+            assert stack_calls(tensors) == 1, name
+        # a stack dim that torch.stack rejects
+        assert stack_calls([a, a], stack_dim=3) == 1
+        assert stack_calls([a, a], stack_dim=-4) == 1
+        # leaves that outlived a torch.func transform, which torch.stack rejects
+        leaked = []
+        torch.vmap(lambda x: leaked.append(x) or x)(a)
+        torch.vmap(torch.func.grad(lambda x: leaked.append(x) or x.sum()))(a)
+        for tensor in leaked:
+            assert stack_calls([a[0], tensor]) == 1
+
+        # a torch.compile region keeps the walk, also in a frame that Dynamo
+        # runs eagerly: there, the callback of Dynamo is set
+        with mock.patch.dict(
+            _has_typed_tensordict.__globals__, _get_eval_frame_callback=lambda: True
+        ):
+            assert stack_calls([a, a + 1]) == 1
+
+        # torch.jit.trace keeps the walk: it records the stack, as before
+        with mock.patch.dict(
+            _has_typed_tensordict.__globals__, _is_jit_tracing=lambda: True
+        ):
+            assert stack_calls([a, a + 1]) == 1
+
+        # autocast keeps the walk: there, torch.stack rejects float16 leaves
+        # of one shape and device
+        with torch.autocast("cpu"):
+            assert stack_calls([a.half(), a.half() + 1]) == 1
+
+        # the torch function and dispatch modes keep the walk: they see the
+        # stack, or change what it does
+        class FunctionMode(TorchFunctionMode):
+            def __torch_function__(self, func, types, args=(), kwargs=None):
+                return func(*args, **(kwargs or {}))
+
+        class DispatchMode(TorchDispatchMode):
+            def __torch_dispatch__(self, func, types, args=(), kwargs=None):
+                return func(*args, **(kwargs or {}))
+
+        with FunctionMode():
+            assert stack_calls([a, a + 1]) == 1
+        with DispatchMode():
+            assert stack_calls([a, a + 1]) == 1
+        # a default device is a torch function mode
+        with torch.device("cpu"):
+            assert stack_calls([a, a + 1]) == 1
+        assert stack_calls([a, a + 1]) == 0
 
     @pytest.mark.parametrize("stack_dim", [0, 1])
     def test_update__keys_to_update_nested_lazy(self, stack_dim):
