@@ -224,6 +224,11 @@ _SELF_NESTING_ERROR = (
 # Context-manager ops whose inverse __exit__ runs also when the body raises
 _UNDO_ON_ERROR_OPS = frozenset({"to_module", "lock_", "unlock_"})
 
+# The dtypes that _clone_recurse clones one leaf at a time: adding a number
+# turns a bool leaf into an integer one. A set, because the test runs once per
+# leaf and looking up torch.bool there costs more than the membership test.
+_CLONE_PER_LEAF_DTYPES = frozenset((torch.bool,))
+
 _GET_DEFAULTS_TO_NONE_REPLACEMENT = "td[key] to raise a KeyError for a missing key"
 
 if "TD_GET_DEFAULTS_TO_NONE" in os.environ:
@@ -10793,23 +10798,34 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     def _clone_recurse(self) -> Self:
         keys, vals = self._items_list(True, True)
         foreach_vals = {}
+        all_float = True
         iter_vals = {}
         for key, val in zip(keys, vals):
             if (
                 type(val) is torch.Tensor
                 and not val.requires_grad
-                and val.dtype not in (torch.bool,)
+                and (dtype := val.dtype) not in _CLONE_PER_LEAF_DTYPES
             ):
                 foreach_vals[key] = val
+                if all_float and not dtype.is_floating_point:
+                    all_float = False
             else:
                 iter_vals[key] = val
         if foreach_vals:
-            foreach_vals = dict(
-                _zip_strict(
-                    foreach_vals.keys(),
-                    _foreach("add", tuple(foreach_vals.values()), 0),
-                )
-            )
+            leaves = tuple(foreach_vals.values())
+            # x + -0.0 returns both zeros of a floating x as they are, where
+            # x + 0 turns -0.0 into 0.0. Only when every leaf is floating:
+            # integer and complex leaves need the 0, and a call of their own or
+            # a list of numbers changes the CUDA kernel that runs and the graph
+            # that a trace records. The calls are what _foreach("add", ...)
+            # makes, without its scans for unbatched tensors: every leaf here
+            # is an exact Tensor.
+            other = -0.0 if all_float else 0
+            if torch._C._are_functorch_transforms_active():
+                clones = [leaf.add(other) for leaf in leaves]
+            else:
+                clones = torch._foreach_add(leaves, other)
+            foreach_vals = dict(_zip_strict(foreach_vals.keys(), clones))
         if iter_vals:
             iter_vals = dict(
                 _zip_strict(

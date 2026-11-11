@@ -7,6 +7,7 @@ import contextlib
 import dataclasses
 import importlib.util
 import inspect
+import io
 import platform
 import re
 import sys
@@ -1595,6 +1596,34 @@ class TestTD:
             assert clone_c(data)["a", "c"] is not data["a", "c"]
         else:
             assert clone_c(data)["a", "c"] is data["a", "c"]
+
+    def test_clone_device_keeps_negative_zero(self, mode):
+        # #3581: the clone of a tensordict that has a device turned -0.0 into 0.0
+        def clone(td: TensorDict):
+            return td.clone()
+
+        clone_c = torch.compile(clone, fullgraph=True, mode=mode)
+        data = TensorDict(
+            {
+                "f32": torch.tensor([-0.0, 0.0, 1.0]),
+                "a": {
+                    "f64": torch.tensor([0.0, -0.0, 2.0], dtype=torch.float64),
+                    "bool": torch.tensor([True, False, True]),
+                },
+            },
+            batch_size=[3],
+            device="cpu",
+        )
+        for _ in range(2):
+            data_c = clone_c(data)
+            for key, value in data.items(True, True):
+                assert data_c[key] is not value
+                # a copy, not a new tensor over the source's memory
+                assert data_c[key].data_ptr() != value.data_ptr()
+                assert data_c[key].dtype == value.dtype
+                assert (data_c[key] == value).all()
+            assert torch.signbit(data_c["f32"]).tolist() == [True, False, False]
+            assert torch.signbit(data_c["a", "f64"]).tolist() == [False, True, False]
 
     @pytest.mark.parametrize("recurse", [True, False])
     def test_flatten_keys(self, recurse, mode):
@@ -4081,6 +4110,36 @@ class TestExport:
         out = ep.module()(td)
         assert out.names == ["n"]
         torch.testing.assert_close(out["a"], td["a"])
+
+    @pytest.mark.parametrize("strict", [False, True])
+    def test_export_clone_device_keeps_negative_zero(self, strict):
+        # #3581: a program that clones a tensordict with a device keeps the
+        # -0.0 of its floating leaves, also after it is saved and loaded
+        class Mod(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.td = TensorDict(
+                    x=torch.tensor([-0.0, 0.0, 1.0]),
+                    y=torch.tensor([0.0, -0.0, 2.0], dtype=torch.float64),
+                    batch_size=[3],
+                    device="cpu",
+                )
+
+            def forward(self, a):
+                clone = self.td.clone()
+                return clone["x"] * a, clone["y"] * a
+
+        a = torch.full((3,), 2.0)
+        ep = torch.export.export(Mod(), (a,), strict=strict)
+        buffer = io.BytesIO()
+        torch.export.save(ep, buffer)
+        buffer.seek(0)
+        for module in (ep.module(), torch.export.load(buffer).module()):
+            out_x, out_y = module(a)
+            assert torch.signbit(out_x).tolist() == [True, False, False]
+            assert torch.signbit(out_y).tolist() == [False, True, False]
+            assert out_x.tolist() == [-0.0, 0.0, 2.0]
+            assert out_y.tolist() == [0.0, -0.0, 4.0]
 
     @pytest.mark.parametrize("strict", [False])  # , True])
     def test_export_with_td_params(self, strict):

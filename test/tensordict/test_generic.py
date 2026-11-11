@@ -828,6 +828,97 @@ class TestGeneric:
         td = TensorDict(device="cpu", batch_size=[2])
         assert td.clone(recurse=recurse) is not None
 
+    @pytest.mark.parametrize(
+        "dtype", [torch.float16, torch.bfloat16, torch.float32, torch.float64]
+    )
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_clone_device_keeps_negative_zero(self, dtype, device):
+        # #3581: the clone of a tensordict that has a device turned -0.0 into 0.0
+        x = torch.tensor([-0.0, 0.0, 1.0], dtype=dtype, device=device)
+
+        @tensorclass
+        class Data:
+            x: torch.Tensor
+
+        batch_size = [x.shape[0]]
+        td = TensorDict({"x": x}, batch_size=batch_size, device=device)
+        nested = TensorDict(
+            {"n": {"m": {"x": x}}}, batch_size=batch_size, device=device
+        )
+        tc = Data(x=x, batch_size=batch_size, device=device)
+        # bool leaves are cloned one by one, next to floating leaves of any dtype
+        floats = TensorDict(
+            {"x": x, "f64": x.double(), "bool": x > 0},
+            batch_size=batch_size,
+            device=device,
+        )
+        for clone in (
+            td.clone()["x"],
+            floats.clone()["x"],
+            deepcopy(td)["x"],
+            torch.clone(td)["x"],
+            td.to(device).clone()["x"],
+            nested.clone()["n", "m", "x"],
+            tc.clone().x,
+        ):
+            assert clone is not x
+            assert clone.dtype == dtype
+            assert torch.signbit(clone).tolist() == [True, False, False]
+            assert (clone == x).all()
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_clone_device_mixed_dtypes(self, device):
+        # #3581: next to floating leaves, integer, complex and bool leaves are
+        # cloned as before
+        source = {
+            "f32": torch.tensor([-0.0, 0.0, 1.0]),
+            "f64": torch.tensor([0.0, -0.0, 2.0], dtype=torch.float64),
+            "c64": torch.tensor([1 + 2j, 0j, -3 - 4j]),
+            "bool": torch.tensor([True, False, True]),
+            "n": {"f32": torch.tensor([[-0.0], [0.0], [3.0]])},
+        }
+        for dtype in (torch.uint8, torch.int8, torch.int16, torch.int32, torch.int64):
+            info = torch.iinfo(dtype)
+            source[str(dtype)] = torch.tensor([info.min, 0, info.max], dtype=dtype)
+        td = TensorDict(source, batch_size=[3], device=device, names=["time"])
+        clone = td.clone()
+        assert type(clone) is TensorDict
+        assert clone.device == td.device
+        assert clone.batch_size == td.batch_size
+        assert clone.names == ["time"]
+        assert not clone.is_locked
+        assert list(clone.keys(True, True)) == list(td.keys(True, True))
+        for key, value in td.items(True, True):
+            cloned = clone[key]
+            assert type(cloned) is torch.Tensor
+            assert cloned is not value
+            assert cloned.dtype == value.dtype
+            assert cloned.device == value.device
+            assert cloned.shape == value.shape
+            assert (cloned == value).all()
+        # the clone does not share memory with its source
+        clone["f32"].fill_(7)
+        clone["torch.int64"].fill_(7)
+        clone["n", "f32"].fill_(7)
+        assert td["f32"].tolist() == [-0.0, 0.0, 1.0]
+        assert td["torch.int64"][1] == 0
+        assert td["n", "f32"][2] == 3
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_clone_device_requires_grad(self, device):
+        # #3581: a leaf that requires grad is cloned as before, with .clone()
+        leaf = torch.tensor([-0.0, 0.0, 1.0], device=device, requires_grad=True)
+        td = TensorDict(
+            {"leaf": leaf, "plain": torch.arange(3.0)}, batch_size=[3], device=device
+        )
+        clone = td.clone()
+        assert clone["leaf"].requires_grad
+        assert type(clone["leaf"].grad_fn).__name__ == "CloneBackward0"
+        assert torch.signbit(clone["leaf"]).tolist() == [True, False, False]
+        assert not clone["plain"].requires_grad
+        (grad,) = torch.autograd.grad(clone["leaf"].sum(), leaf)
+        assert (grad == 1).all()
+
     @pytest.mark.skipif(
         is_npu_available(), reason="torch.nested_tensor is not adapted on NPU currently"
     )
