@@ -2017,6 +2017,99 @@ class TestZarrSerialization:
         assert (ztd2["a"] == ztd["a"]).all()
         assert (ztd2["b", "c"] == ztd["b", "c"]).all()
 
+    @pytest.mark.parametrize("mode", ["w", "w-", "x", "a", "r+"])
+    @pytest.mark.parametrize("op", ["copy", "to", "replace", "pickle", "clone"])
+    def test_copy_keeps_store_data(self, tmp_path, mode, op):
+        # #3606: a copy opened the store again with the mode of the original,
+        # and "w" emptied the store ("w-" and "x" raised). "a" and "r+" pin
+        # the modes that worked, and "pickle" a call that worked in each mode.
+        pytest.importorskip("zarr", minversion="3")
+        path = str(tmp_path / "s.zarr")
+        if mode == "r+":
+            PersistentTensorDict(filename=path, mode="w", backend="zarr").close()
+        ztd = PersistentTensorDict(
+            filename=path, mode=mode, backend="zarr", batch_size=[3]
+        )
+        ztd["a"] = torch.arange(3.0)
+        ztd["n", "b"] = torch.ones(3, 2)
+        if op == "copy":
+            out = ztd.copy()
+        elif op == "to":
+            out = ztd.to("cpu")
+        elif op == "replace":
+            out = ztd.replace(c=torch.zeros(3))
+        elif op == "pickle":
+            out = pickle.loads(pickle.dumps(ztd))
+        else:
+            out = ztd.clone(newfile=str(tmp_path / "clone.zarr"))
+        assert out.mode == mode
+        for td in (out, ztd):
+            assert (td["a"] == torch.arange(3.0)).all()
+            assert (td["n", "b"] == 1).all()
+        # the copy is as writable as the original, and shares its store
+        out["d"] = torch.full((3,), 2.0)
+        assert ("d" in ztd.keys()) is (op != "clone")
+        out.close()
+        ztd.close()
+        stored = PersistentTensorDict(
+            filename=path, mode="r", backend="zarr", batch_size=[3]
+        )
+        assert (stored["a"] == torch.arange(3.0)).all()
+        assert (stored["n", "b"] == 1).all()
+
+    @pytest.mark.parametrize("mode", ["w", "w-", "x"])
+    def test_copy_of_unreadable_store_follows_mode(self, tmp_path, mode):
+        # #3606: pins what a copy does with a store that "r+" cannot open as a
+        # group, here one whose path now holds an array. The mode of the
+        # original decides, as it did before the copy tried "r+": "w" replaces
+        # the store, and "w-" and "x" refuse it.
+        pytest.importorskip("zarr", minversion="3")
+        import zarr
+
+        path = str(tmp_path / "s.zarr")
+        ztd = PersistentTensorDict(
+            filename=path, mode=mode, backend="zarr", batch_size=[3]
+        )
+        ztd["a"] = torch.arange(3.0)
+        zarr.open_array(path, mode="w", shape=(3,), dtype="f4")
+        if mode == "w":
+            out = ztd.copy()
+            assert out.mode == mode
+            assert not list(out.keys())
+            out["d"] = torch.zeros(3)
+            stored = PersistentTensorDict(
+                filename=path, mode="r", backend="zarr", batch_size=[3]
+            )
+            assert list(stored.keys()) == ["d"]
+        else:
+            with pytest.raises(FileExistsError) as excinfo:
+                ztd.copy()
+            assert type(excinfo.value) is FileExistsError
+
+    @pytest.mark.parametrize("op", ["copy", "to", "pickle"])
+    def test_copy_of_read_only_store_refuses_writes(self, tmp_path, op):
+        # #3606: a copy of a read-only tensordict stays read-only
+        pytest.importorskip("zarr", minversion="3")
+        path = str(tmp_path / "s.zarr")
+        ztd = PersistentTensorDict(
+            filename=path, mode="w", backend="zarr", batch_size=[3]
+        )
+        ztd["a"] = torch.arange(3.0)
+        ztd.close()
+        ztd = PersistentTensorDict(
+            filename=path, mode="r", backend="zarr", batch_size=[3]
+        )
+        if op == "copy":
+            out = ztd.copy()
+        elif op == "to":
+            out = ztd.to("cpu")
+        else:
+            out = pickle.loads(pickle.dumps(ztd))
+        assert out.mode == "r"
+        assert (out["a"] == torch.arange(3.0)).all()
+        with pytest.raises(ValueError, match="read-only"):
+            out["d"] = torch.zeros(3)
+
     def test_pickle_locked_after_nested_access(self, tmp_path):
         # gh-2920: locking after reading a nested view left a weakref in the
         # pickled state

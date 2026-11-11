@@ -647,6 +647,17 @@ def test_lazy_stack_to_tensordict(benchmark, batch, features):
     benchmark(td.to_tensordict)
 
 
+@pytest.mark.parametrize(
+    "batch,features", [(32, 4), (4096, 64)], ids=["rl_step", "large"]
+)
+def test_update__dense_from_lazy_stack(benchmark, batch, features):
+    td = LazyStackedTensorDict.lazy_stack(
+        [_rl_step_td(batch, features) for _ in range(8)], 0
+    )
+    dense = td.to_tensordict()
+    benchmark(dense.update_, td)
+
+
 def test_clone(benchmark, td):
     benchmark(td.clone)
 
@@ -1554,6 +1565,20 @@ def test_pointwise_nested(benchmark, op):
         "add": lambda td: td + td,
     }[op]
     benchmark(fn, td)
+
+
+def test_where_nested(benchmark):
+    # two RL steps merged by a mask over the rows, as in a partial reset: 20
+    # leaves of two shapes in two levels
+    def level():
+        obs = {f"obs{i}": torch.randn(32, 4) for i in range(8)}
+        return {**obs, "reward": torch.randn(32, 1), "value": torch.randn(32, 1)}
+
+    td, other = (
+        TensorDict({**level(), "next": level()}, batch_size=[32]) for _ in range(2)
+    )
+    mask = torch.rand(32) < 0.5
+    benchmark(td.where, mask, other)
 
 
 @pytest.mark.parametrize(

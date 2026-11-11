@@ -6,6 +6,8 @@
 import argparse
 import ast
 import collections
+import functools
+import gc
 import importlib
 import inspect
 import itertools
@@ -19,6 +21,7 @@ import sys
 import time
 import types
 import warnings
+import weakref
 from pathlib import Path
 
 import numpy as np
@@ -46,6 +49,7 @@ from tensordict import (
 from tensordict._indexing import _slice_length, convert_ellipsis_to_idx
 from tensordict._tensorcollection import TensorCollection
 from tensordict.utils import (
+    _cache_while_locked,
     _check_recursive_properties,
     _get_shared_executor,
     _getitem_batch_size,
@@ -302,6 +306,116 @@ def test_make_cache_key():
         (1, (2, 3), id(Q)),
         (("a", id(V)), ("b", "c"), ("d", ("e", "f"))),
     )
+
+
+def _new_is_leaf(tensors_only):
+    # a new function at each call, as a lambda or a closure in user code
+    def is_leaf(cls):
+        return issubclass(cls, torch.Tensor) if tensors_only else True
+
+    return is_leaf
+
+
+def _locked_td_counting_cached_calls():
+    calls = []
+
+    class CountingTD(TensorDict):
+        @_cache_while_locked
+        def cached(self, *args, **kwargs):
+            calls.append(None)
+            return [len(calls)]
+
+    return CountingTD(a=torch.zeros(3)).lock_(), calls
+
+
+def test_cache_while_locked_freed_function():
+    # #3608: the cache keyed a function by its id(). Once the function is
+    # freed, the next one can get the same id(), and must not get its result.
+    td = TensorDict(a=TensorDict(b=torch.zeros(3)), c=torch.ones(3)).lock_()
+    for _ in range(10):
+        is_leaf = _new_is_leaf(tensors_only=False)
+        assert sorted(td.flatten_keys(is_leaf=is_leaf).keys()) == ["a", "c"]
+        del is_leaf
+        is_leaf = _new_is_leaf(tensors_only=True)
+        assert sorted(td.flatten_keys(is_leaf=is_leaf).keys()) == ["a.b", "c"]
+        del is_leaf
+
+
+def test_cache_while_locked_skips_callables():
+    # #3608: a call with a callable argument is computed at each call, and
+    # nothing is stored for it.
+    class IsLeaf:
+        def method(self, cls):
+            return True
+
+        __call__ = method
+
+    is_leaf = _new_is_leaf(tensors_only=True)
+    ref = weakref.ref(is_leaf)
+    td, calls = _locked_td_counting_cached_calls()
+    for args, kwargs in [
+        ((), {"is_leaf": is_leaf}),
+        ((is_leaf,), {}),
+        (("a", (1, [is_leaf])), {"default": 0.5}),
+        ((), {"is_leaf": lambda cls: True}),
+        ((), {"is_leaf": IsLeaf().method}),
+        ((), {"is_leaf": functools.partial(is_leaf)}),
+        ((), {"is_leaf": IsLeaf()}),
+        ((), {"is_leaf": tensordict.base._default_is_leaf}),
+    ]:
+        assert _make_cache_key(args, kwargs) is None
+        expected = len(calls) + 1
+        assert td.cached(*args, **kwargs) == [expected]
+        assert td.cached(*args, **kwargs) == [expected + 1]
+        assert not td._cache["cached"]
+    del is_leaf, args, kwargs
+    gc.collect()
+    assert ref() is None
+
+    td = TensorDict(a=TensorDict(b=torch.zeros(3)), c=torch.ones(3)).lock_()
+    for _ in range(100):
+        out = td.flatten_keys(is_leaf=lambda cls: issubclass(cls, torch.Tensor))
+        assert sorted(out.keys()) == ["a.b", "c"]
+    assert not td._cache["flatten_keys"]
+
+
+def test_cache_while_locked_hits():
+    # #3608: a call without a callable argument is cached as before, under
+    # the same key.
+    class Unhashable(type):
+        def __eq__(cls, other):
+            return cls is other
+
+    class OfUnhashableClass(metaclass=Unhashable):
+        pass
+
+    td, calls = _locked_td_counting_cached_calls()
+    tensor, obj, flt, raw = torch.zeros(1), object(), 0.5, b"a"
+    unhashable = OfUnhashableClass()
+    for args, kwargs, key in [
+        ((), {}, ((), ())),
+        (("a",), {}, (("a",), ())),
+        ((True, 1, ("a", "b"), ...), {}, ((True, 1, ("a", "b"), ...), ())),
+        (
+            (True, True),
+            {"sorting_keys": ["a", ("b", "c")], "default": None},
+            (
+                (True, True),
+                (("default", id(None)), ("sorting_keys", ("a", ("b", "c")))),
+            ),
+        ),
+        (("a", flt, tensor), {}, (("a", id(flt), id(tensor)), ())),
+        ((obj, [td]), {"x": raw}, ((id(obj), (id(td),)), (("x", id(raw)),))),
+        ((unhashable, [unhashable]), {}, ((id(unhashable), (id(unhashable),)), ())),
+        ((), {"layout": torch.strided}, ((), (("layout", id(torch.strided)),))),
+    ]:
+        assert _make_cache_key(args, kwargs) == key
+        expected = [len(calls) + 1]
+        first = td.cached(*args, **kwargs)
+        assert first == expected
+        assert td.cached(*args, **kwargs) is first
+        assert td._cache["cached"][key] is first
+    assert len(td._cache["cached"]) == len(calls) == 8
 
 
 @tensorclass
@@ -1916,6 +2030,47 @@ def test_assert_close_keeps_torch_message():
 def test_expand_as_right_fewer_dims_message():
     with pytest.raises(RuntimeError, match="at least as many dimensions"):
         expand_as_right(torch.zeros(3, 2), torch.zeros(3))
+
+
+def test_expand_as_right_shapes_and_messages():
+    # #3609: the results and the error texts of expand_as_right, for leading
+    # dims that are equal, of size one, or that do not fit
+    x = torch.arange(3)
+    out = expand_as_right(x, torch.zeros(3, 2, 4))
+    assert out.shape == (3, 2, 4)
+    assert out._base is x
+    assert (out == x.reshape(3, 1, 1)).all()
+    assert expand_as_right(x, x) is not x
+    assert expand_as_right(x, TensorDict(batch_size=[3, 5])).shape == (3, 5)
+    assert expand_as_right(torch.tensor(1), torch.zeros(3, 2)).shape == (3, 2)
+    assert expand_as_right(torch.zeros(1), torch.zeros(3, 2)).shape == (3, 2)
+    assert expand_as_right(torch.zeros(3, 1), torch.zeros(3, 2, 4)).shape == (3, 2, 4)
+    assert expand_as_right(torch.zeros(1, 2), torch.zeros(3, 2, 4)).shape == (3, 2, 4)
+    with pytest.raises(
+        RuntimeError,
+        match=re.escape(
+            "expand_as_right requires the destination tensor to have at least "
+            "as many dimensions as the input tensor, got "
+            "tensor.ndimension()=2 and dest.ndimension()=1"
+        ),
+    ):
+        expand_as_right(torch.zeros(3, 2), torch.zeros(3))
+    with pytest.raises(
+        RuntimeError,
+        match=re.escape(
+            "tensor shape is incompatible with dest shape, got: "
+            "tensor.shape=torch.Size([3, 2]), dest=torch.Size([3, 4, 2])"
+        ),
+    ):
+        expand_as_right(torch.zeros(3, 2), torch.zeros(3, 4, 2))
+    with pytest.raises(
+        RuntimeError,
+        match=re.escape(
+            "tensor shape is incompatible with dest shape, got: "
+            "tensor.shape=torch.Size([4]), dest=torch.Size([3, 2])"
+        ),
+    ):
+        expand_as_right(torch.zeros(4), TensorDict(batch_size=[3, 2]))
 
 
 def test_get_shared_executor():

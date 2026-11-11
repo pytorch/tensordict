@@ -90,6 +90,7 @@ from tensordict.utils import (
 from torch import nn
 from torch._subclasses import FakeTensor, FakeTensorMode
 from torch.autograd import forward_ad
+from torch.fx.experimental.proxy_tensor import make_fx
 from torch.multiprocessing.reductions import StorageWeakRef
 from torch.nn.parameter import UninitializedTensorMixin
 from torch.utils._python_dispatch import TorchDispatchMode
@@ -221,6 +222,11 @@ class _ReportsOtherDevice(torch.Tensor):
     @property
     def device(self):
         return torch.device("cuda", 0)
+
+
+@tensorclass
+class _LazyStackPoint:
+    x: torch.Tensor
 
 
 def _save_and_load(data, save):
@@ -834,6 +840,97 @@ class TestGeneric:
         assert td.clone(recurse=recurse) is not None
         td = TensorDict(device="cpu", batch_size=[2])
         assert td.clone(recurse=recurse) is not None
+
+    @pytest.mark.parametrize(
+        "dtype", [torch.float16, torch.bfloat16, torch.float32, torch.float64]
+    )
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_clone_device_keeps_negative_zero(self, dtype, device):
+        # #3581: the clone of a tensordict that has a device turned -0.0 into 0.0
+        x = torch.tensor([-0.0, 0.0, 1.0], dtype=dtype, device=device)
+
+        @tensorclass
+        class Data:
+            x: torch.Tensor
+
+        batch_size = [x.shape[0]]
+        td = TensorDict({"x": x}, batch_size=batch_size, device=device)
+        nested = TensorDict(
+            {"n": {"m": {"x": x}}}, batch_size=batch_size, device=device
+        )
+        tc = Data(x=x, batch_size=batch_size, device=device)
+        # bool leaves are cloned one by one, next to floating leaves of any dtype
+        floats = TensorDict(
+            {"x": x, "f64": x.double(), "bool": x > 0},
+            batch_size=batch_size,
+            device=device,
+        )
+        for clone in (
+            td.clone()["x"],
+            floats.clone()["x"],
+            deepcopy(td)["x"],
+            torch.clone(td)["x"],
+            td.to(device).clone()["x"],
+            nested.clone()["n", "m", "x"],
+            tc.clone().x,
+        ):
+            assert clone is not x
+            assert clone.dtype == dtype
+            assert torch.signbit(clone).tolist() == [True, False, False]
+            assert (clone == x).all()
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_clone_device_mixed_dtypes(self, device):
+        # #3581: next to floating leaves, integer, complex and bool leaves are
+        # cloned as before
+        source = {
+            "f32": torch.tensor([-0.0, 0.0, 1.0]),
+            "f64": torch.tensor([0.0, -0.0, 2.0], dtype=torch.float64),
+            "c64": torch.tensor([1 + 2j, 0j, -3 - 4j]),
+            "bool": torch.tensor([True, False, True]),
+            "n": {"f32": torch.tensor([[-0.0], [0.0], [3.0]])},
+        }
+        for dtype in (torch.uint8, torch.int8, torch.int16, torch.int32, torch.int64):
+            info = torch.iinfo(dtype)
+            source[str(dtype)] = torch.tensor([info.min, 0, info.max], dtype=dtype)
+        td = TensorDict(source, batch_size=[3], device=device, names=["time"])
+        clone = td.clone()
+        assert type(clone) is TensorDict
+        assert clone.device == td.device
+        assert clone.batch_size == td.batch_size
+        assert clone.names == ["time"]
+        assert not clone.is_locked
+        assert list(clone.keys(True, True)) == list(td.keys(True, True))
+        for key, value in td.items(True, True):
+            cloned = clone[key]
+            assert type(cloned) is torch.Tensor
+            assert cloned is not value
+            assert cloned.dtype == value.dtype
+            assert cloned.device == value.device
+            assert cloned.shape == value.shape
+            assert (cloned == value).all()
+        # the clone does not share memory with its source
+        clone["f32"].fill_(7)
+        clone["torch.int64"].fill_(7)
+        clone["n", "f32"].fill_(7)
+        assert td["f32"].tolist() == [-0.0, 0.0, 1.0]
+        assert td["torch.int64"][1] == 0
+        assert td["n", "f32"][2] == 3
+
+    @pytest.mark.parametrize("device", get_available_devices())
+    def test_clone_device_requires_grad(self, device):
+        # #3581: a leaf that requires grad is cloned as before, with .clone()
+        leaf = torch.tensor([-0.0, 0.0, 1.0], device=device, requires_grad=True)
+        td = TensorDict(
+            {"leaf": leaf, "plain": torch.arange(3.0)}, batch_size=[3], device=device
+        )
+        clone = td.clone()
+        assert clone["leaf"].requires_grad
+        assert type(clone["leaf"].grad_fn).__name__ == "CloneBackward0"
+        assert torch.signbit(clone["leaf"]).tolist() == [True, False, False]
+        assert not clone["plain"].requires_grad
+        (grad,) = torch.autograd.grad(clone["leaf"].sum(), leaf)
+        assert (grad == 1).all()
 
     @pytest.mark.skipif(
         is_npu_available(), reason="torch.nested_tensor is not adapted on NPU currently"
@@ -1628,6 +1725,165 @@ class TestGeneric:
         }
         assert len(devices) == 1
         assert td.device is None or td.device == devices.pop()
+
+    @staticmethod
+    def _td_with_lazy_stack_of_tensorclasses():
+        points = lazy_stack(
+            [_LazyStackPoint(x=torch.zeros(3)), _LazyStackPoint(x=torch.ones(3))]
+        )
+        return TensorDict(
+            a=torch.arange(2.0), points=points, z=torch.ones(2), batch_size=[2]
+        )
+
+    @pytest.mark.parametrize("num_threads", [None, 1, 4])
+    @pytest.mark.parametrize("target", ["meta", torch.float64])
+    def test_to_inplace_lazy_stack_of_tensorclasses(self, target, num_threads):
+        # #3684: to(device or dtype, inplace=True) raised when an entry was a
+        # lazy stack of tensorclasses, after it had cast the entries before
+        # the stack. It gives the result of the call without inplace.
+        td = self._td_with_lazy_stack_of_tensorclasses()
+        ref = self._td_with_lazy_stack_of_tensorclasses().to(
+            target, num_threads=num_threads
+        )
+        result = td.to(target, inplace=True, num_threads=num_threads)
+        assert result is td
+        assert td.device == ref.device
+        assert not td.is_locked
+        points = td["points"]
+        assert type(points) is _LazyStackPoint
+        assert type(points._tensordict) is LazyStackedTensorDict
+        assert points.device == ref["points"].device
+        leaves = [td["a"], points[0].x, points[1].x, td["z"]]
+        ref_leaves = [ref["a"], ref["points"][0].x, ref["points"][1].x, ref["z"]]
+        for leaf, ref_leaf in zip(leaves, ref_leaves, strict=True):
+            assert leaf.device == ref_leaf.device
+            assert leaf.dtype == ref_leaf.dtype
+            assert leaf.shape == ref_leaf.shape
+            if target != "meta":
+                assert (leaf == ref_leaf).all()
+
+    @pytest.mark.parametrize("device", ["cpu", "meta"])
+    def test_consolidate_to_inplace_lazy_stack_of_tensorclasses(self, device):
+        # #3684: the consolidated tensordict was also left unlocked and no
+        # longer consolidated. The tensordict has no device, so "cpu" is a
+        # change of device too.
+        td = self._td_with_lazy_stack_of_tensorclasses().consolidate()
+        result = td.to(device, inplace=True)
+        assert result is td
+        assert td.device == torch.device(device)
+        assert td.is_consolidated()
+        assert td.is_locked
+        points = td["points"]
+        assert type(points) is _LazyStackPoint
+        assert points.is_locked
+        storage = td._consolidated["storage"]
+        assert storage.device == torch.device(device)
+        leaves = (td["a"], points[0].x, points[1].x, td["z"])
+        for leaf, value in zip(leaves, (torch.arange(2.0), 0, 1, 1), strict=True):
+            assert leaf.device == torch.device(device)
+            assert leaf.untyped_storage().data_ptr() == storage.data_ptr()
+            if device != "meta":
+                assert (leaf == value).all()
+        assert points[1].x.shape == (3,)
+
+    def test_consolidate_inplace_lazy_stack_of_tensorclasses(self):
+        # #3684: consolidate(inplace=True) raised for the same tensordict
+        td = self._td_with_lazy_stack_of_tensorclasses()
+        result = td.consolidate(inplace=True)
+        assert result is td
+        assert td.is_consolidated()
+        assert td.is_locked
+        points = td["points"]
+        assert type(points) is _LazyStackPoint
+        storage = td._consolidated["storage"]
+        leaves = (td["a"], points[0].x, points[1].x, td["z"])
+        for leaf, value in zip(leaves, (torch.arange(2.0), 0, 1, 1), strict=True):
+            assert leaf.untyped_storage().data_ptr() == storage.data_ptr()
+            assert (leaf == value).all()
+
+    @pytest.mark.parametrize("call", ["apply", "named_apply", "_fast_apply"])
+    def test_apply_out_self_lazy_stack_of_tensorclasses(self, call):
+        # #3684: apply(fn, out=td), the walk that the in-place to runs, raised
+        # for the same tensordict after it had written the entries before the
+        # stack. It gives the result of the call on a lazy stack of
+        # TensorDicts with the same data.
+        def run(td):
+            if call == "named_apply":
+                return td.named_apply(lambda name, x: x + 1, out=td)
+            return getattr(td, call)(lambda x: x + 1, out=td)
+
+        td = self._td_with_lazy_stack_of_tensorclasses()
+        twin = td.clone()
+        twin["points"] = lazy_stack(
+            [TensorDict(x=torch.zeros(3)), TensorDict(x=torch.ones(3))]
+        )
+        assert run(td) is td
+        assert run(twin) is twin
+        points = td["points"]
+        assert type(points) is _LazyStackPoint
+        assert type(points._tensordict) is LazyStackedTensorDict
+        assert (td["a"] == twin["a"]).all()
+        assert (td["a"] == torch.tensor([1.0, 2.0])).all()
+        assert (td["z"] == 2).all()
+        for i in range(2):
+            assert (points[i].x == twin["points"][i]["x"]).all()
+            assert (points[i].x == i + 1).all()
+
+    def test_apply_out_lazy_stack_of_tensorclasses_still_raises(self):
+        # #3684: the calls that keep raising as they did, with the lazy stack
+        # of tensorclasses in out left as it was
+        def fn(x):
+            return x + 1
+
+        match = "out must be a LazyStackedTensorDict"
+        td = self._td_with_lazy_stack_of_tensorclasses()
+        points = td["points"]
+        # a tensorclass that is not over a lazy stack
+        dense = torch.stack([points[0], points[1]])
+        with pytest.raises(ValueError, match=match):
+            points.apply(fn, out=dense)
+        assert (dense.x == torch.tensor([[0.0], [1.0]])).all()
+        # a tensorclass class, which has no _tensordict
+        with pytest.raises(ValueError, match=match):
+            points.apply(fn, out=_LazyStackPoint)
+        # another tensordict as out, a copy included
+        for call in ("apply", "_fast_apply"):
+            out = td.clone()
+            with pytest.raises(ValueError, match=match):
+                getattr(td, call)(fn, out=out)
+            assert type(out["points"]) is _LazyStackPoint
+            assert (out["points"][0].x == 0).all()
+            assert (out["points"][1].x == 1).all()
+        # a lazy stack of tensorclasses with fewer members
+        short = lazy_stack([_LazyStackPoint(x=torch.zeros(3))])
+        with pytest.raises(ValueError, match=match):
+            points.apply(fn, out=short)
+        assert (short[0].x == 0).all()
+        # the walk with threads, which returns a tensorclass without its class
+        out = td.clone()
+        with pytest.raises(ValueError, match=match):
+            td._fast_apply(fn, out=out, num_threads=2)
+        assert type(out["points"]) is _LazyStackPoint
+        assert (out["points"][1].x == 1).all()
+
+    def test_apply_out_lazy_stack_of_tensorclasses_locked(self):
+        # #3684: a locked out raises as it does for a lazy stack of TensorDicts
+        points = self._td_with_lazy_stack_of_tensorclasses().consolidate()["points"]
+        with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
+            points.apply(lambda x: x + 1, out=points)
+        assert (points[1].x == 1).all()
+
+    @pytest.mark.parametrize("num_threads", [1, 4])
+    def test_consolidate_to_inplace_num_threads_keeps_tensorclass(self, num_threads):
+        # #3684: with num_threads, a consolidated tensordict that holds a lazy
+        # stack of tensorclasses is not moved, and the stack keeps its class
+        td = self._td_with_lazy_stack_of_tensorclasses().consolidate()
+        try:
+            td.to("meta", inplace=True, num_threads=num_threads)
+        except (RuntimeError, ValueError):
+            pass
+        assert type(td["points"]) is _LazyStackPoint
+        assert type(td["points"][0]) is _LazyStackPoint
 
     def test_consolidate_to_inplace_locked_raises(self):
         # A tensordict that the user locked keeps raising
@@ -2717,6 +2973,48 @@ class TestGeneric:
         loaded = TensorDict.from_consolidated(filename)
         assert_allclose_td(saved, expected)
         assert_allclose_td(loaded, expected)
+
+    @pytest.mark.parametrize("num_threads", [0, 2])
+    @pytest.mark.parametrize("use_buffer", [False, True])
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    @pytest.mark.parametrize("kind", ["tensordict", "nested", "tensorclass"])
+    def test_consolidated_file_inplace_device(
+        self, tmp_path, kind, device, use_buffer, num_threads
+    ):
+        # #3698: consolidate(filename=..., inplace=True) raised a TypeError,
+        # after it wrote the file, on a tensordict with the device "cpu". It
+        # returns the tensordict with its device, as it does without a device.
+        a, b = torch.tensor([7, 8, 9]), torch.arange(3.0)
+        if kind == "tensordict":
+            td = TensorDict(a=a, b=b, batch_size=[3], device=device)
+        elif kind == "nested":
+            td = TensorDict(
+                a=a, nested=TensorDict(b=b, deep=TensorDict(c=b + 1)), device=device
+            )
+        else:
+            td = _AppendMemmapRows(x=a, label="a label", batch_size=[3], device=device)
+        expected = td.clone()
+        filename = tmp_path / "td.bin"
+        result = td.consolidate(
+            filename=filename,
+            inplace=True,
+            use_buffer=use_buffer,
+            num_threads=num_threads,
+        )
+        assert result is td
+        assert td.is_consolidated()
+        if device is not None:
+            device = torch.device(device)
+        levels = [td]
+        if kind == "nested":
+            levels += [td["nested"], td["nested", "deep"]]
+        for level in levels:
+            assert level.is_locked
+            assert level.device == device
+        assert (td == expected).all()
+        loaded = TensorDict.from_consolidated(filename)
+        assert loaded.device == device
+        assert (loaded == expected).all()
 
     def test_consolidated_lazy_stack_names_serialized(self):
         td = lazy_stack(
@@ -19477,6 +19775,254 @@ class TestGeneric:
                 expected = torch.where(expand_as_right(mask, leaf), value, leaf)
                 assert torch.equal(result.get(key), expected)
             assert_allclose_td(result, torch.where(~mask, td, value))
+
+    _SHARED_EXPANSION_CALLS = {
+        # name: (the call on the tensordict, the same work on one leaf)
+        "where": (
+            lambda td, other, mask, t: td.where(mask, other),
+            lambda x, y, mask, t: torch.where(expand_as_right(mask, x), x, y),
+        ),
+        "where_scalar": (
+            lambda td, other, mask, t: td.where(mask, 0),
+            lambda x, y, mask, t: torch.where(expand_as_right(mask, x), x, 0),
+        ),
+        "where_out": (
+            lambda td, other, mask, t: td.where(
+                mask, other=other, out=td, pad=0, update_batch_size=True
+            ),
+            lambda x, y, mask, t: torch.where(expand_as_right(mask, x), x, y),
+        ),
+        "masked_fill": (
+            lambda td, other, mask, t: td.masked_fill(mask, 0),
+            lambda x, y, mask, t: x.masked_fill(expand_as_right(mask, x), 0),
+        ),
+        "masked_fill_": (
+            lambda td, other, mask, t: td.masked_fill_(mask, 0),
+            lambda x, y, mask, t: x.masked_fill(expand_as_right(mask, x), 0),
+        ),
+        "mul": (
+            lambda td, other, mask, t: td * t,
+            lambda x, y, mask, t: x * expand_as_right(t, x),
+        ),
+        "mul_": (
+            lambda td, other, mask, t: td.mul_(t),
+            lambda x, y, mask, t: x * expand_as_right(t, x),
+        ),
+        "maximum": (
+            lambda td, other, mask, t: td.maximum(t),
+            lambda x, y, mask, t: x.maximum(expand_as_right(t, x)),
+        ),
+        "eq": (
+            lambda td, other, mask, t: td == t,
+            lambda x, y, mask, t: x == expand_as_right(t, x),
+        ),
+        "ge": (
+            lambda td, other, mask, t: td >= t,
+            lambda x, y, mask, t: x >= expand_as_right(t, x),
+        ),
+    }
+
+    @staticmethod
+    @contextlib.contextmanager
+    def _expand_as_right_calls():
+        # the calls of expand_as_right from where, masked_fill and the ops
+        calls = mock.Mock(wraps=expand_as_right)
+        with (
+            mock.patch("tensordict.utils.expand_as_right", calls),
+            mock.patch("tensordict.base.expand_as_right", calls),
+            mock.patch("tensordict._base.pointwise.expand_as_right", calls),
+        ):
+            yield calls
+
+    @pytest.mark.parametrize("call", list(_SHARED_EXPANSION_CALLS))
+    def test_mask_expanded_once_per_leaf_shape(self, call):
+        # #3609: where, masked_fill, td * tensor and td == tensor expand the
+        # mask or the tensor once per leaf shape, not once per leaf
+        td_call, leaf_call = self._SHARED_EXPANSION_CALLS[call]
+        td = TensorDict(
+            {f"a{i}": torch.randn(4, 3) for i in range(4)}
+            | {f"b{i}": torch.randn(4, 1) for i in range(4)},
+            batch_size=[4],
+        )
+        other = td + 1
+        mask = torch.tensor([True, False, True, False])
+        t = torch.tensor([0.0, 0.5, 1.0, 2.0])
+        expected = {
+            key: leaf_call(td[key].clone(), other[key], mask, t) for key in td.keys()
+        }
+        with self._expand_as_right_calls() as calls:
+            result = td_call(td, other, mask, t)
+        assert calls.call_count == 2
+        assert list(result.keys()) == list(expected)
+        for key, value in expected.items():
+            assert result[key].dtype == value.dtype
+            assert torch.equal(result[key], value), key
+
+    @pytest.mark.parametrize("call", list(_SHARED_EXPANSION_CALLS))
+    def test_shared_expansion_matches_per_leaf(self, call):
+        # #3609: with leaves of one shape that differ in dtype, nested
+        # tensordicts (one with a larger batch size) and a leaf with the shape
+        # of the mask, each leaf gets the result of its own expansion
+        td_call, leaf_call = self._SHARED_EXPANSION_CALLS[call]
+
+        def make(shift):
+            return TensorDict(
+                a=torch.arange(12.0).reshape(4, 3) + shift,
+                b=torch.arange(12, dtype=torch.float64).reshape(4, 3) - shift,
+                c=torch.arange(4.0) + shift,
+                d=torch.arange(8.0).reshape(4, 1, 2) * (shift + 1),
+                nested=TensorDict(
+                    a=torch.arange(12.0).reshape(4, 3) * (shift + 2),
+                    c=torch.arange(4.0) - shift,
+                    batch_size=[4],
+                ),
+                wide=TensorDict(
+                    e=torch.arange(24.0).reshape(4, 3, 2) + shift, batch_size=[4, 3]
+                ),
+                batch_size=[4],
+            )
+
+        td, other = make(0), make(1)
+        mask = torch.tensor([True, False, True, False])
+        t = torch.tensor([0.0, 0.5, 1.0, 2.0])
+        expected = {
+            key: leaf_call(td[key].clone(), other[key], mask, t)
+            for key in td.keys(True, True)
+        }
+        result = td_call(td, other, mask, t)
+        assert result.batch_size == td.batch_size
+        assert result["wide"].batch_size == td["wide"].batch_size
+        assert list(result.keys(True, True)) == list(expected)
+        for key, value in expected.items():
+            assert result[key].dtype == value.dtype
+            assert torch.equal(result[key], value), key
+
+    @pytest.mark.parametrize("mask_first", [True, False])
+    def test_shared_expansion_mask_among_leaves(self, mask_first):
+        # #3609: a mask or an operand that is one of the leaves changes as the
+        # leaves are written, and the leaves after it see the new values
+        def make():
+            leaves = {
+                "done": torch.tensor([True, False, True, False]),
+                "a": torch.arange(12.0).reshape(4, 3) + 1,
+                "b": torch.arange(12.0).reshape(4, 3) + 2,
+                "scale": torch.tensor([1.0, 2.0, 3.0, 4.0]),
+                "flag": torch.tensor([True, True, False, False]),
+            }
+            if not mask_first:
+                leaves = dict(reversed(leaves.items()))
+            return TensorDict(leaves, batch_size=[4])
+
+        td, expected = make(), make()
+        assert td.masked_fill_(td["done"], 0) is td
+        mask = expected["done"]
+        for leaf in expected.values():
+            leaf.masked_fill_(expand_as_right(mask, leaf), 0)
+        assert (td == expected).all()
+        assert (td["done"] == 0).all()
+        assert bool((td["a"] == 0).any()) is not mask_first
+
+        td, expected = make(), make()
+        other = td.apply(lambda x: ~x if x.dtype == torch.bool else -x)
+        assert td.where(td["done"], other, out=td) is td
+        mask = expected["done"]
+        for key, leaf in list(expected.items()):
+            expected[key] = torch.where(expand_as_right(mask, leaf), leaf, other[key])
+        assert (td == expected).all()
+        assert (td["a"][1] < 0).all() and (td["a"][0] > 0).all()
+
+        td, expected = make().float(), make().float()
+        assert td.mul_(td["scale"]) is td
+        scale = expected["scale"]
+        for leaf in expected.values():
+            leaf.mul_(expand_as_right(scale, leaf))
+        assert (td == expected).all()
+        assert (td["scale"] == torch.tensor([1.0, 4.0, 9.0, 16.0])).all()
+        scaled_once = (td["a"][:, 0] == torch.tensor([1.0, 8.0, 21.0, 40.0])).all()
+        assert bool(scaled_once) is mask_first
+
+    @pytest.mark.parametrize("inplace", [False, True])
+    def test_operand_with_grad_expanded_per_leaf(self, inplace):
+        # #3609: an operand that requires grad keeps one expanded view per
+        # leaf, so that its gradient is summed over the leaves as before
+        def make():
+            torch.manual_seed(0)
+            return TensorDict(
+                {f"a{i}": torch.randn(4, 3) for i in range(6)}, batch_size=[4]
+            )
+
+        td = make()
+        t = torch.tensor([0.3, 0.7, 1.1, 1.9], requires_grad=True)
+        with self._expand_as_right_calls() as calls:
+            result = td.mul_(t) if inplace else td * t
+        assert calls.call_count == 6
+        sum(leaf.sin().sum() for leaf in result.values()).backward()
+
+        t_ref = t.detach().clone().requires_grad_()
+        leaves = [
+            leaf.mul_(expand_as_right(t_ref, leaf))
+            if inplace
+            else leaf * expand_as_right(t_ref, leaf)
+            for leaf in make().values()
+        ]
+        sum(leaf.sin().sum() for leaf in leaves).backward()
+        assert torch.equal(t.grad, t_ref.grad)
+
+    @pytest.mark.parametrize("call", list(_SHARED_EXPANSION_CALLS))
+    def test_mask_expanded_per_leaf_when_compiling(self, call):
+        # #3609: under torch.compile each leaf keeps its own expansion, so
+        # that the traced code is the one from before the shared expansion
+        td_call, leaf_call = self._SHARED_EXPANSION_CALLS[call]
+        td = TensorDict(
+            {f"a{i}": torch.randn(4, 3) for i in range(4)}
+            | {f"b{i}": torch.randn(4, 1) for i in range(4)},
+            batch_size=[4],
+        )
+        other = td + 1
+        mask = torch.tensor([True, False, True, False])
+        t = torch.tensor([0.0, 0.5, 1.0, 2.0])
+        expected = {
+            key: leaf_call(td[key].clone(), other[key], mask, t) for key in td.keys()
+        }
+        with (
+            self._expand_as_right_calls() as calls,
+            mock.patch("tensordict.utils.is_compiling", return_value=True),
+        ):
+            result = td_call(td, other, mask, t)
+        assert calls.call_count == 8
+        assert list(result.keys()) == list(expected)
+        for key, value in expected.items():
+            assert result[key].dtype == value.dtype
+            assert torch.equal(result[key], value), key
+
+    @pytest.mark.parametrize("call", list(_SHARED_EXPANSION_CALLS))
+    def test_shared_expansion_symbolic_shapes(self, call):
+        # #3609: traced with symbolic sizes outside torch.compile, the shape of
+        # a leaf does not hash, and each leaf gets its own expansion, as before
+        td_call, leaf_call = self._SHARED_EXPANSION_CALLS[call]
+
+        def fn(a, b, c, mask, t):
+            td = TensorDict(a=a, b=b, c=c, batch_size=a.shape[:1])
+            result = td_call(td, td + 1, mask, t)
+            return result["a"], result["b"], result["c"]
+
+        def make():
+            return (
+                torch.arange(12.0).reshape(4, 3),
+                torch.arange(12.0).reshape(4, 3) + 1,
+                torch.arange(4.0).reshape(4, 1),
+                torch.tensor([True, False, True, False]),
+                torch.tensor([0.0, 0.5, 1.0, 2.0]),
+            )
+
+        with self._expand_as_right_calls() as calls:
+            traced = make_fx(fn, tracing_mode="symbolic")(*make())
+        assert calls.call_count == 3
+        *leaves, mask, t = make()
+        expected = [leaf_call(x.clone(), x + 1, mask, t) for x in leaves]
+        for value, value_expected in zip(traced(*make()), expected, strict=True):
+            assert value.dtype == value_expected.dtype
+            assert torch.equal(value, value_expected)
 
     def test_apply_out_batch_size_list(self):
         # a batch_size list equal to out.batch_size is accepted

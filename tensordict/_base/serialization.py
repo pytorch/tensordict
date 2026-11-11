@@ -31,6 +31,7 @@ from tensordict._archive import (
     _ArchivePath,
     _make_archive_like,
     _save_as_archive,
+    _td_method,
     is_memmap_archive,
     TENSORDICT_ARCHIVE_SUFFIX,
 )
@@ -1438,7 +1439,7 @@ class _Serialization:
             self.clear_device_()
             device = None
         else:
-            device = None
+            device = self.device
         result = self._fast_apply(
             assign_val,
             named=True,
@@ -1709,7 +1710,7 @@ class _Serialization:
                     future.result()
                 return result
             return TensorDictFuture(futures, result)
-        return self._memmap_(
+        result = self._memmap_(
             prefix=prefix,
             copy_existing=copy_existing,
             inplace=True,
@@ -1719,7 +1720,8 @@ class _Serialization:
             share_non_tensor=share_non_tensor,
             existsok=existsok,
             robust_key=robust_key,
-        ).lock_()
+        )
+        return _td_method(result, "lock_")()
 
     def save(
         self,
@@ -1798,7 +1800,7 @@ class _Serialization:
             ...     print((loaded == td).all())
             True
         """
-        return self.memmap(
+        return _td_method(self, "memmap")(
             prefix=prefix,
             copy_existing=copy_existing,
             num_threads=num_threads,
@@ -2012,7 +2014,7 @@ class _Serialization:
                 )
             return _memmap_atomically(
                 prefix,
-                lambda path: self.memmap(
+                lambda path: _td_method(self, "memmap")(
                     path,
                     copy_existing=copy_existing,
                     num_threads=num_threads,
@@ -2045,7 +2047,7 @@ class _Serialization:
                 return result
             return TensorDictFuture(futures, result)
 
-        return self._memmap_(
+        result = self._memmap_(
             prefix=prefix,
             copy_existing=copy_existing,
             inplace=False,
@@ -2055,7 +2057,8 @@ class _Serialization:
             share_non_tensor=share_non_tensor,
             existsok=existsok,
             robust_key=robust_key,
-        ).lock_()
+        )
+        return _td_method(result, "lock_")()
 
     def memmap_like(
         self,
@@ -2191,7 +2194,9 @@ class _Serialization:
             # we create an empty copy of self
             # This is because calling MMapTensor.from_tensor(mmap_tensor) does nothing
             # if both are in filesystem
-            input = self.apply(_memmap_like_stand_in, named=True, nested_keys=True)
+            input = _td_method(self, "apply")(
+                _memmap_like_stand_in, named=True, nested_keys=True
+            )
             result = input._memmap_(
                 prefix=prefix,
                 copy_existing=copy_existing,
@@ -2211,8 +2216,10 @@ class _Serialization:
                 return result
             return TensorDictFuture(futures, result)
 
-        input = self.apply(_memmap_like_stand_in, named=True, nested_keys=True)
-        return input._memmap_(
+        input = _td_method(self, "apply")(
+            _memmap_like_stand_in, named=True, nested_keys=True
+        )
+        result = input._memmap_(
             prefix=prefix,
             copy_existing=copy_existing,
             inplace=False,
@@ -2222,7 +2229,8 @@ class _Serialization:
             share_non_tensor=share_non_tensor,
             existsok=existsok,
             robust_key=robust_key,
-        ).lock_()
+        )
+        return _td_method(result, "lock_")()
 
     @classmethod
     def load(cls, prefix: str | Path, *args, **kwargs) -> Self:
