@@ -1570,20 +1570,18 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                 )
             for owner in owners:
                 # _reset_params only registers the leaves of _param_td: keep
-                # the None entries and the non-persistent buffers that are not
-                # leaves.
-                kept = owner._non_persistent_buffers_set
-                if kept:
-                    kept = kept.difference(
-                        keys if owner is self else owner._leaf_keys()
-                    )
-                params = {k: v for k, v in owner._parameters.items() if v is None}
-                buffers = {
-                    k: v for k, v in owner._buffers.items() if v is None or k in kept
-                }
+                # the None entries, and the parameters and buffers that are
+                # not leaves.
+                params = dict(owner._parameters)
+                buffers = dict(owner._buffers)
                 owner._reset_params()
-                owner._parameters.update(params)
-                owner._buffers.update(buffers)
+                leaves = {*owner._parameters, *owner._buffers}
+                owner._parameters.update(
+                    {k: v for k, v in params.items() if v is None or k not in leaves}
+                )
+                owner._buffers.update(
+                    {k: v for k, v in buffers.items() if v is None or k not in leaves}
+                )
         # A locked tensordict caches some of its reads, such as detach(), its
         # view under vmap and the list of its leaves: erase them in the
         # tensordicts above an assigned leaf, and in the locked tensordicts
@@ -1610,6 +1608,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                     break
                 td = td._param_td
         n = len(unexpected_keys)
+        n_missing = len(missing_keys)
         # The base now copies each entry into the (assigned) leaf, and reports
         # missing and unexpected keys.
         nn.Module._load_from_state_dict(
@@ -1627,6 +1626,14 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             for key in unexpected_keys[n:]
             if key in unexpected or key[len(prefix) :] not in local_state
         ]
+        if len(missing_keys) > n_missing:
+            # state_dict() holds the leaves only: a parameter or a buffer that
+            # is not a leaf has no key to miss.
+            if keys is None:
+                keys = self._leaf_keys()
+            missing_keys[n_missing:] = [
+                key for key in missing_keys[n_missing:] if key[len(prefix) :] in keys
+            ]
 
     def _leaf_keys(self) -> dict[str, NestedKey]:
         # Maps each registered name to the key of its leaf in _param_td.
