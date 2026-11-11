@@ -1462,13 +1462,14 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
                 non_blocking=non_blocking,
             )
         elif key[0] in self.keys():
-            return self._get_str(key[0], NO_DEFAULT)._set_tuple(
+            self._get_str(key[0], NO_DEFAULT)._set_tuple(
                 key[1:],
                 value,
                 inplace=inplace,
                 validated=validated,
                 non_blocking=non_blocking,
             )
+            return self
         # Direct set with full key path
         key_path = self._full_key_path(_KEY_SEP.join(key))
         if not validated:
@@ -1529,9 +1530,10 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
                 key[0], value, idx, validated=validated, non_blocking=non_blocking
             )
         td = self._get_str(key[0], NO_DEFAULT)
-        return td._set_at_tuple(
+        td._set_at_tuple(
             key[1:], value, idx, validated=validated, non_blocking=non_blocking
         )
+        return self
 
     # ---- Keys / structure ----
 

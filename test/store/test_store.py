@@ -206,6 +206,30 @@ class TestTensorDictStore:
         td.clear_redis()
         td.close()
 
+    @pytest.mark.parametrize("key", [("n", "y"), ("n", "m", "y")])
+    @pytest.mark.parametrize("method", ["set", "set_", "set_at_"])
+    def test_nested_set_returns_root(self, store_td, key, method):
+        store_td.set(
+            "n",
+            TensorDict(
+                y=torch.zeros(10),
+                m=TensorDict(y=torch.zeros(10), batch_size=[10]),
+                batch_size=[10],
+            ),
+        )
+        if method == "set_at_":
+            expected = torch.zeros(10)
+            expected[0] = 1
+            result = store_td.set_at_(key, torch.tensor(1.0), 0)
+        else:
+            expected = torch.ones(10)
+            result = getattr(store_td, method)(key, expected)
+        assert result is store_td
+        result.set("z", torch.full((10,), 2.0))
+        torch.testing.assert_close(store_td[key], expected)
+        torch.testing.assert_close(store_td["z"], torch.full((10,), 2.0))
+        assert "z" not in store_td["n"].keys()
+
     def test_basic_set_get(self, store_td):
         """Store and retrieve a tensor."""
         tensor = torch.randn(10, 3)
