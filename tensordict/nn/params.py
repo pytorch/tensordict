@@ -684,7 +684,10 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
 
     def _copy_leaf_counts(self, other: TensorDictParams) -> None:
         # For a copy that keeps the parameters and buffers of other, in order.
-        self.__dict__["_leaf_counts"] = other.__dict__.get("_leaf_counts")
+        # A copy that registered its own leaves (_new_unsafe under
+        # torch.compile) has its own counts already.
+        if self.__dict__.get("_leaf_counts") is None:
+            self.__dict__["_leaf_counts"] = other.__dict__.get("_leaf_counts")
 
     def _added_names(self) -> set[str] | None:
         # The names that register_parameter, register_buffer and attribute

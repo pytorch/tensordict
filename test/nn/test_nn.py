@@ -7157,6 +7157,56 @@ class TestTensorDictParams:
         result = module.load_state_dict(module.state_dict())
         assert result.missing_keys == result.unexpected_keys == []
 
+    @pytest.mark.parametrize("assign", [True, False])
+    @pytest.mark.parametrize("strict", [True, False])
+    @pytest.mark.parametrize("kind", ["buffer", "parameter"])
+    def test_load_state_dict_not_a_leaf_swap(self, kind, strict, assign):
+        # #3652: with swap_module_params_on_conversion, assign=True does not
+        # register the leaves again, so the entry was never dropped: it was
+        # reported as missing, as with assign=False. It loads as in
+        # test_load_state_dict_not_a_leaf.
+        params, registry = self._params_with_extra(kind)
+        extra = registry["extra"]
+        module = self._parent(params)
+        sd = {k: v.detach() + 1 for k, v in module.state_dict().items()}
+        assert set(sd) == {"params.a"}
+        prev = torch.__future__.get_swap_module_params_on_conversion()
+        torch.__future__.set_swap_module_params_on_conversion(True)
+        try:
+            result = module.load_state_dict(sd, strict=strict, assign=assign)
+        finally:
+            torch.__future__.set_swap_module_params_on_conversion(prev)
+        assert result.missing_keys == result.unexpected_keys == []
+        assert (params["a"] == 1).all()
+        assert registry["extra"] is extra
+        assert (extra == 5).all()
+
+    def test_load_state_dict_stale_name_compiled_copy(self, monkeypatch):
+        # #3652: under torch.compile, _new_unsafe registers the leaves of a
+        # copy again, so the copy has counts of its own and keeps them. A leaf
+        # that the counts of the source do not cover is then not an entry of
+        # the copy, and its name loads as in test_load_state_dict_stale_name
+        # once the leaf is gone. is_compiling is patched so that the copy
+        # takes that branch without compiling.
+        td = TensorDict(a=torch.zeros(3))
+        params = TensorDictParams(td, no_convert="skip")
+        td["c"] = torch.zeros(1)
+        assert list(params._buffers) == ["a"]
+        with monkeypatch.context() as patch:
+            patch.setattr("tensordict.nn.params.is_compiling", lambda: True)
+            copied = params.copy()
+        assert list(copied._buffers) == ["a", "c"]
+        del copied._param_td["c"]
+        module = self._parent(copied)
+        with pytest.raises(
+            RuntimeError, match=r'Missing key\(s\) in state_dict: "params.c"'
+        ):
+            module.load_state_dict(module.state_dict())
+        assert list(copied._buffers) == ["a", "c"]
+        result = module.load_state_dict(module.state_dict(), strict=False, assign=True)
+        assert result.missing_keys == result.unexpected_keys == []
+        assert list(copied._buffers) == ["a"]
+
     @pytest.mark.parametrize(
         "swap",
         [
