@@ -1867,6 +1867,47 @@ def test_expand_as_right_fewer_dims_message():
         expand_as_right(torch.zeros(3, 2), torch.zeros(3))
 
 
+def test_expand_as_right_shapes_and_messages():
+    # #3609: the results and the error texts of expand_as_right, for leading
+    # dims that are equal, of size one, or that do not fit
+    x = torch.arange(3)
+    out = expand_as_right(x, torch.zeros(3, 2, 4))
+    assert out.shape == (3, 2, 4)
+    assert out._base is x
+    assert (out == x.reshape(3, 1, 1)).all()
+    assert expand_as_right(x, x) is not x
+    assert expand_as_right(x, TensorDict(batch_size=[3, 5])).shape == (3, 5)
+    assert expand_as_right(torch.tensor(1), torch.zeros(3, 2)).shape == (3, 2)
+    assert expand_as_right(torch.zeros(1), torch.zeros(3, 2)).shape == (3, 2)
+    assert expand_as_right(torch.zeros(3, 1), torch.zeros(3, 2, 4)).shape == (3, 2, 4)
+    assert expand_as_right(torch.zeros(1, 2), torch.zeros(3, 2, 4)).shape == (3, 2, 4)
+    with pytest.raises(
+        RuntimeError,
+        match=re.escape(
+            "expand_as_right requires the destination tensor to have at least "
+            "as many dimensions as the input tensor, got "
+            "tensor.ndimension()=2 and dest.ndimension()=1"
+        ),
+    ):
+        expand_as_right(torch.zeros(3, 2), torch.zeros(3))
+    with pytest.raises(
+        RuntimeError,
+        match=re.escape(
+            "tensor shape is incompatible with dest shape, got: "
+            "tensor.shape=torch.Size([3, 2]), dest=torch.Size([3, 4, 2])"
+        ),
+    ):
+        expand_as_right(torch.zeros(3, 2), torch.zeros(3, 4, 2))
+    with pytest.raises(
+        RuntimeError,
+        match=re.escape(
+            "tensor shape is incompatible with dest shape, got: "
+            "tensor.shape=torch.Size([4]), dest=torch.Size([3, 2])"
+        ),
+    ):
+        expand_as_right(torch.zeros(4), TensorDict(batch_size=[3, 2]))
+
+
 def test_get_shared_executor():
     executor = _get_shared_executor(2)
     # repeated calls with the same thread count reuse the pool

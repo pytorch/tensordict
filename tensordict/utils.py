@@ -291,24 +291,65 @@ def expand_as_right(
                 [2, 2]])
 
     """
-    if dest.ndimension() < tensor.ndimension():
+    # Called once per leaf by where, masked_fill and the pointwise ops: each
+    # shape is read once, and equal leading dims skip the scan (#3609). When
+    # compiling, the scan always runs and expand reads dest.shape again after
+    # it: with dynamic shapes the shortcut would be traced as dead nodes, and
+    # a shape read before the check would give expand a runtime size where
+    # the check has made the dim a constant.
+    dest_ndim = dest.ndimension()
+    ndim = tensor.ndimension()
+    if dest_ndim < ndim:
         raise RuntimeError(
             "expand_as_right requires the destination tensor to have at least "
             f"as many dimensions as the input tensor, got"
-            f" tensor.ndimension()={tensor.ndimension()} and "
-            f"dest.ndimension()={dest.ndimension()}"
+            f" tensor.ndimension()={ndim} and "
+            f"dest.ndimension()={dest_ndim}"
         )
-    if any(
-        tensor.shape[i] != dest.shape[i] and tensor.shape[i] != 1
-        for i in range(tensor.ndimension())
-    ):
-        raise RuntimeError(
-            f"tensor shape is incompatible with dest shape, "
-            f"got: tensor.shape={tensor.shape}, dest={dest.shape}"
-        )
-    for _ in range(dest.ndimension() - tensor.ndimension()):
+    expand_shape = None
+    if ndim:
+        dest_shape = dest.shape
+        shape = tensor.shape
+        compiling = is_compiling()
+        if (compiling or shape != dest_shape[:ndim]) and any(
+            shape[i] != dest_shape[i] and shape[i] != 1 for i in range(ndim)
+        ):
+            raise RuntimeError(
+                f"tensor shape is incompatible with dest shape, "
+                f"got: tensor.shape={shape}, dest={dest_shape}"
+            )
+        if not compiling:
+            expand_shape = dest_shape
+    for _ in range(dest_ndim - ndim):
         tensor = tensor.unsqueeze(-1)
-    return tensor.expand(dest.shape)
+    return tensor.expand(dest.shape if expand_shape is None else expand_shape)
+
+
+def _expand_as_right_by_shape(
+    expanded: dict, tensor: torch.Tensor, dest: Any
+) -> torch.Tensor | TensorDictBase:
+    """``expand_as_right(tensor, dest)``, kept in ``expanded`` by the shape of ``dest``.
+
+    ``expanded`` is a dict that lives for one call of where, masked_fill or a
+    pointwise op: the leaves of one shape share one expanded view, since
+    ``expand_as_right`` reads nothing but the shape of ``dest`` (#3609). Each
+    leaf keeps its own view under ``torch.compile``, where a size used as a
+    dict key would be specialized, and for a tensor that requires grad, whose
+    gradient autograd would sum over the leaves in another order. The checks
+    are made per leaf, not once per call: a call before the first leaf would
+    add a frame without tensor operations for ``torch.compile`` to trace.
+    """
+    if is_compiling() or not isinstance(tensor, Tensor) or tensor.requires_grad:
+        return expand_as_right(tensor, dest)
+    shape = dest.shape
+    try:
+        out = expanded.get(shape)
+    except TypeError:
+        # the symbolic sizes of a traced tensor do not hash
+        return expand_as_right(tensor, dest)
+    if out is None:
+        out = expanded[shape] = expand_as_right(tensor, dest)
+    return out
 
 
 def expand_right(tensor: Tensor, shape: Sequence[int]) -> Tensor:
