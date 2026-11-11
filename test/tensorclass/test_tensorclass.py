@@ -9763,6 +9763,11 @@ class _ShadowItems(TensorClass["shadow"]):
     items: torch.Tensor
 
 
+class _ShadowMemmap(TensorClass["shadow"]):
+    indices: torch.Tensor
+    memmap: torch.Tensor
+
+
 # the calls of the archive writer to the methods of the classes below
 _ARCHIVE_CALLS = []
 
@@ -10142,6 +10147,23 @@ class TestShadow:
         with pytest.raises(NotImplementedError, match="nested tensors in archive"):
             c.memmap_like(tmp_path / "like.tdz")
         assert not (tmp_path / "like.tdz").exists()
+
+    def test_shadow_field_memmap_nested_tensor_archive(self, tmp_path):
+        # #3676: for a nested tensor, the archive writer also called the shadow
+        # field named memmap. Only the unbound call gets there: save and dumps
+        # call self.memmap first
+        rows = [torch.ones(2), torch.ones(3), torch.ones(1)]
+        with warnings.catch_warnings():
+            # the strided layout is a prototype
+            warnings.simplefilter("ignore", UserWarning)
+            nested = torch.nested.nested_tensor(rows)
+        c = _ShadowMemmap(indices=torch.arange(3), memmap=nested, batch_size=[3])
+        saved = TensorDictBase.memmap(c, tmp_path / "data.tdz")
+        loaded = TensorDict.load(tmp_path / "data.tdz")
+        for result in (saved, loaded):
+            assert type(result) is _ShadowMemmap
+            for row, expected in zip(result.memmap.unbind(0), rows):
+                assert (row == expected).all()
 
     def test_shadow_field_lazy_stack_save_archive(self, tmp_path):
         # #3676: the same for a lazy stack of shadow tensorclasses
