@@ -349,6 +349,27 @@ class TestGeneric:
         else:
             assert td.bytes(count_duplicates=count_duplicates) == 12 + 24 + 52 + 0
 
+    @pytest.mark.parametrize("count_duplicates", [False, True])
+    def test_bytes_frees_leaves_without_gc(self, count_duplicates):
+        # #3644: bytes() left a reference cycle that kept every leaf alive
+        # until the garbage collector ran.
+        def leaf_of_dropped_td():
+            td = TensorDict(
+                a=torch.zeros(3),
+                nested=TensorDict(b=torch.ones(2, 3), batch_size=[2]),
+            )
+            assert td.bytes(count_duplicates=count_duplicates) == 36
+            return weakref.ref(td["a"]), weakref.ref(td["nested", "b"])
+
+        was_enabled = gc.isenabled()
+        gc.disable()
+        try:
+            refs = leaf_of_dropped_td()
+            assert all(ref() is None for ref in refs)
+        finally:
+            if was_enabled:
+                gc.enable()
+
     def test_depth(self):
         td = TensorDict({"a": {"b": {"c": {"d": 0}, "e": 0}, "f": 0}, "g": 0}).lock_()
         assert td.depth == 3
