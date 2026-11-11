@@ -255,9 +255,14 @@ def _is_exporting() -> bool:
     # Whether torch.export is running. A function of its own, so that
     # TensorDict._clone names no torch module: after a graph break, Dynamo
     # skips a frame that holds no tensor and names none, and runs it eagerly.
-    # The flag is read rather than torch.compiler.is_exporting() called because
-    # Dynamo in torch 2.11 answers True to the call under torch.compile.
-    return torch.compiler._is_exporting_flag
+    # Where torch has the flag, it is read rather than
+    # torch.compiler.is_exporting() called, because Dynamo in torch 2.11
+    # answers True to the call under torch.compile. Newer torch has no flag,
+    # and its is_exporting() is False under torch.compile.
+    flag = getattr(torch.compiler, "_is_exporting_flag", None)
+    if flag is None:
+        return torch.compiler.is_exporting()
+    return flag
 
 
 class TensorDict(TensorDictBase):
