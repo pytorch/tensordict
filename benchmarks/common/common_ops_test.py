@@ -651,6 +651,16 @@ def test_clone(benchmark, td):
     benchmark(td.clone)
 
 
+@pytest.mark.parametrize("kind", ["rl_step", "flat100"])
+def test_shallow_copy(benchmark, kind):
+    # copy() is clone(False): a new tensordict that holds the same leaves
+    if kind == "rl_step":
+        td = _rl_step_td(32, 4)
+    else:
+        td = TensorDict({f"x{i}": torch.zeros(3) for i in range(100)}, batch_size=[3])
+    benchmark(td.copy)
+
+
 def test_clone_device(benchmark, td):
     benchmark(td.to("cpu").clone)
 
@@ -1178,6 +1188,17 @@ def test_lazy_stack_get_leaf(benchmark, members):
         [_rl_step_td(32, 4) for _ in range(members)], 0
     )
     benchmark(td.get, "obs")
+
+
+@pytest.mark.parametrize("members", [8, 256])
+@pytest.mark.parametrize("op", ["build", "slice"])
+def test_lazy_stack_build_slice(benchmark, op, members):
+    # building a lazy stack of tensordicts, and slicing one
+    tds = [_rl_step_td(32, 4) for _ in range(members)]
+    if op == "build":
+        benchmark(LazyStackedTensorDict.lazy_stack, tds, 0)
+    else:
+        benchmark(LazyStackedTensorDict.lazy_stack(tds, 0).__getitem__, slice(1, None))
 
 
 def test_select(benchmark, td, c):

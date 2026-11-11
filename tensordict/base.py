@@ -1780,11 +1780,41 @@ def _is_leaf_nontensor(cls: Type) -> bool:
 
     .. seealso:: :func:`~tensordict.default_is_leaf`.
     """
+    # ``_is_leaf_written`` below repeats this body: change both together.
     if cls is Tensor:
         return True
     if _is_tensor_collection(cls):
         return _pass_through_cls(cls)
     return issubclass(cls, torch.Tensor)
+
+
+def _is_leaf_written(cls: Type) -> bool:
+    """``_is_leaf_nontensor`` for the walks of ``update_``, whose function writes into its last operand.
+
+    ``_apply_nest`` tells these walks by it: under a nested tensordict that
+    the destination lacks, they skip the non-tensor entries (#3605).
+    """
+    if cls is Tensor:
+        return True
+    if _is_tensor_collection(cls):
+        return _pass_through_cls(cls)
+    return issubclass(cls, torch.Tensor)
+
+
+def _skip_non_tensor_dest(fn: Callable) -> Callable:
+    """Wraps the function of a walk of ``update_`` under a nested tensordict that the destination lacks.
+
+    There, ``_apply_nest`` pairs a leaf with the entry of the same name of an
+    empty copy of the parent of the nested tensordict. A non-tensor entry of
+    this copy is the entry of the source itself: ``fn`` would write into the
+    source, so it is not called (#3605).
+    """
+
+    def skip_non_tensor_dest(name, source, dest):
+        if dest is None or not _is_non_tensor(type(dest)):
+            return fn(name, source, dest)
+
+    return skip_non_tensor_dest
 
 
 def _load_metadata(prefix: Path):
@@ -4273,6 +4303,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         result = dict(self.__dict__)
         for key in (
             "_last_op",
+            # the records of the with blocks that self is in: they hold
+            # weakrefs, and the copy is in no block
+            "_last_op_queue",
             "_cache",
             "__lock_parents_weakrefs",
         ):
@@ -7534,7 +7567,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                             default=None,
                             prefix=name,
                             filter_empty=True,
-                            is_leaf=_is_leaf_nontensor,
+                            is_leaf=_is_leaf_written,
                             out=None,
                             call_on_unbatched=False,
                         )
@@ -7594,7 +7627,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             default=None,
             filter_empty=True,
             named=named,
-            is_leaf=_is_leaf_nontensor,
+            is_leaf=_is_leaf_written,
         )
         if written:
             self._write_back(*zip(*written), "update_")
@@ -7727,7 +7760,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 default=None,
                 filter_empty=True,
                 named=True,
-                is_leaf=_is_leaf_nontensor,
+                is_leaf=_is_leaf_written,
             )
             if skipped:
                 _warn_update_skipped(skipped)
@@ -9647,9 +9680,29 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     "batch_size and out.batch_size must be equal when both are provided."
                 )
             if device is not NO_DEFAULT and device != out.device:
-                raise RuntimeError(
-                    "device and out.device must be equal when both are provided."
+                nodes = (
+                    list(out.values(True, True, is_leaf=_is_tensor_collection))
+                    if checked and device is not None
+                    else None
                 )
+                # A lazy stack of tensorclasses cannot be written through out:
+                # it raises as before, before a device is set on any node
+                if nodes is None or any(
+                    is_tensorclass(node) and node._tensordict._lazy for node in nodes
+                ):
+                    raise RuntimeError(
+                        "device and out.device must be equal when both are provided."
+                    )
+                # As in _apply_nest: the caller moves every leaf of out to
+                # device, such as to(device, inplace=True) of a consolidated
+                # tensordict (#3645)
+                device = torch.device(device)
+                out._device = device
+                for node in nodes:
+                    if is_tensorclass(node):
+                        node._tensordict._device = device
+                    else:
+                        node._device = device
         else:
 
             def make_result(names=names, batch_size=batch_size):
@@ -9882,8 +9935,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 not call_on_nested and not is_leaf(type(item))
                 # and not is_non_tensor(item)
             ):
+                nested_fn = fn
                 if default is not NO_DEFAULT:
                     _others = [_other._get_str(key, default=None) for _other in others]
+                    if is_leaf is _is_leaf_written and _others[0] is None:
+                        # a walk of update_, which has one other tensordict
+                        nested_fn = _skip_non_tensor_dest(fn)
                     _others = [
                         self.empty(recurse=True) if _other is None else _other
                         for _other in _others
@@ -9894,7 +9951,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     ]
 
                 item_trsf = item._apply_nest(
-                    fn,
+                    nested_fn,
                     *_others,
                     inplace=inplace,
                     batch_size=batch_size,

@@ -30,6 +30,7 @@ import weakref
 from collections import defaultdict, namedtuple, OrderedDict, UserDict
 from copy import deepcopy
 from dataclasses import dataclass, field
+from multiprocessing.reduction import ForkingPickler
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, get_type_hints
@@ -214,6 +215,19 @@ class _AppendMemmapRows:
     label: str
 
 
+def _save_and_load(data, save):
+    # A copy of data made with pickle, with torch.save, or with the pickler of
+    # the multiprocessing queues and pipes (test_pickle_in_*_block)
+    if save == "pickle":
+        return pickle.loads(pickle.dumps(data))
+    if save == "ForkingPickler":
+        return pickle.loads(ForkingPickler.dumps(data))
+    buffer = io.BytesIO()
+    torch.save(data, buffer)
+    buffer.seek(0)
+    return torch.load(buffer, weights_only=False)
+
+
 class TestGeneric:
     # Generic, type-insensitive teests
 
@@ -334,6 +348,27 @@ class TestGeneric:
             assert td.bytes(count_duplicates=count_duplicates) == 12 + 24 + 52 + 52
         else:
             assert td.bytes(count_duplicates=count_duplicates) == 12 + 24 + 52 + 0
+
+    @pytest.mark.parametrize("count_duplicates", [False, True])
+    def test_bytes_frees_leaves_without_gc(self, count_duplicates):
+        # #3644: bytes() left a reference cycle that kept every leaf alive
+        # until the garbage collector ran.
+        def leaf_of_dropped_td():
+            td = TensorDict(
+                a=torch.zeros(3),
+                nested=TensorDict(b=torch.ones(2, 3), batch_size=[2]),
+            )
+            assert td.bytes(count_duplicates=count_duplicates) == 36
+            return weakref.ref(td["a"]), weakref.ref(td["nested", "b"])
+
+        was_enabled = gc.isenabled()
+        gc.disable()
+        try:
+            refs = leaf_of_dropped_td()
+            assert all(ref() is None for ref in refs)
+        finally:
+            if was_enabled:
+                gc.enable()
 
     def test_depth(self):
         td = TensorDict({"a": {"b": {"c": {"d": 0}, "e": 0}, "f": 0}, "g": 0}).lock_()
@@ -1517,6 +1552,75 @@ class TestGeneric:
         if device != "meta":
             assert (td["b", "c"] == 1).all()
 
+    @pytest.mark.parametrize("num_threads", [1, 4])
+    @pytest.mark.parametrize("lazy", [False, True])
+    @pytest.mark.parametrize("device", ["cpu", "meta"])
+    def test_consolidate_to_inplace_num_threads(self, device, lazy, num_threads):
+        # #3645: with num_threads, to(device, inplace=True) of a consolidated
+        # tensordict raised and left it unlocked. It gives the result of the
+        # call without threads. The tensordict has no device, so "cpu" is a
+        # change of device too.
+        def make():
+            td = TensorDict(
+                {
+                    "a": torch.arange(3.0),
+                    "b": {"c": torch.ones(3, 2)},
+                    "d": "a string!",
+                },
+                batch_size=[3],
+            )
+            if lazy:
+                td = LazyStackedTensorDict(*td.unbind(0))
+            return td.consolidate(metadata=True)
+
+        ref = make().to(device, inplace=True)
+        td = make()
+        result = td.to(device, inplace=True, num_threads=num_threads)
+        assert result is td
+        assert td.device == ref.device == torch.device(device)
+        assert td["b"].device == torch.device(device)
+        assert td.is_consolidated()
+        assert td.is_locked
+        assert td["b"].is_locked
+        storage = td._consolidated["storage"]
+        assert storage.device == torch.device(device)
+        assert list(td.keys(True, True)) == list(ref.keys(True, True))
+        for sub_td in td.tensordicts if lazy else [td]:
+            for value in sub_td.values(True, True):
+                assert value.device == torch.device(device)
+                assert value.untyped_storage().data_ptr() == storage.data_ptr()
+        assert td[0]["d"] == "a string!"
+        if device != "meta":
+            assert (td == ref).all()
+
+    @pytest.mark.parametrize("num_threads", [1, 4])
+    def test_consolidate_to_inplace_num_threads_all_or_nothing(self, num_threads):
+        # #3645: a consolidated tensordict that the call cannot move (it holds
+        # a lazy stack of tensorclasses) is not left with a device that its
+        # leaves are not on
+        @tensorclass
+        class Point:
+            x: torch.Tensor
+
+        td = TensorDict(
+            {
+                "a": torch.arange(2.0),
+                "l": lazy_stack([Point(x=torch.zeros(3)), Point(x=torch.ones(3))]),
+            },
+            batch_size=[2],
+        ).consolidate()
+        try:
+            td.to("meta", inplace=True, num_threads=num_threads)
+        except (RuntimeError, ValueError):
+            pass
+        devices = {
+            leaf.device
+            for member in (td.select("a"), *td["l"].tensordicts)
+            for leaf in member.values(True, True)
+        }
+        assert len(devices) == 1
+        assert td.device is None or td.device == devices.pop()
+
     def test_consolidate_to_inplace_locked_raises(self):
         # A tensordict that the user locked keeps raising
         td = TensorDict(a=torch.zeros(3), batch_size=[3]).lock_()
@@ -1956,6 +2060,115 @@ class TestGeneric:
         result = pickle.loads(pickle.dumps(td))
         assert result.names == ["x", "y"]
         assert result[0]["b"].names == ["y"]
+
+    @pytest.mark.parametrize("save", ["pickle", "torch.save", "ForkingPickler"])
+    @pytest.mark.parametrize(
+        "kind",
+        [
+            "td",
+            "tensorclass",
+            "lazy_stack",
+            pytest.param(
+                "h5",
+                marks=pytest.mark.skipif(not _has_h5py, reason="h5py not installed"),
+            ),
+        ],
+    )
+    def test_pickle_in_lock_block(self, kind, save, tmp_path):
+        # #3578: a tensor collection can be pickled inside its own
+        # `with data.unlock_():` or `with data.lock_():` block. The copy is in
+        # no block, and the block of the original still ends as it should.
+        x = torch.arange(3.0)
+        if kind == "td":
+            data = TensorDict(x=x, batch_size=[3])
+        elif kind == "tensorclass":
+            data = _AppendMemmapRows(x=x, label="a", batch_size=[3])
+        elif kind == "lazy_stack":
+            data = lazy_stack([TensorDict(x=x), TensorDict(x=x + 1)])
+            x = torch.stack([x, x + 1])
+        else:
+            data = PersistentTensorDict.from_dict(
+                {"x": x}, filename=tmp_path / "td.h5", batch_size=[3]
+            )
+        copies = []
+        try:
+            data.lock_()
+            with data.unlock_():
+                copy = _save_and_load(data, save)
+                copies.append(copy)
+                assert type(copy) is type(data)
+                assert not copy.is_locked
+                torch.testing.assert_close(copy.get("x"), x)
+                with copy.lock_():
+                    assert copy.is_locked
+                assert not copy.is_locked
+            assert data.is_locked
+            data.unlock_()
+            with data.lock_():
+                copy = _save_and_load(data, save)
+                copies.append(copy)
+                assert copy.is_locked
+                torch.testing.assert_close(copy.get("x"), x)
+                with copy.unlock_():
+                    assert not copy.is_locked
+                assert copy.is_locked
+            assert not data.is_locked
+            # outside a block, as before
+            copy = _save_and_load(data, save)
+            copies.append(copy)
+            assert not copy.is_locked
+            torch.testing.assert_close(copy.get("x"), x)
+        finally:
+            if kind == "h5":
+                for td in (data, *copies):
+                    td.close()
+
+    @pytest.mark.parametrize("save", ["pickle", "torch.save", "ForkingPickler"])
+    @pytest.mark.parametrize(
+        "op",
+        [
+            lambda td: td.flatten_keys(),
+            lambda td: td.view(-1),
+            lambda td: td.to(torch.float64),
+        ],
+        ids=["flatten_keys", "view", "to"],
+    )
+    def test_pickle_in_write_back_block(self, op, save):
+        # #3578: the result of an operation can be pickled inside the block
+        # that writes it back, and the block still writes it back.
+        td = TensorDict(
+            a=torch.zeros(3, 4),
+            n=TensorDict(b=torch.zeros(3, 4), batch_size=[3, 4]),
+            batch_size=[3, 4],
+        )
+        with op(td) as other:
+            copy = _save_and_load(other, save)
+            assert copy.batch_size == other.batch_size
+            assert_allclose_td(copy, other)
+            for key in list(other.keys(True, True)):
+                other[key] = other[key] + 1
+            with copy.lock_():
+                assert copy.is_locked
+            assert not copy.is_locked
+        assert (td == 1).all()
+        assert (copy == 0).all()
+
+    @pytest.mark.parametrize("save", ["pickle", "torch.save", "ForkingPickler"])
+    def test_pickle_in_to_module_block(self, save):
+        # #3578: `with params.to_module(module) as swapped:` is a block of the
+        # tensordict that to_module returns, which holds the parameters that
+        # the module had. It can be pickled inside the block.
+        module = nn.Linear(2, 2)
+        weight = module.weight.detach().clone()
+        params = TensorDict.from_module(module).data.clone().zero_()
+        with params.to_module(module) as swapped:
+            assert (module.weight == 0).all()
+            copy = _save_and_load(swapped, save)
+            torch.testing.assert_close(copy["weight"].data, weight)
+            torch.testing.assert_close(
+                _save_and_load(params, save)["weight"], params["weight"]
+            )
+        torch.testing.assert_close(module.weight.data, weight)
 
     def test_to_device_batch_size_nested_only(self):
         # When the device changes and the root holds only nested tensordicts,
@@ -8522,6 +8735,24 @@ class TestGeneric:
         assert td_load.names == td.names
         assert (td_load == td).all()
 
+    @pytest.mark.parametrize("inside", [False, True])
+    def test_torch_load_weights_only_with_block(self, inside, tmpdir):
+        # #3578: the save of a tensordict that is, or has been, the subject of
+        # a with block does not hold the records of its blocks (a deque, which
+        # weights_only=True does not load).
+        td = TensorDict(a=torch.arange(3.0), batch_size=[3]).lock_()
+        filename = Path(tmpdir) / "td.pt"
+        with td.unlock_():
+            td["b"] = torch.ones(3)
+            if inside:
+                torch.save(td, filename)
+        if not inside:
+            torch.save(td, filename)
+        td_load = torch.load(filename, weights_only=True)
+        assert type(td_load) is TensorDict
+        assert td_load.is_locked is not inside
+        assert (td_load == td).all()
+
     @pytest.mark.parametrize(
         "method,kwargs",
         [
@@ -13679,6 +13910,282 @@ class TestGeneric:
         assert set(out.keys(True)) == {"x", "n", ("n", "y")}
         assert out["x"] is td["x"]
 
+    @pytest.mark.parametrize(
+        "kind",
+        [
+            "flat",
+            "nested",
+            "locked",
+            "named",
+            "device",
+            "memmap",
+            "shared",
+            "non_tensor",
+            "tensorclass",
+            "lazy_stack",
+            "parameter",
+            "unbatched",
+        ],
+    )
+    def test_shallow_copy_select_exclude_entries(self, kind, tmp_path):
+        # #3575: copy(), clone(False), select and exclude build their result
+        # in one pass. The result keeps the type, batch size, names, device
+        # and key order, is not locked, shared or memory-mapped, and shares
+        # its entries with the source: a shallow copy holds the same leaves
+        # and a new shallow copy of each nested collection; select and exclude
+        # hold the same entries, and a new node only on the path of a nested
+        # key.
+        def leaf(*shape):
+            return torch.zeros(3, *shape)
+
+        source = {"a": leaf(2), "b": leaf()}
+        kwargs = {}
+        if kind != "flat":
+            source["n"] = {"c": leaf(), "m": {"e": leaf(1)}}
+        if kind == "named":
+            kwargs["names"] = ["time"]
+        elif kind == "device":
+            kwargs["device"] = "cpu"
+        elif kind == "non_tensor":
+            source["s"] = NonTensorData("x", batch_size=[3])
+            source["st"] = NonTensorStack("x", "y", "z")
+        elif kind == "tensorclass":
+            source["tc"] = _AppendMemmapRows(x=leaf(2), label="x", batch_size=[3])
+        elif kind == "lazy_stack":
+            source["ls"] = lazy_stack([TensorDict(q=torch.zeros(2)) for _ in range(3)])
+        elif kind == "parameter":
+            source["p"] = nn.Parameter(leaf(2))
+            source["buffer"] = nn.Buffer(leaf())
+        elif kind == "unbatched":
+            source["u"] = tensordict.UnbatchedTensor(torch.zeros(7))
+            source["mmt"] = MemoryMappedTensor.from_tensor(leaf(2))
+        td = TensorDict(source, batch_size=[3], **kwargs)
+        if kind == "locked":
+            td.lock_()
+        elif kind == "memmap":
+            td.memmap_(tmp_path)
+        elif kind == "shared":
+            td.share_memory_()
+        keys = list(td.keys())
+
+        def check_node(src, out):
+            assert out is not src
+            assert type(out) is type(src)
+            assert out.batch_size == src.batch_size
+            assert out.names == src.names
+            assert out.device == src.device
+            assert not out.is_locked
+            assert not out.is_shared()
+            assert not out.is_memmap()
+
+        def check_copy(src, out):
+            check_node(src, out)
+            assert list(out._tensordict) == list(src._tensordict)
+            for key, value in src._tensordict.items():
+                new = out._tensordict[key]
+                assert type(new) is type(value)
+                if not is_tensor_collection(value):
+                    assert new is value
+                    continue
+                assert new is not value
+                if type(value) is TensorDict:
+                    check_copy(value, new)
+
+        def check_same_entries(src, out, expected_keys):
+            check_node(src, out)
+            assert list(out._tensordict) == expected_keys
+            for key in expected_keys:
+                assert out._tensordict[key] is src._tensordict[key]
+
+        check_copy(td, td.copy())
+        check_copy(td, td.clone(False))
+        check_same_entries(td, td.exclude(keys[0]), keys[1:])
+        check_same_entries(td, td.select(*keys[1:]), keys[1:])
+        check_same_entries(td, td.select(*keys[::-1]), keys[::-1])
+        check_same_entries(td, td.select(*keys, "missing", strict=False), keys)
+        check_same_entries(td, td.select(), [])
+        if kind != "flat":
+            node = td._tensordict["n"]
+            selected = td.select("a", ("n", "c"))
+            excluded = td.exclude(("n", "c"), "b")
+            for out, out_keys, node_keys in (
+                (selected, ["a", "n"], ["c"]),
+                (excluded, [key for key in keys if key != "b"], ["m"]),
+            ):
+                check_node(td, out)
+                assert list(out._tensordict) == out_keys
+                for key in out_keys:
+                    assert (out._tensordict[key] is td._tensordict[key]) == (key != "n")
+                check_same_entries(node, out._tensordict["n"], node_keys)
+        if not td.is_locked:
+            # in place: the tensordict itself, with the same entries
+            for inplace_op, kept in (
+                (lambda src: src.select(*keys[1:], inplace=True), keys[1:]),
+                (lambda src: src.exclude(keys[0], inplace=True), keys[1:]),
+            ):
+                src = td.copy()
+                entries = dict(src._tensordict)
+                assert inplace_op(src) is src
+                assert list(src._tensordict) == kept
+                for key in kept:
+                    assert src._tensordict[key] is entries[key]
+
+    def test_shallow_copy_keeps_tensors_without_a_call(self, monkeypatch):
+        # #3575: a shallow copy keeps each exact Tensor as it is, without a
+        # call for each leaf. Every other entry still goes through
+        # _clone_value, which keeps a tensor of another class and makes a
+        # shallow copy of a tensor collection.
+        seen = []
+        clone_value = tensordict._td._clone_value
+
+        def counting_clone_value(value, recurse):
+            seen.append((type(value), recurse))
+            return clone_value(value, recurse)
+
+        monkeypatch.setattr(tensordict._td, "_clone_value", counting_clone_value)
+        td = TensorDict({f"k{i}": torch.zeros(3) for i in range(10)}, batch_size=[3])
+        for out in (td.copy(), td.clone(False)):
+            assert seen == []
+            assert list(out.keys()) == list(td.keys())
+            for key, value in td.items():
+                assert out._tensordict[key] is value
+        td = TensorDict(
+            a=torch.zeros(3),
+            p=nn.Parameter(torch.zeros(3)),
+            u=tensordict.UnbatchedTensor(torch.zeros(2)),
+            m=MemoryMappedTensor.from_tensor(torch.zeros(3)),
+            n=TensorDict(c=torch.zeros(3), batch_size=[3]),
+            batch_size=[3],
+        )
+        out = td.copy()
+        assert seen == [
+            (nn.Parameter, False),
+            (tensordict.UnbatchedTensor, False),
+            (MemoryMappedTensor, False),
+            (TensorDict, False),
+        ]
+        for key in ("a", "p", "u", "m"):
+            assert out._tensordict[key] is td._tensordict[key]
+        assert out["n"] is not td["n"]
+        assert out["n", "c"] is td["n", "c"]
+        # a deep copy clones every entry, as before
+        del seen[:]
+        cloned = td.clone()
+        for key in ("a", "p", "m", ("n", "c")):
+            assert cloned[key] is not td[key]
+
+    @pytest.mark.parametrize("reports_tensordict", [False, True])
+    def test_shallow_copy_select_exclude_subclass_new_unsafe(self, reports_tensordict):
+        # #3575: only an exact TensorDict builds its copy in one pass. A
+        # subclass whose _new_unsafe takes no `nested` argument keeps
+        # copy(), clone(), select, exclude and split_keys, also when its
+        # instances report TensorDict as their __class__.
+        class StrictNewUnsafe(TensorDict):
+            if reports_tensordict:
+                __class__ = property(lambda self: TensorDict)
+
+            @classmethod
+            def _new_unsafe(
+                cls,
+                source=None,
+                batch_size=None,
+                device=None,
+                names=None,
+                non_blocking=None,
+                lock=False,
+            ):
+                return super()._new_unsafe(
+                    source=source,
+                    batch_size=batch_size,
+                    device=device,
+                    names=names,
+                    non_blocking=non_blocking,
+                    lock=lock,
+                )
+
+        td = StrictNewUnsafe(
+            {"a": torch.zeros(3, 2), "b": torch.zeros(3), "n": {"c": torch.zeros(3)}},
+            batch_size=[3],
+        )
+
+        def check(out, keys, same_leaves=True):
+            assert type(out) is StrictNewUnsafe
+            assert out is not td
+            assert out.batch_size == td.batch_size
+            assert list(out.keys()) == keys
+            for key in out.keys(True, True):
+                assert (out[key] is td[key]) == same_leaves
+                assert (out[key] == td[key]).all()
+
+        check(td.copy(), ["a", "b", "n"])
+        check(td.clone(False), ["a", "b", "n"])
+        check(td.clone(), ["a", "b", "n"], same_leaves=False)
+        check(td.select("a", "n"), ["a", "n"])
+        check(td.select("b", ("n", "c")), ["b", "n"])
+        check(td.exclude("a"), ["b", "n"])
+        check(td.exclude(("n", "c")), ["a", "b", "n"])
+        first, second = td.split_keys(["a"])
+        check(first, ["a"])
+        check(second, ["b", "n"])
+        # as an entry of a TensorDict, and in place
+        parent = TensorDict(x=torch.zeros(3), sub=td, batch_size=[3])
+        for out in (parent.copy(), parent.select("sub"), parent.exclude("x")):
+            assert type(out["sub"]) is StrictNewUnsafe
+            assert out["sub", "a"] is td["a"]
+        src = td.copy()
+        assert src.select("a", inplace=True) is src
+        check(src, ["a"])
+
+    def test_shallow_copy_select_exclude_without_entries(self, monkeypatch):
+        # #3575: a result without entries has nothing to gain from the
+        # one-pass call, so it is built with the call that every result was
+        # built with before, without `nested`. So is each shallow copy of a
+        # NonTensorData, whose tensordict has no entries.
+        nested_args = []
+        new_unsafe = TensorDict._new_unsafe.__func__
+
+        def recording_new_unsafe(cls, *args, **kwargs):
+            nested_args.append(kwargs.get("nested"))
+            return new_unsafe(cls, *args, **kwargs)
+
+        monkeypatch.setattr(
+            TensorDict, "_new_unsafe", classmethod(recording_new_unsafe)
+        )
+        empty = TensorDict(batch_size=[3], names=["time"], device="cpu")
+        # without a device, the deep clone is built by the same call as the copy
+        no_device = TensorDict(batch_size=[3])
+        td = TensorDict(a=torch.zeros(3, 2), b=torch.zeros(3), batch_size=[3])
+        for src, call in (
+            (empty, lambda: empty.copy()),
+            (empty, lambda: empty.clone(False)),
+            (empty, lambda: empty.clone()),
+            (no_device, lambda: no_device.clone()),
+            (empty, lambda: empty.select()),
+            (empty, lambda: empty.exclude("a")),
+            (td, lambda: td.select()),
+            (td, lambda: td.select("missing", strict=False)),
+            (td, lambda: td.exclude("a", "b")),
+        ):
+            del nested_args[:]
+            out = call()
+            assert nested_args == [None]
+            assert type(out) is TensorDict
+            assert out is not src
+            assert out.batch_size == src.batch_size
+            assert out.names == src.names
+            assert out.device == src.device
+            assert out.is_empty()
+            assert not out.is_locked
+        data = NonTensorData("x", batch_size=[3])
+        for call in (data.copy, lambda: data.clone(False)):
+            del nested_args[:]
+            out = call()
+            assert nested_args and set(nested_args) == {None}
+            assert type(out) is NonTensorData
+            assert out is not data
+            assert out.data == "x"
+            assert out.batch_size == data.batch_size
+
     def test_separates(self):
         td = TensorDict(a=0, b=TensorDict(c=0, d=0))
         td_sep = td.separates("a", ("b", ("d",)))
@@ -14616,6 +15123,36 @@ class TestGeneric:
 
         td1b = torch.squeeze(td2, dim=1)
         assert td1b.batch_size == td1.batch_size
+
+    @pytest.mark.parametrize("batch_size", [[1], [1, 1]])
+    def test_squeeze_all_dims_leaf_without_feature_dims(self, batch_size):
+        # #3647: squeeze() raised a TypeError when every batch dim has size 1
+        # and a leaf has no dims after the batch dims
+        td = TensorDict(
+            a=torch.arange(1.0).view(batch_size),
+            b=torch.ones(*batch_size, 2),
+            nested=TensorDict(c=torch.zeros(batch_size), batch_size=batch_size),
+            batch_size=batch_size,
+            names=[f"d{i}" for i in range(len(batch_size))],
+        )
+        for out in (td.squeeze(), torch.squeeze(td)):
+            assert out.batch_size == torch.Size([])
+            assert out.names == []
+            assert out["a"].shape == torch.Size([])
+            assert out["a"].data_ptr() == td["a"].data_ptr()
+            assert out["b"].shape == torch.Size([2])
+            assert out["nested"].batch_size == torch.Size([])
+            assert out["nested", "c"].shape == torch.Size([])
+            assert (out == td.reshape(())).all()
+
+        @tensorclass
+        class MyData:
+            a: torch.Tensor
+
+        data = MyData(a=torch.zeros(batch_size), batch_size=batch_size)
+        out = data.squeeze()
+        assert out.batch_size == torch.Size([])
+        assert out.a.shape == torch.Size([])
 
     def test_stack_from_tensordict(self):
         td = TensorDict(

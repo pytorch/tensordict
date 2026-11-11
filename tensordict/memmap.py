@@ -449,8 +449,8 @@ class MemoryMappedTensor(torch.Tensor):
         else:
             shape_numel = torch.Size(shape).numel()
         if filename is None:
-            handler = _FileHandler(input.dtype.itemsize * shape_numel)
             if isinstance(shape, torch.Tensor):
+                handler = _FileHandler(input.dtype.itemsize * shape_numel)
                 offsets_strides = torch._nested_compute_contiguous_strides_offsets(
                     shape
                 )
@@ -463,7 +463,28 @@ class MemoryMappedTensor(torch.Tensor):
                     *offsets_strides,
                 )
             else:
-                result = torch.frombuffer(memoryview(handler.buffer), dtype=input.dtype)
+                # torch.frombuffer crashes on a quantized dtype of 1 element
+                if shape_numel or input.is_quantized:
+                    handler = _FileHandler(input.dtype.itemsize * shape_numel)
+                    result = torch.frombuffer(
+                        memoryview(handler.buffer), dtype=input.dtype
+                    )
+                else:
+                    # mmap cannot map 0 bytes: a tensor with no elements maps one
+                    # element and views none of it
+                    handler = _FileHandler(input.dtype.itemsize)
+                    try:
+                        result = torch.frombuffer(
+                            memoryview(handler.buffer), dtype=input.dtype
+                        )[:0]
+                        if copy_data:
+                            result.view(shape).copy_(input)
+                        else:
+                            result.view(shape)
+                    except Exception:
+                        # an invalid call raises what mapping 0 bytes raises
+                        _FileHandler(0)
+                        raise
                 result = result.view(shape)
             result = cls(result)
         else:
@@ -1170,6 +1191,16 @@ class MemoryMappedTensor(torch.Tensor):
             )
         else:
             shape = torch.Size(shape)
+            if 0 in shape and out.numel() == 1:
+                # the handler of a tensor with no elements maps one element
+                try:
+                    empty = torch.reshape(out[:0], shape)
+                    if index is not None:
+                        empty[index]
+                    out = out[:0]
+                except Exception:
+                    # an invalid shape or index raises as one element does
+                    pass
             out = torch.reshape(out, shape)
 
         if index is not None:
