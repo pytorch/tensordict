@@ -153,6 +153,12 @@ def test_plain_set_nested(benchmark):
     benchmark(lambda: td.set(key, tensor))
 
 
+def test_plain_set_scalar(benchmark):
+    # a Python scalar: the class of the value is checked against the accepted classes
+    td = TensorDict(a=torch.zeros(3))
+    benchmark(lambda: td.set("x", 1.0))
+
+
 def test_plain_set_stack_nested(benchmark):
     td = big_nested_stacked_td()[0][0]
     key = tuple(str(j) for j in range(20, 0, -1))
@@ -764,6 +770,24 @@ def test_getitem_memmap_on_disk(benchmark, tmp_path, index):
     benchmark(td.__getitem__, index)
 
 
+@pytest.mark.parametrize("indices", [256, 1024])
+def test_getitem_int_list(benchmark, indices):
+    # a batch of DataLoader(td, collate_fn=lambda x: x): 5 leaves, 2 of them
+    # nested, read with a list of ints
+    rows = 4096
+    td = TensorDict(
+        {
+            "a": torch.randn(rows, 3),
+            "b": torch.randn(rows, 4),
+            "c": torch.randn(rows, 5),
+            "meta": {"id": torch.arange(rows), "weight": torch.rand(rows)},
+        },
+        batch_size=[rows],
+    )
+    index = torch.randint(0, rows, (indices,)).tolist()
+    benchmark(td.__getitem__, index)
+
+
 @pytest.mark.parametrize(
     "device", [None, "cpu"] + (["cuda"] if torch.cuda.is_available() else [])
 )
@@ -1165,6 +1189,17 @@ def test_lazy_stack_get_leaf(benchmark, members):
         [_rl_step_td(32, 4) for _ in range(members)], 0
     )
     benchmark(td.get, "obs")
+
+
+@pytest.mark.parametrize("members", [8, 256])
+@pytest.mark.parametrize("op", ["build", "slice"])
+def test_lazy_stack_build_slice(benchmark, op, members):
+    # building a lazy stack of tensordicts, and slicing one
+    tds = [_rl_step_td(32, 4) for _ in range(members)]
+    if op == "build":
+        benchmark(LazyStackedTensorDict.lazy_stack, tds, 0)
+    else:
+        benchmark(LazyStackedTensorDict.lazy_stack(tds, 0).__getitem__, slice(1, None))
 
 
 def test_select(benchmark, td, c):
