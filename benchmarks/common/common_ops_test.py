@@ -641,6 +641,17 @@ def test_lazy_stack_to_tensordict(benchmark, batch, features):
     benchmark(td.to_tensordict)
 
 
+@pytest.mark.parametrize(
+    "batch,features", [(32, 4), (4096, 64)], ids=["rl_step", "large"]
+)
+def test_update__dense_from_lazy_stack(benchmark, batch, features):
+    td = LazyStackedTensorDict.lazy_stack(
+        [_rl_step_td(batch, features) for _ in range(8)], 0
+    )
+    dense = td.to_tensordict()
+    benchmark(dense.update_, td)
+
+
 def test_clone(benchmark, td):
     benchmark(td.clone)
 
