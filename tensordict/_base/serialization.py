@@ -761,6 +761,14 @@ class _Serialization:
                     f"UnbatchedTensor entries cannot be consolidated yet, but "
                     f"{unravel_key(total_key)!r} is one."
                 )
+            if value.is_quantized:
+                # torch ends the process when the bytes of a quantized tensor
+                # are copied
+                raise NotImplementedError(
+                    f"Quantized tensors cannot be consolidated yet, but "
+                    f"{unravel_key(total_key)!r} is one. Store its int_repr() "
+                    f"or dequantize() instead."
+                )
             if getattr(value, "is_nested", False):
                 if value.layout is torch.jagged:
                     # Get the values

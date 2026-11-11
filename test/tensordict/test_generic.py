@@ -1477,6 +1477,97 @@ class TestGeneric:
         check(source.consolidate(filename=path))
         check(TensorDict.from_consolidated(path))
 
+    @staticmethod
+    def _quantized_tensor():
+        with warnings.catch_warnings():
+            # recent torch releases warn that quantized tensors are deprecated
+            warnings.filterwarnings(
+                "ignore",
+                "torch.quantize_per_tensor, torch.quantize_per_channel",
+                UserWarning,
+            )
+            return torch.quantize_per_tensor(torch.arange(4.0), 0.1, 0, torch.quint8)
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {},
+            {"metadata": True},
+            {"num_threads": 2},
+            {"num_threads": 2, "return_early": True},
+            {"inplace": True},
+            {"filename": True},
+            {"filename": True, "num_threads": 2},
+        ],
+        ids=[
+            "default",
+            "metadata",
+            "threads",
+            "return_early",
+            "inplace",
+            "filename",
+            "filename_threads",
+        ],
+    )
+    @pytest.mark.parametrize(
+        "holder", ["top", "after_plain", "nested", "lazy_stack", "tensorclass"]
+    )
+    def test_consolidate_quantized_raises(self, holder, kwargs, tmp_path):
+        # #3716: consolidate() ended the process with a segmentation fault
+        # when a leaf was a quantized tensor, because torch crashes when the
+        # bytes of such a tensor are copied. It raises instead, before it
+        # copies a leaf or touches the file. With a plain leaf copied first
+        # (after_plain), some of the calls raised a NotImplementedError of
+        # torch's instead.
+        q = self._quantized_tensor()
+        if holder == "top":
+            td, key = TensorDict(x=q), "'x'"
+        elif holder == "after_plain":
+            td, key = TensorDict(a=torch.zeros(3), x=q), "'x'"
+        elif holder == "nested":
+            td, key = TensorDict(n={"x": q}), "('n', 'x')"
+        elif holder == "lazy_stack":
+            td, key = lazy_stack([TensorDict(x=q), TensorDict(x=q)]), "('0', 'x')"
+        else:
+            td, key = TensorDict(tc=_LazyStackPoint(x=q)), "('tc', 'x')"
+        kwargs = dict(kwargs)
+        path = tmp_path / "td.bin"
+        TensorDict(a=torch.arange(3.0)).consolidate(filename=path)
+        saved = path.read_bytes()
+        if kwargs.pop("filename", False):
+            kwargs["filename"] = path
+        message = (
+            f"Quantized tensors cannot be consolidated yet, but {key} is one. "
+            "Store its int_repr() or dequantize() instead."
+        )
+        with pytest.raises(NotImplementedError, match=f"^{re.escape(message)}$"):
+            td.consolidate(**kwargs)
+        assert path.read_bytes() == saved
+        assert not td.is_consolidated()
+        assert not td.is_locked
+        if holder == "top":
+            assert td["x"] is q
+        assert q.is_quantized
+        assert q.int_repr().tolist() == [0, 10, 20, 30]
+
+    @pytest.mark.parametrize("num_threads", [0, 2])
+    def test_consolidate_quantized_values(self, num_threads, tmp_path):
+        # #3716: the integer and the float values of a quantized tensor, which
+        # the error names, consolidate as any other leaf
+        q = self._quantized_tensor()
+        td = TensorDict(i=q.int_repr(), f=q.dequantize(), a=torch.zeros(3))
+        path = tmp_path / "td.bin"
+        for td_c in (
+            td.consolidate(num_threads=num_threads),
+            td.consolidate(filename=path, num_threads=num_threads),
+            TensorDict.from_consolidated(path),
+        ):
+            assert td_c.is_consolidated()
+            assert td_c["i"].dtype == torch.uint8
+            assert td_c["i"].tolist() == [0, 10, 20, 30]
+            assert td_c["f"].dtype == torch.float32
+            assert_allclose_td(td_c, td)
+
     def test_consolidate_threads_after_closure_drop(self):
         # #3563: the worker threads are done with the functions that
         # consolidate() and to(device) drop before these return
