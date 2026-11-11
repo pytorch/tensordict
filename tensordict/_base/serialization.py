@@ -1067,6 +1067,7 @@ class _Serialization:
         device = torch.device(device) if device is not None else None
         # the size of the file at filename if it is written in place
         inplace_filesize = 0
+        inplace_file_id = None
         if filename is None:
             storage = torch.empty(
                 filesize,
@@ -1102,6 +1103,9 @@ class _Serialization:
                     # needed when device ctx differs
                     device=torch.device("cpu"),
                 )
+                if inplace_filesize:
+                    # the file that a source leaf may map, identified once
+                    inplace_file_id = _file_id(filename)
             else:
                 total_storage = MemoryMappedTensor.empty(
                     shape=(filesize + suffix,),
@@ -1176,7 +1180,7 @@ class _Serialization:
                         or not v.is_contiguous()
                         or (
                             inplace_filesize
-                            and _may_map_file(v, filename, inplace_filesize)
+                            and _may_map_file(v, inplace_file_id, inplace_filesize)
                         )
                     ):
                         v = v.clone(memory_format=torch.contiguous_format)
@@ -1219,6 +1223,19 @@ class _Serialization:
                         )
 
             else:
+                if inplace_filesize:
+                    # #3672: the workers read the leaves while the file is
+                    # written, and with return_early while its metadata is.
+                    # A CPU leaf that may map a file that is written in
+                    # place is copied here, before they start.
+                    values = [
+                        v.clone(memory_format=torch.contiguous_format)
+                        if not v.is_nested
+                        and v.device == storage.device
+                        and _may_map_file(v, inplace_file_id, inplace_filesize)
+                        else v
+                        for v in values
+                    ]
 
                 def _copy_chunk(start_idx, stop_idx):
                     """Copies values[start_idx:stop_idx] into their storage slices.
@@ -1325,7 +1342,7 @@ class _Serialization:
                     or not v.is_contiguous()
                     or (
                         inplace_filesize
-                        and _may_map_file(v, filename, inplace_filesize)
+                        and _may_map_file(v, inplace_file_id, inplace_filesize)
                     )
                 ):
                     v = v.clone(memory_format=torch.contiguous_format)
@@ -2866,22 +2883,28 @@ def _replace_existing_file(filename) -> int:
     return 0
 
 
-def _may_map_file(tensor: torch.Tensor, filename, filesize: int) -> bool:
-    """Whether the CPU ``tensor`` may be a map of the file at ``filename``, of ``filesize`` bytes.
+def _may_map_file(
+    tensor: torch.Tensor, file_id: tuple[int, int, int] | None, filesize: int
+) -> bool:
+    """Whether the CPU ``tensor`` may be a map of the file ``file_id``, of ``filesize`` bytes.
 
+    ``file_id`` is what :func:`_file_id` returns for the file, or ``None``.
     The storage of a file map cannot be resized and is no larger than the
     file. A :class:`~tensordict.MemoryMappedTensor` of another file is not
-    one.
+    one: as :func:`os.path.samefile` does, its file is compared by device and
+    inode, with one ``os.stat`` per leaf.
     """
     storage = tensor.untyped_storage()
     if storage.resizable() or storage.nbytes() > filesize:
         return False
     mapped = getattr(tensor, "_filename", None)
-    if mapped is not None:
+    if mapped is not None and file_id is not None:
         try:
-            return os.path.samefile(mapped, filename)
+            stat = os.stat(mapped)
         except OSError:
             pass
+        else:
+            return (stat.st_dev, stat.st_ino) == file_id[:2]
     return True
 
 

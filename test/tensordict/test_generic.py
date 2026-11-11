@@ -2019,16 +2019,18 @@ class TestGeneric:
         [-8, 0, 1, 8, "footer", 1000, 1_000_000],
     )
     def test_consolidated_file_overwrite_replace_fails_reads_back(
-        self, tmp_path, tail, num_threads, return_early
+        self, tmp_path, tmp_path_factory, tail, num_threads, return_early
     ):
         # #3672: a larger file that cannot be replaced is written in place and
         # keeps its size. The metadata is written at the end of the file,
         # where from_consolidated reads it: the file reads back what was saved
         filename = tmp_path / "td.bin"
         expected = TensorDict(z=torch.tensor([500, 501]), batch_size=[2])
-        expected.consolidate(filename=tmp_path / "fresh.bin")
-        fresh = (tmp_path / "fresh.bin").read_bytes()
-        os.remove(tmp_path / "fresh.bin")
+        # a new file, in a folder of its own: Windows cannot remove a file
+        # while it is mapped
+        fresh = tmp_path_factory.mktemp("fresh") / "fresh.bin"
+        expected.consolidate(filename=fresh)
+        fresh = fresh.read_bytes()
         footer = len(fresh) - 16
         size = len(fresh) + (footer if tail == "footer" else tail)
         filename.write_bytes(b"\xff" * size)
@@ -2315,6 +2317,98 @@ class TestGeneric:
         loaded = TensorDict.from_consolidated(filename)
         assert set(loaded.keys()) == set(expected.keys())
         assert_allclose_td(loaded, expected)
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS, reason="simulates the in-place write of Windows with a mock"
+    )
+    @pytest.mark.parametrize("return_early", [False, True])
+    @pytest.mark.parametrize(
+        "other_device",
+        [
+            "subclass",
+            pytest.param(
+                "cuda",
+                marks=pytest.mark.skipif(
+                    not torch.cuda.is_available(), reason="CUDA not available"
+                ),
+            ),
+        ],
+    )
+    def test_consolidated_file_overwrite_replace_fails_several_devices(
+        self, tmp_path, other_device, return_early
+    ):
+        # #3672: with leaves on several devices, the workers read the leaves
+        # of the source while the file is written, and with return_early
+        # while its metadata is. The CPU leaves that map a file that is
+        # written in place are read before: c lies where the new metadata
+        # goes, and a where the leaves before it are written
+        filename = tmp_path / "td.bin"
+        TensorDict(
+            a=torch.arange(300.0), b=torch.arange(8.0) + 100, c=torch.arange(4.0) + 200
+        ).consolidate(filename=filename)
+        size = filename.stat().st_size
+        original = TensorDict.from_consolidated(filename)
+        released = threading.Event()
+
+        class OtherDevice(torch.Tensor):
+            # stands in for a leaf on a GPU: its copy to the file waits until
+            # consolidate has returned
+
+            @property
+            def device(self):
+                return torch.device("cuda", 0)
+
+            @classmethod
+            def __torch_function__(cls, func, types, args=(), kwargs=None):
+                if func is torch.Tensor.contiguous:
+                    released.wait(30)
+                with torch._C.DisableTorchFunctionSubclass():
+                    return func(*args, **(kwargs or {}))
+
+        if other_device == "cuda":
+            first = torch.tensor([1.0, 2.0], device="cuda")
+        else:
+            first = torch.tensor([1.0, 2.0]).as_subclass(OtherDevice)
+        tensor = torch.arange(3.0)
+        leaves = {"k" * 400: original["c"], "a": original["a"][:4]}
+        source = TensorDict({"first": first, **leaves, "tensor": tensor})
+        expected = TensorDict(
+            {
+                "first": torch.tensor([1.0, 2.0]),
+                "k" * 400: torch.arange(4.0) + 200,
+                "a": torch.arange(4.0),
+                "tensor": torch.arange(3.0),
+            }
+        )
+        clones = []
+        tensor_clone = torch.Tensor.clone
+
+        def clone(tensor, *args, **kwargs):
+            clones.append(tensor)
+            return tensor_clone(tensor, *args, **kwargs)
+
+        if not return_early:
+            released.set()
+        with (
+            mock.patch("os.replace", side_effect=PermissionError),
+            mock.patch.object(torch.Tensor, "clone", clone),
+        ):
+            saved = source.consolidate(
+                filename=filename, num_threads=2, return_early=return_early
+            )
+            if return_early:
+                released.set()
+                saved = saved.result()
+        assert filename.stat().st_size == size
+        # the leaf under the new metadata, then every leaf
+        assert (saved["k" * 400] == expected["k" * 400]).all()
+        assert_allclose_td(saved, expected)
+        loaded = TensorDict.from_consolidated(filename)
+        assert set(loaded.keys()) == set(expected.keys())
+        assert_allclose_td(loaded, expected)
+        # only the leaves of the file are copied first
+        assert len(clones) == 2
+        assert all(clone is leaf for clone, leaf in zip(clones, leaves.values()))
 
     @pytest.mark.skipif(
         _IS_WINDOWS, reason="simulates the in-place write of Windows with a mock"
