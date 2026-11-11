@@ -38,10 +38,12 @@ from _utils_internal import _describe, check_known_failures, TestTensorDictsBase
 from tensordict import lazy_stack, TensorDict, UnbatchedTensor
 from tensordict._lazy import LazyStackedTensorDict
 from tensordict.base import is_tensor_collection
+from tensordict.memmap import MemoryMappedTensor
 from tensordict.nn import TensorDictParams
 from tensordict.store import LazyStackedTensorDictStore, TensorDictStore
 from tensordict.store._store import _has_redis
 from tensordict.tensorclass import NonTensorData, NonTensorStack, tensorclass
+from torch.utils.data import DataLoader
 
 _KNOWN_FAILURES_FILE = pathlib.Path(__file__).with_name("indexing_known_failures.json")
 _KNOWN_FAILURES = json.loads(_KNOWN_FAILURES_FILE.read_text())
@@ -354,6 +356,55 @@ _SHORTCUT_TDS = {
     "shared": lambda: _shortcut_nested().share_memory_(),
     "TensorDictParams": lambda: TensorDictParams(_shortcut_nested()),
 }
+# more tensordicts for the list indices of #3568
+_LIST_INDEX_TDS = {
+    "one leaf": lambda: TensorDict(a=torch.randn(4, 3), batch_size=[4]),
+    "one nested": lambda: TensorDict(n=_shortcut_nested(), batch_size=[4]),
+    "empty batch": lambda: TensorDict(
+        a=torch.randn(0, 3), b=torch.randn(0), batch_size=[0]
+    ),
+    "memmap": lambda: _shortcut_nested().memmap_(),
+    "memmap view": lambda: _shortcut_nested().memmap_()[:, 1:],
+    "memmap and tensors": lambda: TensorDict(
+        a=torch.randn(4, 3),
+        m=MemoryMappedTensor.from_tensor(torch.randn(4, 3)),
+        s=NonTensorData("x", batch_size=[4]),
+        n={"m": MemoryMappedTensor.from_tensor(torch.randn(4, 3))},
+        batch_size=[4],
+    ),
+}
+# the shortest list of ints that is turned into an index tensor (#3568)
+_LIST_MIN = 64
+_LIST_INDICES = {
+    "ascending": sorted([0, 2, 3] * _LIST_MIN),
+    "repeated": [1, 1, 0, 1] * _LIST_MIN,
+    "negative": [-1, 0, -3] * _LIST_MIN,
+    "shortest converted": ([3, 0, 1, 1] * _LIST_MIN)[:_LIST_MIN],
+    "longest kept": ([3, 0, 1, 1] * _LIST_MIN)[: _LIST_MIN - 1],
+    "short": [0, 2, 3],
+    "length 1": [2],
+    "in a tuple": ([0, 2] * _LIST_MIN,),
+    "out of range": [0, 10] * _LIST_MIN,
+    "short out of range": [0, 10],
+    "negative out of range": [-5] * _LIST_MIN,
+    "short negative out of range": [-5],
+    "empty": [],
+    "bools": [True, False, True, False],
+    "int and bool": [0, True] * _LIST_MIN,
+    "short int and bool": [0, True],
+    "NumPy ints": [np.int64(0), np.int64(2)] * _LIST_MIN,
+    "int and NumPy int": [0, np.int64(2)] * _LIST_MIN,
+    "nested": [[0, 1], [2, 0]],
+    "0-d tensors": [torch.tensor(0), torch.tensor(2)],
+    "int and 0-d tensor": [0] * _LIST_MIN + [torch.tensor(2)],
+    "beyond int64": [0] * _LIST_MIN + [2**70],
+    "short beyond int64": [2**70],
+    "int64 max": [2**63 - 1] * _LIST_MIN,
+    "short int64 max": [2**63 - 1],
+    "floats": [0.0, 1.0],
+    "range": range(2),
+    "list and slice": ([0, 2], slice(None)),
+}
 # indices that raise or warn, next to the pools of indices that torch takes
 _SHORTCUT_EXTRA_INDICES = {
     "out of range": 10,
@@ -563,6 +614,350 @@ class TestContainersMatchDense:
         monkeypatch.setattr(tensordict.base, "_get_eval_frame_callback", None)
         assert (td[1] == result).all()
         assert calls.count(torch.Tensor) == 2
+
+    @pytest.mark.parametrize("td_name", [*_SHORTCUT_TDS, *_LIST_INDEX_TDS])
+    def test_getitem_int_list(self, td_name, monkeypatch):
+        # #3568: a list of ints is turned into an index tensor once, for the
+        # plain and the memory-mapped tensors; the results, errors and warnings
+        # are those of the generic path, where every leaf takes the list
+        make = {**_SHORTCUT_TDS, **_LIST_INDEX_TDS}[td_name]
+        _check_shortcut_matches_generic(make, _LIST_INDICES, monkeypatch)
+
+    @pytest.mark.parametrize("td_name", ["nested", "names", "memmap", "memmap view"])
+    @pytest.mark.parametrize(
+        "lst",
+        [
+            sorted([0, 2, 3] * _LIST_MIN),
+            [1, 1, 0, 1] * _LIST_MIN,
+            [-1, 0] * _LIST_MIN,
+            ([3, 0] * _LIST_MIN)[:_LIST_MIN],
+            ([3, 0] * _LIST_MIN)[: _LIST_MIN - 1],
+            [0, 2, 3],
+            [2],
+        ],
+        ids=[
+            "ascending",
+            "repeated",
+            "negative",
+            "shortest converted",
+            "longest kept",
+            "short",
+            "length 1",
+        ],
+    )
+    def test_getitem_int_list_matches_tensor(self, td_name, lst):
+        # #3568: td[list] is td[tensor], and each leaf is leaf[list], for the
+        # lists that are converted and for the shorter ones, which are not
+        torch.manual_seed(0)
+        td = {**_SHORTCUT_TDS, **_LIST_INDEX_TDS}[td_name]()
+        result = td[lst]
+        expected = td[torch.tensor(lst)]
+        assert type(result) is type(expected)
+        assert result.batch_size == expected.batch_size
+        assert result.names == expected.names
+        assert result.device == expected.device
+        assert result.is_locked == expected.is_locked
+        assert result.is_memmap() == expected.is_memmap()
+        assert list(result.keys(True, True)) == list(td.keys(True, True))
+        for key, leaf in td.items(True, True):
+            assert type(result[key]) is torch.Tensor
+            assert torch.equal(result[key], leaf[lst])
+            assert torch.equal(result[key], expected[key])
+        # the list is left as it is, and the result is a copy
+        assert lst == list(lst)
+        result.zero_()
+        assert not (td[lst] == 0).all()
+
+    def test_getitem_int_list_converted_once(self, monkeypatch, tmp_path):
+        # #3568: for a list of at least _LIST_MIN ints, the plain tensors, the
+        # memory-mapped tensors and the nested TensorDicts take one index
+        # tensor; the other entries, the shorter lists and the lists that
+        # torch does not read as an int64 index tensor keep the list
+        calls = []
+        get_item = tensordict.base._get_item
+
+        def recording(item, index):
+            calls.append((type(item), index))
+            return get_item(item, index)
+
+        monkeypatch.setattr(tensordict.base, "_get_item", recording)
+        td = TensorDict(
+            a=torch.zeros(4, 3),
+            m=MemoryMappedTensor.from_tensor(torch.arange(4)),
+            p=torch.nn.Parameter(torch.zeros(4)),
+            s=NonTensorData("x", batch_size=[4]),
+            n={"b": torch.arange(4), "q": torch.nn.Parameter(torch.zeros(4))},
+            batch_size=[4],
+        )
+        assert tensordict._indexing._LIST_INDEX_MIN_LEN == _LIST_MIN
+        lst = ([0, 2] * _LIST_MIN)[:_LIST_MIN]
+        result = td[lst]
+        assert result.batch_size == torch.Size([len(lst)])
+        assert result["n", "b"].tolist() == lst
+        indices = dict(calls)
+        converted = [index for cls, index in calls if type(index) is torch.Tensor]
+        assert [cls for cls, index in calls if type(index) is torch.Tensor] == [
+            torch.Tensor,
+            MemoryMappedTensor,
+            torch.Tensor,
+        ]
+        assert all(index is converted[0] for index in converted)
+        assert converted[0].dtype is torch.int64 and converted[0].tolist() == lst
+        assert indices[torch.nn.Parameter] == (lst,)
+        assert indices[NonTensorData] == (lst,)
+        # the lists that keep the generic path
+        kept = {
+            "longest kept": lst[:-1],
+            "short": [0, 2],
+            "length 1": [2],
+            "empty": [],
+            "bools": [True, False, True, False],
+            "int and bool": [0, True] * _LIST_MIN,
+            "NumPy ints": [np.int64(0), np.int64(2)] * _LIST_MIN,
+            "int and NumPy int": [0, np.int64(2)] * _LIST_MIN,
+            "nested": [[0, 1], [2, 0]],
+            "0-d tensors": [torch.tensor(0), torch.tensor(2)],
+            "beyond int64": [0] * _LIST_MIN + [2**70],
+        }
+        for case, kept_lst in kept.items():
+            calls.clear()
+            try:
+                td[kept_lst]
+            except (ValueError, RuntimeError, OverflowError):
+                assert case == "beyond int64"
+            assert calls, case
+            assert all(index == (kept_lst,) for _, index in calls), case
+        # the list is converted only if the first two entries are plain or
+        # memory-mapped tensors: where a single leaf reads the list, and where
+        # another kind of entry comes first or second, every leaf takes the list
+        one_leaf = {
+            "one tensor": TensorDict(a=torch.arange(4), batch_size=[4]),
+            "non-tensor": TensorDict(
+                a=torch.arange(4), s=NonTensorData("x", batch_size=[4]), batch_size=[4]
+            ),
+            "parameter": TensorDict(
+                a=torch.arange(4), p=torch.nn.Parameter(torch.zeros(4)), batch_size=[4]
+            ),
+            "one nested": TensorDict(n={"a": torch.arange(4)}, batch_size=[4]),
+            "lazy stack": TensorDict(
+                a=torch.arange(4),
+                l=lazy_stack([TensorDict(b=torch.arange(4)) for _ in range(4)]),
+                batch_size=[4],
+            ),
+            "nested second": TensorDict(
+                a=torch.arange(4),
+                n={"b": torch.arange(4)},
+                c=torch.arange(4),
+                batch_size=[4],
+            ),
+            "nested first": TensorDict(
+                n={"b": torch.arange(4)},
+                a=torch.arange(4),
+                c=torch.arange(4),
+                batch_size=[4],
+            ),
+            "non-tensor first": TensorDict(
+                s=NonTensorData("x", batch_size=[4]),
+                a=torch.arange(4),
+                c=torch.arange(4),
+                batch_size=[4],
+            ),
+            "tensorclass second": TensorDict(
+                a=torch.arange(4),
+                t=_ShortcutTC(x=torch.arange(4), batch_size=[4]),
+                c=torch.arange(4),
+                batch_size=[4],
+            ),
+        }
+        for case, td_one in one_leaf.items():
+            calls.clear()
+            assert td_one[lst].batch_size == (len(lst),), case
+            assert calls, case
+            assert all(index == (lst,) for _, index in calls), case
+        # the leaves of a nested TensorDict share the tensor of the outer one
+        calls.clear()
+        TensorDict(
+            a=torch.arange(4),
+            b=torch.arange(4),
+            n={"c": torch.arange(4)},
+            batch_size=[4],
+        )[lst]
+        assert [type(index) for _, index in calls] == [torch.Tensor] * 3
+        assert all(index is calls[0][1] for _, index in calls)
+        # a memory-mapped tensor without elements records its index
+        calls.clear()
+        empty = TensorDict(
+            a=torch.arange(4), b=torch.arange(4), e=torch.zeros(4, 0), batch_size=[4]
+        )
+        empty = empty.memmap(tmp_path)
+        assert type(empty["e"]) is MemoryMappedTensor
+        result_empty = empty[lst]
+        assert [type(index) for _, index in calls] == [
+            torch.Tensor,
+            torch.Tensor,
+            tuple,
+        ]
+        assert result_empty["e"].shape == (len(lst), 0)
+        assert result_empty["a"].tolist() == lst
+        # also when it is one of the first two entries
+        calls.clear()
+        result_empty = TensorDict(e=empty["e"], a=torch.arange(4), batch_size=[4])[lst]
+        assert [type(index) for _, index in calls] == [tuple, torch.Tensor]
+        assert result_empty["e"].shape == (len(lst), 0)
+        # in a frame that Dynamo runs, every leaf takes the list
+        calls.clear()
+        monkeypatch.setattr(tensordict.base, "_get_eval_frame_callback", None)
+        assert (td[lst]["n", "b"] == result["n", "b"]).all()
+        assert all(type(index) is tuple for _, index in calls)
+
+    def test_getitem_int_list_errors(self):
+        # #3568: the errors of a list index are those of torch
+        td = _shortcut_nested()
+        for lst in (
+            [0, 10] * _LIST_MIN,
+            [-5] * _LIST_MIN,
+            [2**63 - 1] * _LIST_MIN,
+            [0] * _LIST_MIN + [2**70],
+            [0, 10],
+            [-5],
+            [2**63 - 1],
+            [2**70],
+        ):
+            with pytest.raises(Exception) as torch_err:
+                td["a"][lst]
+            with pytest.raises(type(torch_err.value)) as err:
+                td[lst]
+            assert str(err.value) == str(torch_err.value)
+        # an int beyond int64 raises only if a leaf reads it
+        assert TensorDict(batch_size=[4])[[2**70]].batch_size == torch.Size([1])
+
+    def test_getitem_int_list_default_device(self):
+        # #3568: the index tensor is on the CPU whatever the default device
+        td = _shortcut_nested()
+        lst = [0, 2] * _LIST_MIN
+        expected = td[lst]
+        with torch.device("meta"):
+            result = td[lst]
+        assert (result == expected).all()
+        assert result["a"].device.type == "cpu"
+
+    @pytest.mark.parametrize(
+        "device", ["meta"] + (["cuda"] if torch.cuda.is_available() else [])
+    )
+    def test_getitem_int_list_other_device(self, device, monkeypatch):
+        # #3568: the list is converted only if the first two entries are on the
+        # CPU; the leaves on another device that come after them take the same
+        # index tensor, which is on the CPU (torch moves it, as it moves the
+        # one it builds from the list), and give what leaf[list] gives
+        calls = []
+        get_item = tensordict.base._get_item
+
+        def recording(item, index):
+            calls.append(index)
+            return get_item(item, index)
+
+        monkeypatch.setattr(tensordict.base, "_get_item", recording)
+
+        def cpu():
+            return torch.arange(4)
+
+        def other():
+            return torch.arange(4, device=device)
+
+        lst = [0, 2] * _LIST_MIN
+        tds = {
+            "tensordict device": TensorDict(
+                a=other(), b=other(), c=other(), batch_size=[4], device=device
+            ),
+            "no tensordict device": TensorDict(a=other(), b=other(), batch_size=[4]),
+            "other device first": TensorDict(
+                a=other(), b=cpu(), c=cpu(), batch_size=[4]
+            ),
+            "other device second": TensorDict(
+                a=cpu(), b=other(), c=cpu(), batch_size=[4]
+            ),
+            "other device later": TensorDict(
+                a=cpu(),
+                b=cpu(),
+                c=other(),
+                n={"d": other(), "e": cpu()},
+                batch_size=[4],
+            ),
+        }
+        for case, td in tds.items():
+            calls.clear()
+            result = td[lst]
+            assert len(calls) == len(list(td.keys(True, True))), case
+            if case == "other device later":
+                assert all(index is calls[0] for index in calls), case
+                assert type(calls[0]) is torch.Tensor, case
+                assert calls[0].device.type == "cpu", case
+            else:
+                assert all(index == (lst,) for index in calls), case
+            assert result.device == td.device, case
+            for key, leaf in td.items(True, True):
+                assert result[key].device == leaf.device, case
+                assert result[key].shape == leaf[lst].shape, case
+                if device != "meta":
+                    assert torch.equal(result[key], leaf[lst]), case
+            # a shorter list is read by every leaf
+            short = lst[: _LIST_MIN - 1]
+            calls.clear()
+            td[short]
+            assert calls and all(index == (short,) for index in calls), case
+
+    @pytest.mark.parametrize("td_name", ["nested", "memmap"])
+    def test_dataloader_int_list(self, td_name):
+        # #3568: a DataLoader reads each batch with a list of ints
+        torch.manual_seed(0)
+        td = torch.cat([_shortcut_nested()] * _LIST_MIN)
+        rows = 4 * _LIST_MIN
+        td = TensorDict(dict(td.items()), batch_size=[rows])
+        if td_name == "memmap":
+            td = td.memmap_()
+        loader = DataLoader(td, batch_size=3 * _LIST_MIN, collate_fn=lambda x: x)  # noqa: TOR401
+        batches = list(loader)
+        assert [batch.batch_size for batch in batches] == [
+            (3 * _LIST_MIN,),
+            (_LIST_MIN,),
+        ]
+        for batch, index in zip(batches, torch.arange(rows).split(3 * _LIST_MIN)):
+            expected = td[index]
+            assert type(batch) is type(expected)
+            for key, value in expected.items(True, True):
+                assert torch.equal(batch[key], value)
+
+    def test_getitem_int_list_jit_trace(self, monkeypatch):
+        # #3568: under torch.jit.trace every leaf takes the list: torch.tensor
+        # warns there, and reading the list in the index does not
+        calls = []
+        get_item = tensordict.base._get_item
+
+        def recording(item, index):
+            calls.append(index)
+            return get_item(item, index)
+
+        monkeypatch.setattr(tensordict.base, "_get_item", recording)
+        td = _shortcut_nested()
+        lst = [0, 2] * _LIST_MIN
+        expected = td[lst]
+        calls.clear()
+
+        # the newest torch has no torch.jit.trace: patch the tracer test
+        monkeypatch.setattr(tensordict._indexing, "_is_jit_tracing", lambda: True)
+        result = td[lst]
+        assert calls and all(index == (lst,) for index in calls)
+        assert torch.equal(result["a"], expected["a"])
+        assert torch.equal(result["n", "d", "e"], expected["n", "d", "e"])
+
+    def test_compiled_int_list(self):
+        # #3568: a compiled td[list] takes the generic path, in one graph
+        td = _shortcut_nested()
+        lst = [0, 2] * _LIST_MIN
+        expected = td[lst]
+        result = torch.compile(lambda td: td[lst], backend="eager", fullgraph=True)(td)
+        assert result.batch_size == expected.batch_size
+        assert (result == expected).all()
 
 
 @functools.cache
