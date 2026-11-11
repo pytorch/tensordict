@@ -616,9 +616,11 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
       ``AttributeError`` when the class is defined. The field hides the
       attribute from the methods of the object too, so a name that other
       methods use does not work: a field ``keys`` breaks printing and
-      arithmetic. The constructor reads ``batch_size``, ``device`` and
-      ``names`` as its own arguments, so it cannot take a field with one of
-      these names by keyword.
+      arithmetic. The constructor reads the keywords ``batch_size``,
+      ``device`` and ``names`` as its own arguments, so it cannot take a
+      field with one of these names by keyword. A field ``batch_size`` or
+      ``device`` also hides the batch size or the device, and breaks
+      :func:`torch.stack`.
     - ``frozen``: the constructor locks the instance.
 
     The ``autocast``, ``nocast`` and ``tensor_only`` options of
