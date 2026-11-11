@@ -7318,16 +7318,18 @@ class TestTensorDictParams:
     @pytest.mark.parametrize("kind", ["buffer", "parameter"])
     def test_load_state_dict_not_a_leaf_no_key(self, kind, leaves, assign):
         # #3652: a state dict with no key for the TensorDictParams (it has no
-        # leaves, or the checkpoint lacks the module) loads as before. Without
-        # assign the entry is a missing key, as in 0.15.4. assign=True drops
-        # it, and so does not report it.
+        # leaves, or the checkpoint lacks the module) loads as before. The
+        # entry is a missing key, as in 0.15.4. Without leaves, assign=True
+        # drops it, and so does not report it (#3728: with leaves it keeps it).
         params, registry = self._params_with_extra(kind, leaves=leaves)
         extra = registry["extra"]
         root = nn.Module()
         root.child = self._parent(params)
         root.other = nn.Linear(1, 1)
         sd = {"other.weight": torch.ones(1, 1), "other.bias": torch.ones(1)}
-        missing = ["child.params.a"] * leaves + ["child.params.extra"] * (not assign)
+        missing = ["child.params.a"] * leaves + ["child.params.extra"] * (
+            leaves or not assign
+        )
         if missing:
             names = ", ".join(f'"{key}"' for key in missing)
             with pytest.raises(
@@ -7337,7 +7339,7 @@ class TestTensorDictParams:
         result = root.load_state_dict(sd, strict=False, assign=assign)
         assert result.missing_keys == missing
         assert result.unexpected_keys == []
-        if assign:
+        if assign and not leaves:
             assert "extra" not in registry
         else:
             assert registry["extra"] is extra
