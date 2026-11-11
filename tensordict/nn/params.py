@@ -13,6 +13,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import nullcontext
 from copy import copy
 from functools import wraps
+from itertools import islice
 from pathlib import Path
 from typing import (
     Any,
@@ -572,12 +573,13 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
 
         params = None
         buffers = None
+        copied = None
         if isinstance(parameters, dict):
             parameters = TensorDict(parameters)
         elif isinstance(parameters, TensorDictParams):
             params = dict(parameters._parameters)
             buffers = dict(parameters._buffers)
-            self._copy_registered_names(parameters)
+            copied = parameters
             parameters = parameters._param_td.copy().lock_()
             no_convert = "skip"
 
@@ -595,6 +597,8 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         if lock:
             self._param_td.lock_()
         self._reset_params(params=params, buffers=buffers)
+        if copied is not None:
+            self._copy_leaf_counts(copied)
         self._is_locked = False
         self._get_post_hook = []
 
@@ -635,16 +639,14 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                 )
             params = dict(parameters._parameters)
             buffers = dict(parameters._buffers)
-            registered = parameters
+            copied = parameters
             parameters = parameters._param_td
             no_convert = "skip"
         else:
-            registered = None
+            copied = None
 
         self = TensorDictParams.__new__(cls)
         nn.Module.__init__(self)
-        if registered is not None:
-            self._copy_registered_names(registered)
 
         self._param_td = parameters
         self.no_convert = no_convert
@@ -654,6 +656,8 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         if lock:
             self._param_td.lock_()
         self._reset_params(params=params, buffers=buffers)
+        if copied is not None:
+            self._copy_leaf_counts(copied)
         self._is_locked = False
         self._get_post_hook = []
         return self
@@ -678,24 +682,29 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                     val = new_val
         return val
 
-    def register_buffer(
-        self, name: str, tensor: Tensor | None, persistent: bool = True
-    ) -> None:
-        # Override: records the name. state_dict() writes the leaves only, so
-        # load_state_dict must tell this buffer from a leaf.
-        nn.Module.register_buffer(self, name, tensor, persistent=persistent)
-        self.__dict__.setdefault("_registered_names", set()).add(name)
+    def _copy_leaf_counts(self, other: TensorDictParams) -> None:
+        # For a copy that keeps the parameters and buffers of other, in order.
+        self.__dict__["_leaf_counts"] = other.__dict__.get("_leaf_counts")
 
-    def register_parameter(self, name: str, param: nn.Parameter | None) -> None:
-        # Override: records the name, as register_buffer does.
-        nn.Module.register_parameter(self, name, param)
-        self.__dict__.setdefault("_registered_names", set()).add(name)
-
-    def _copy_registered_names(self, other: TensorDictParams) -> None:
-        # For a copy that keeps the parameters and buffers of other.
-        registered = other.__dict__.get("_registered_names")
-        if registered:
-            self.__dict__["_registered_names"] = set(registered)
+    def _added_names(self) -> set[str] | None:
+        # The names that register_parameter, register_buffer and attribute
+        # assignment added since _reset_params registered the leaves. The
+        # registries keep insertion order and _reset_params fills them with
+        # the leaves first, so these names come after the recorded counts.
+        # nn.Module refuses a dotted name: one that is in a registry was put
+        # there for a leaf, or by a direct write.
+        counts = self.__dict__.get("_leaf_counts")
+        if counts is None:
+            return None
+        n_params, n_buffers = counts
+        if len(self._parameters) <= n_params and len(self._buffers) <= n_buffers:
+            return None
+        return {
+            name
+            for names, n in ((self._parameters, n_params), (self._buffers, n_buffers))
+            for name in islice(names, n, None)
+            if "." not in name
+        }
 
     def _reset_params(self, params: dict | None = None, buffers: dict | None = None):
         parameters = self._param_td
@@ -723,9 +732,15 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
 
             self._parameters.update(dict(_zip_strict(param_keys, params)))
             self._buffers.update(dict(_zip_strict(buffer_keys, buffers)))
+            # What is registered from here on comes after the leaves: see
+            # _added_names. A plain dict write: setting an attribute of an
+            # nn.Module costs more.
+            self.__dict__["_leaf_counts"] = (len(self._parameters), len(self._buffers))
         else:
             self._parameters.update(params)
             self._buffers.update(buffers)
+            # A copied registry: the caller copies the counts of its source.
+            self.__dict__["_leaf_counts"] = None
 
     @classmethod
     def __torch_function__(
@@ -994,7 +1009,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                 params=dict(self._parameters),
                 buffers=dict(self._buffers),
             )
-            out._copy_registered_names(self)
+            out._copy_leaf_counts(self)
             return out
 
         memo = {}
@@ -1516,12 +1531,16 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         keys = None
         # The names that register_parameter and register_buffer added.
         # state_dict() writes the leaves only: it has no key for these entries,
-        # unless a leaf has their name. As in 0.15.4, they load as any other
-        # entry when the state dict has no value under the prefix.
-        registered = self.__dict__.get("_registered_names")
-        if registered and not any(
-            val is not None and key.startswith(prefix)
-            for key, val in state_dict.items()
+        # unless a leaf has their name. They load as any other entry when the
+        # state dict has no value under the prefix (as in 0.15.4), and when
+        # there is no leaf: the state dict then has no key to tell it by.
+        registered = self._added_names()
+        if registered and not (
+            any(True for _ in self._param_td.keys(True, True))
+            and any(
+                val is not None and key.startswith(prefix)
+                for key, val in state_dict.items()
+            )
         ):
             registered = None
         # The keys of non-persistent buffers that are not leaves, where the
@@ -1610,11 +1629,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                 # the None entries, the non-persistent buffers that are not
                 # leaves, and the registered names that are not leaves.
                 kept = owner._non_persistent_buffers_set
-                added = (
-                    registered
-                    if owner is self
-                    else owner.__dict__.get("_registered_names")
-                )
+                added = registered if owner is self else owner._added_names()
                 if added:
                     kept = kept | added
                 if kept:

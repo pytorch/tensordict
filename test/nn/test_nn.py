@@ -7019,9 +7019,9 @@ class TestTensorDictParams:
     def test_load_state_dict_stale_name(self, how):
         # #3652: a name stays registered when its leaf is deleted or renamed
         # through a nested handle, or in the source tensordict of
-        # no_convert=True. No register_buffer or register_parameter call added
-        # it, so it loads as before: it is a missing key, and assign=True
-        # drops it.
+        # no_convert=True. It was registered as a leaf, not after the leaves,
+        # so it loads as before: it is a missing key, and assign=True drops
+        # it.
         td = TensorDict(
             a=torch.zeros(3),
             c=torch.zeros(1),
@@ -7043,8 +7043,6 @@ class TestTensorDictParams:
             stale = "c"
         registry = params._buffers if how == "source" else params._parameters
         assert stale in registry
-        # The writes of leaves record no name.
-        assert not params.__dict__.get("_registered_names")
         with pytest.raises(
             RuntimeError, match=rf'Missing key\(s\) in state_dict: "params.{stale}"'
         ):
@@ -7060,6 +7058,104 @@ class TestTensorDictParams:
         assert result.missing_keys == [f"params.{key}" for key in new]
         assert result.unexpected_keys == [f"params.{stale}"]
         assert list(registry) == leaves
+
+    @pytest.mark.parametrize("over", [False, True])
+    @pytest.mark.parametrize("assign", [True, False])
+    def test_load_state_dict_stale_name_and_entry(self, over, assign):
+        # #3652: next to a name whose leaf is gone, an entry registered after
+        # the leaves loads as in test_load_state_dict_not_a_leaf, and the
+        # stale name loads as before, also when register_buffer is called
+        # with that name: it keeps its place among the leaves.
+        td = TensorDict(a=torch.zeros(3), c=torch.zeros(1))
+        params = TensorDictParams(td, no_convert=True)
+        del td["c"]
+        assert list(params._buffers) == ["a", "c"]
+        if over:
+            params.register_buffer("c", torch.ones(1))
+        params.register_buffer("extra", torch.full((2,), 5.0))
+        extra = params._buffers["extra"]
+        module = self._parent(params)
+        result = module.load_state_dict(
+            module.state_dict(), strict=False, assign=assign
+        )
+        assert result.missing_keys == ([] if assign else ["params.c"])
+        assert result.unexpected_keys == []
+        assert list(params._buffers) == (
+            ["a", "extra"] if assign else ["a", "c", "extra"]
+        )
+        assert params._buffers["extra"] is extra
+
+    @pytest.mark.parametrize("assign", [True, False])
+    @pytest.mark.parametrize(
+        "steps,kept",
+        [
+            # A write through the root drops the entry (#3547): unchanged.
+            (["extra", "write"], []),
+            (["extra", "del extra"], []),
+            (["extra", "write", "other"], ["other"]),
+            (["extra", "other", "del extra"], ["other"]),
+            (["extra", "del extra", "other", "extra"], ["other", "extra"]),
+            (["extra", "double"], ["extra"]),
+            (["extra", "half"], ["extra"]),
+        ],
+        ids=lambda val: "-".join(val).replace(" ", "_") or "none",
+    )
+    def test_load_state_dict_not_a_leaf_order(self, steps, kept, assign):
+        # #3652: the entries are the names registered after the leaves. The
+        # ones that are still registered at the load are kept and are not
+        # reported, in any order of registrations, deletions and writes.
+        params = TensorDictParams(TensorDict(a=torch.zeros(3), n={"b": torch.zeros(2)}))
+        module = self._parent(params)
+        for step in steps:
+            if step == "write":
+                params["c"] = torch.zeros(1)
+            elif step == "double":
+                module.double()
+            elif step == "half":
+                module.half().float()
+            elif step.startswith("del "):
+                delattr(params, step[4:])
+            else:
+                params.register_buffer(step, torch.full((2,), 5.0))
+        leaves = list(params.keys(True, True))
+        entries = {name: params._buffers[name] for name in kept}
+        assert list(params._buffers) == kept
+        sd = {key: value.detach() + 1 for key, value in module.state_dict().items()}
+        assert len(sd) == len(leaves)
+        result = module.load_state_dict(sd, assign=assign)
+        assert result.missing_keys == result.unexpected_keys == []
+        assert list(params._buffers) == kept
+        for name, entry in entries.items():
+            assert params._buffers[name] is entry
+            assert (entry == 5).all()
+        for key in leaves:
+            assert (params[key] == 1).all()
+
+    def test_load_state_dict_not_a_leaf_no_leaves_two_loads(self):
+        # #3652: a TensorDictParams with no leaves loads as before, whatever
+        # the state dict has under its prefix: its own state dict has no key
+        # to tell the entry by. assign=True drops the entry, so the strict
+        # load of the own state dict returns afterwards.
+        params, registry = self._params_with_extra("buffer", leaves=False)
+        module = self._parent(params)
+        with pytest.raises(
+            RuntimeError, match=r'Missing key\(s\) in state_dict: "params.extra"'
+        ):
+            module.load_state_dict(module.state_dict())
+        result = module.load_state_dict(
+            {"params.bogus": torch.ones(1)}, strict=False, assign=False
+        )
+        assert result.missing_keys == ["params.extra"]
+        assert result.unexpected_keys == ["params.bogus"]
+        assert "extra" in registry
+        result = module.load_state_dict(
+            {"params.bogus": torch.ones(1)}, strict=False, assign=True
+        )
+        assert result.missing_keys == []
+        assert result.unexpected_keys == ["params.bogus"]
+        assert "extra" not in registry
+        result = module.load_state_dict(module.state_dict())
+        assert result.missing_keys == result.unexpected_keys == []
 
     @pytest.mark.parametrize(
         "swap",
