@@ -1413,6 +1413,76 @@ class TestZarrWriteOps:
         torch.testing.assert_close(nested_td["n", "y"], torch.ones(3, 2))
         torch.testing.assert_close(nested_td["n", "m", "y"], torch.zeros(3, 2))
 
+    @pytest.mark.parametrize(
+        "key,value_type",
+        [
+            (("o", "p"), TensorDict),
+            (("o", "p"), _NestedData),
+            (("o", "p", "n"), TensorDict),
+        ],
+    )
+    @pytest.mark.parametrize(
+        "index",
+        [0, slice(0, 2), [0, 2], torch.tensor([True, False, True])],
+        ids=["int", "slice", "list", "mask"],
+    )
+    def test_nested_set_at_tensordict(self, tmp_path, key, value_type, index):
+        # #3732: set_at_ with a nested key and a tensordict or a tensorclass
+        # as the value raised a TypeError
+        twin = TensorDict(
+            o=TensorDict(p=_nested_source(), batch_size=[3]), batch_size=[3]
+        )
+        value = twin[key][index] + 1
+        if value_type is not TensorDict:
+            value = value_type.from_tensordict(value)
+        td = PersistentTensorDict.from_dict(
+            twin, filename=tmp_path / "set_at.zarr", backend="zarr"
+        )
+        try:
+            result = td.set_at_(key, value, index)
+            assert result is td
+            expected = _nested_source()["n", "y"]
+            expected[index] += 1
+            torch.testing.assert_close(td["o", "p", "n", "y"], expected)
+            # every entry is as after the same call on a TensorDict
+            assert twin.set_at_(key, value, index) is twin
+            assert (td.to_tensordict() == twin).all()
+        finally:
+            td.close()
+
+    def test_nested_set_at_tensordict_wrapped_or_locked(self, nested_td):
+        # #3732: the same through a tensorclass over the file, with a
+        # dictionary of nested keys, and on a locked file
+        value = TensorDict(y=torch.ones(2))
+        tc = _NestedData.from_tensordict(nested_td)
+        assert tc.set_at_(("n", "m"), value, 0) is tc
+        assert nested_td.update_at_({("n", "m"): value}, 1) is nested_td
+        nested_td.lock_()
+        assert nested_td.set_at_(("n", "m"), value, 2) is nested_td
+        torch.testing.assert_close(nested_td["n", "m", "y"], torch.ones(3, 2))
+        torch.testing.assert_close(nested_td["n", "y"], _nested_source()["n", "y"])
+        torch.testing.assert_close(nested_td["a"], torch.zeros(3, 2))
+
+    def test_nested_set_at_other_values_unchanged(self, nested_td):
+        # #3732 left these alone: a tensor at a nested key and a tensordict at
+        # a one-part key write, and a dict raises as it does on a TensorDict
+        twin = _nested_source()
+        for td in (nested_td, twin):
+            assert td.set_at_(("n", "m", "y"), torch.ones(2), 0) is td
+            assert td.set_at_("n", TensorDict(y=torch.full((2,), 7.0)), 1) is td
+            with pytest.raises(RuntimeError, match="batch dimension mismatch"):
+                td.set_at_(("n", "m"), {"y": torch.full((2,), 9.0)}, 2)
+        assert (nested_td.to_tensordict() == twin).all()
+        assert not (twin == 9).any()
+
+    @pytest.mark.xfail(strict=True, reason="#NNNN")
+    def test_nested_set_at_missing_key_creates_no_group(self, nested_td):
+        # as td["n"].set_at_("zz", value, 0) does, the call creates the group
+        # n/zz before its KeyError; a TensorDict raises and writes nothing
+        with pytest.raises(KeyError):
+            nested_td.set_at_(("n", "zz"), TensorDict(y=torch.ones(2)), 0)
+        assert "zz" not in nested_td["n"].keys()
+
     def test_fill_zero(self, ztd):
         ztd.fill_("a", 1.0)
         assert (ztd["a"] == 1).all()
