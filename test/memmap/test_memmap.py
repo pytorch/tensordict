@@ -9,6 +9,7 @@ import os
 import pickle
 import stat
 import sys
+import time
 from contextlib import nullcontext
 from multiprocessing.reduction import ForkingPickler
 from pathlib import Path
@@ -435,6 +436,165 @@ class TestIndexing:
         assert y.shape == torch.Size([1])
         assert t.shape == torch.Size([10])
 
+    @staticmethod
+    def _check_view(parent, view, expected):
+        # the view is on the file or the shared memory of its parent
+        assert type(view) is MemoryMappedTensor
+        assert view._filename == parent._filename
+        assert view._handler is parent._handler
+        assert view._mode == parent._mode
+        assert torch.as_tensor(view._parent_shape).equal(
+            torch.as_tensor(parent._parent_shape)
+        )
+        assert view.shape == expected.shape
+        assert (view == expected).all()
+        if parent._filename is None:
+            with pytest.raises(RuntimeError, match="no file associated"):
+                view.filename
+            if os.name == "nt":
+                # the handler pickles through a fd
+                return
+            loaded = pickle.loads(ForkingPickler.dumps(view))
+        else:
+            assert view.filename == parent.filename
+            # the form that the filename setter stores
+            assert view._filename == str(Path(view._filename).absolute())
+            loaded = pickle.loads(pickle.dumps(view))
+        assert type(loaded) is MemoryMappedTensor
+        assert loaded._filename == parent._filename
+        assert loaded._mode == parent._mode
+        assert loaded.shape == expected.shape
+        assert (loaded == expected).all()
+
+    @pytest.mark.parametrize(
+        "make_view",
+        [
+            lambda t: t[1],
+            lambda t: t[1:3],
+            lambda t: t[1, :, 1],
+            lambda t: t[..., 0],
+            lambda t: t[None],
+            lambda t: t[::2],
+            lambda t: t[1:][0][1:],
+            lambda t: t.unbind(0)[2],
+            lambda t: t.unbind(1)[1],
+            lambda t: t.chunk(2, dim=1)[1],
+            lambda t: t.split(1, dim=2)[1],
+            lambda t: t[1:].unbind(1)[0],
+            lambda t: t[:, 1:].chunk(2)[1],
+            lambda t: t.split(3)[0][2],
+        ],
+        ids=[
+            "int",
+            "slice",
+            "tuple",
+            "ellipsis",
+            "none",
+            "step",
+            "view-of-view",
+            "unbind",
+            "unbind-dim1",
+            "chunk",
+            "split",
+            "slice-unbind",
+            "slice-chunk",
+            "split-int",
+        ],
+    )
+    @pytest.mark.parametrize(
+        "source",
+        ["file", "anonymous", "r", "r+", "unpickled", "td", "loaded-td", "atomic-td"],
+    )
+    def test_view_keeps_file(self, make_view, source, tmp_path):
+        # #3570: a view takes the file name of its parent as it is, and it has
+        # the file, the handler and the mode that it had through the setter
+        data = torch.arange(24).view(4, 3, 2)
+        if source == "anonymous":
+            t = MemoryMappedTensor.from_tensor(data)
+        elif source in ("td", "loaded-td", "atomic-td"):
+            if source == "atomic-td" and sys.platform == "win32":
+                pytest.skip("atomic=True is not supported on Windows")
+            td = TensorDict(a=data, batch_size=[4])
+            td = td.memmap(tmp_path / "td", atomic=source == "atomic-td")
+            if source == "loaded-td":
+                td = TensorDict.load_memmap(tmp_path / "td")
+            t = td["a"]
+        else:
+            filename = tmp_path / "tensor.memmap"
+            t = MemoryMappedTensor.from_tensor(data, filename=filename)
+            if source == "unpickled":
+                t = pickle.loads(pickle.dumps(t))
+            elif source != "file":
+                t = MemoryMappedTensor.from_filename(
+                    filename, data.dtype, data.shape, mode=source
+                )
+        assert (t._filename is None) == (source == "anonymous")
+        self._check_view(t, make_view(t), make_view(data))
+
+    @pytest.mark.parametrize("with_filename", [False, True])
+    def test_view_keeps_file_nested(self, with_filename, tmp_path):
+        # #3570: the same for the views of a nested tensor
+        tensors = [torch.arange(6).view(2, 3), torch.arange(8).view(2, 4)]
+        filename = tmp_path / "nested.memmap" if with_filename else None
+        t = MemoryMappedTensor.from_tensor(
+            torch.nested.nested_tensor(tensors), filename=filename
+        )
+        assert (t._filename is None) == (not with_filename)
+        self._check_view(t, t[1], tensors[1])
+        self._check_view(t, t[1][1:], tensors[1][1:])
+        self._check_view(t, t.unbind(0)[0][:, 1], tensors[0][:, 1])
+        self._check_view(t, t[..., 0][1], tensors[1][:, 0])
+
+    def test_view_keeps_file_after_chdir(self, tmp_path, monkeypatch):
+        # #3570: the file name of a view is absolute, like its parent's: it
+        # does not follow the working directory
+        (tmp_path / "saved").mkdir()
+        (tmp_path / "other").mkdir()
+        monkeypatch.chdir(tmp_path / "saved")
+        data = torch.arange(6).view(2, 3)
+        t = MemoryMappedTensor.from_tensor(data, filename="tensor.memmap")
+        td = TensorDict(a=data, batch_size=[2]).memmap("td")
+        filename = t.filename
+        td_filename = td["a"].filename
+        assert os.path.isabs(filename)
+        assert os.path.isabs(td_filename)
+        assert os.path.samefile(filename, tmp_path / "saved" / "tensor.memmap")
+        assert os.path.samefile(td_filename, tmp_path / "saved" / "td" / "a.memmap")
+        monkeypatch.chdir(tmp_path / "other")
+        views = (t[1], t[:1], t[1:][0], *t.unbind(0), *t.chunk(2), *t.split(1), *t)
+        for view in views:
+            assert view.filename == filename
+        assert pickle.loads(pickle.dumps(t[1])).filename == filename
+        assert (pickle.loads(pickle.dumps(t[1])) == data[1]).all()
+        for sub in (td[1], td[:1], *td.unbind(0)):
+            assert sub["a"].filename == td_filename
+        assert not os.listdir(tmp_path / "other")
+
+    def test_view_does_not_call_pathlib(self, tmp_path, monkeypatch):
+        # #3570: a view has the file name of its parent, which is absolute
+        # already, so only opening a file goes through pathlib
+        data = torch.arange(24).view(4, 3, 2)
+        t = MemoryMappedTensor.from_tensor(data, filename=tmp_path / "tensor.memmap")
+        td = TensorDict(a=data, b=data + 1, batch_size=[4]).memmap(tmp_path / "td")
+        calls = []
+
+        def counting_path(*args):
+            calls.append(args)
+            return Path(*args)
+
+        # tensordict.memmap is also a function of the package
+        monkeypatch.setattr(sys.modules["tensordict.memmap"], "Path", counting_path)
+        views = [t[1], t[1:3], t[1][0], t[..., 0], *t]
+        views += [*t.unbind(1), *t.chunk(2), *t.split(1, dim=2)]
+        views += [td[1]["a"], td[1:3]["b"], *(sub["a"] for sub in td.unbind(0))]
+        for view in views:
+            assert type(view) is MemoryMappedTensor
+            assert view.filename in (t.filename, td["a"].filename, td["b"].filename)
+        assert not calls
+        loaded = MemoryMappedTensor.from_filename(t.filename, data.dtype, data.shape)
+        assert loaded.filename == t.filename
+        assert calls
+
     @pytest.mark.parametrize(
         "make_view",
         [
@@ -860,6 +1020,85 @@ def test_pickle_handler_complex():
     loaded = pickle.loads(ForkingPickler.dumps(mt))
     assert loaded.dtype == torch.complex64
     assert (loaded == tensor[1]).all()
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="counts /proc/self/fd")
+def test_pickle_handler_closes_fd():
+    # #3565: a tensor without a file that is received from another process
+    # closes the descriptor it received when it is dropped
+    def round_trip():
+        td = TensorDict(obs=torch.zeros(8, 3), reward=torch.zeros(8, 1), batch_size=[8])
+        td.memmap_()
+        loaded = pickle.loads(ForkingPickler.dumps(td))
+        assert (loaded["obs"] == 0).all()
+
+    def open_fds():
+        return len(os.listdir("/proc/self/fd"))
+
+    # the first round trip starts the thread that sends the descriptors
+    round_trip()
+    gc.collect()
+    start = open_fds()
+    for _ in range(50):
+        round_trip()
+    gc.collect()
+    # That thread closes its own copy of a descriptor after the receiver has
+    # it: wait for it. A leak is 100 descriptors.
+    for _ in range(200):
+        if open_fds() <= start:
+            break
+        time.sleep(0.01)
+    assert open_fds() <= start
+
+
+def _recv_write_and_send_on(queue_out, queue_in):
+    t = queue_in.get(timeout=TIMEOUT)
+    assert isinstance(t, MemoryMappedTensor)
+    assert (t == 0).all()
+    queue_out.put("received")
+    assert queue_in.get(timeout=TIMEOUT) == "written"
+    assert (t == 1).all()
+    t[1] = 2
+    # the second hop, of a view: this process drops its tensors once they are sent
+    queue_out.put(t[1:])
+    del t
+    gc.collect()
+    assert queue_in.get(timeout=TIMEOUT) == "done"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="the handler pickles through a fd")
+def test_pickle_handler_shares_memory_across_procs():
+    # #3565: a received tensor reads and writes the sender's memory, also after
+    # it is sent on and the tensors that it came from are dropped
+    t = MemoryMappedTensor.from_tensor(torch.zeros(10))
+    queue_in = mp.Queue(1)
+    queue_out = mp.Queue(1)
+    p = mp.Process(target=_recv_write_and_send_on, args=(queue_in, queue_out))
+    p.start()
+    try:
+        queue_out.put(t, block=True)
+        assert queue_in.get(timeout=TIMEOUT) == "received"
+        t.fill_(1.0)
+        queue_out.put("written", block=True)
+        t2 = queue_in.get(timeout=TIMEOUT)
+        queue_out.put("done", block=True)
+    finally:
+        p.join()
+    assert p.exitcode == 0
+    assert isinstance(t2, MemoryMappedTensor)
+    assert t2.tolist() == [2.0] + [1.0] * 8
+    assert t[1] == 2
+    t2[1] = 3
+    assert t[2] == 3
+    # a third hop, after the process and the tensor of the second hop are gone
+    t3 = pickle.loads(ForkingPickler.dumps(t2))
+    del t2
+    gc.collect()
+    assert isinstance(t3, MemoryMappedTensor)
+    t[3] = 4
+    assert t3.tolist() == [2.0, 3.0, 4.0] + [1.0] * 6
+    t3[3] = 5
+    assert t.tolist() == [1.0, 2.0, 3.0, 4.0, 5.0] + [1.0] * 5
 
 
 def test_pickle_filename(tmp_path):

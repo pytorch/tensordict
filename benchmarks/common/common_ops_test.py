@@ -660,6 +660,17 @@ def test_clone_device(benchmark, td):
     benchmark(td.to("cpu").clone)
 
 
+@pytest.mark.parametrize("source", ["padding", "offset"])
+def test_consolidate(benchmark, source):
+    # 20 float32 leaves, about 2 MiB: each has an odd number of elements and
+    # needs padding to a multiple of 8 bytes, or has a storage offset (td[1:])
+    if source == "padding":
+        td = _rl_step_td(4097, 9)
+    else:
+        td = _rl_step_td(4097, 8)[1:]
+    benchmark(td.consolidate)
+
+
 @pytest.mark.parametrize(
     "index",
     [
@@ -731,6 +742,25 @@ def test_getitem_rl_step(benchmark, index, size):
         "slice": slice(2, 10),
         "tensor": torch.randint(0, batch, (batch // 2,)),
     }[index]
+    benchmark(td.__getitem__, index)
+
+
+@pytest.mark.parametrize("index", ["int", "slice"])
+def test_getitem_memmap_on_disk(benchmark, tmp_path, index):
+    # rows of a replay buffer saved to disk (about 50 kB): 10 leaves, 5 of them
+    # nested, each returned as a view of its file
+    def step():
+        return {
+            "observation": torch.zeros(1000, 4),
+            "reward": torch.zeros(1000, 1),
+            "done": torch.zeros(1000, 1, dtype=torch.bool),
+            "terminated": torch.zeros(1000, 1, dtype=torch.bool),
+            "truncated": torch.zeros(1000, 1, dtype=torch.bool),
+        }
+
+    td = TensorDict({**step(), "next": step()}, batch_size=[1000])
+    td = td.memmap_like(tmp_path)
+    index = {"int": 5, "slice": slice(10, 42)}[index]
     benchmark(td.__getitem__, index)
 
 
@@ -1126,6 +1156,15 @@ def test_lazy_stack_get_nested(benchmark, size, key):
         [_rl_step_td(batch, features) for _ in range(8)], 0
     )
     benchmark(td.get, key)
+
+
+@pytest.mark.parametrize("members", [4, 32])
+def test_lazy_stack_get_leaf(benchmark, members):
+    # a top-level leaf read from a lazy stack
+    td = LazyStackedTensorDict.lazy_stack(
+        [_rl_step_td(32, 4) for _ in range(members)], 0
+    )
+    benchmark(td.get, "obs")
 
 
 def test_select(benchmark, td, c):
