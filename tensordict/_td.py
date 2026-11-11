@@ -2812,11 +2812,23 @@ class TensorDict(TensorDictBase):
             return self._clone_recurse()
 
         if not recurse and is_compiling():
-            result = TensorDict(
-                batch_size=self.batch_size,
-                device=self.device,
-                names=self._maybe_names(),
-            )
+            # TensorDict comes first in the comparison: Dynamo then checks
+            # type(self) with the guard it already has on that global, and
+            # adds none for an exact TensorDict.
+            if TensorDict is type(self):
+                result = TensorDict(
+                    batch_size=self.batch_size,
+                    device=self.device,
+                    names=self._maybe_names(),
+                )
+            else:
+                # A subclass keeps its class, as in eager mode. The device is
+                # set afterwards: given one, _new_unsafe reads _has_mps, which
+                # Dynamo cannot always trace.
+                result = self._new_unsafe(
+                    batch_size=self.batch_size, names=self._maybe_names()
+                )
+                result._device = self.device
             schema = self._locked_schema
             _src = self._tensordict
             _dst = result._tensordict

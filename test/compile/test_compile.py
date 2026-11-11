@@ -1511,6 +1511,127 @@ class TestTD:
         else:
             assert clone_c(data)["a", "c"] is data["a", "c"]
 
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    @pytest.mark.parametrize("lock", [True, False])
+    @pytest.mark.parametrize("op", ["clone", "copy"])
+    def test_clone_shallow_subclass(self, op, lock, device, mode):
+        # #3673: compiled, clone(False) and copy() of a TensorDict subclass
+        # return the subclass, as they do in eager mode, with or without a
+        # device. set and update then work on the copy.
+        class MyTD(TensorDict):
+            def __init__(self, *args, scale=2, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.scale = scale
+
+        def shallow(td):
+            return td.clone(False) if op == "clone" else td.copy()
+
+        def shallow_set(td, value):
+            return shallow(td).set("b", value).update({"c": value})
+
+        def make():
+            td = MyTD(
+                a=torch.zeros(3, 2),
+                batch_size=[3, 2],
+                device=device,
+                names=["x", "y"],
+                scale=7,
+            )
+            return td.lock_() if lock else td
+
+        shallow_c = torch.compile(shallow, fullgraph=True, mode=mode)
+        td = make()
+        eager = shallow(td)
+        out = shallow_c(td)
+        assert type(eager) is MyTD
+        assert type(out) is MyTD
+        assert out is not td
+        assert out["a"] is td["a"]
+        assert out.batch_size == eager.batch_size == td.batch_size
+        assert out.device == eager.device == td.device
+        assert out.names == eager.names == ["x", "y"]
+        assert not out.is_locked and not eager.is_locked
+        # neither mode runs MyTD.__init__ for the copy
+        assert not hasattr(eager, "scale") and not hasattr(out, "scale")
+        # another instance does not recompile
+        with torch._dynamo.config.patch(error_on_recompile=True):
+            assert type(shallow_c(make())) is MyTD
+
+        value = torch.ones(3, 2)
+        out = torch.compile(shallow_set, fullgraph=True, mode=mode)(td, value)
+        assert type(out) is MyTD
+        assert out["b"] is value and out["c"] is value
+        assert "b" not in td.keys()
+
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    @pytest.mark.parametrize("op", ["clone", "copy"])
+    def test_clone_shallow_subclass_entries(self, op, device, mode):
+        # #3673: compiled, clone(False) and copy() keep the class of the
+        # TensorDict subclasses that a TensorDict, a tensorclass or a lazy
+        # stack holds, as they do in eager mode.
+        class MyTD(TensorDict):
+            pass
+
+        @tensorclass
+        class Holder:
+            a: torch.Tensor
+            n: MyTD
+
+        def shallow(td):
+            return td.clone(False) if op == "clone" else td.copy()
+
+        def make_nested():
+            return MyTD(b=torch.ones(3), batch_size=[3], device=device)
+
+        shallow_c = torch.compile(shallow, fullgraph=True, mode=mode)
+        td = TensorDict(a=torch.zeros(3), n=make_nested(), batch_size=[3])
+        tc = Holder(a=torch.zeros(3), n=make_nested(), batch_size=[3])
+        ls = lazy_stack([make_nested() for _ in range(2)], 0)
+        for data in (td, tc):
+            out = shallow_c(data)
+            assert type(out) is type(shallow(data)) is type(data)
+            assert type(out.get("n")) is type(shallow(data).get("n")) is MyTD
+            assert out.get("n") is not data.get("n")
+            assert out.get("n").get("b") is data.get("n").get("b")
+        out = shallow_c(ls)
+        assert type(out) is LazyStackedTensorDict
+        assert [type(member) for member in out.tensordicts] == [MyTD, MyTD]
+        assert [type(member) for member in shallow(ls).tensordicts] == [MyTD, MyTD]
+        assert out.tensordicts[0] is not ls.tensordicts[0]
+        assert out.tensordicts[0]["b"] is ls.tensordicts[0]["b"]
+
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    @pytest.mark.parametrize("kind", ["tensordict", "typed", "tensorclass"])
+    @pytest.mark.parametrize("op", ["clone", "copy"])
+    def test_clone_shallow_exact_classes(self, op, kind, device, mode):
+        # #3673: compiled, clone(False) and copy() of a TensorDict, a
+        # TypedTensorDict and a tensorclass return the same class, without a
+        # recompile for another instance.
+        class Typed(TypedTensorDict):
+            a: torch.Tensor
+
+        @tensorclass
+        class Data:
+            a: torch.Tensor
+
+        cls = {"tensordict": TensorDict, "typed": Typed, "tensorclass": Data}[kind]
+
+        def shallow(td):
+            return td.clone(False) if op == "clone" else td.copy()
+
+        def make():
+            return cls(a=torch.zeros(3), batch_size=[3], device=device)
+
+        shallow_c = torch.compile(shallow, fullgraph=True, mode=mode)
+        td = make()
+        out = shallow_c(td)
+        assert type(out) is type(shallow(td)) is cls
+        assert out is not td
+        assert out.get("a") is td.get("a")
+        assert out.device == td.device
+        with torch._dynamo.config.patch(error_on_recompile=True):
+            assert type(shallow_c(make())) is cls
+
     @pytest.mark.parametrize("recurse", [True, False])
     def test_flatten_keys(self, recurse, mode):
         def flatten_keys(td: TensorDict):
@@ -5623,6 +5744,50 @@ class TestGuardCount:
         second = cnt.frame_count
         assert first == 1, f"Expected 1 compile frame, got {first}"
         assert second == 1, f"Recompilation detected: {second} frames"
+
+    @pytest.mark.parametrize("op", ["clone", "copy"])
+    def test_clone_shallow_exact_tensordict_guards(self, op, monkeypatch):
+        # #3673: the compiled clone(False) and copy() check the class, to keep
+        # a TensorDict subclass. For an exact TensorDict, nested ones included,
+        # that check adds no guard: the guards are those of the same code
+        # without it.
+        from torch._dynamo.eval_frame import _debug_get_cache_entry_list
+
+        def shallow(td):
+            return td.clone(False) if op == "clone" else td.copy()
+
+        def leaf_guards():
+            td = TensorDict(
+                a=torch.zeros(3),
+                sub=TensorDict(b=torch.ones(3), batch_size=[3]),
+                sub2=TensorDict(b=torch.ones(3), batch_size=[3]),
+                batch_size=[3],
+            )
+            torch._dynamo.reset()
+            out = torch.compile(shallow, backend="eager", fullgraph=True)(td)
+            assert type(out) is TensorDict
+            assert type(out["sub"]) is TensorDict
+            (entry,) = _debug_get_cache_entry_list(shallow.__code__)
+            return sorted(
+                re.sub(
+                    r"___\d+|_c\d+|0x[0-9a-f]+|\d{4,}|, type=.*| *#.*",
+                    "",
+                    line.split("+- ")[1],
+                )
+                for line in str(entry.guard_manager).splitlines()
+                if "+- " in line and "GuardManager" not in line.split("+- ")[1][:30]
+            )
+
+        with_check = leaf_guards()
+        source = textwrap.dedent(inspect.getsource(TensorDict._clone))
+        check = "if TensorDict is type(self):"
+        assert source.count(check) == 1
+        module = sys.modules[TensorDict.__module__]
+        namespace = {}
+        code = compile(source.replace(check, "if True:"), module.__file__, "exec")
+        exec(code, vars(module), namespace)
+        monkeypatch.setattr(TensorDict, "_clone", namespace["_clone"])
+        assert leaf_guards() == with_check
 
     def test_getitem_str_key_guards(self):
         """``td["k"]`` guards little more than reading the entry from the dict."""
