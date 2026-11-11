@@ -7186,18 +7186,26 @@ def test_unflatten_keys_context_manager_keyword_separator_locked_unchanged():
     assert set(td.keys(True, True)) == {("b", "c"), "a/z", "a.z", "b.c"}
 
 
+@pytest.mark.parametrize("empty", [False, True])
 @pytest.mark.parametrize("transform", ["vmap", "functionalize"])
 def test_unflatten_keys_context_manager_keyword_separator_locked_functorch(
-    transform,
+    transform, empty
 ):
     # #3724: under a torch.func transform, the leaves are wrapped tensors
     # whose storage cannot be read, so the exit raises the KeyError of
-    # v0.15.5 with nothing written, not a torch internal error
+    # v0.15.5 with nothing written, not a torch internal error. Empty leaves
+    # need no storage, and their exit returns, as without the transform.
     def body(x):
+        if empty:
+            x = x[:0]
         td = TensorDict({"b": {"c": x * 1}, "a/z": x * 2}, []).lock_()
-        with pytest.raises(KeyError, match="b.c"):
+        if empty:
             with td.unflatten_keys(separator="/"):
                 pass
+        else:
+            with pytest.raises(KeyError, match="b.c"):
+                with td.unflatten_keys(separator="/"):
+                    pass
         return td["b", "c"], td["a/z"]
 
     if transform == "vmap":
