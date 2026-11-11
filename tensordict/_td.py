@@ -2839,7 +2839,11 @@ class TensorDict(TensorDictBase):
             # (type(td) or td.__class__, as an entry read and select do) gets
             # aliasing guards between the classes of the TensorDicts it
             # copies, one for each member of a nested lazy stack.
-            if TensorDict is type(self):
+            # torch.export keeps the plain TensorDict for a subclass too: an
+            # exported program cannot return a subclass, which is not a pytree
+            # node. The flag is read rather than is_exporting() called because
+            # Dynamo in torch 2.11 answers True to the call under torch.compile.
+            if TensorDict is type(self) or torch.compiler._is_exporting_flag:
                 result = TensorDict(
                     batch_size=self.batch_size,
                     device=self.device,

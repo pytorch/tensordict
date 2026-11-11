@@ -4212,6 +4212,55 @@ class TestExport:
         td = make()
         torch.testing.assert_close(ep.module()(td), td["a"] * 2)
 
+    @pytest.mark.parametrize("strict", [False, True])
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    @pytest.mark.parametrize(
+        "body", ["copy", "clone", "copy_set", "rename", "replace", "nested", "lazy"]
+    )
+    def test_export_clone_shallow_subclass(self, body, device, strict):
+        # #3673: pins that a module that returns a shallow copy of a TensorDict
+        # subclass exports, and that the exported program returns a plain
+        # TensorDict. An exported program cannot return a subclass, which is
+        # not a pytree node, so under torch.export the shallow copy stays a
+        # TensorDict; under torch.compile it keeps the class.
+        class MyTD(TensorDict):
+            pass
+
+        def make(x):
+            return MyTD(a=x, batch_size=[3], device=device)
+
+        bodies = {
+            "copy": lambda x: make(x).copy(),
+            "clone": lambda x: make(x).clone(False),
+            "copy_set": lambda x: make(x).copy().set("b", x + 1),
+            "rename": lambda x: make(x).rename("r"),
+            "replace": lambda x: make(x).replace(a=x + 1),
+            "nested": lambda x: TensorDict(n=make(x), batch_size=[3]).copy(),
+            "lazy": lambda x: lazy_stack([make(x), make(x)]).copy(),
+        }
+
+        class Mod(torch.nn.Module):
+            def forward(self, x):
+                return bodies[body](x)
+
+        def classes(td):
+            if isinstance(td, LazyStackedTensorDict):
+                return [classes(member) for member in td.tensordicts]
+            return [type(td)] + [
+                classes(value) for value in td.values() if is_tensor_collection(value)
+            ]
+
+        x = torch.arange(3.0)
+        eager = Mod()(x)
+        out = torch.export.export(Mod(), (x,), strict=strict).module()(x)
+        assert classes(out) == {
+            "nested": [TensorDict, [TensorDict]],
+            "lazy": [[TensorDict], [TensorDict]],
+        }.get(body, [TensorDict])
+        assert out.batch_size == eager.batch_size
+        assert out.device == eager.device
+        assert (out == eager).all()
+
     def test_export_td_output_non_tensor(self):
         # The non-tensor entry of the output is rebuilt with the batch size of
         # the output. Not with strict=True: there _tensordict_unflatten first
@@ -5835,7 +5884,7 @@ class TestGuardCount:
 
         with_check = leaf_guards()
         source = textwrap.dedent(inspect.getsource(TensorDict._clone))
-        check = "if TensorDict is type(self):"
+        check = "if TensorDict is type(self) or torch.compiler._is_exporting_flag:"
         assert source.count(check) == 1
         module = sys.modules[TensorDict.__module__]
         namespace = {}
