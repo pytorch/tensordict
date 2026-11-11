@@ -20,6 +20,7 @@ loadable archive (unaligned entries silently fall back to a copying read).
 
 from __future__ import annotations
 
+import functools
 import io
 import os
 import posixpath
@@ -855,6 +856,31 @@ def _check_archive_target(archive_path: Path, existsok: bool) -> None:
     archive_path.parent.mkdir(parents=True, exist_ok=True)
 
 
+def _td_method(td, name: str):
+    """Returns ``getattr(td, name)``, or the method that a field of that name hides.
+
+    The fields of a shadow tensorclass hide the methods that they are named
+    after (#3676).
+    """
+    cls = type(td)
+    if (
+        # a tensorclass of its own, not a plain subclass of one, which can
+        # define a method over a field of its parent
+        "_is_tensorclass" in vars(cls)
+        and name in cls.__expected_keys__
+        and not callable(getattr(cls, name, None))
+    ):
+        if name in ("memmap", "memmap_like"):
+            # circular import: base imports this module
+            from tensordict.base import TensorDictBase
+
+            # a tensorclass runs these TensorDict methods on itself
+            return functools.partial(getattr(TensorDictBase, name), td)
+        # values, items: a tensorclass calls them on its tensordict
+        return getattr(td._tensordict, name)
+    return getattr(td, name)
+
+
 def _write_archive_from_td(
     td,
     archive_path: Path,
@@ -882,7 +908,8 @@ def _write_archive_from_td(
     # circular import: base imports this module
     from tensordict.base import _NESTED_TENSORS_AS_LISTS
 
-    leaves = list(td.values(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS))
+    values = _td_method(td, "values")
+    leaves = list(values(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS))
     if any(_is_unbatched(value) for value in leaves):
         # meta.json has no place for the class (#3264)
         _warn_unbatched_saved_as_plain()
@@ -892,7 +919,9 @@ def _write_archive_from_td(
         # cannot map a nested tensor: fail before anything is written
         key, value = next(
             (key, value)
-            for key, value in td.items(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
+            for key, value in _td_method(td, "items")(
+                True, True, is_leaf=_NESTED_TENSORS_AS_LISTS
+            )
             if getattr(value, "is_nested", False)
         )
         _raise_if_jagged(value, key)
@@ -915,7 +944,7 @@ def _write_archive_from_td(
             # archive is loaded.
             token = None if like else _SKIP_TENSORCLASS_POST_INIT.set(True)
             try:
-                td_stage = td.memmap_like(
+                td_stage = _td_method(td, "memmap_like")(
                     prefix=staging,
                     copy_existing=copy_existing,
                     share_non_tensor=share_non_tensor,
@@ -926,7 +955,7 @@ def _write_archive_from_td(
                 if token is not None:
                     _SKIP_TENSORCLASS_POST_INIT.reset(token)
             if not like:
-                staged_leaves = td_stage.values(
+                staged_leaves = _td_method(td_stage, "values")(
                     True, True, is_leaf=_NESTED_TENSORS_AS_LISTS
                 )
                 file_to_source = {}
@@ -937,7 +966,7 @@ def _write_archive_from_td(
         else:
             # nested tensors cannot be streamed by _tensor_chunks: fall back
             # to writing the data to the staging directory
-            td.memmap(
+            _td_method(td, "memmap")(
                 prefix=staging,
                 copy_existing=copy_existing,
                 num_threads=num_threads,
