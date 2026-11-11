@@ -894,11 +894,12 @@ class _Serialization:
             filename (str or Path, optional): a file to use as the storage. The
                 leaves are views into a memory map of the file, and the
                 metadata is written after them, so that
-                :meth:`~.from_consolidated` can read the file back. With
-                ``use_buffer=False``, an existing file that is not empty is
-                replaced by a new file, and the tensordicts that map the old
-                file keep their data; its disk space is freed once none of
-                them maps it. With ``use_buffer=True``, or on Windows while the
+                :meth:`~.from_consolidated` can read the file back. An
+                existing file that is not empty is replaced by a new file,
+                with or without ``use_buffer``, and the tensordicts that map
+                the old file keep their data; its disk space is freed once
+                none of them maps it. If it cannot be replaced, as in a
+                directory that is not writable, or on Windows while the
                 file is open (for example mapped by a tensordict), the file
                 is written in place. Defaults to ``None``, which keeps the
                 storage in memory.
@@ -930,7 +931,10 @@ class _Serialization:
                 the leaves are copied into a buffer in shared memory, which is
                 written to the file at the end. This can be faster on a remote
                 file system (for example NFS). In-place writes into the leaves
-                then do not reach the file. Defaults to ``False``.
+                then do not reach the file. An existing file that cannot be
+                replaced (see ``filename``) is truncated before it is
+                written: do not read a tensordict that maps it afterwards.
+                Defaults to ``False``.
             share_memory (bool, optional): if ``True``, the storage is placed
                 in shared memory. Defaults to ``False``.
             pin_memory (bool, optional): if ``True``, the storage is placed in
@@ -1397,6 +1401,10 @@ class _Serialization:
         result.lock_()
         if filename is not None:
             if use_buffer:
+                # #3699: open(..., "w+b") truncates the file under the
+                # tensordicts and processes that map it, and their next read
+                # past the new end is a bus error: replace the file first
+                _replace_existing_file(filename)
                 with open(filename, "w+b") as f:
                     f.write(total_storage._handler.buffer)
             result._consolidated["filename"] = Path(filename).resolve()

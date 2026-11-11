@@ -2233,6 +2233,205 @@ class TestGeneric:
         assert TensorDict.from_consolidated(filename).names == ["x"]
 
     @pytest.mark.skipif(
+        _IS_WINDOWS, reason="Windows cannot replace a file while a tensordict maps it"
+    )
+    def test_consolidated_file_use_buffer_keeps_older_maps(self, tmp_path):
+        # #3699: consolidate(filename=f, use_buffer=True) truncated f and wrote
+        # it again. A tensordict that mapped f, the source of the save
+        # included, then read past the end of a smaller file: a bus error,
+        # which kills the process, so a child process does the reads. The
+        # file is replaced, as with use_buffer=False, and they keep their data.
+        code = """
+import sys, torch
+from tensordict import TensorDict
+for i, count in enumerate((2, 100000, 200000, None)):
+    f = sys.argv[1] + str(i)
+    result = TensorDict(a=torch.arange(100000.0), c=torch.arange(4.0)).consolidate(
+        filename=f
+    )
+    loaded = TensorDict.from_consolidated(f)
+    if count is None:
+        # a source made of views of the file it overwrites
+        source = TensorDict(a=loaded["a"][-2:], c=loaded["c"])
+    else:
+        source = TensorDict(a=torch.arange(float(count)) + 500, c=torch.ones(4))
+    expected = source.clone()
+    saved = source.consolidate(filename=f, use_buffer=True)
+    for td in (saved, TensorDict.from_consolidated(f), source):
+        assert (td == expected).all()
+    for td in (result, loaded):
+        assert (td["a"] == torch.arange(100000.0)).all()
+        assert (td["c"] == torch.arange(4.0)).all()
+print("done")
+"""
+        result = subprocess.run(
+            [sys.executable, "-c", code, str(tmp_path / "td.bin")],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.strip() == "done"
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS, reason="Windows cannot replace a file while a process maps it"
+    )
+    def test_consolidated_file_use_buffer_reader_during_save(self, tmp_path):
+        # #3699: the file was empty from its truncation to the end of the
+        # write, so another process that mapped it and read it meanwhile got
+        # a bus error, whatever the size of the new content. A child process
+        # maps the file, and reads its last element once the save has opened
+        # the file for writing.
+        filename = tmp_path / "td.bin"
+        TensorDict(a=torch.arange(100000.0), batch_size=[100000]).consolidate(
+            filename=filename
+        )
+        code = (
+            "import sys\n"
+            "from tensordict import TensorDict\n"
+            "td = TensorDict.from_consolidated(sys.argv[1])\n"
+            "print('ready', flush=True)\n"
+            "sys.stdin.readline()\n"
+            "print(td['a'][-1].item(), flush=True)\n"
+        )
+        real_open = open
+        seen = []
+
+        def open_then_read(file, mode="r", *args, **kwargs):
+            opened = real_open(file, mode, *args, **kwargs)
+            if "w" in mode and file == filename:
+                reader.stdin.write("read\n")
+                reader.stdin.flush()
+                seen.append(reader.stdout.readline().strip())
+            return opened
+
+        with subprocess.Popen(
+            [sys.executable, "-c", code, str(filename)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        ) as reader:
+            assert reader.stdout.readline().strip() == "ready"
+            expected = TensorDict(a=torch.arange(100000.0) + 500, batch_size=[100000])
+            with mock.patch("builtins.open", open_then_read):
+                expected.consolidate(filename=filename, use_buffer=True)
+            _, stderr = reader.communicate(timeout=120)
+        assert reader.returncode == 0, stderr
+        assert seen == ["99999.0"]
+        assert_allclose_td(TensorDict.from_consolidated(filename), expected)
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS, reason="Windows cannot replace a file while a result maps it"
+    )
+    def test_consolidated_file_use_buffer_overwrite_same_size(self, tmp_path):
+        # #3699: with use_buffer=True too, the tensordicts that map the old
+        # file keep their data after a save of the same size, and an older
+        # result does not write its metadata into the new file
+        filename = tmp_path / "td.bin"
+        previous = TensorDict(a=torch.zeros(4), batch_size=[4]).consolidate(
+            filename=filename
+        )
+        loaded = TensorDict.from_consolidated(filename)
+        inode = filename.stat().st_ino
+        expected = TensorDict(a=torch.ones(4), batch_size=[4])
+        saved = expected.consolidate(filename=filename, use_buffer=True)
+        assert filename.stat().st_ino != inode
+        for td in (previous, loaded):
+            torch.testing.assert_close(td["a"], torch.zeros(4))
+        for td in (saved, TensorDict.from_consolidated(filename)):
+            torch.testing.assert_close(td["a"], torch.ones(4))
+        previous.batch_size = []
+        with pytest.warns(UserWarning, match="writes nothing"):
+            previous.consolidate(filename=filename)
+        assert TensorDict.from_consolidated(filename).batch_size == (4,)
+        assert [p.name for p in tmp_path.iterdir()] == ["td.bin"]
+
+    @pytest.mark.skipif(_IS_WINDOWS, reason="symlinks need privileges on Windows")
+    def test_consolidated_file_use_buffer_overwrite_links(self, tmp_path):
+        # #3699: with use_buffer=True too, a file is replaced by a new one: a
+        # symlink follows it, a hardlink keeps the old file, and the mode is
+        # kept
+        filename = tmp_path / "td.bin"
+        TensorDict(a=torch.arange(100), batch_size=[100]).consolidate(filename=filename)
+        filename.chmod(0o640)
+        os.link(filename, tmp_path / "hard.bin")
+        (tmp_path / "sym.bin").symlink_to(filename)
+        expected = TensorDict(a=torch.tensor([500, 501]), batch_size=[2])
+        saved = expected.consolidate(filename=tmp_path / "sym.bin", use_buffer=True)
+        assert (tmp_path / "sym.bin").is_symlink()
+        assert saved._consolidated["filename"] == filename.resolve()
+        assert (filename.stat().st_mode & 0o777) == 0o640
+        assert_allclose_td(saved, expected)
+        assert_allclose_td(TensorDict.from_consolidated(filename), expected)
+        assert_allclose_td(TensorDict.from_consolidated(tmp_path / "sym.bin"), expected)
+        old = TensorDict.from_consolidated(tmp_path / "hard.bin")
+        assert (old["a"] == torch.arange(100)).all()
+        assert sorted(p.name for p in tmp_path.iterdir()) == [
+            "hard.bin",
+            "sym.bin",
+            "td.bin",
+        ]
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS or os.geteuid() == 0, reason="needs POSIX file permissions"
+    )
+    def test_consolidated_file_use_buffer_overwrite_read_only(self, tmp_path):
+        # with use_buffer=True, a file the caller cannot write is not
+        # replaced: the write fails as before #3699, and the file keeps its
+        # data
+        filename = tmp_path / "td.bin"
+        TensorDict(a=torch.arange(100), batch_size=[100]).consolidate(filename=filename)
+        filename.chmod(0o444)
+        with pytest.raises(PermissionError):
+            TensorDict(a=torch.tensor([500, 501]), batch_size=[2]).consolidate(
+                filename=filename, use_buffer=True
+            )
+        loaded = TensorDict.from_consolidated(filename)
+        assert (loaded["a"] == torch.arange(100)).all()
+        assert [p.name for p in tmp_path.iterdir()] == ["td.bin"]
+
+    @pytest.mark.parametrize("new_count", [2, 100, 1000])
+    def test_consolidated_file_use_buffer_replace_fails(self, tmp_path, new_count):
+        # with use_buffer=True, a file that cannot be replaced (as on Windows
+        # while it is mapped) is written in place, as before #3699: it is
+        # the same file, with the size of a fresh write
+        filename = tmp_path / "td.bin"
+        TensorDict(a=torch.arange(100), batch_size=[100]).consolidate(filename=filename)
+        inode = filename.stat().st_ino
+        expected = TensorDict(a=torch.arange(new_count) + 500, batch_size=[new_count])
+        with mock.patch("os.replace", side_effect=PermissionError):
+            saved = expected.consolidate(filename=filename, use_buffer=True)
+        assert_allclose_td(saved, expected)
+        assert_allclose_td(TensorDict.from_consolidated(filename), expected)
+        assert filename.stat().st_ino == inode
+        assert [p.name for p in tmp_path.iterdir()] == ["td.bin"]
+        expected.consolidate(filename=tmp_path / "fresh.bin")
+        assert filename.stat().st_size == (tmp_path / "fresh.bin").stat().st_size
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS or os.geteuid() == 0, reason="needs POSIX file permissions"
+    )
+    def test_consolidated_file_use_buffer_read_only_directory(self, tmp_path):
+        # with use_buffer=True, a file in a directory the caller cannot write
+        # cannot be replaced: it is written in place, as before #3699
+        directory = tmp_path / "dir"
+        directory.mkdir()
+        filename = directory / "td.bin"
+        TensorDict(a=torch.arange(100), batch_size=[100]).consolidate(filename=filename)
+        inode = filename.stat().st_ino
+        expected = TensorDict(a=torch.tensor([500, 501]), batch_size=[2])
+        directory.chmod(0o555)
+        try:
+            saved = expected.consolidate(filename=filename, use_buffer=True)
+        finally:
+            directory.chmod(0o755)
+        assert_allclose_td(saved, expected)
+        assert_allclose_td(TensorDict.from_consolidated(filename), expected)
+        assert filename.stat().st_ino == inode
+        assert [p.name for p in directory.iterdir()] == ["td.bin"]
+
+    @pytest.mark.skipif(
         _IS_WINDOWS or os.geteuid() == 0, reason="needs POSIX file permissions"
     )
     def test_consolidated_file_overwrite_read_only(self, tmp_path):
