@@ -5079,8 +5079,9 @@ class TestLazyStackedTensorDict:
                 # every member holds a plain tensor: none is read again
                 expected = []
             elif late == "missing":
-                # the general path stops at a member that lacks the key
-                expected = td.tensordicts[position : position + 1]
+                # get reads the stack with _get_str(key, None), which returns
+                # None at a member that lacks the key, and reads no member
+                expected = []
             else:
                 expected = td.tensordicts[position:]
             assert len(read) == len(expected), name
@@ -5089,6 +5090,69 @@ class TestLazyStackedTensorDict:
             assert stack.call_count <= 1, name
             with mock.patch("tensordict._lazy.is_compiling", return_value=True):
                 assert result == outcome(call, make()), name
+
+    @pytest.mark.parametrize("entry", ["missing", "None"])
+    @pytest.mark.parametrize("count, position", [(4, 1), (4, 2), (4, 3), (1, 0)])
+    def test_flat_get_missing_key_in_member(self, entry, count, position):
+        # #3573: when member 0 holds a plain tensor and a later member lacks
+        # the key or holds None, _get_str(key, None), which get and td[key]
+        # call, returns None without a _get_str call on the members; any other
+        # default, and none, take the general path from that member on. With
+        # one member, a key that it holds is stacked from its dict, and one
+        # that it lacks takes the general path. Each read returns and raises
+        # as the general path does
+        def make():
+            members = [_flat_get_member(i) for i in range(count)]
+            if entry == "missing":
+                del members[position]["a"]
+            else:
+                members[position]._tensordict["a"] = None
+            return lazy_stack(members)
+
+        def outcome(call, td):
+            try:
+                result = call(td)
+            except Exception as err:
+                return type(err), str(err)
+            if isinstance(result, torch.Tensor):
+                return type(result), result.shape, result.tolist()
+            return type(result), result
+
+        default = torch.zeros(4, 3)
+        calls = {
+            "get": lambda td: td.get("a"),
+            "default None": lambda td: td.get("a", None),
+            "_get_str None": lambda td: td._get_str("a", None),
+            "default tensor": lambda td: td.get("a", default),
+            "getitem": lambda td: td["a"],
+            "_get_str": lambda td: td._get_str("a"),
+            "_get_str tensor": lambda td: td._get_str("a", default),
+        }
+        for name, call in calls.items():
+            td = make()
+            with mock.patch.object(
+                TensorDict, "_get_str", autospec=True, side_effect=TensorDict._get_str
+            ) as get_str:
+                result = outcome(call, td)
+            with mock.patch("tensordict._lazy.is_compiling", return_value=True):
+                assert result == outcome(call, make()), name
+            if name in ("_get_str", "_get_str tensor"):
+                assert get_str.called, name
+            else:
+                assert get_str.called is (position == 0), name
+            if name in ("get", "default None", "_get_str None"):
+                assert result == (type(None), None), name
+            elif name == "default tensor":
+                assert result == outcome(lambda td: default, None), name
+            elif entry == "missing" and name in ("getitem", "_get_str"):
+                assert result[0] is KeyError, name
+        # one member that holds the key: read from its dict
+        td = lazy_stack([_flat_get_member(0)])
+        with mock.patch.object(
+            TensorDict, "_get_str", side_effect=AssertionError("read with _get_str")
+        ):
+            result = td.get("a")
+        assert torch.equal(result, td.tensordicts[0]["a"].unsqueeze(0))
 
     @pytest.mark.parametrize("value", [0, 0.0, None, "", ()])
     @pytest.mark.parametrize(

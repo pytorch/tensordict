@@ -2924,9 +2924,17 @@ class LazyStackedTensorDict(TensorDictBase):
                         break
                     leaf = td._tensordict.get(key)
                     if type(leaf) is not Tensor:
+                        if leaf is None and default is None:
+                            # The member's _get_str(key, None) returns None here,
+                            # and the loop below returns it at once.
+                            return default
                         break
                     tensors.append(leaf)
-                tensordicts = islice(tensordicts, len(tensors), None)
+                else:
+                    # every member was read: nothing is left for the loop below
+                    tensordicts = ()
+                if tensordicts:
+                    tensordicts = islice(tensordicts, len(tensors), None)
         for td in tensordicts:
             # tensors.append(td._get_str(key, default=default))
             tensors.append(
