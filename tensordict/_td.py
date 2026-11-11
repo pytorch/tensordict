@@ -251,6 +251,20 @@ def _propagate_lock_dense(td, lock_parents_weakrefs):
             value._propagate_lock(lock_parents_weakrefs, is_compiling=False)
 
 
+def _is_exporting() -> bool:
+    # Whether torch.export is running. A function of its own, so that
+    # TensorDict._clone names no torch module: after a graph break, Dynamo
+    # skips a frame that holds no tensor and names none, and runs it eagerly.
+    # Where torch has the flag, it is read rather than
+    # torch.compiler.is_exporting() called, because Dynamo in torch 2.11
+    # answers True to the call under torch.compile. Newer torch has no flag,
+    # and its is_exporting() is False under torch.compile.
+    flag = getattr(torch.compiler, "_is_exporting_flag", None)
+    if flag is None:
+        return torch.compiler.is_exporting()
+    return flag
+
+
 class TensorDict(TensorDictBase):
     """A dictionary of tensors that share a batch size.
 
@@ -2832,11 +2846,30 @@ class TensorDict(TensorDictBase):
             return self._clone_recurse()
 
         if not recurse and is_compiling():
-            result = TensorDict(
-                batch_size=self.batch_size,
-                device=self.device,
-                names=self._maybe_names(),
-            )
+            # TensorDict comes first in the comparison: Dynamo then checks
+            # type(self) with the guard it already has on that global, and a
+            # function that only copies exact TensorDicts gets no new guard.
+            # One that has already read a TensorDict's class another way
+            # (type(td) or td.__class__, as an entry read and select do) gets
+            # aliasing guards between the classes of the TensorDicts it
+            # copies, one for each member of a nested lazy stack.
+            # torch.export keeps the plain TensorDict for a subclass too: an
+            # exported program cannot return a subclass, which is not a pytree
+            # node.
+            if TensorDict is type(self) or _is_exporting():
+                result = TensorDict(
+                    batch_size=self.batch_size,
+                    device=self.device,
+                    names=self._maybe_names(),
+                )
+            else:
+                # A subclass keeps its class, as in eager mode. The device is
+                # set afterwards: given one, _new_unsafe reads _has_mps, which
+                # Dynamo cannot always trace.
+                result = self._new_unsafe(
+                    batch_size=self.batch_size, names=self._maybe_names()
+                )
+                result._device = self.device
             schema = self._locked_schema
             _src = self._tensordict
             _dst = result._tensordict
