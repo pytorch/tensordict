@@ -64,6 +64,7 @@ from tensordict.tensorclass import TensorClass
 from tensordict.utils import (
     _unravel_key_to_tuple,
     _unravel_keys,
+    isin,
     unravel_key,
     unravel_key_list,
 )
@@ -678,6 +679,33 @@ def test_construction_empty_then_full_source(device):
     assert (result["b", "c"] == x).all()
 
 
+@pytest.mark.parametrize(
+    "call", ["from_tensor", "zeros", "memmap", "memmap_", "memmap_like"]
+)
+def test_empty_anonymous_memmap_compile(call):
+    # #3566: compiled code builds an anonymous memory map of a tensor with no
+    # elements as eager code does, also after a call on a tensor with elements
+    def fn(td):
+        if call == "from_tensor":
+            return MemoryMappedTensor.from_tensor(td["a"])
+        if call == "zeros":
+            return MemoryMappedTensor.zeros(td["a"].shape)
+        return getattr(td, call)()
+
+    compiled = torch.compile(fn, backend="eager")
+    for width in (3, 0, 3):
+        td = TensorDict(a=torch.ones(4, width), batch_size=[4])
+        result = compiled(td.clone())
+        expected = fn(td.clone())
+        if call.startswith("memmap"):
+            assert result.is_memmap()
+            result, expected = result["a"], expected["a"]
+        assert type(result) is type(expected) is MemoryMappedTensor
+        assert result.shape == expected.shape == (4, width)
+        assert result.dtype == expected.dtype
+        assert (result == expected).all()
+
+
 def _index_tensordict_without_shortcut():
     # TensorDictBase._index_tensordict with its eager shortcut cut out, which
     # is the loop of the base branch
@@ -939,6 +967,44 @@ class TestTD:
         data0 = TensorDict({"a": {"b": torch.arange(3)}}, [3])
         data1 = TensorDict({"a": {"b": torch.arange(3)}}, [3])
         assert (stack_tds(data0, data1) == stack_tds_c(data0, data1)).all()
+
+    def test_stack_lazy_stacks_other_stack_dims(self, mode):
+        # #3587: a compiled stack of lazy stacks with different stack dims
+        # pairs their members as before, also where the slices of the second
+        # one along the stack dim of the first cannot be stacked (ragged)
+        def make(ragged):
+            return [
+                lazy_stack(
+                    [
+                        TensorDict(
+                            x=torch.zeros(2),
+                            r=torch.zeros(2, i + 1 if ragged else 1),
+                            batch_size=[2],
+                        )
+                        for i in range(2)
+                    ],
+                    stack_dim,
+                )
+                for stack_dim in (0, 1)
+            ]
+
+        def stack_tds(td0, td1):
+            return torch.stack([td0, td1])
+
+        stack_tds_c = torch.compile(stack_tds, mode=mode)
+        for ragged in (False, True):
+            expected = stack_tds(*make(ragged))
+            result = stack_tds_c(*make(ragged))
+            assert type(result) is LazyStackedTensorDict
+            assert result.stack_dim == expected.stack_dim == 1
+            assert result.batch_size == expected.batch_size == (2, 2, 2)
+            for member, expected_member in zip(
+                result.tensordicts, expected.tensordicts
+            ):
+                assert type(member) is TensorDict
+                assert member.batch_size == expected_member.batch_size
+                assert member["r"].shape == expected_member["r"].shape
+                assert (member["x"] == 0).all()
 
     def test_stack_refine_names_nested(self, mode):
         def stack_and_refine(td0, td1):
@@ -3851,6 +3917,31 @@ class TestExport:
         out = ep.module()(torch.randn(4, 6, 8))
         assert out.batch_size == torch.Size([4, 6])
         torch.testing.assert_close(out["y"], out["x"] * 2)
+
+    @pytest.mark.parametrize("strict", [False, True])
+    def test_export_isin_dynamic_batch_size(self, strict):
+        # #3607: pins that isin exports with both batch sizes dynamic, and that
+        # one program serves short and long references and inputs
+        class Mod(torch.nn.Module):
+            def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+                return isin(
+                    TensorDict(x=x, batch_size=x.shape[0]),
+                    TensorDict(x=y, batch_size=y.shape[0]),
+                    key="x",
+                )
+
+        ep = torch.export.export(
+            Mod(),
+            args=(torch.arange(4) * 3, torch.arange(20)),
+            strict=strict,
+            dynamic_shapes={
+                "x": {0: torch.export.Dim("m")},
+                "y": {0: torch.export.Dim("n")},
+            },
+        )
+        for m, n in ((6, 3), (6, 30), (300, 5), (300, 300), (4, 11), (4, 12)):
+            x, y = torch.arange(m) * 3, torch.arange(n)
+            assert ep.module()(x, y).tolist() == torch.isin(x, y).tolist()
 
     class _TDInOutModule(torch.nn.Module):
         def forward(self, td: TensorDict) -> TensorDict:
