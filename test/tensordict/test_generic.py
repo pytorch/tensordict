@@ -1907,54 +1907,53 @@ class TestGeneric:
         "num_threads,return_early", [(0, False), (2, False), (2, True)]
     )
     @pytest.mark.parametrize(
-        "old_key,old_count",
-        [
-            # larger files: the new content ends before the old metadata,
-            # inside it, and 3 bytes before the end of the file
-            ("a", 100),
-            ("a", 3),
-            ("abcd", 2),
-            # a file of the same size, and a smaller one
-            ("a", 2),
-            ("a", 1),
-        ],
+        # how much larger the old file is than the new one: "footer" is the
+        # length of the new metadata and its 8-byte length. -8 and 0 pin a
+        # smaller file and a file of the same size
+        "tail",
+        [-8, 0, 1, 8, "footer", 1000, 1_000_000],
     )
     def test_consolidated_file_overwrite_replace_fails_reads_back(
-        self, tmp_path, old_key, old_count, num_threads, return_early
+        self, tmp_path, tail, num_threads, return_early
     ):
         # #3672: a larger file that cannot be replaced is written in place and
-        # keeps its size. The metadata is padded up to the end of the file,
+        # keeps its size. The metadata is written at the end of the file,
         # where from_consolidated reads it: the file reads back what was saved
         filename = tmp_path / "td.bin"
-        TensorDict(
-            {old_key: torch.arange(old_count)}, batch_size=[old_count]
-        ).consolidate(filename=filename)
-        size = filename.stat().st_size
         expected = TensorDict(z=torch.tensor([500, 501]), batch_size=[2])
         expected.consolidate(filename=tmp_path / "fresh.bin")
-        fresh_size = (tmp_path / "fresh.bin").stat().st_size
+        fresh = (tmp_path / "fresh.bin").read_bytes()
         os.remove(tmp_path / "fresh.bin")
+        footer = len(fresh) - 16
+        size = len(fresh) + (footer if tail == "footer" else tail)
+        filename.write_bytes(b"\xff" * size)
         with mock.patch("os.replace", side_effect=PermissionError):
             saved = expected.consolidate(
                 filename=filename, num_threads=num_threads, return_early=return_early
             )
             if return_early:
                 saved = saved.result()
-        assert filename.stat().st_size == max(size, fresh_size)
+        size = max(size, len(fresh))
+        written = filename.read_bytes()
+        assert len(written) == size
         assert [p.name for p in tmp_path.iterdir()] == ["td.bin"]
+        # the leaves at the start, the metadata at the end, and the bytes of
+        # the old file in between
+        assert written[:16] == fresh[:16]
+        assert written[-footer:] == fresh[-footer:]
+        assert written[16:-footer] == b"\xff" * (size - len(fresh))
         loaded = TensorDict.from_consolidated(filename)
         assert list(loaded.keys()) == ["z"]
         assert loaded.batch_size == (2,)
         assert_allclose_td(loaded, expected)
         assert_allclose_td(saved, expected)
         assert_allclose_td(pickle.loads(pickle.dumps(saved)), expected)
-        # the storage of the result, and of what is read back, is the leaves
+        # the storage of the result is the leaves
         assert saved._consolidated["storage"].numel() == 16
-        assert loaded._consolidated["storage"].numel() == 16
         # the result rewrites the metadata of its file
         saved.names = ["x"]
         assert saved.consolidate(filename=filename) is saved
-        assert filename.stat().st_size == max(size, fresh_size)
+        assert filename.stat().st_size == size
         loaded = TensorDict.from_consolidated(filename)
         assert loaded.names == ["x"]
         assert_allclose_td(loaded, expected)
@@ -1965,27 +1964,55 @@ class TestGeneric:
     @pytest.mark.parametrize(
         "num_threads,return_early", [(0, False), (2, False), (2, True)]
     )
-    @pytest.mark.parametrize("source_kind", ["rows", "last_leaf"])
-    def test_consolidated_file_overwrite_replace_fails_source_view(
+    def test_consolidated_file_overwrite_replace_fails_own_rows(
+        self, tmp_path, num_threads, return_early
+    ):
+        # #3672: rows of a tensordict that was read from a file are saved over
+        # this file, which cannot be replaced. The last row of b lies where
+        # the metadata used to be written before the leaves were read
+        filename = tmp_path / "td.bin"
+        td = TensorDict(a=torch.arange(6.0), b=torch.ones(6, 2), batch_size=[6])
+        td.consolidate(filename=filename)
+        size = filename.stat().st_size
+        source = TensorDict.from_consolidated(filename)
+        with mock.patch("os.replace", side_effect=PermissionError):
+            saved = source[1:].consolidate(
+                filename=filename, num_threads=num_threads, return_early=return_early
+            )
+            if return_early:
+                saved = saved.result()
+        assert filename.stat().st_size == size
+        assert saved.batch_size == (5,)
+        assert_allclose_td(saved, td[1:])
+        loaded = TensorDict.from_consolidated(filename)
+        assert set(loaded.keys()) == {"a", "b"}
+        assert loaded.batch_size == (5,)
+        assert_allclose_td(loaded, td[1:])
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS, reason="simulates the in-place write of Windows with a mock"
+    )
+    @pytest.mark.parametrize(
+        "num_threads,return_early", [(0, False), (2, False), (2, True)]
+    )
+    @pytest.mark.parametrize("source_kind", ["last_leaves", "new"])
+    def test_consolidated_file_overwrite_replace_fails_old_leaves(
         self, tmp_path, source_kind, num_threads, return_early
     ):
-        # #3672: part of a tensordict that was read from a file is saved over
-        # this file, which cannot be replaced. The file reads back what was
-        # saved
+        # #3672: the leaves of the old file that lie between the new content
+        # and the metadata at the end of the file keep their values, for the
+        # source and for a tensor that was read from the file before
         filename = tmp_path / "td.bin"
-        if source_kind == "rows":
-            TensorDict(
-                a=torch.arange(6.0), b=torch.arange(12.0).reshape(6, 2), batch_size=[6]
-            ).consolidate(filename=filename)
-            source = TensorDict.from_consolidated(filename)[:5]
-        else:
-            # the leaf lies past the new content and its metadata: it is read
-            # before the padding is written there
-            TensorDict(a=torch.arange(200.0), b=torch.arange(4.0) + 100).consolidate(
-                filename=filename
-            )
-            source = TensorDict.from_consolidated(filename).select("b")
+        TensorDict(
+            a=torch.arange(300.0), b=torch.arange(8.0) + 100, c=torch.arange(4.0) + 200
+        ).consolidate(filename=filename)
         size = filename.stat().st_size
+        original = TensorDict.from_consolidated(filename)
+        held = original["c"]
+        if source_kind == "last_leaves":
+            source = original.select("b")
+        else:
+            source = TensorDict(z=torch.tensor([500, 501]), batch_size=[2])
         expected = source.clone()
         with mock.patch("os.replace", side_effect=PermissionError):
             saved = source.consolidate(
@@ -1994,34 +2021,96 @@ class TestGeneric:
             if return_early:
                 saved = saved.result()
         assert filename.stat().st_size == size
+        assert_allclose_td(saved, expected)
+        assert_allclose_td(source, expected)
+        assert (original["b"] == torch.arange(8.0) + 100).all()
+        assert (held == torch.arange(4.0) + 200).all()
         loaded = TensorDict.from_consolidated(filename)
         assert set(loaded.keys()) == set(expected.keys())
         assert loaded.batch_size == expected.batch_size
-        assert_allclose_td(saved, expected)
         assert_allclose_td(loaded, expected)
+
+    @pytest.mark.parametrize(
+        "num_threads,return_early", [(0, False), (2, False), (2, True)]
+    )
+    @pytest.mark.parametrize("kind", ["nested_names", "tensorclass", "non_tensor"])
+    def test_consolidated_file_overwrite_replace_fails_kinds(
+        self, tmp_path, kind, num_threads, return_early
+    ):
+        # #3672: a larger file that is written in place reads back as a new
+        # file does, for nested keys, names, a tensorclass and non-tensor data
+        if kind == "nested_names":
+            source = TensorDict(
+                z=torch.arange(6).reshape(2, 3),
+                n={"m": torch.ones(2, 3, 4), "k": {"j": torch.zeros(2, 3)}},
+                batch_size=[2, 3],
+                names=["t", "u"],
+            )
+        elif kind == "tensorclass":
+            source = _AppendMemmapRows(x=torch.arange(2.0), label="row", batch_size=[2])
+        else:
+            source = TensorDict(z=torch.arange(2), s="hello", batch_size=[2])
+        filenames = [tmp_path / "td.bin", tmp_path / "fresh.bin"]
+        TensorDict(a=torch.arange(1000)).consolidate(filename=filenames[0])
+        size = filenames[0].stat().st_size
+        results = []
+        with mock.patch("os.replace", side_effect=PermissionError):
+            for filename in filenames:
+                saved = source.consolidate(
+                    filename=filename,
+                    num_threads=num_threads,
+                    return_early=return_early,
+                )
+                if return_early:
+                    saved = saved.result()
+                results.append((saved, TensorDict.from_consolidated(filename)))
+        assert filenames[0].stat().st_size == size > filenames[1].stat().st_size
+        (saved, loaded), (fresh_saved, fresh_loaded) = results
+        assert type(saved) is type(fresh_saved)
+        assert (saved == source).all()
+        assert type(loaded) is type(fresh_loaded)
+        assert loaded.batch_size == source.batch_size
+        assert loaded.names == source.names
+        assert set(loaded.keys(True, True)) == set(fresh_loaded.keys(True, True))
+        assert (loaded == fresh_loaded).all()
+        assert (loaded.to_tensordict() == source.to_tensordict()).all()
+        if kind == "tensorclass":
+            assert loaded["label"] == "row"
+        elif kind == "non_tensor":
+            assert loaded["s"] == "hello"
 
     @pytest.mark.skipif(
         _IS_WINDOWS or os.geteuid() == 0, reason="needs POSIX file permissions"
     )
-    def test_consolidated_file_overwrite_read_only_directory(self, tmp_path):
+    @pytest.mark.parametrize("source_kind", ["new", "own_rows"])
+    def test_consolidated_file_overwrite_read_only_directory(
+        self, tmp_path, source_kind
+    ):
         # #3672: a file in a directory the caller cannot write is not
         # replaced either: it is written in place, and reads back what was
         # saved
         directory = tmp_path / "data"
         directory.mkdir()
         filename = directory / "td.bin"
-        TensorDict(a=torch.arange(100), batch_size=[100]).consolidate(filename=filename)
+        TensorDict(
+            a=torch.arange(100), b=torch.ones(100, 2), batch_size=[100]
+        ).consolidate(filename=filename)
         size = filename.stat().st_size
-        expected = TensorDict(z=torch.tensor([500, 501]), batch_size=[2])
+        if source_kind == "new":
+            source = TensorDict(z=torch.tensor([500, 501]), batch_size=[2])
+        else:
+            source = TensorDict.from_consolidated(filename)[90:]
+        expected = source.clone()
         directory.chmod(0o555)
         try:
-            saved = expected.consolidate(filename=filename)
+            saved = source.consolidate(filename=filename)
         finally:
             directory.chmod(0o755)
         assert filename.stat().st_size == size
         assert [p.name for p in directory.iterdir()] == ["td.bin"]
         loaded = TensorDict.from_consolidated(filename)
-        assert list(loaded.keys()) == ["z"]
+        assert set(loaded.keys()) == set(expected.keys())
+        assert loaded.batch_size == expected.batch_size
         assert_allclose_td(saved, expected)
         assert_allclose_td(loaded, expected)
 

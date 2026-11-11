@@ -901,7 +901,7 @@ class _Serialization:
                 file is open (for example mapped by a tensordict), the file
                 is written in place, and the tensordicts that map it see the
                 new bytes. Without a buffer, a larger file then keeps its
-                size: the metadata is padded up to its end. Defaults to
+                size, and the metadata is written at its end. Defaults to
                 ``None``, which keeps the storage in memory.
 
         Keyword Args:
@@ -1105,9 +1105,8 @@ class _Serialization:
                     shape=(filesize + suffix,),
                     dtype=torch.uint8,
                 )
-
-            total_storage[-8:] = len_metadata
-            total_storage[-8 - metadata_dict_json.numel() : -8] = metadata_dict_json
+                total_storage[-8:] = len_metadata
+                total_storage[-8 - metadata_dict_json.numel() : -8] = metadata_dict_json
             storage = total_storage[:-suffix]
 
         offsets = torch.tensor([0] + flat_size).cumsum(0).tolist()
@@ -1402,19 +1401,27 @@ class _Serialization:
                     f.write(total_storage._handler.buffer)
             result._consolidated["filename"] = Path(filename).resolve()
             file_id = result._consolidated["file_id"] = _file_id(filename)
-            if (
-                not use_buffer
-                and file_id is not None
-                and file_id[2] > total_storage.numel()
-            ):
-                # #3672: a larger file that could not be replaced keeps its
-                # size. This comes after the copies, which read the leaves of
-                # a source that views the file.
-                if consolidate_futures is not None:
-                    wait(consolidate_futures)
-                _pad_consolidated_metadata(
-                    filename, filesize, metadata_dict_json.numel()
-                )
+            if not use_buffer:
+                # #3672: the footer is written after the leaves of the source
+                # are read, since a source that views a file that could not
+                # be replaced can have leaves under it. It goes at the end of
+                # the file, where from_consolidated reads it: such a file
+                # keeps its size if it is larger.
+                footer = total_storage
+                if file_id is not None and file_id[2] > footer.numel():
+                    if consolidate_futures is not None:
+                        # the copies can still read a leaf under the footer
+                        wait(consolidate_futures)
+                    footer = torch.from_file(
+                        str(filename),
+                        size=file_id[2],
+                        dtype=torch.uint8,
+                        shared=True,
+                        # needed when device ctx differs
+                        device=torch.device("cpu"),
+                    )
+                footer[-8:] = len_metadata
+                footer[-8 - metadata_dict_json.numel() : -8] = metadata_dict_json
         if consolidate_futures is not None:
             return TensorDictFuture(consolidate_futures, result)
         return result
@@ -2847,28 +2854,6 @@ def _write_consolidated_metadata(filename, metadata: dict, data_size: int) -> No
         f.seek(data_size)
         f.write(metadata_json)
         f.write(len_metadata.view(torch.uint8).numpy().tobytes())
-
-
-def _pad_consolidated_metadata(filename, data_size: int, metadata_size: int) -> None:
-    """Pads the ``metadata_size`` bytes of metadata that follow the ``data_size`` bytes of leaves up to the end of a larger consolidated file.
-
-    :meth:`~tensordict.TensorDictBase.from_consolidated` reads the length of
-    the metadata in the last 8 bytes of the file, and the metadata before it.
-    The padding is made of spaces, as in :func:`_write_consolidated_metadata`,
-    and is written through a map of the file rather than built in memory.
-    """
-    file = torch.from_file(
-        str(filename),
-        size=os.path.getsize(filename),
-        dtype=torch.uint8,
-        shared=True,
-        # needed when device ctx differs
-        device=torch.device("cpu"),
-    )
-    file[data_size + metadata_size : -8] = 32
-    file[-8:] = torch.tensor(
-        [file.numel() - data_size - 8], dtype=torch.int64, device=file.device
-    ).view(torch.uint8)
 
 
 def _update_consolidated_metadata(td, metadata: dict) -> None:
