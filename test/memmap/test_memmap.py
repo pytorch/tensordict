@@ -1372,24 +1372,31 @@ def test_anonymous_with_elements_unchanged(tmp_path):
 )
 @pytest.mark.parametrize("shape", [(4, 3), (4, 0)])
 def test_anonymous_file_descriptors(shape):
-    def count():
-        # the open files of the handlers of this process
+    def handler_files():
+        # the open files of the handlers of this process, each with its
+        # descriptor
         gc.collect()
-        targets = []
+        files = set()
         for fd in os.listdir("/proc/self/fd"):
             try:
-                targets.append(os.readlink(f"/proc/self/fd/{fd}"))
+                target = os.readlink(f"/proc/self/fd/{fd}")
             except OSError:
                 # the file descriptor of the listing itself
                 continue
-        return sum(f"pym-{os.getpid()}-" in target for target in targets)
+            if f"pym-{os.getpid()}-" in target:
+                files.add((fd, target))
+        return files
 
-    before = count()
+    # Only the files that the tensors below open are counted: a memory map
+    # of an earlier test can be released at any time (on a free-threaded
+    # build, by the thread that made it)
+    before = handler_files()
     tensors = [MemoryMappedTensor.zeros(shape) for _ in range(8)]
+    opened = handler_files() - before
     # the handler holds one, and its mmap a duplicate
-    assert count() == before + 16
+    assert len(opened) == 16
     del tensors
-    assert count() == before
+    assert not opened & handler_files()
 
 
 def test_pickle_filename(tmp_path):
