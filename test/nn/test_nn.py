@@ -7578,17 +7578,32 @@ class TestTensorDictParams:
         "to_empty",
         "overwrite",
     ]
+    # #3547: a conversion that replaces the leaves registers them again, and
+    # the registrations that are not leaves are lost. The fix of #3726 keeps
+    # the None buffers of the converted TensorDictParams only.
+    _LOST_3547 = pytest.mark.xfail(
+        strict=True,
+        reason="#3547: a conversion that replaces the leaves drops the registrations that are not leaves",
+    )
 
     @pytest.mark.parametrize("locked", [False, True])
-    @pytest.mark.parametrize("nested", [False, True])
     @pytest.mark.parametrize("none", ["buffer", "non_persistent"])
-    @pytest.mark.parametrize("op", _CONVERSIONS)
-    def test_apply_none_buffer(self, op, none, nested, locked):
+    @pytest.mark.parametrize(
+        "op,nested",
+        [
+            *((op, False) for op in _CONVERSIONS),
+            *((op, True) for op in _CONVERSIONS[:8]),
+            pytest.param("meta", True, marks=_LOST_3547),
+            pytest.param("to_empty", True, marks=_LOST_3547),
+            pytest.param("overwrite", True, marks=_LOST_3547),
+        ],
+    )
+    def test_apply_none_buffer(self, op, nested, none, locked):
         # #3726: a None buffer made module.to() and its siblings raise an
         # AttributeError. As in nn.Module, the conversion skips it and it stays
         # registered: the rest converts as it does without the None buffer.
-        # On a nested TensorDictParams it never raised, but a conversion that
-        # replaces the leaves dropped it.
+        # On a nested TensorDictParams it never raised: it is kept as before,
+        # unless the conversion replaces the leaves (#3547).
         params = self._apply_params_with_none(none, nested, op)
         ref = self._apply_params_with_none(None, nested, op)
         params.lock_() if locked else params.unlock_()
@@ -7656,24 +7671,56 @@ class TestTensorDictParams:
         assert all(params[key] is leaf for key, leaf in leaves.items())
         assert params.unused is None
 
+    @pytest.mark.parametrize("target", [torch.float64, "meta"])
+    def test_apply_none_over_leaf(self, target):
+        # #3726: a None registered over the name of a leaf is not skipped: the
+        # leaf is still in the tensordict, and skipping it would leave it
+        # unconverted. The conversion raises as before.
+        params = TensorDictParams(
+            TensorDict(a=torch.zeros(3), b=torch.zeros(2)), no_convert=True
+        )
+        params.register_buffer("a", None)
+        with pytest.raises(
+            AttributeError, match="'NoneType' object has no attribute 'data'"
+        ):
+            self._parent(params).to(target)
+
+    @pytest.mark.parametrize("op", _CONVERSIONS)
+    def test_apply_none_buffer_and_parameter(self, op):
+        # #3726: a None buffer next to a None parameter. The None buffer is
+        # kept, and the rest is what the module without it gives: the None
+        # parameter stays, unless the conversion replaces the leaves (#3547).
+        params = self._apply_params_with_none("parameter", False, op)
+        params.register_buffer("unused_buffer", None)
+        ref = self._apply_params_with_none("parameter", False, op)
+        self._convert(self._parent(params), op)
+        self._convert(self._parent(ref), op)
+        assert list(params._buffers) == [*ref._buffers, "unused_buffer"]
+        assert params.unused_buffer is None
+        assert list(params._parameters) == list(ref._parameters)
+        assert ("unused" in params._parameters) is (op in self._CONVERSIONS[:8])
+        assert self._registered(params) == self._registered(ref)
+        self._check_registered(params)
+        self._check_registered(params["sub"])
+
+    @_LOST_3547
+    @pytest.mark.parametrize("op", _CONVERSIONS[8:])
+    def test_apply_none_buffer_keeps_none_parameter(self, op):
+        # #3547: next to a None buffer too, the right result of a conversion
+        # that replaces the leaves keeps the None parameter.
+        params = self._apply_params_with_none("parameter", False, op)
+        params.register_buffer("unused_buffer", None)
+        self._convert(self._parent(params), op)
+        assert "unused" in params._parameters and params.unused is None
+
     @pytest.mark.parametrize("nested", [False, True])
     @pytest.mark.parametrize(
         "op",
         [
             *_CONVERSIONS[:8],
-            *(
-                # #3547: where the conversion replaces the leaves, the
-                # registrations that are not leaves are lost, a None parameter
-                # among them. The fix of #3726 keeps the None buffers only.
-                pytest.param(
-                    op,
-                    marks=pytest.mark.xfail(
-                        strict=True,
-                        reason="#3547: a conversion that replaces the leaves drops a None parameter",
-                    ),
-                )
-                for op in _CONVERSIONS[8:]
-            ),
+            pytest.param("meta", marks=_LOST_3547),
+            pytest.param("to_empty", marks=_LOST_3547),
+            pytest.param("overwrite", marks=_LOST_3547),
         ],
     )
     def test_apply_none_parameter(self, op, nested):
