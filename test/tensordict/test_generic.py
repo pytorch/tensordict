@@ -2221,16 +2221,30 @@ class TestGeneric:
         filename = tmp_path / "td.bin"
         source = TensorDict(a=torch.arange(6.0) + 7, b=torch.ones(6, 2), batch_size=[6])
         if old_file == "same_size":
-            (source * 0).consolidate(filename=filename)
+            # locked, as the source is: the metadata has the same length
+            (source * 0).lock_().consolidate(filename=filename)
         elif old_file != "none":
             numel = 2 if old_file == "smaller" else 300
             TensorDict(a=torch.arange(numel)).consolidate(filename=filename)
+        old_size = filename.stat().st_size if old_file != "none" else 0
         source.lock_()
-        with (
-            mock.patch("os.replace", side_effect=PermissionError),
-            pytest.raises(RuntimeError, match="lock"),
-        ):
-            source.consolidate(filename=filename, inplace=True)
+        written = []
+        for path in (filename, tmp_path / "fresh.bin"):
+            with (
+                mock.patch("os.replace", side_effect=PermissionError),
+                pytest.raises(RuntimeError, match="lock"),
+            ):
+                source.consolidate(filename=path, inplace=True)
+            written.append(path.read_bytes())
+        written, fresh = written
+        if old_file == "larger":
+            # the leaves at the start and the metadata at the end
+            assert len(written) == old_size > len(fresh)
+            assert written[:72] == fresh[:72]
+            assert written[72 - len(fresh) :] == fresh[72:]
+        else:
+            assert (len(fresh) == old_size) == (old_file == "same_size")
+            assert written == fresh
         loaded = TensorDict.from_consolidated(filename)
         assert set(loaded.keys()) == {"a", "b"}
         assert loaded.batch_size == (6,)
