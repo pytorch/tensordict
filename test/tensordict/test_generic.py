@@ -4611,6 +4611,82 @@ class TestGeneric:
                 check(*pair, *pair)
                 assert is_accepted(EqualTensor) and not is_accepted(EqualPlain)
 
+    def test_is_accepted_class_follows_bases_and_metaclasses(self, monkeypatch):
+        # #3569: _is_accepted_class gives what issubclass gives after the
+        # __bases__ of a checked class, or of one of its ancestors, are
+        # reassigned, and while an accepted class has a metaclass whose
+        # __subclasscheck__ answers from state of its own, in both directions.
+        is_accepted = tensordict_base._is_accepted_class
+
+        def check(*classes):
+            out = []
+            for cls in classes:
+                # as a write of a value of the class does before the check
+                is_tensor_collection(cls)
+                expected = issubclass(cls, tensordict_base._ACCEPTED_CLASSES)
+                assert is_accepted(cls) is expected, cls
+                assert is_accepted(cls) is expected, cls
+                out.append(expected)
+            return out
+
+        @tensorclass
+        class Base:
+            x: torch.Tensor
+
+        class Plain:
+            pass
+
+        class ToTensorClass(Plain):
+            pass
+
+        class FromTensorClass(Base):
+            pass
+
+        class Ancestor(Plain):
+            pass
+
+        class Descendant(Ancestor):
+            pass
+
+        classes = (ToTensorClass, FromTensorClass, Descendant)
+        assert check(*classes) == [False, True, False]
+        ToTensorClass.__bases__ = (Base,)
+        FromTensorClass.__bases__ = (Plain,)
+        Ancestor.__bases__ = (Base,)
+        assert check(*classes) == [True, False, True]
+        ToTensorClass.__bases__ = (Plain,)
+        FromTensorClass.__bases__ = (Base,)
+        Ancestor.__bases__ = (Plain,)
+        assert check(*classes) == [False, True, False]
+
+        class RegistryMeta(type):
+            registry = set()
+
+            def __subclasscheck__(cls, subclass):
+                return subclass in RegistryMeta.registry or type.__subclasscheck__(
+                    cls, subclass
+                )
+
+        Registered = RegistryMeta("Registered", (), {})
+
+        class Joins:
+            pass
+
+        class Leaves:
+            pass
+
+        RegistryMeta.registry.add(Leaves)
+        with monkeypatch.context() as m:
+            m.setattr(
+                tensordict_base,
+                "_ACCEPTED_CLASSES",
+                (*tensordict_base._ACCEPTED_CLASSES, Registered),
+            )
+            assert check(Joins, Leaves) == [False, True]
+            RegistryMeta.registry.add(Joins)
+            RegistryMeta.registry.discard(Leaves)
+            assert check(Joins, Leaves) == [True, False]
+
     def test_is_accepted_class_keeps_no_class_alive(self):
         # #3569: the memo of _is_accepted_class does not keep alive a class
         # that is created at run time.
