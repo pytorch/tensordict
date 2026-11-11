@@ -899,10 +899,10 @@ class _Serialization:
                 file keep their data; its disk space is freed once none of
                 them maps it. With ``use_buffer=True``, or on Windows while the
                 file is open (for example mapped by a tensordict), the file
-                is written in place, and the tensordicts that map it see the
-                new bytes. Without a buffer, a larger file then keeps its
-                size, and the metadata is written at its end. Defaults to
-                ``None``, which keeps the storage in memory.
+                is written in place. Without a buffer, the tensordicts that
+                map it then see the new bytes, and a larger file keeps its
+                size, with the metadata at its end. Defaults to ``None``,
+                which keeps the storage in memory.
 
         Keyword Args:
             num_threads (int, optional): the number of threads that copy the
@@ -1065,6 +1065,8 @@ class _Serialization:
         )
         filesize = sum(flat_size)
         device = torch.device(device) if device is not None else None
+        # the size of the file at filename if it is written in place
+        inplace_filesize = 0
         if filename is None:
             storage = torch.empty(
                 filesize,
@@ -1091,7 +1093,7 @@ class _Serialization:
                 )
             suffix = len_metadata.numel() + metadata_dict_json.numel()
             if not use_buffer:
-                _replace_existing_file(filename)
+                inplace_filesize = _replace_existing_file(filename)
                 total_storage = torch.from_file(
                     str(filename),
                     size=filesize + suffix,
@@ -1105,6 +1107,8 @@ class _Serialization:
                     shape=(filesize + suffix,),
                     dtype=torch.uint8,
                 )
+
+            if not inplace_filesize:
                 total_storage[-8:] = len_metadata
                 total_storage[-8 - metadata_dict_json.numel() : -8] = metadata_dict_json
             storage = total_storage[:-suffix]
@@ -1161,7 +1165,8 @@ class _Serialization:
                     # e.g. for x[:, :1], which cannot be viewed as bytes.
                     # With a filename or return_early, a leaf with a storage
                     # offset is copied first, as a leaf that needs padding
-                    # is below.
+                    # is below, and as a leaf that may map a file that is
+                    # written in place.
                     if (
                         (stride and stride[-1] != 1)
                         or (
@@ -1169,6 +1174,10 @@ class _Serialization:
                             and (filename is not None or return_early or is_compiling())
                         )
                         or not v.is_contiguous()
+                        or (
+                            inplace_filesize
+                            and _may_map_file(v, filename, inplace_filesize)
+                        )
                     ):
                         v = v.clone(memory_format=torch.contiguous_format)
                     try:
@@ -1310,9 +1319,14 @@ class _Serialization:
                 elif (
                     (stride and stride[-1] != 1)
                     # with a filename, a leaf with a storage offset is copied
-                    # first, as a leaf that needs padding is below
+                    # first, as a leaf that needs padding is below, and as a
+                    # leaf that may map a file that is written in place
                     or (filename is not None and v.storage_offset())
                     or not v.is_contiguous()
+                    or (
+                        inplace_filesize
+                        and _may_map_file(v, filename, inplace_filesize)
+                    )
                 ):
                     v = v.clone(memory_format=torch.contiguous_format)
                 try:
@@ -1332,6 +1346,25 @@ class _Serialization:
                 self._sync_all()
             if items:
                 torch.cat(items, out=storage)
+        if inplace_filesize:
+            # #3672: a file that could not be replaced is written in place,
+            # and the source can be a view of it. Its metadata is written
+            # once the leaves of the source are read: they were copied above,
+            # or before the workers started. It goes at the end of the file,
+            # where from_consolidated reads it: a larger file keeps its size.
+            file_id = _file_id(filename)
+            footer = total_storage
+            if file_id is not None and file_id[2] > footer.numel():
+                footer = torch.from_file(
+                    str(filename),
+                    size=file_id[2],
+                    dtype=torch.uint8,
+                    shared=True,
+                    # needed when device ctx differs
+                    device=torch.device("cpu"),
+                )
+            footer[-8:] = len_metadata
+            footer[-8 - metadata_dict_json.numel() : -8] = metadata_dict_json
         for v, (k, oldv) in _zip_strict(
             storage.split(flat_size), list(flat_dict.items())
         ):
@@ -1400,28 +1433,9 @@ class _Serialization:
                 with open(filename, "w+b") as f:
                     f.write(total_storage._handler.buffer)
             result._consolidated["filename"] = Path(filename).resolve()
-            file_id = result._consolidated["file_id"] = _file_id(filename)
-            if not use_buffer:
-                # #3672: the footer is written after the leaves of the source
-                # are read, since a source that views a file that could not
-                # be replaced can have leaves under it. It goes at the end of
-                # the file, where from_consolidated reads it: such a file
-                # keeps its size if it is larger.
-                footer = total_storage
-                if file_id is not None and file_id[2] > footer.numel():
-                    if consolidate_futures is not None:
-                        # the copies can still read a leaf under the footer
-                        wait(consolidate_futures)
-                    footer = torch.from_file(
-                        str(filename),
-                        size=file_id[2],
-                        dtype=torch.uint8,
-                        shared=True,
-                        # needed when device ctx differs
-                        device=torch.device("cpu"),
-                    )
-                footer[-8:] = len_metadata
-                footer[-8 - metadata_dict_json.numel() : -8] = metadata_dict_json
+            result._consolidated["file_id"] = (
+                file_id if inplace_filesize else _file_id(filename)
+            )
         if consolidate_futures is not None:
             return TensorDictFuture(consolidate_futures, result)
         return result
@@ -2814,8 +2828,11 @@ def _file_id(filename) -> tuple[int, int, int] | None:
     return stat.st_dev, stat.st_ino, stat.st_size
 
 
-def _replace_existing_file(filename) -> None:
+def _replace_existing_file(filename) -> int:
     """Puts an empty file at ``filename`` if the file there is not empty.
+
+    Returns the size of the file that is still there and will be written in
+    place, and 0 if the file at ``filename`` is new, replaced or empty.
 
     ``torch.from_file`` does not shrink a file, so the footer written at the
     end of the map would not be at the end of a larger file. A new file also
@@ -2828,19 +2845,44 @@ def _replace_existing_file(filename) -> None:
     fails as before instead of replacing it.
     """
     try:
-        if not os.path.getsize(filename) or not os.access(filename, os.W_OK):
-            return
+        size = os.path.getsize(filename)
+    except OSError:
+        return 0
+    try:
+        if not size or not os.access(filename, os.W_OK):
+            return size
         target = os.path.realpath(filename)
         # A sibling is on the same file system, so a rename moves it into place.
         fd, tmp = tempfile.mkstemp(prefix=".tdtmp-", dir=os.path.dirname(target))
     except OSError:
-        return
+        return size
     os.close(fd)
     try:
         shutil.copymode(target, tmp)
         os.replace(tmp, target)
     except OSError:
         os.unlink(tmp)
+        return size
+    return 0
+
+
+def _may_map_file(tensor: torch.Tensor, filename, filesize: int) -> bool:
+    """Whether the CPU ``tensor`` may be a map of the file at ``filename``, of ``filesize`` bytes.
+
+    The storage of a file map cannot be resized and is no larger than the
+    file. A :class:`~tensordict.MemoryMappedTensor` of another file is not
+    one.
+    """
+    storage = tensor.untyped_storage()
+    if storage.resizable() or storage.nbytes() > filesize:
+        return False
+    mapped = getattr(tensor, "_filename", None)
+    if mapped is not None:
+        try:
+            return os.path.samefile(mapped, filename)
+        except OSError:
+            pass
+    return True
 
 
 def _write_consolidated_metadata(filename, metadata: dict, data_size: int) -> None:
