@@ -1494,8 +1494,19 @@ def _register_tensor_class(cls):
     _ACCEPTED_CLASSES = tuple(_ACCEPTED_CLASSES)
 
 
+# What the results of _is_accepted_class were computed for, and the results:
+# the _ACCEPTED_CLASSES tuple, abc.get_cache_token(), which changes when a class
+# is registered as a virtual subclass of an ABC (most accepted classes are ABCs),
+# whether results may be stored, and a {cls: (bool, cls.__mro__)} dict.
+_ACCEPTED_CLASS_MEMO_STATE = (None, None, False, {})
+
+
 def _is_accepted_class(cls: type) -> bool:
     """Returns True if ``cls`` is a subclass of one of the ``_ACCEPTED_CLASSES``."""
+    global _ACCEPTED_CLASS_MEMO_STATE
+    if cls is Tensor:
+        # The most common entry type: skip is_compiling() and the memo lookup.
+        return True
     if is_compiling():
         # Dynamo guards on the length of _ACCEPTED_CLASSES, which
         # _register_tensor_class rebinds each time a tensorclass is defined,
@@ -1504,7 +1515,59 @@ def _is_accepted_class(cls: type) -> bool:
         return issubclass(
             cls, (Tensor, TensorDictBase, ftdim.Tensor)
         ) or _is_tensorclass(cls)
-    return issubclass(cls, _ACCEPTED_CLASSES)
+    if type(cls) is not type:
+        # A class with a metaclass: no memo. The memo hashes the class, which
+        # issubclass does not do when Tensor comes before every ABC, and a
+        # metaclass can make the hash raise, or make two classes hash and
+        # compare equal, which would then share an entry. With type as its
+        # metaclass, a class hashes and compares by identity.
+        return issubclass(cls, _ACCEPTED_CLASSES)
+    classes, token, store, memo = _ACCEPTED_CLASS_MEMO_STATE
+    if classes is not _ACCEPTED_CLASSES or token != abc.get_cache_token():
+        if classes is not _ACCEPTED_CLASSES:
+            # A new tuple (a tensorclass was defined). A new token alone
+            # (an ABC registration) changes no metaclass, so the flag stays.
+            classes = _ACCEPTED_CLASSES
+            # issubclass calls the __subclasscheck__ of the metaclass of each
+            # class in the tuple. Those of type and ABCMeta answer from the
+            # __mro__ of cls and from caches that a new token clears; any
+            # other one may answer from state of its own, so nothing is
+            # stored then.
+            store = type(classes) is tuple
+            for accepted in classes if store else ():
+                meta = type(accepted)
+                check = (
+                    getattr(meta, "__subclasscheck__", None)
+                    if type(meta) is type
+                    else None
+                )
+                if (
+                    check is not type.__subclasscheck__
+                    and check is not abc.ABCMeta.__subclasscheck__
+                ):
+                    store = False
+                    break
+        # A new dict, not a cleared one: a call of another thread that began
+        # before the change then stores its result in the dict it read.
+        memo = {}
+        _ACCEPTED_CLASS_MEMO_STATE = (classes, abc.get_cache_token(), store, memo)
+    if not store:
+        return issubclass(cls, _ACCEPTED_CLASSES)
+    # A new __mro__ tuple is built for a class and its subclasses when
+    # __bases__ is assigned; the entry keeps the old one alive.
+    mro = cls.__mro__
+    hit = memo.get(cls)
+    if hit is not None and hit[1] is mro:
+        return hit[0]
+    # issubclass walks the tuple, in an order that changes from process to
+    # process, and calls ABCMeta.__subclasscheck__ for each ABC in it.
+    out = issubclass(cls, _ACCEPTED_CLASSES)
+    if cls in _TENSOR_COLLECTION_MEMO:
+        # Only a class that _TENSOR_COLLECTION_MEMO keeps alive already, as
+        # it does for the class of every value that is set: this memo must
+        # not keep alive a class that is created at run time.
+        memo[cls] = (out, mro)
+    return out
 
 
 _TENSOR_COLLECTION_MEMO = {}
