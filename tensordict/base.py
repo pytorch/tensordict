@@ -221,6 +221,21 @@ _SELF_NESTING_ERROR = (
 # Context-manager ops whose inverse __exit__ runs also when the body raises
 _UNDO_ON_ERROR_OPS = frozenset({"to_module", "lock_", "unlock_"})
 
+# The dtypes that _clone_recurse clones one leaf at a time: adding a number
+# turns a bool leaf into an integer one. A set, because the test runs once per
+# leaf and looking up torch.bool there costs more than the membership test.
+_CLONE_PER_LEAF_DTYPES = frozenset((torch.bool,))
+
+# torch.jit.trace cannot record the per-kind calls of _clone_recurse; a torch
+# without TorchScript tracing has nothing to record.
+try:
+    from torch._C import _is_tracing as _clone_is_jit_tracing
+except ImportError:
+
+    def _clone_is_jit_tracing() -> bool:
+        return False
+
+
 _GET_DEFAULTS_TO_NONE_REPLACEMENT = "td[key] to raise a KeyError for a missing key"
 
 if "TD_GET_DEFAULTS_TO_NONE" in os.environ:
@@ -10666,23 +10681,60 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     def _clone_recurse(self) -> Self:
         keys, vals = self._items_list(True, True)
         foreach_vals = {}
+        is_float = []
         iter_vals = {}
         for key, val in zip(keys, vals):
             if (
                 type(val) is torch.Tensor
                 and not val.requires_grad
-                and val.dtype not in (torch.bool,)
+                and (dtype := val.dtype) not in _CLONE_PER_LEAF_DTYPES
             ):
                 foreach_vals[key] = val
+                is_float.append(dtype.is_floating_point)
             else:
                 iter_vals[key] = val
         if foreach_vals:
-            foreach_vals = dict(
-                _zip_strict(
-                    foreach_vals.keys(),
-                    _foreach("add", tuple(foreach_vals.values()), 0),
+            leaves = tuple(foreach_vals.values())
+            # x + -0.0 returns both zeros of a floating x as they are, where
+            # x + 0 turns -0.0 into 0.0. Complex leaves keep the 0: no number
+            # keeps their zeros. The calls are what _foreach("add", ...) makes,
+            # without its scans for unbatched tensors: every leaf here is an
+            # exact Tensor. When the two kinds mix, each kind needs its own
+            # call.
+            if torch._C._are_functorch_transforms_active():
+                clones = [
+                    leaf.add(-0.0 if float_ else 0)
+                    for leaf, float_ in zip(leaves, is_float)
+                ]
+            elif False not in is_float:
+                clones = torch._foreach_add(leaves, -0.0)
+            elif True not in is_float:
+                clones = torch._foreach_add(leaves, 0)
+            elif is_compiling() or not _clone_is_jit_tracing():
+                # one number per call, not one per leaf: inductor has no
+                # lowering for a list of numbers, and torch.export.save and
+                # torch.jit.trace (of a make_fx graph) cannot write a list of
+                # a float and an int
+                floats = iter(
+                    torch._foreach_add(
+                        [leaf for leaf, float_ in zip(leaves, is_float) if float_],
+                        -0.0,
+                    )
                 )
-            )
+                others = iter(
+                    torch._foreach_add(
+                        [leaf for leaf, float_ in zip(leaves, is_float) if not float_],
+                        0,
+                    )
+                )
+                clones = [
+                    next(floats) if float_ else next(others) for float_ in is_float
+                ]
+            else:
+                # under torch.jit.trace the clone stays as it was, and its
+                # -0.0 become 0.0
+                clones = torch._foreach_add(leaves, 0)
+            foreach_vals = dict(_zip_strict(foreach_vals.keys(), clones))
         if iter_vals:
             iter_vals = dict(
                 _zip_strict(
