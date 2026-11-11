@@ -60,9 +60,16 @@ Two options change the behavior of a class. Set them with
 `class State(TypedTensorDict, frozen=True)`. Subclasses inherit them.
 
 - `shadow`: allows a field to have the name of a
-[`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase) attribute (`batch_size`,
+[`TensorDictBase`](tensordict.TensorDictBase.html#tensordict.TensorDictBase) attribute (`data`,
 `sum`, ...), which it then hides. Without it, such a field raises an
-`AttributeError` when the class is defined.
+`AttributeError` when the class is defined. The field hides the
+attribute from the methods of the object too, so a name that other
+methods use does not work: a field `keys` breaks printing and
+arithmetic. The constructor reads the keywords `batch_size`,
+`device` and `names` as its own arguments, so it cannot take a
+field with one of these names by keyword. A field `batch_size` or
+`device` also hides the batch size or the device, and breaks
+[`torch.stack()`](https://docs.pytorch.org/docs/stable/generated/torch.stack.html#torch.stack).
 - `frozen`: the constructor locks the instance.
 
 The `autocast`, `nocast` and `tensor_only` options of
