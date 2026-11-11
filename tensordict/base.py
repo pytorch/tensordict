@@ -128,7 +128,6 @@ from tensordict.utils import (
 from torch import _foreach_copy_, multiprocessing as mp, nn, Tensor
 from torch.autograd import forward_ad
 from torch.compiler import allow_in_graph, is_compiling, is_dynamo_compiling
-from torch.jit import is_tracing as _is_jit_tracing
 from torch.nn.parameter import Buffer, UninitializedTensorMixin
 from torch.utils._pytree import tree_map
 
@@ -193,6 +192,16 @@ try:
     )
 except ImportError:
     _get_eval_frame_callback = None
+# torch.jit.trace records the stack that update_ from a lazy stack makes;
+# a torch without TorchScript tracing has nothing to record.
+try:
+    from torch.jit import is_tracing as _is_jit_tracing
+except ImportError:
+
+    def _is_jit_tracing() -> bool:
+        return False
+
+
 # Private torch functions that update_ and copy_ from a lazy stack check before
 # they skip the stack of its leaves (#3593). Without them, the walk is kept.
 try:

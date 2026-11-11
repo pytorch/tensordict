@@ -8453,13 +8453,10 @@ class TestLazyStackedTensorDict:
             assert stack_calls([a, a + 1]) == 1
 
         # torch.jit.trace keeps the walk: it records the stack, as before
-        def traced(x):
-            assert stack_calls([x, x + 1]) == 1
-            return x
-
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            torch.jit.trace(traced, a, check_trace=False)
+        with mock.patch.dict(
+            _has_typed_tensordict.__globals__, _is_jit_tracing=lambda: True
+        ):
+            assert stack_calls([a, a + 1]) == 1
 
         # autocast keeps the walk: there, torch.stack rejects float16 leaves
         # of one shape and device
