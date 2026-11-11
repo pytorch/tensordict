@@ -1382,7 +1382,7 @@ class _Serialization:
             self.clear_device_()
             device = None
         else:
-            device = None
+            device = self.device
         result = self._fast_apply(
             assign_val,
             named=True,

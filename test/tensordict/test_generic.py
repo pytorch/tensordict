@@ -2141,6 +2141,48 @@ class TestGeneric:
         assert_allclose_td(saved, expected)
         assert_allclose_td(loaded, expected)
 
+    @pytest.mark.parametrize("num_threads", [0, 2])
+    @pytest.mark.parametrize("use_buffer", [False, True])
+    @pytest.mark.parametrize("device", [None, "cpu"])
+    @pytest.mark.parametrize("kind", ["tensordict", "nested", "tensorclass"])
+    def test_consolidated_file_inplace_device(
+        self, tmp_path, kind, device, use_buffer, num_threads
+    ):
+        # #3698: consolidate(filename=..., inplace=True) raised a TypeError,
+        # after it wrote the file, on a tensordict with the device "cpu". It
+        # returns the tensordict with its device, as it does without a device.
+        a, b = torch.tensor([7, 8, 9]), torch.arange(3.0)
+        if kind == "tensordict":
+            td = TensorDict(a=a, b=b, batch_size=[3], device=device)
+        elif kind == "nested":
+            td = TensorDict(
+                a=a, nested=TensorDict(b=b, deep=TensorDict(c=b + 1)), device=device
+            )
+        else:
+            td = _AppendMemmapRows(x=a, label="a label", batch_size=[3], device=device)
+        expected = td.clone()
+        filename = tmp_path / "td.bin"
+        result = td.consolidate(
+            filename=filename,
+            inplace=True,
+            use_buffer=use_buffer,
+            num_threads=num_threads,
+        )
+        assert result is td
+        assert td.is_consolidated()
+        if device is not None:
+            device = torch.device(device)
+        levels = [td]
+        if kind == "nested":
+            levels += [td["nested"], td["nested", "deep"]]
+        for level in levels:
+            assert level.is_locked
+            assert level.device == device
+        assert (td == expected).all()
+        loaded = TensorDict.from_consolidated(filename)
+        assert loaded.device == device
+        assert (loaded == expected).all()
+
     def test_consolidated_lazy_stack_names_serialized(self):
         td = lazy_stack(
             [
