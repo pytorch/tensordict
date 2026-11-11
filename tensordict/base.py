@@ -1524,23 +1524,29 @@ def _is_accepted_class(cls: type) -> bool:
         return issubclass(cls, _ACCEPTED_CLASSES)
     classes, token, store, memo = _ACCEPTED_CLASS_MEMO_STATE
     if classes is not _ACCEPTED_CLASSES or token != abc.get_cache_token():
-        classes = _ACCEPTED_CLASSES
-        # issubclass calls the __subclasscheck__ of the metaclass of each
-        # class in the tuple. Those of type and ABCMeta answer from the
-        # __mro__ of cls and from caches that a new token clears; any other
-        # one may answer from state of its own, so nothing is stored then.
-        store = type(classes) is tuple
-        for accepted in classes if store else ():
-            meta = type(accepted)
-            check = (
-                getattr(meta, "__subclasscheck__", None) if type(meta) is type else None
-            )
-            if (
-                check is not type.__subclasscheck__
-                and check is not abc.ABCMeta.__subclasscheck__
-            ):
-                store = False
-                break
+        if classes is not _ACCEPTED_CLASSES:
+            # A new tuple (a tensorclass was defined). A new token alone
+            # (an ABC registration) changes no metaclass, so the flag stays.
+            classes = _ACCEPTED_CLASSES
+            # issubclass calls the __subclasscheck__ of the metaclass of each
+            # class in the tuple. Those of type and ABCMeta answer from the
+            # __mro__ of cls and from caches that a new token clears; any
+            # other one may answer from state of its own, so nothing is
+            # stored then.
+            store = type(classes) is tuple
+            for accepted in classes if store else ():
+                meta = type(accepted)
+                check = (
+                    getattr(meta, "__subclasscheck__", None)
+                    if type(meta) is type
+                    else None
+                )
+                if (
+                    check is not type.__subclasscheck__
+                    and check is not abc.ABCMeta.__subclasscheck__
+                ):
+                    store = False
+                    break
         # A new dict, not a cleared one: a call of another thread that began
         # before the change then stores its result in the dict it read.
         memo = {}
