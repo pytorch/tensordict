@@ -1616,7 +1616,9 @@ class LazyStackedTensorDictStore(_StoreConnection, _StoreUnsupported, TensorDict
 
     # ---- Key access ----
 
-    def _index_tensordict(self, index, new_batch_size=None, names=None):
+    def _index_tensordict(
+        self, index, new_batch_size=None, names=None, list_index=None
+    ):
         """Eagerly fetch all leaf tensors for the given index in one pipeline."""
         batch_size = self.batch_size
         if new_batch_size is None:

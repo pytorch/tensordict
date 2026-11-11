@@ -1101,6 +1101,297 @@ def test_pickle_handler_shares_memory_across_procs():
     assert t.tolist() == [1.0, 2.0, 3.0, 4.0, 5.0] + [1.0] * 5
 
 
+# #3566: an anonymous memory map of a tensor with no elements raised
+# "ValueError: cannot mmap an empty file"
+@pytest.mark.parametrize("shape", [(0,), (3, 0), (0, 2), (2, 0, 3)])
+@pytest.mark.parametrize(
+    "dtype", [None, torch.float64, torch.int64, torch.bool, torch.complex64]
+)
+def test_empty_anonymous_constructors(shape, dtype):
+    source = torch.zeros(shape, dtype=dtype)
+    tensors = [
+        MemoryMappedTensor.zeros(shape, dtype=dtype),
+        MemoryMappedTensor.zeros(*shape, dtype=dtype),
+        MemoryMappedTensor.zeros(shape=shape, dtype=dtype),
+        MemoryMappedTensor.ones(shape, dtype=dtype),
+        MemoryMappedTensor.empty(shape, dtype=dtype),
+        MemoryMappedTensor.empty(*shape, dtype=dtype),
+        MemoryMappedTensor.full(shape, fill_value=1, dtype=dtype),
+        MemoryMappedTensor.from_tensor(source),
+        MemoryMappedTensor.from_tensor(source, copy_data=False),
+        MemoryMappedTensor.from_tensor(torch.zeros((), dtype=dtype), shape=shape),
+        MemoryMappedTensor.zeros_like(source),
+        MemoryMappedTensor.ones_like(source),
+        MemoryMappedTensor.empty_like(source),
+        MemoryMappedTensor.full_like(source, 1),
+    ]
+    for tensor in tensors:
+        assert type(tensor) is MemoryMappedTensor
+        assert tensor.shape == source.shape
+        assert tensor.dtype == source.dtype
+        assert tensor._handler is not None
+        with pytest.raises(RuntimeError, match="has no file associated"):
+            tensor.filename
+        assert MemoryMappedTensor.from_tensor(tensor) is tensor
+        assert tensor.clone().shape == source.shape
+        tensor.fill_(1)
+        tensor.copy_(source)
+        assert torch.cat([tensor, source]).shape[0] == 2 * shape[0]
+
+
+# #3566: memmap(), memmap_() and memmap_like() without a prefix raised when a
+# leaf had no elements; they now give what the calls with a prefix give
+@pytest.mark.parametrize("method", ["memmap", "memmap_", "memmap_like"])
+@pytest.mark.parametrize("num_threads", [0, 2])
+@pytest.mark.parametrize("batch", [4, 0])
+def test_empty_anonymous_td(method, num_threads, batch, tmp_path):
+    td = TensorDict(
+        obs=torch.arange(batch * 3.0).view(batch, 3),
+        empty=torch.zeros(batch, 0, dtype=torch.int64),
+        nested={"empty": torch.zeros(batch, 0, 2)},
+        batch_size=[batch],
+    )
+    anon = getattr(td.clone(), method)(num_threads=num_threads)
+    with_file = getattr(td.clone(), method)(tmp_path / "td", num_threads=num_threads)
+    assert anon.is_memmap()
+    assert anon.batch_size == with_file.batch_size
+    assert set(anon.keys(True, True)) == set(with_file.keys(True, True))
+    for key in td.keys(True, True):
+        assert type(anon[key]) is MemoryMappedTensor
+        assert anon[key].shape == with_file[key].shape == td[key].shape
+        assert anon[key].dtype == with_file[key].dtype == td[key].dtype
+        assert anon[key]._handler is not None
+    if method != "memmap_like":
+        assert (anon["obs"] == td["obs"]).all()
+
+
+# #3566: the leaf with no elements behaves like the one of a tensordict that is
+# memory-mapped in a directory
+@pytest.mark.parametrize("with_prefix", [False, True])
+def test_empty_anonymous_td_ops(with_prefix, tmp_path):
+    td = TensorDict(
+        obs=torch.arange(12.0).view(4, 3), empty=torch.zeros(4, 0), batch_size=[4]
+    )
+    mm = td.memmap(tmp_path / "td" if with_prefix else None)
+    for index, shape in ((slice(1, 3), (2, 0)), (2, (0,)), (None, (1, 4, 0))):
+        assert type(mm[index]["empty"]) is MemoryMappedTensor
+        assert mm[index]["empty"].shape == shape
+    for index, rows in (
+        (torch.tensor([0, 2]), 2),
+        (torch.tensor([True, False, True, True]), 3),
+    ):
+        assert mm[index]["empty"].shape == (rows, 0)
+        assert (mm[index]["obs"] == td["obs"][index]).all()
+    assert mm["empty"][:, None].shape == (4, 1, 0)
+    assert [t.shape for t in mm["empty"].unbind(0)] == [(0,)] * 4
+    clone = mm.clone()
+    assert clone["empty"].shape == (4, 0)
+    assert not clone.is_memmap()
+    assert torch.cat([mm, td])["empty"].shape == (8, 0)
+    assert torch.stack([mm, td])["empty"].shape == (2, 4, 0)
+    empty = mm["empty"]
+    mm.update_(td + 1)
+    mm[1:1] = td[1:1]
+    mm[:2] = td[2:]
+    mm[torch.tensor([3])] = td[:1]
+    assert mm["empty"] is empty
+    assert (
+        mm["obs"] == td["obs"][[2, 3, 2, 0]] + torch.tensor([[0], [0], [1], [0]])
+    ).all()
+    if with_prefix:
+        assert mm.memmap_refresh_()["empty"].shape == (4, 0)
+
+
+# #3566: TorchRL's LazyMemmapStorage without a scratch_dir allocates its storage
+# with memmap_like() and writes rows into it
+def test_empty_anonymous_memmap_like_write():
+    data = TensorDict(
+        obs=torch.arange(6.0).view(2, 3), empty=torch.zeros(2, 0), batch_size=[2]
+    )
+    storage = data[0].clone().expand(10).memmap_like()
+    assert storage.is_memmap()
+    assert storage["empty"].shape == (10, 0)
+    storage[torch.tensor([0, 1])] = data
+    storage[2:4] = data
+    storage[4] = data[1]
+    sample = storage[torch.tensor([1, 0, 3, 4])]
+    assert sample["empty"].shape == (4, 0)
+    assert (sample["obs"] == data["obs"][[1, 0, 1, 1]]).all()
+    # with an empty batch size, as the storage of a buffer that holds nothing
+    storage = data[:0].memmap_like()
+    assert storage.batch_size == (0,)
+    assert storage["obs"].shape == (0, 3)
+    storage[:] = data[:0]
+    storage[torch.tensor([], dtype=torch.long)] = data[:0]
+    assert storage[:0]["empty"].shape == (0, 0)
+
+
+def _empty_anonymous_child(queue_in, queue_out):
+    td = queue_in.get(timeout=TIMEOUT)
+    td["obs"].fill_(1.0)
+    queue_out.put(
+        [
+            (type(td[key]).__name__, tuple(td[key].shape), td[key].dtype)
+            for key in ("obs", "empty")
+        ]
+        + [(type(leaf).__name__, tuple(leaf.shape)) for leaf in td[1:3][0].values()]
+    )
+
+
+# #3566: a memory map with no elements reaches another process like the other
+# leaves of its tensordict
+@pytest.mark.flaky(reruns=5, reruns_delay=5)
+@pytest.mark.skipif(os.name == "nt", reason="the handler pickles through a fd")
+@pytest.mark.parametrize("start_method", ["fork", "spawn"])
+def test_empty_anonymous_send_across_procs(start_method):
+    if start_method == "fork" and sys.platform != "linux":
+        pytest.skip("fork is only safe on Linux")
+    td = TensorDict(
+        obs=torch.zeros(4, 3),
+        empty=torch.zeros(4, 0, dtype=torch.int64),
+        batch_size=[4],
+    ).memmap()
+    ctx = mp.get_context(start_method)
+    queue_in = ctx.Queue(1)
+    queue_out = ctx.Queue(1)
+    p = ctx.Process(target=_empty_anonymous_child, args=(queue_out, queue_in))
+    p.start()
+    try:
+        queue_out.put(td, block=True)
+        assert queue_in.get(timeout=TIMEOUT) == [
+            ("MemoryMappedTensor", (4, 3), torch.float32),
+            ("MemoryMappedTensor", (4, 0), torch.int64),
+            ("MemoryMappedTensor", (3,)),
+            ("MemoryMappedTensor", (0,)),
+        ]
+        # the child wrote to the shared memory of the other leaf
+        assert (td["obs"] == 1).all()
+    finally:
+        p.join()
+
+
+# #3566: pickling a memory map with no elements, and its views
+@pytest.mark.skipif(os.name == "nt", reason="the handler pickles through a fd")
+def test_empty_anonymous_pickle():
+    mt = MemoryMappedTensor.zeros((4, 0, 2), dtype=torch.int32)
+    for view in (mt, mt[1:3], mt[2], mt[None], mt[1:3][0], mt[:, None][2:], mt[..., 0]):
+        loaded = pickle.loads(ForkingPickler.dumps(view))
+        assert type(loaded) is MemoryMappedTensor
+        assert loaded.shape == view.shape
+        assert loaded.dtype == torch.int32
+        assert loaded._handler is not None
+    # a handler that does not hold a tensor with no elements still raises
+    mt = MemoryMappedTensor.zeros(4, 3)
+    with pytest.raises(RuntimeError):
+        MemoryMappedTensor._from_handler(mt._handler, torch.float32, (0, 3))
+
+
+# #3566: an invalid call for a tensor with no elements keeps the error it had:
+# the one of mapping 0 bytes
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda: MemoryMappedTensor.from_tensor(torch.zeros(3), shape=(2, 0)),
+        lambda: MemoryMappedTensor.from_tensor(torch.tensor(3.0), shape=(-1, 0)),
+        lambda: MemoryMappedTensor.from_tensor(torch.tensor(3.0), shape=(True, 0)),
+        lambda: MemoryMappedTensor.from_tensor(torch.zeros(3, 0).to_sparse()),
+        lambda: MemoryMappedTensor.from_tensor(torch.zeros(3, 0, device="meta")),
+        lambda: MemoryMappedTensor.from_tensor(
+            torch.quantize_per_tensor(torch.zeros(0), 1.0, 0, torch.qint8)
+        ),
+        lambda: MemoryMappedTensor.zeros((-1, 0)),
+        lambda: MemoryMappedTensor.full((-1, 0), fill_value=1),
+    ],
+    ids=[
+        "not_broadcastable",
+        "ambiguous_shape",
+        "bool_in_shape",
+        "sparse",
+        "meta",
+        "quantized",
+        "zeros_ambiguous_shape",
+        "full_ambiguous_shape",
+    ],
+)
+def test_empty_anonymous_invalid_call(call):
+    handler_type = type(MemoryMappedTensor.zeros(1)._handler)
+    with pytest.raises(Exception) as expected:
+        handler_type(0)
+    with pytest.raises(type(expected.value)) as raised:
+        call()
+    assert str(raised.value) == str(expected.value)
+
+
+# #3566: a handler of one element with a shape or an index that does not fit a
+# tensor with no elements keeps the error of reshaping one element
+@pytest.mark.parametrize(
+    "shape,index", [((0,), 0), ((0, 3), 0), ((0, 3), "a"), ((-1, 0), None)]
+)
+def test_empty_anonymous_from_handler_invalid(shape, index):
+    handler = MemoryMappedTensor.zeros(1)._handler
+    with pytest.raises(RuntimeError) as expected:
+        torch.zeros(1).reshape(shape)
+    with pytest.raises(RuntimeError) as raised:
+        MemoryMappedTensor._from_handler(handler, torch.float32, shape, index)
+    assert str(raised.value) == str(expected.value)
+
+
+# #3566: what must not change. A memory map with elements maps exactly its
+# elements, holds the same file descriptors and pickles as before, and a
+# file-backed memory map with no elements still works.
+@pytest.mark.skipif(os.name == "nt", reason="the handler pickles through a fd")
+def test_anonymous_with_elements_unchanged(tmp_path):
+    mt = MemoryMappedTensor.from_tensor(torch.arange(6.0).view(2, 3))
+    assert mt._handler.size == 24
+    assert len(mt._handler.buffer) == 24
+    func, args = mt.__reduce__()
+    assert func == MemoryMappedTensor._from_handler
+    assert args == (mt._handler, torch.float32, torch.Size([2, 3]), None)
+    loaded = pickle.loads(ForkingPickler.dumps(mt))
+    assert loaded._handler.size == 24
+    assert loaded.shape == (2, 3)
+    loaded[0, 0] = 10.0
+    assert mt[0, 0] == 10.0
+    empty_view = pickle.loads(ForkingPickler.dumps(mt[1:][3:]))
+    assert empty_view.shape == (0, 3)
+
+    filename = tmp_path / "empty.memmap"
+    mt = MemoryMappedTensor.zeros((3, 0), dtype=torch.int64, filename=filename)
+    assert type(mt) is MemoryMappedTensor
+    assert mt.shape == (3, 0)
+    assert mt.dtype == torch.int64
+    assert mt._handler is None
+    assert mt.filename == str(filename)
+    assert pickle.loads(pickle.dumps(mt)).shape == (3, 0)
+
+
+# #3566: a memory map with no elements holds the file descriptors of one with
+# elements, and releases them with the tensor
+@pytest.mark.skipif(
+    not os.path.isdir("/proc/self/fd"), reason="reads the open files in /proc"
+)
+@pytest.mark.parametrize("shape", [(4, 3), (4, 0)])
+def test_anonymous_file_descriptors(shape):
+    def count():
+        # the open files of the handlers of this process
+        gc.collect()
+        targets = []
+        for fd in os.listdir("/proc/self/fd"):
+            try:
+                targets.append(os.readlink(f"/proc/self/fd/{fd}"))
+            except OSError:
+                # the file descriptor of the listing itself
+                continue
+        return sum(f"pym-{os.getpid()}-" in target for target in targets)
+
+    before = count()
+    tensors = [MemoryMappedTensor.zeros(shape) for _ in range(8)]
+    # the handler holds one, and its mmap a duplicate
+    assert count() == before + 16
+    del tensors
+    assert count() == before
+
+
 def test_pickle_filename(tmp_path):
     mt = MemoryMappedTensor.from_tensor(
         torch.arange(6.0).view(2, 3), filename=tmp_path / "tensor.memmap"

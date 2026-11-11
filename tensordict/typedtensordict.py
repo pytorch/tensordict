@@ -967,7 +967,9 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
     # them, as indexing the stack does; the base method would stack copies of
     # the flat leaves (#2759). Other sources, and members whose reads return
     # copies (files, stores), index as before.
-    def _index_tensordict(self, index, new_batch_size=None, names=None):
+    def _index_tensordict(
+        self, index, new_batch_size=None, names=None, list_index=None
+    ):
         source = self._source
         if (
             isinstance(source, LazyStackedTensorDict)

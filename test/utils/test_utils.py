@@ -1517,6 +1517,57 @@ def test_isin_2dim(dim):
     torch.testing.assert_close(in_ref, expected_in_ref)
 
 
+@pytest.mark.parametrize("dim", (0, 1))
+def test_isin_repeated_rows_not_in_reference(dim):
+    # #3607: a row that repeats in the input and is not in the reference came
+    # back as True once the reference had a dozen rows or more
+    x = torch.tensor([100, 100, 7, 100])
+    reference_x = torch.arange(20)
+    if dim == 1:
+        x, reference_x = x.expand(2, 4), reference_x.expand(2, 20)
+    td = TensorDict(x=x, batch_size=x.shape)
+    reference = TensorDict(x=reference_x, batch_size=reference_x.shape)
+    in_ref = isin(td, reference, key="x", dim=dim)
+    assert in_ref.tolist() == [False, False, True, False]
+
+
+def test_isin_random_sweep():
+    # #3607: a seeded sweep against a brute-force comparison of the rows
+    generator = torch.Generator().manual_seed(0)
+    for case in range(200):
+        n_ref, n_in, n_feature_dims = (
+            int(torch.randint(low, high, (), generator=generator))
+            for low, high in ((1, 40), (1, 12), (0, 3))
+        )
+        shape = (2,) * n_feature_dims
+        dtype = (torch.long, torch.float)[case % 2]
+        ref = torch.randint(0, 2, (n_ref, *shape), generator=generator).to(dtype)
+        inp = torch.randint(0, 3, (n_in, *shape), generator=generator).to(dtype)
+        in_ref = isin(
+            TensorDict(x=inp, batch_size=[n_in]),
+            TensorDict(x=ref, batch_size=[n_ref]),
+            key="x",
+        )
+        expected = inp.reshape(n_in, 1, -1) == ref.reshape(1, n_ref, -1)
+        expected = expected.all(-1).any(-1)
+        assert in_ref.dtype == torch.bool
+        assert in_ref.tolist() == expected.tolist(), (inp, ref)
+
+
+def test_isin_docstring_example():
+    # #3607: pins a mask that was right before the fix (a repeated row that is
+    # in the reference)
+    td = TensorDict(
+        x=torch.tensor([[1, 2], [3, 4], [1, 2], [5, 6]]),
+        y=torch.arange(4),
+        batch_size=[4],
+    )
+    reference = TensorDict(x=torch.tensor([[1, 2], [5, 6]]), batch_size=[2])
+    in_ref = isin(td, reference, key="x")
+    assert in_ref.dtype == torch.bool
+    assert in_ref.tolist() == [True, False, True, True]
+
+
 @pytest.mark.parametrize("key", ("tensor1", "tensor3", "next"))
 @pytest.mark.parametrize("dim", (0, 1, -1, -2))
 @pytest.mark.parametrize("device", get_available_devices())
@@ -1865,6 +1916,47 @@ def test_assert_close_keeps_torch_message():
 def test_expand_as_right_fewer_dims_message():
     with pytest.raises(RuntimeError, match="at least as many dimensions"):
         expand_as_right(torch.zeros(3, 2), torch.zeros(3))
+
+
+def test_expand_as_right_shapes_and_messages():
+    # #3609: the results and the error texts of expand_as_right, for leading
+    # dims that are equal, of size one, or that do not fit
+    x = torch.arange(3)
+    out = expand_as_right(x, torch.zeros(3, 2, 4))
+    assert out.shape == (3, 2, 4)
+    assert out._base is x
+    assert (out == x.reshape(3, 1, 1)).all()
+    assert expand_as_right(x, x) is not x
+    assert expand_as_right(x, TensorDict(batch_size=[3, 5])).shape == (3, 5)
+    assert expand_as_right(torch.tensor(1), torch.zeros(3, 2)).shape == (3, 2)
+    assert expand_as_right(torch.zeros(1), torch.zeros(3, 2)).shape == (3, 2)
+    assert expand_as_right(torch.zeros(3, 1), torch.zeros(3, 2, 4)).shape == (3, 2, 4)
+    assert expand_as_right(torch.zeros(1, 2), torch.zeros(3, 2, 4)).shape == (3, 2, 4)
+    with pytest.raises(
+        RuntimeError,
+        match=re.escape(
+            "expand_as_right requires the destination tensor to have at least "
+            "as many dimensions as the input tensor, got "
+            "tensor.ndimension()=2 and dest.ndimension()=1"
+        ),
+    ):
+        expand_as_right(torch.zeros(3, 2), torch.zeros(3))
+    with pytest.raises(
+        RuntimeError,
+        match=re.escape(
+            "tensor shape is incompatible with dest shape, got: "
+            "tensor.shape=torch.Size([3, 2]), dest=torch.Size([3, 4, 2])"
+        ),
+    ):
+        expand_as_right(torch.zeros(3, 2), torch.zeros(3, 4, 2))
+    with pytest.raises(
+        RuntimeError,
+        match=re.escape(
+            "tensor shape is incompatible with dest shape, got: "
+            "tensor.shape=torch.Size([4]), dest=torch.Size([3, 2])"
+        ),
+    ):
+        expand_as_right(torch.zeros(4), TensorDict(batch_size=[3, 2]))
 
 
 def test_get_shared_executor():

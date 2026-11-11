@@ -308,6 +308,29 @@ def _all_of_type(values, ndim, cls) -> bool:
     return all(_all_of_type(value, ndim - 1, cls) for value in values)
 
 
+def _reopen(open_with, mode):
+    """Opens for a copy a file that was opened with ``mode``; ``open_with`` opens it in a given mode.
+
+    ``"w"`` empties a file that exists, and ``"w-"`` and ``"x"`` refuse it: a
+    copy opens the file with ``"r+"`` instead, which keeps what it holds
+    (#3606). When ``"r+"`` cannot open the file, ``mode`` decides what happens,
+    as it always did, except for ``"w"`` on a file that another process holds.
+    """
+    if mode in ("w", "w-", "x"):
+        try:
+            return open_with("r+")
+        except BlockingIOError:
+            # another process holds the file: "w" would empty it under that
+            # process before it failed on the same lock
+            if mode == "w":
+                raise
+        except Exception:
+            # not in this handler: what ``mode`` raises must not be chained to
+            # this error, and nothing may keep the failed open alive
+            pass
+    return open_with(mode)
+
+
 class _H5Backend(_PersistentBackend):
     """h5py storage dialect."""
 
@@ -577,7 +600,10 @@ class _H5Backend(_PersistentBackend):
     def setstate(self, state):
         import h5py
 
-        file = h5py.File(state["filename"], mode=state["mode"], locking=self.locking)
+        file = _reopen(
+            lambda mode: h5py.File(state["filename"], mode=mode, locking=self.locking),
+            state["mode"],
+        )
         if state["group_name"] != "/":
             file = file[state["group_name"]]
         return file
@@ -2759,17 +2785,21 @@ class PersistentTensorDict(
             }
             filename = self.filename
             file = self.file if filename is None else None
-            clone = PersistentTensorDict(
-                filename=filename,
-                group=file,
-                mode=self.mode,
-                backend=self.backend,
-                device=self.device,
-                batch_size=self.batch_size,
-                non_tensor_as_stack=self._non_tensor_as_stack,
-                allow_pickle=self._backend.allow_pickle,
-                **self._dataset_kwargs,
+            clone = _reopen(
+                lambda mode: PersistentTensorDict(
+                    filename=filename,
+                    group=file,
+                    mode=mode,
+                    backend=self.backend,
+                    device=self.device,
+                    batch_size=self.batch_size,
+                    non_tensor_as_stack=self._non_tensor_as_stack,
+                    allow_pickle=self._backend.allow_pickle,
+                    **self._dataset_kwargs,
+                ),
+                self.mode,
             )
+            clone.mode = self.mode
             clone._nested_tensordicts = nested_tds
             clone._link_nested()
             clone._pin_mem = False
@@ -2789,6 +2819,9 @@ class PersistentTensorDict(
         # and the cache is rebuilt on demand (gh-2920)
         state["_last_op"] = None
         state["_cache"] = None
+        # the records of the with blocks that self is in hold weakrefs too,
+        # and the copy is in no block
+        state.pop("_last_op_queue", None)
         return state
 
     # Override: reopens the file, and reads the pickles of TensorDict 0.14.
