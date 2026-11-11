@@ -26,6 +26,7 @@ from typing import Any, List, Literal, Sequence, Type, TYPE_CHECKING
 import numpy as np
 import tensordict.base as _td_base
 import torch
+from tensordict._archive import _td_method
 from tensordict._datasets import to_mds
 from tensordict._nestedkey import NestedKey
 from tensordict._tabular import (
@@ -1995,7 +1996,12 @@ class _Conversion:
                 if tolist_first:
                     value = value.tolist(convert_tensors=convert_tensors)
                 else:
-                    value = value.to_dict(
+                    to_dict = value.to_dict
+                    if not callable(to_dict):
+                        # a field of a shadow tensorclass hides the method
+                        # (#3694)
+                        to_dict = _td_method(value, "to_dict")
+                    value = to_dict(
                         retain_none=retain_none, convert_tensors=convert_tensors
                     )
             elif convert_tensors:
