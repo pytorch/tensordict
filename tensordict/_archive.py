@@ -860,7 +860,7 @@ def _td_method(td, name: str):
     """Returns ``getattr(td, name)``, or the method that a field of that name hides.
 
     The fields of a shadow tensorclass hide the methods that they are named
-    after (#3676).
+    after (#3676, #3695).
     """
     cls = type(td)
     if (
@@ -870,14 +870,12 @@ def _td_method(td, name: str):
         and name in cls.__expected_keys__
         and not callable(getattr(cls, name, None))
     ):
-        if name in ("memmap", "memmap_like"):
-            # circular import: base imports this module
-            from tensordict.base import TensorDictBase
+        # circular import: tensorclass imports base, which imports this module
+        from tensordict.tensorclass import TensorClass
 
-            # a tensorclass runs these TensorDict methods on itself
-            return functools.partial(getattr(TensorDictBase, name), td)
-        # values, items: a tensorclass calls them on its tensordict
-        return getattr(td._tensordict, name)
+        # TensorClass holds the method that every tensorclass gets under
+        # that name, and it works on a class that is only decorated too
+        return functools.partial(getattr(TensorClass, name), td)
     return getattr(td, name)
 
 
