@@ -3646,6 +3646,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         (True, True)
     """
 
+    # As for torch.Tensor: a NumPy scalar or array on the left of an operator
+    # returns NotImplemented instead of converting the tensordict to an array,
+    # so that Python calls the reflected operator (gh-3583).
+    __array_priority__ = 1000
+
     _lazy: bool = False
     _is_locked: bool = False
     _is_shared: bool = False

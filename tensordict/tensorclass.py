@@ -1351,6 +1351,9 @@ _TENSORCLASS_MEMBER_NAMES = frozenset(dir(TensorDict)).union(
     "_is_non_tensor",
     # read only by the cache decorator of TensorDict methods, on the TensorDict
     "_cache",
+    # NumPy reads it on the instance, which forwards it to the TensorDict
+    # (gh-3583); a field may have this name, as before TensorDict had it
+    "__array_priority__",
 }
 
 
