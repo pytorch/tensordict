@@ -64,6 +64,7 @@ from tensordict.tensorclass import TensorClass
 from tensordict.utils import (
     _unravel_key_to_tuple,
     _unravel_keys,
+    expand_as_right,
     isin,
     unravel_key,
     unravel_key_list,
@@ -613,6 +614,62 @@ def test_comparison_tensor_fullgraph():
     other = torch.ones(4)
     result = torch.compile(fn, fullgraph=True, backend="eager")(td, other)
     assert (result == fn(td, other)).all()
+
+
+def _expand_as_right_before_3609(tensor, dest):
+    # the body of expand_as_right before #3609, without the error texts
+    if dest.ndimension() < tensor.ndimension():
+        raise RuntimeError
+    if any(
+        tensor.shape[i] != dest.shape[i] and tensor.shape[i] != 1
+        for i in range(tensor.ndimension())
+    ):
+        raise RuntimeError
+    for _ in range(dest.ndimension() - tensor.ndimension()):
+        tensor = tensor.unsqueeze(-1)
+    return tensor.expand(dest.shape)
+
+
+@pytest.mark.parametrize("dynamic", [None, True])
+def test_expand_as_right_compiled_graphs(dynamic):
+    # #3609: compiled, expand_as_right traces the graphs of its earlier body, also
+    # once the batch dim is dynamic and a new key puts a leaf with a static shape
+    # in front (a shape read before the check gave that leaf a runtime size)
+    def graphs(expand):
+        torch._dynamo.reset()
+        backend = EagerAndRecordGraphs()
+        fn = torch.compile(
+            lambda td, mask: [expand(mask, v) for v in td.values()],
+            backend=backend,
+            dynamic=dynamic,
+        )
+        g = torch.Generator().manual_seed(0)
+        for b, keys in [(4, "p"), (6, "p"), (4, "xp"), (5, "xp"), (4, "pq")]:
+            td = TensorDict(
+                {k: torch.randn(b, 3, *(2,) * (k == "q"), generator=g) for k in keys},
+                batch_size=[b],
+            )
+            mask = torch.rand(b, generator=g) < 0.5
+            assert all(
+                (out == old).all()
+                for out, old in zip(
+                    fn(td, mask), [expand_as_right(mask, v) for v in td.values()]
+                )
+            )
+        torch._dynamo.reset()
+        out = []
+        for gm in backend.graphs:
+            # nodes by position: Dynamo may name a value after a local variable
+            index = {n: i for i, n in enumerate(gm.graph.nodes)}
+            out.append(
+                [
+                    (n.op, str(n.target), str(torch.fx.map_arg(n.args, index.get)))
+                    for n in gm.graph.nodes
+                ]
+            )
+        return out
+
+    assert graphs(expand_as_right) == graphs(_expand_as_right_before_3609)
 
 
 _NESTED_DEVICE_CASES = {

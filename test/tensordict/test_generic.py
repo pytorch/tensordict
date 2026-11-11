@@ -90,6 +90,7 @@ from tensordict.utils import (
 from torch import nn
 from torch._subclasses import FakeTensor, FakeTensorMode
 from torch.autograd import forward_ad
+from torch.fx.experimental.proxy_tensor import make_fx
 from torch.multiprocessing.reductions import StorageWeakRef
 from torch.nn.parameter import UninitializedTensorMixin
 from torch.utils._python_dispatch import TorchDispatchMode
@@ -18808,6 +18809,254 @@ class TestGeneric:
                 expected = torch.where(expand_as_right(mask, leaf), value, leaf)
                 assert torch.equal(result.get(key), expected)
             assert_allclose_td(result, torch.where(~mask, td, value))
+
+    _SHARED_EXPANSION_CALLS = {
+        # name: (the call on the tensordict, the same work on one leaf)
+        "where": (
+            lambda td, other, mask, t: td.where(mask, other),
+            lambda x, y, mask, t: torch.where(expand_as_right(mask, x), x, y),
+        ),
+        "where_scalar": (
+            lambda td, other, mask, t: td.where(mask, 0),
+            lambda x, y, mask, t: torch.where(expand_as_right(mask, x), x, 0),
+        ),
+        "where_out": (
+            lambda td, other, mask, t: td.where(
+                mask, other=other, out=td, pad=0, update_batch_size=True
+            ),
+            lambda x, y, mask, t: torch.where(expand_as_right(mask, x), x, y),
+        ),
+        "masked_fill": (
+            lambda td, other, mask, t: td.masked_fill(mask, 0),
+            lambda x, y, mask, t: x.masked_fill(expand_as_right(mask, x), 0),
+        ),
+        "masked_fill_": (
+            lambda td, other, mask, t: td.masked_fill_(mask, 0),
+            lambda x, y, mask, t: x.masked_fill(expand_as_right(mask, x), 0),
+        ),
+        "mul": (
+            lambda td, other, mask, t: td * t,
+            lambda x, y, mask, t: x * expand_as_right(t, x),
+        ),
+        "mul_": (
+            lambda td, other, mask, t: td.mul_(t),
+            lambda x, y, mask, t: x * expand_as_right(t, x),
+        ),
+        "maximum": (
+            lambda td, other, mask, t: td.maximum(t),
+            lambda x, y, mask, t: x.maximum(expand_as_right(t, x)),
+        ),
+        "eq": (
+            lambda td, other, mask, t: td == t,
+            lambda x, y, mask, t: x == expand_as_right(t, x),
+        ),
+        "ge": (
+            lambda td, other, mask, t: td >= t,
+            lambda x, y, mask, t: x >= expand_as_right(t, x),
+        ),
+    }
+
+    @staticmethod
+    @contextlib.contextmanager
+    def _expand_as_right_calls():
+        # the calls of expand_as_right from where, masked_fill and the ops
+        calls = mock.Mock(wraps=expand_as_right)
+        with (
+            mock.patch("tensordict.utils.expand_as_right", calls),
+            mock.patch("tensordict.base.expand_as_right", calls),
+            mock.patch("tensordict._base.pointwise.expand_as_right", calls),
+        ):
+            yield calls
+
+    @pytest.mark.parametrize("call", list(_SHARED_EXPANSION_CALLS))
+    def test_mask_expanded_once_per_leaf_shape(self, call):
+        # #3609: where, masked_fill, td * tensor and td == tensor expand the
+        # mask or the tensor once per leaf shape, not once per leaf
+        td_call, leaf_call = self._SHARED_EXPANSION_CALLS[call]
+        td = TensorDict(
+            {f"a{i}": torch.randn(4, 3) for i in range(4)}
+            | {f"b{i}": torch.randn(4, 1) for i in range(4)},
+            batch_size=[4],
+        )
+        other = td + 1
+        mask = torch.tensor([True, False, True, False])
+        t = torch.tensor([0.0, 0.5, 1.0, 2.0])
+        expected = {
+            key: leaf_call(td[key].clone(), other[key], mask, t) for key in td.keys()
+        }
+        with self._expand_as_right_calls() as calls:
+            result = td_call(td, other, mask, t)
+        assert calls.call_count == 2
+        assert list(result.keys()) == list(expected)
+        for key, value in expected.items():
+            assert result[key].dtype == value.dtype
+            assert torch.equal(result[key], value), key
+
+    @pytest.mark.parametrize("call", list(_SHARED_EXPANSION_CALLS))
+    def test_shared_expansion_matches_per_leaf(self, call):
+        # #3609: with leaves of one shape that differ in dtype, nested
+        # tensordicts (one with a larger batch size) and a leaf with the shape
+        # of the mask, each leaf gets the result of its own expansion
+        td_call, leaf_call = self._SHARED_EXPANSION_CALLS[call]
+
+        def make(shift):
+            return TensorDict(
+                a=torch.arange(12.0).reshape(4, 3) + shift,
+                b=torch.arange(12, dtype=torch.float64).reshape(4, 3) - shift,
+                c=torch.arange(4.0) + shift,
+                d=torch.arange(8.0).reshape(4, 1, 2) * (shift + 1),
+                nested=TensorDict(
+                    a=torch.arange(12.0).reshape(4, 3) * (shift + 2),
+                    c=torch.arange(4.0) - shift,
+                    batch_size=[4],
+                ),
+                wide=TensorDict(
+                    e=torch.arange(24.0).reshape(4, 3, 2) + shift, batch_size=[4, 3]
+                ),
+                batch_size=[4],
+            )
+
+        td, other = make(0), make(1)
+        mask = torch.tensor([True, False, True, False])
+        t = torch.tensor([0.0, 0.5, 1.0, 2.0])
+        expected = {
+            key: leaf_call(td[key].clone(), other[key], mask, t)
+            for key in td.keys(True, True)
+        }
+        result = td_call(td, other, mask, t)
+        assert result.batch_size == td.batch_size
+        assert result["wide"].batch_size == td["wide"].batch_size
+        assert list(result.keys(True, True)) == list(expected)
+        for key, value in expected.items():
+            assert result[key].dtype == value.dtype
+            assert torch.equal(result[key], value), key
+
+    @pytest.mark.parametrize("mask_first", [True, False])
+    def test_shared_expansion_mask_among_leaves(self, mask_first):
+        # #3609: a mask or an operand that is one of the leaves changes as the
+        # leaves are written, and the leaves after it see the new values
+        def make():
+            leaves = {
+                "done": torch.tensor([True, False, True, False]),
+                "a": torch.arange(12.0).reshape(4, 3) + 1,
+                "b": torch.arange(12.0).reshape(4, 3) + 2,
+                "scale": torch.tensor([1.0, 2.0, 3.0, 4.0]),
+                "flag": torch.tensor([True, True, False, False]),
+            }
+            if not mask_first:
+                leaves = dict(reversed(leaves.items()))
+            return TensorDict(leaves, batch_size=[4])
+
+        td, expected = make(), make()
+        assert td.masked_fill_(td["done"], 0) is td
+        mask = expected["done"]
+        for leaf in expected.values():
+            leaf.masked_fill_(expand_as_right(mask, leaf), 0)
+        assert (td == expected).all()
+        assert (td["done"] == 0).all()
+        assert bool((td["a"] == 0).any()) is not mask_first
+
+        td, expected = make(), make()
+        other = td.apply(lambda x: ~x if x.dtype == torch.bool else -x)
+        assert td.where(td["done"], other, out=td) is td
+        mask = expected["done"]
+        for key, leaf in list(expected.items()):
+            expected[key] = torch.where(expand_as_right(mask, leaf), leaf, other[key])
+        assert (td == expected).all()
+        assert (td["a"][1] < 0).all() and (td["a"][0] > 0).all()
+
+        td, expected = make().float(), make().float()
+        assert td.mul_(td["scale"]) is td
+        scale = expected["scale"]
+        for leaf in expected.values():
+            leaf.mul_(expand_as_right(scale, leaf))
+        assert (td == expected).all()
+        assert (td["scale"] == torch.tensor([1.0, 4.0, 9.0, 16.0])).all()
+        scaled_once = (td["a"][:, 0] == torch.tensor([1.0, 8.0, 21.0, 40.0])).all()
+        assert bool(scaled_once) is mask_first
+
+    @pytest.mark.parametrize("inplace", [False, True])
+    def test_operand_with_grad_expanded_per_leaf(self, inplace):
+        # #3609: an operand that requires grad keeps one expanded view per
+        # leaf, so that its gradient is summed over the leaves as before
+        def make():
+            torch.manual_seed(0)
+            return TensorDict(
+                {f"a{i}": torch.randn(4, 3) for i in range(6)}, batch_size=[4]
+            )
+
+        td = make()
+        t = torch.tensor([0.3, 0.7, 1.1, 1.9], requires_grad=True)
+        with self._expand_as_right_calls() as calls:
+            result = td.mul_(t) if inplace else td * t
+        assert calls.call_count == 6
+        sum(leaf.sin().sum() for leaf in result.values()).backward()
+
+        t_ref = t.detach().clone().requires_grad_()
+        leaves = [
+            leaf.mul_(expand_as_right(t_ref, leaf))
+            if inplace
+            else leaf * expand_as_right(t_ref, leaf)
+            for leaf in make().values()
+        ]
+        sum(leaf.sin().sum() for leaf in leaves).backward()
+        assert torch.equal(t.grad, t_ref.grad)
+
+    @pytest.mark.parametrize("call", list(_SHARED_EXPANSION_CALLS))
+    def test_mask_expanded_per_leaf_when_compiling(self, call):
+        # #3609: under torch.compile each leaf keeps its own expansion, so
+        # that the traced code is the one from before the shared expansion
+        td_call, leaf_call = self._SHARED_EXPANSION_CALLS[call]
+        td = TensorDict(
+            {f"a{i}": torch.randn(4, 3) for i in range(4)}
+            | {f"b{i}": torch.randn(4, 1) for i in range(4)},
+            batch_size=[4],
+        )
+        other = td + 1
+        mask = torch.tensor([True, False, True, False])
+        t = torch.tensor([0.0, 0.5, 1.0, 2.0])
+        expected = {
+            key: leaf_call(td[key].clone(), other[key], mask, t) for key in td.keys()
+        }
+        with (
+            self._expand_as_right_calls() as calls,
+            mock.patch("tensordict.utils.is_compiling", return_value=True),
+        ):
+            result = td_call(td, other, mask, t)
+        assert calls.call_count == 8
+        assert list(result.keys()) == list(expected)
+        for key, value in expected.items():
+            assert result[key].dtype == value.dtype
+            assert torch.equal(result[key], value), key
+
+    @pytest.mark.parametrize("call", list(_SHARED_EXPANSION_CALLS))
+    def test_shared_expansion_symbolic_shapes(self, call):
+        # #3609: traced with symbolic sizes outside torch.compile, the shape of
+        # a leaf does not hash, and each leaf gets its own expansion, as before
+        td_call, leaf_call = self._SHARED_EXPANSION_CALLS[call]
+
+        def fn(a, b, c, mask, t):
+            td = TensorDict(a=a, b=b, c=c, batch_size=a.shape[:1])
+            result = td_call(td, td + 1, mask, t)
+            return result["a"], result["b"], result["c"]
+
+        def make():
+            return (
+                torch.arange(12.0).reshape(4, 3),
+                torch.arange(12.0).reshape(4, 3) + 1,
+                torch.arange(4.0).reshape(4, 1),
+                torch.tensor([True, False, True, False]),
+                torch.tensor([0.0, 0.5, 1.0, 2.0]),
+            )
+
+        with self._expand_as_right_calls() as calls:
+            traced = make_fx(fn, tracing_mode="symbolic")(*make())
+        assert calls.call_count == 3
+        *leaves, mask, t = make()
+        expected = [leaf_call(x.clone(), x + 1, mask, t) for x in leaves]
+        for value, value_expected in zip(traced(*make()), expected, strict=True):
+            assert value.dtype == value_expected.dtype
+            assert torch.equal(value, value_expected)
 
     def test_apply_out_batch_size_list(self):
         # a batch_size list equal to out.batch_size is accepted

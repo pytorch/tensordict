@@ -80,6 +80,7 @@ from tensordict.utils import (
     _convert_list_to_stack,
     _copy_cached_result,
     _erase_cache_first,
+    _expand_as_right_by_shape,
     _foreach,
     _GENERIC_NESTED_ERR,
     _get_item,
@@ -1195,12 +1196,16 @@ def _maybe_broadcast_other(
                         is_leaf=is_leaf,
                     )
 
+                expanded = [{} if flag else None for flag in is_operand]
+
                 def leaf_fn(x):
                     return leaf_op(
                         x,
                         *[
-                            expand_as_right(other, x) if flag else other
-                            for other, flag in zip(others_map, is_operand)
+                            other
+                            if memo is None
+                            else _expand_as_right_by_shape(memo, other, x)
+                            for other, memo in zip(others_map, expanded)
                         ],
                         *args,
                         **kwargs,
@@ -11661,8 +11666,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         fill without reading the leaves (a file) or must split the mask over
         its members (a lazy stack).
         """
+        expanded = {}
         for item in self.values():
-            mask_expand = expand_as_right(mask, item)
+            mask_expand = _expand_as_right_by_shape(expanded, mask, item)
             item.masked_fill_(mask_expand, value)
         return self
 
