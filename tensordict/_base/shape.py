@@ -73,8 +73,9 @@ def _is_numpy_integer(x) -> bool:
     # torch reads a NumPy integer as an int, but it is not one for isinstance.
     # roll, flip, movedim and tile ask this only after their own code has
     # raised, and through this function: a method that names NumPy or torch
-    # is compiled by torch.compile as a frame of its own.
-    return isinstance(x, np.integer)
+    # is compiled by torch.compile as a frame of its own. NumPy makes
+    # timedelta64 an integer too: it keeps the error it raised.
+    return isinstance(x, np.integer) and not isinstance(x, np.timedelta64)
 
 
 def _is_zero_dim_non_bool_tensor(x) -> bool:
@@ -99,8 +100,10 @@ def _repeat_interleave_batch_size(
             ):
                 # torch broadcasts a 0-d or one-element repeats to the size of dim
                 new_batch_size.append(s * int(repeats))
-            elif not isinstance(repeats, torch.Tensor) and isinstance(
-                repeats, np.integer
+            elif (
+                not isinstance(repeats, torch.Tensor)
+                and isinstance(repeats, np.integer)
+                and not isinstance(repeats, np.timedelta64)
             ):
                 # the sum() of a NumPy integer is the count itself
                 new_batch_size.append(s * operator.index(repeats))
@@ -495,7 +498,9 @@ class _ShapeOps:
 
         """
         if not isinstance(indices_or_sections, (int, list, tuple, torch.Tensor)):
-            if not isinstance(indices_or_sections, np.integer):
+            if not isinstance(indices_or_sections, np.integer) or isinstance(
+                indices_or_sections, np.timedelta64
+            ):
                 raise ValueError(
                     "indices_or_sections must be an integer, a list of integers, or a 1D tensor of integers"
                 )
@@ -1780,7 +1785,8 @@ class _ShapeOps:
                     # torch.split
                     try:
                         split_size = operator.index(split_size)
-                    except TypeError:
+                    except (TypeError, RuntimeError):
+                        # a value that cannot be read, in vmap or on meta
                         raise TypeError(WRONG_TYPE) from None
                     if split_size > 0:
                         return self.split(split_size, dim)

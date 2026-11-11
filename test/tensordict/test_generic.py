@@ -8859,6 +8859,57 @@ class TestGeneric:
         with pytest.raises(TypeError, match="has no len"):
             parent.repeat_interleave(np.int64(0), 0)
 
+    def test_numpy_integer_count_negative_lazy_stack_dim(self):
+        # #3586: a negative NumPy count along the stack dim of a lazy stack
+        # raises what the same Python int raises
+        lazy = lazy_stack(self._build_nested_td().unbind(0))
+        parent = TensorDict(n=lazy, batch_size=lazy.batch_size)
+        for call in (
+            lambda r: lazy.repeat_interleave(r, 0),
+            lambda r: torch.repeat_interleave(lazy, r, 0),
+            lambda r: parent.repeat_interleave(r, 0),
+        ):
+            with pytest.raises(Exception) as int_error:
+                call(-1)
+            with pytest.raises(type(int_error.value)) as numpy_error:
+                call(np.int64(-1))
+            assert str(numpy_error.value) == str(int_error.value)
+
+    def test_split_zero_dim_tensor_unreadable(self):
+        # #3586: a 0-d tensor whose value cannot be read raises TypeError, as
+        # before
+        td = self._build_nested_td()
+        lazy = lazy_stack(td.unbind(0))
+        for call in (
+            lambda: td.split(torch.tensor(2, device="meta"), 1),
+            lambda: lazy.split(torch.tensor(2, device="meta"), 1),
+            lambda: torch.vmap(lambda s: td.split(s, 1))(torch.tensor([2, 2])),
+        ):
+            with pytest.raises(TypeError, match="must be int or list of ints"):
+                call()
+
+    @pytest.mark.parametrize("unit", ["ns", "D"])
+    def test_numpy_timedelta_unchanged(self, unit):
+        # #3586: NumPy makes timedelta64 an integer, but it keeps the errors
+        # it raised before
+        td = self._build_nested_td()
+        lazy = lazy_stack(td.unbind(0))
+        t = np.timedelta64(2 if unit == "ns" else 1, unit)
+        for call, match in (
+            (lambda: td.roll(1, t), "has no len"),
+            (lambda: td.flip(t), "is not iterable"),
+            (lambda: td.movedim(t, 1), "has no len"),
+            (lambda: td.movedim(0, t), "has no len"),
+            (lambda: td.tile(t), "has no len"),
+            (lambda: lazy.repeat_interleave(t, 0), "has no len"),
+        ):
+            with pytest.raises(TypeError, match=match):
+                call()
+        with pytest.raises(TypeError):
+            td.repeat_interleave(t, 0)
+        with pytest.raises(ValueError, match="indices_or_sections must be"):
+            td.tensor_split(t, 1)
+
     def test_non_integer_count_and_dim_unchanged(self):
         # #3586: the counts and dims that are not integers keep their
         # behaviour. A bool is an int, a float raises.

@@ -6306,6 +6306,7 @@ class LazyStackedTensorDict(TensorDictBase):
             elif (
                 not isinstance(repeats, torch.Tensor)
                 and isinstance(repeats, np.integer)
+                and not isinstance(repeats, np.timedelta64)
                 and operator.index(repeats) != 0
             ):
                 # torch reads a NumPy integer as an int. A count of 0 keeps
