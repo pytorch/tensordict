@@ -982,6 +982,10 @@ def _is_tensorclass(cls: type) -> bool:
     return out
 
 
+class _CallableInCacheKey(Exception):
+    """Raised by ``_unfold_sequence`` for a call that must not be cached."""
+
+
 def _unfold_sequence(seq):
     for item in seq:
         if isinstance(item, (list, tuple)):
@@ -989,22 +993,33 @@ def _unfold_sequence(seq):
         else:
             if isinstance(item, (str, int, slice)) or item is Ellipsis:
                 yield item
-            else:
+            elif item is None or not callable(item):
                 yield id(item)
+            else:
+                # A function made on the spot is freed after the call, and the
+                # next one can get its id(): it would find the result of the
+                # first under that key.
+                raise _CallableInCacheKey
 
 
 def _make_cache_key(args, kwargs):
-    """Creates a key for the cache such that memory footprint is minimized."""
+    """Creates a key for the cache such that memory footprint is minimized.
+
+    Returns ``None`` if an argument is callable: such a call is not cached.
+    """
     # Fast path for the common args
     if not args and not kwargs:
         return ((), ())
     elif not kwargs and len(args) == 1 and type(args[0]) is str:
         return (args, ())
     else:
-        return (
-            tuple(_unfold_sequence(args)),
-            tuple(_unfold_sequence(sorted(kwargs.items()))),
-        )
+        try:
+            return (
+                tuple(_unfold_sequence(args)),
+                tuple(_unfold_sequence(sorted(kwargs.items()))),
+            )
+        except _CallableInCacheKey:
+            return None
 
 
 def _cache_while_locked(fun):
@@ -1012,7 +1027,8 @@ def _cache_while_locked(fun):
 
     This decorator will cache the values returned by a method as long as the
     input arguments match.
-    Leaves (tensors and such) are not cached.
+    Leaves (tensors and such) are not cached, and neither is a call with a
+    callable argument.
     The cache is stored within the tensordict such that it can be erased at any
     point in time.
 
@@ -1041,7 +1057,7 @@ def _cache_while_locked(fun):
         key = _make_cache_key(args, kwargs)
         if key not in cache:
             out = fun(_self, *args, **kwargs)
-            if not isinstance(out, Tensor):
+            if key is not None and not isinstance(out, Tensor):
                 # we don't cache tensors to avoid filling the mem and / or
                 # stacking them from their origin
                 cache[key] = out
