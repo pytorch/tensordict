@@ -759,6 +759,24 @@ def test_getitem_memmap_on_disk(benchmark, tmp_path, index):
     benchmark(td.__getitem__, index)
 
 
+@pytest.mark.parametrize("indices", [256, 1024])
+def test_getitem_int_list(benchmark, indices):
+    # a batch of DataLoader(td, collate_fn=lambda x: x): 5 leaves, 2 of them
+    # nested, read with a list of ints
+    rows = 4096
+    td = TensorDict(
+        {
+            "a": torch.randn(rows, 3),
+            "b": torch.randn(rows, 4),
+            "c": torch.randn(rows, 5),
+            "meta": {"id": torch.arange(rows), "weight": torch.rand(rows)},
+        },
+        batch_size=[rows],
+    )
+    index = torch.randint(0, rows, (indices,)).tolist()
+    benchmark(td.__getitem__, index)
+
+
 @pytest.mark.parametrize(
     "device", [None, "cpu"] + (["cuda"] if torch.cuda.is_available() else [])
 )
