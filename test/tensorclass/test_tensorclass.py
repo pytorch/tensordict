@@ -9801,6 +9801,17 @@ def _recorded_values(self, *args, **kwargs):
 _ShadowValuesMethod.values = _recorded_values
 
 
+@tensorclass(shadow=True)
+class _ShadowApply:
+    indices: torch.Tensor
+    apply: torch.Tensor
+
+
+class _ShadowLock(TensorClass["shadow"]):
+    indices: torch.Tensor
+    lock_: torch.Tensor
+
+
 class TestShadow:
     def test_no_shadow(self):
         with pytest.raises(AttributeError):
@@ -10226,6 +10237,59 @@ class TestShadow:
             # read back
             c.save(tmp_path / "child.tdz")
         assert "memmap_like" in _ARCHIVE_CALLS
+
+    @pytest.mark.parametrize(
+        "method,target",
+        [
+            (method, target)
+            for method in ["save", "dumps", "memmap", "memmap_", "memmap_like"]
+            for target in ["data", "data.tdz"]
+            # no docstring says what memmap_ does with a .tdz path
+            if (method, target) != ("memmap_", "data.tdz")
+        ],
+    )
+    @pytest.mark.parametrize("name", ["memmap", "apply", "lock_"])
+    def test_shadow_field_save(self, name, method, target, tmp_path):
+        # #3695: save, dumps, memmap, memmap_ and memmap_like called the shadow
+        # field named memmap, apply or lock_, for a directory too
+        cls = {"memmap": _ShadowMemmap, "apply": _ShadowApply, "lock_": _ShadowLock}[
+            name
+        ]
+        c = cls(indices=torch.arange(3), **{name: torch.ones(3)}, batch_size=[3])
+        if method == name:
+            # c.memmap is the field: this lookup is the caller's
+            with pytest.raises(TypeError, match="object is not callable"):
+                c.memmap(tmp_path / target)
+            assert not (tmp_path / target).exists()
+            return
+        saved = getattr(c, method)(tmp_path / target)
+        loaded = TensorDict.load(tmp_path / target)
+        like = method == "memmap_like"
+        for result in (saved, loaded):
+            assert type(result) is cls
+            assert result.batch_size == torch.Size([3])
+            assert (result.indices == (0 if like else torch.arange(3))).all()
+            assert (getattr(result, name) == (0 if like else 1)).all()
+        # memmap_ has no archive mode: it maps c itself to a directory
+        assert (saved is c) is (method == "memmap_")
+        assert saved.is_locked is (target == "data" or method == "memmap_")
+
+    @pytest.mark.parametrize("name", ["memmap", "apply", "lock_"])
+    def test_shadow_field_save_options(self, name, tmp_path):
+        # #3695: the same with threads, atomic=True and the save function
+        cls = {"memmap": _ShadowMemmap, "apply": _ShadowApply, "lock_": _ShadowLock}[
+            name
+        ]
+        c = cls(indices=torch.arange(3), **{name: torch.ones(3)}, batch_size=[3])
+        results = [
+            c.save(tmp_path / "atomic", atomic=True),
+            c.save(tmp_path / "threads", num_threads=2),
+            c.memmap_like(tmp_path / "like", num_threads=2),
+        ]
+        results += [TensorDict.load(tmp_path / "atomic")]
+        for i, result in enumerate(results):
+            assert type(result) is cls
+            assert (getattr(result, name) == (i != 2)).all()
 
     # A TensorClass subclass inherits TensorClass methods and properties, which
     # dataclass() used to take as the defaults of fields with the same name.
