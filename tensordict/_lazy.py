@@ -2236,6 +2236,9 @@ class LazyStackedTensorDict(TensorDictBase):
                 ignore_lock=ignore_lock,
                 non_blocking=non_blocking,
             )
+        if not inplace and hasattr(self, "_consolidated"):
+            # The members hold new leaves, outside the consolidated storage
+            self._mark_consolidated_stale()
         return self
 
     def _set_tuple(
@@ -2300,6 +2303,8 @@ class LazyStackedTensorDict(TensorDictBase):
         finally:
             if outermost:
                 _SET_MEMBERS_CALL.warned = None
+        if inplace is False and hasattr(self, "_consolidated"):
+            self._mark_consolidated_stale()
         return self
 
     # Override: each member keeps or replaces its own entry on the path.
@@ -4395,6 +4400,9 @@ class LazyStackedTensorDict(TensorDictBase):
                 )
                 for i, (td, *oth) in enumerate(_zip_strict(self.tensordicts, *others))
             ]
+        if out is not None and not inplace and hasattr(out_td, "_consolidated"):
+            # The members of out hold the results as new leaves
+            out_td._mark_consolidated_stale()
         if all(r is None for r in results) and filter_empty in (None, True):
             return
         if not inplace:
@@ -4460,6 +4468,8 @@ class LazyStackedTensorDict(TensorDictBase):
             for td in self.tensordicts
         ]
         if inplace:
+            if hasattr(self, "_consolidated"):
+                self._mark_consolidated_stale()
             return self
         result = self._new_lazy_unsafe(
             *tensordicts, stack_dim=self.stack_dim, stack_dim_name=self._td_dim_name
@@ -4476,6 +4486,8 @@ class LazyStackedTensorDict(TensorDictBase):
         ]
         if inplace:
             self.tensordicts = tensordicts
+            if hasattr(self, "_consolidated"):
+                self._mark_consolidated_stale()
             return self
         result = type(self)(
             *tensordicts, stack_dim=self.stack_dim, stack_dim_name=self._td_dim_name
@@ -4987,6 +4999,8 @@ class LazyStackedTensorDict(TensorDictBase):
                 else:
                     td.del_(key)
                     is_deleted = True
+        if is_deleted and hasattr(self, "_consolidated"):
+            self._mark_consolidated_stale()
         if not is_deleted:
             # a path through an entry that is not a tensordict raises
             # ValueError, as in TensorDict
@@ -5251,12 +5265,20 @@ class LazyStackedTensorDict(TensorDictBase):
                         stack_dim_name=self._td_dim_name,
                     )
                     self._hook_out, self._hook_in = hook_out, hook_in
+                    if hasattr(self, "_consolidated"):
+                        self._mark_consolidated_stale()
                     return self
             elif len(sources) < n:
                 raise ValueError(
                     "cannot update stacked tensordicts with different shapes when update_batch_size=False."
                 )
             _update_members(zip(self.tensordicts, sources), kwargs)
+            if (
+                not inplace
+                and hasattr(self, "_consolidated")
+                and not input_dict_or_td.is_empty()
+            ):
+                self._mark_consolidated_stale()
             if update_batch_size:
                 self._reset_member_batch_size()
             if len(sources) > n and update_batch_size:
@@ -5303,6 +5325,12 @@ class LazyStackedTensorDict(TensorDictBase):
             ),
             kwargs,
         )
+        if (
+            not inplace
+            and hasattr(self, "_consolidated")
+            and not input_dict_or_td.is_empty()
+        ):
+            self._mark_consolidated_stale()
         if update_batch_size:
             self_upd._reset_member_batch_size()
         if self._hook_out is not None:
@@ -5842,6 +5870,8 @@ class LazyStackedTensorDict(TensorDictBase):
                 td is other for other, _ in islice(tds, i)
             ):
                 td.rename_key_(old_key, new_key, safe=safe)
+        if hasattr(self, "_consolidated"):
+            self._mark_consolidated_stale()
         return self
 
     # Override: where runs on each member, so that members with different
@@ -6029,6 +6059,8 @@ class LazyStackedTensorDict(TensorDictBase):
 
         N = len(self.tensordicts)
         self._batch_size = self._compute_batch_size(batch_size, self.stack_dim, N)
+        if hasattr(self, "_consolidated"):
+            self._mark_consolidated_stale()
 
     @_lock_blocked
     def append(self, tensordict: T) -> None:
@@ -6096,6 +6128,8 @@ class LazyStackedTensorDict(TensorDictBase):
 
         N = len(self.tensordicts)
         self._batch_size = self._compute_batch_size(batch_size, self.stack_dim, N)
+        if hasattr(self, "_consolidated"):
+            self._mark_consolidated_stale()
 
     # Override: a stack is locked when all its members are.
     @TensorDictBase.is_locked.getter

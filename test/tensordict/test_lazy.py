@@ -3514,6 +3514,162 @@ class TestLazyStackedTensorDict:
         assert assert_allclose_td(td_c_device.cpu(), td)
         assert td_c_device["njt_lengths"]._lengths is not None
 
+    @staticmethod
+    def _unlocked_consolidated_stack(stack_dim=0):
+        members = [
+            TensorDict(x=torch.full((3,), float(i)), a=torch.full((3,), i + 5.0))
+            for i in range(2)
+        ]
+        if stack_dim:
+            members = [member.expand(4).clone() for member in members]
+        out = lazy_stack(members, dim=stack_dim).consolidate()
+        assert out.is_consolidated()
+        out.unlock_()
+        return out
+
+    @staticmethod
+    def _assert_reads_match(out):
+        # #3738: pickle, torch.save and to(device) read the consolidated
+        # record of the stack, not its entries
+        expected = out.to_tensordict()
+        assert not out.is_consolidated()
+        buffer = io.BytesIO()
+        torch.save(out, buffer)
+        buffer.seek(0)
+        for copy in (
+            pickle.loads(pickle.dumps(out)),
+            torch.load(buffer, weights_only=False),
+            out.to("cpu"),
+            out.consolidate(),
+        ):
+            assert set(copy.keys(True, True)) == set(expected.keys(True, True))
+            assert copy.batch_size == expected.batch_size
+            for key, value in expected.items(True, True):
+                assert copy[key].dtype == value.dtype, key
+                assert (copy[key] == value).all(), key
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize(
+        "write",
+        [
+            "setitem",
+            "set_nested",
+            "add",
+            "del",
+            "pop",
+            "rename",
+            "update",
+            "select",
+            "exclude",
+            "to_dtype",
+            "apply_out",
+        ],
+    )
+    def test_consolidate_unlock_write(self, write, stack_dim):
+        # #3738: a write through the stack that replaces, adds or deletes an
+        # entry after unlock_() ends the consolidated state of the stack
+        out = self._unlocked_consolidated_stack(stack_dim)
+        new = torch.full(out["x"].shape, 7.0)
+        if write == "setitem":
+            out["x"] = new
+            assert (out["x"] == 7).all()
+        elif write == "set_nested":
+            out["n", "x"] = new
+        elif write == "add":
+            out["y"] = new
+        elif write == "del":
+            del out["x"]
+        elif write == "pop":
+            out.pop("x")
+        elif write == "rename":
+            out.rename_key_("x", "z")
+        elif write == "update":
+            out.update({"x": new, "y": new})
+        elif write == "select":
+            out.select("a", inplace=True)
+        elif write == "exclude":
+            out.exclude("a", inplace=True)
+        elif write == "to_dtype":
+            out.to(torch.float64, inplace=True)
+        elif write == "apply_out":
+            out.apply(lambda tensor: tensor + 1, out=out)
+        self._assert_reads_match(out)
+
+    @pytest.mark.parametrize("write", ["insert", "append", "extend"])
+    def test_consolidate_unlock_new_member(self, write):
+        # #3738: a member added after unlock_() is outside the consolidated storage
+        out = self._unlocked_consolidated_stack()
+        member = TensorDict(x=torch.full((3,), 7.0), a=torch.full((3,), 8.0))
+        if write == "insert":
+            out.insert(0, member)
+        elif write == "append":
+            out.append(member)
+        else:
+            out.extend([member, member.clone()])
+        self._assert_reads_match(out)
+
+    def test_consolidate_unlock_write_tensorclass(self):
+        # #3738, with a lazy stack of tensorclasses
+        out = lazy_stack(
+            [
+                _Pair(x=torch.zeros(3), y=torch.zeros(3)),
+                _Pair(x=torch.ones(3), y=torch.ones(3)),
+            ]
+        ).consolidate()
+        out.unlock_()
+        out.x = torch.full((2, 3), 7.0)
+        assert not out.is_consolidated()
+        for copy in (pickle.loads(pickle.dumps(out)), out.to("cpu")):
+            assert isinstance(copy, _Pair)
+            assert (copy.x == 7).all()
+            assert (copy.y == torch.tensor([[0.0], [1.0]])).all()
+
+    @pytest.mark.parametrize(
+        "write", ["none", "set_", "update_", "add_", "index", "set_inplace"]
+    )
+    def test_consolidate_unlock_keeps_record(self, write):
+        # unlock_() alone, or followed by a write in place, keeps the stack
+        # consolidated: the leaves are still views of the consolidated storage
+        out = self._unlocked_consolidated_stack()
+        new = torch.full((2, 3), 7.0)
+        if write == "set_":
+            out.set_("x", new)
+        elif write == "update_":
+            out.update_({"x": new})
+        elif write == "add_":
+            out.add_(1)
+        elif write == "index":
+            out[0] = out[0] + 3
+        elif write == "set_inplace":
+            out.set("x", new, inplace=True)
+        assert out.is_consolidated()
+        assert out.consolidate() is out
+        expected = out.to_tensordict()
+        for copy in (pickle.loads(pickle.dumps(out)), out.to("cpu")):
+            assert copy.is_consolidated()
+            assert (copy == expected).all()
+
+    def test_consolidate_locked_write_raises_keeps_record(self):
+        # a write that a locked consolidated stack refuses leaves it consolidated
+        out = lazy_stack(
+            [TensorDict(x=torch.zeros(3)), TensorDict(x=torch.ones(3))]
+        ).consolidate()
+        with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
+            out["x"] = torch.full((2, 3), 7.0)
+        assert out.is_consolidated()
+        assert out.is_locked
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason="#3738: a write through one member does not reach the stack's "
+        "consolidated record",
+    )
+    def test_consolidate_unlock_member_write(self):
+        out = self._unlocked_consolidated_stack()
+        out.tensordicts[0]["x"] = torch.full((3,), 7.0)
+        copy = pickle.loads(pickle.dumps(out))
+        assert (copy["x"] == out["x"]).all()
+
     def test_batch_size_equal_list(self):
         lazy = lazy_stack(
             [TensorDict(a=torch.zeros(3), batch_size=[3]) for _ in range(2)]
