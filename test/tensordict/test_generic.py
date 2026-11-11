@@ -1230,6 +1230,47 @@ class TestGeneric:
         if device != "meta":
             assert (td["b", "c"] == 1).all()
 
+    @pytest.mark.parametrize("num_threads", [1, 4])
+    @pytest.mark.parametrize("lazy", [False, True])
+    @pytest.mark.parametrize("device", ["cpu", "meta"])
+    def test_consolidate_to_inplace_num_threads(self, device, lazy, num_threads):
+        # #3645: with num_threads, to(device, inplace=True) of a consolidated
+        # tensordict raised and left it unlocked. It gives the result of the
+        # call without threads. The tensordict has no device, so "cpu" is a
+        # change of device too.
+        def make():
+            td = TensorDict(
+                {
+                    "a": torch.arange(3.0),
+                    "b": {"c": torch.ones(3, 2)},
+                    "d": "a string!",
+                },
+                batch_size=[3],
+            )
+            if lazy:
+                td = LazyStackedTensorDict(*td.unbind(0))
+            return td.consolidate(metadata=True)
+
+        ref = make().to(device, inplace=True)
+        td = make()
+        result = td.to(device, inplace=True, num_threads=num_threads)
+        assert result is td
+        assert td.device == ref.device == torch.device(device)
+        assert td["b"].device == torch.device(device)
+        assert td.is_consolidated()
+        assert td.is_locked
+        assert td["b"].is_locked
+        storage = td._consolidated["storage"]
+        assert storage.device == torch.device(device)
+        assert list(td.keys(True, True)) == list(ref.keys(True, True))
+        for sub_td in td.tensordicts if lazy else [td]:
+            for value in sub_td.values(True, True):
+                assert value.device == torch.device(device)
+                assert value.untyped_storage().data_ptr() == storage.data_ptr()
+        assert td[0]["d"] == "a string!"
+        if device != "meta":
+            assert (td == ref).all()
+
     def test_consolidate_to_inplace_locked_raises(self):
         # A tensordict that the user locked keeps raising
         td = TensorDict(a=torch.zeros(3), batch_size=[3]).lock_()

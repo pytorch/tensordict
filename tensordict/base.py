@@ -9582,9 +9582,20 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     "batch_size and out.batch_size must be equal when both are provided."
                 )
             if device is not NO_DEFAULT and device != out.device:
-                raise RuntimeError(
-                    "device and out.device must be equal when both are provided."
-                )
+                if not checked or device is None:
+                    raise RuntimeError(
+                        "device and out.device must be equal when both are provided."
+                    )
+                # As in _apply_nest: the caller moves every leaf of out to
+                # device, such as to(device, inplace=True) of a consolidated
+                # tensordict (#3645)
+                device = torch.device(device)
+                out._device = device
+                for node in out.values(True, True, is_leaf=_is_tensor_collection):
+                    if is_tensorclass(node):
+                        node._tensordict._device = device
+                    else:
+                        node._device = device
         else:
 
             def make_result(names=names, batch_size=batch_size):
