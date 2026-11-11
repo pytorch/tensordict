@@ -3117,7 +3117,8 @@ class TensorDict(TensorDictBase):
                 sort=sort,
             )
 
-    @_cache_while_locked
+    # Not cached while locked: the view holds the tensordict, so a view kept in
+    # the cache of that tensordict would be a reference cycle (#3564).
     def _nested_keys(
         self,
         include_nested: bool = False,
