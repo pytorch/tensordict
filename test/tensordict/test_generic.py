@@ -12533,6 +12533,282 @@ class TestGeneric:
         assert set(out.keys(True)) == {"x", "n", ("n", "y")}
         assert out["x"] is td["x"]
 
+    @pytest.mark.parametrize(
+        "kind",
+        [
+            "flat",
+            "nested",
+            "locked",
+            "named",
+            "device",
+            "memmap",
+            "shared",
+            "non_tensor",
+            "tensorclass",
+            "lazy_stack",
+            "parameter",
+            "unbatched",
+        ],
+    )
+    def test_shallow_copy_select_exclude_entries(self, kind, tmp_path):
+        # #3575: copy(), clone(False), select and exclude build their result
+        # in one pass. The result keeps the type, batch size, names, device
+        # and key order, is not locked, shared or memory-mapped, and shares
+        # its entries with the source: a shallow copy holds the same leaves
+        # and a new shallow copy of each nested collection; select and exclude
+        # hold the same entries, and a new node only on the path of a nested
+        # key.
+        def leaf(*shape):
+            return torch.zeros(3, *shape)
+
+        source = {"a": leaf(2), "b": leaf()}
+        kwargs = {}
+        if kind != "flat":
+            source["n"] = {"c": leaf(), "m": {"e": leaf(1)}}
+        if kind == "named":
+            kwargs["names"] = ["time"]
+        elif kind == "device":
+            kwargs["device"] = "cpu"
+        elif kind == "non_tensor":
+            source["s"] = NonTensorData("x", batch_size=[3])
+            source["st"] = NonTensorStack("x", "y", "z")
+        elif kind == "tensorclass":
+            source["tc"] = _AppendMemmapRows(x=leaf(2), label="x", batch_size=[3])
+        elif kind == "lazy_stack":
+            source["ls"] = lazy_stack([TensorDict(q=torch.zeros(2)) for _ in range(3)])
+        elif kind == "parameter":
+            source["p"] = nn.Parameter(leaf(2))
+            source["buffer"] = nn.Buffer(leaf())
+        elif kind == "unbatched":
+            source["u"] = tensordict.UnbatchedTensor(torch.zeros(7))
+            source["mmt"] = MemoryMappedTensor.from_tensor(leaf(2))
+        td = TensorDict(source, batch_size=[3], **kwargs)
+        if kind == "locked":
+            td.lock_()
+        elif kind == "memmap":
+            td.memmap_(tmp_path)
+        elif kind == "shared":
+            td.share_memory_()
+        keys = list(td.keys())
+
+        def check_node(src, out):
+            assert out is not src
+            assert type(out) is type(src)
+            assert out.batch_size == src.batch_size
+            assert out.names == src.names
+            assert out.device == src.device
+            assert not out.is_locked
+            assert not out.is_shared()
+            assert not out.is_memmap()
+
+        def check_copy(src, out):
+            check_node(src, out)
+            assert list(out._tensordict) == list(src._tensordict)
+            for key, value in src._tensordict.items():
+                new = out._tensordict[key]
+                assert type(new) is type(value)
+                if not is_tensor_collection(value):
+                    assert new is value
+                    continue
+                assert new is not value
+                if type(value) is TensorDict:
+                    check_copy(value, new)
+
+        def check_same_entries(src, out, expected_keys):
+            check_node(src, out)
+            assert list(out._tensordict) == expected_keys
+            for key in expected_keys:
+                assert out._tensordict[key] is src._tensordict[key]
+
+        check_copy(td, td.copy())
+        check_copy(td, td.clone(False))
+        check_same_entries(td, td.exclude(keys[0]), keys[1:])
+        check_same_entries(td, td.select(*keys[1:]), keys[1:])
+        check_same_entries(td, td.select(*keys[::-1]), keys[::-1])
+        check_same_entries(td, td.select(*keys, "missing", strict=False), keys)
+        check_same_entries(td, td.select(), [])
+        if kind != "flat":
+            node = td._tensordict["n"]
+            selected = td.select("a", ("n", "c"))
+            excluded = td.exclude(("n", "c"), "b")
+            for out, out_keys, node_keys in (
+                (selected, ["a", "n"], ["c"]),
+                (excluded, [key for key in keys if key != "b"], ["m"]),
+            ):
+                check_node(td, out)
+                assert list(out._tensordict) == out_keys
+                for key in out_keys:
+                    assert (out._tensordict[key] is td._tensordict[key]) == (key != "n")
+                check_same_entries(node, out._tensordict["n"], node_keys)
+        if not td.is_locked:
+            # in place: the tensordict itself, with the same entries
+            for inplace_op, kept in (
+                (lambda src: src.select(*keys[1:], inplace=True), keys[1:]),
+                (lambda src: src.exclude(keys[0], inplace=True), keys[1:]),
+            ):
+                src = td.copy()
+                entries = dict(src._tensordict)
+                assert inplace_op(src) is src
+                assert list(src._tensordict) == kept
+                for key in kept:
+                    assert src._tensordict[key] is entries[key]
+
+    def test_shallow_copy_keeps_tensors_without_a_call(self, monkeypatch):
+        # #3575: a shallow copy keeps each exact Tensor as it is, without a
+        # call for each leaf. Every other entry still goes through
+        # _clone_value, which keeps a tensor of another class and makes a
+        # shallow copy of a tensor collection.
+        seen = []
+        clone_value = tensordict._td._clone_value
+
+        def counting_clone_value(value, recurse):
+            seen.append((type(value), recurse))
+            return clone_value(value, recurse)
+
+        monkeypatch.setattr(tensordict._td, "_clone_value", counting_clone_value)
+        td = TensorDict({f"k{i}": torch.zeros(3) for i in range(10)}, batch_size=[3])
+        for out in (td.copy(), td.clone(False)):
+            assert seen == []
+            assert list(out.keys()) == list(td.keys())
+            for key, value in td.items():
+                assert out._tensordict[key] is value
+        td = TensorDict(
+            a=torch.zeros(3),
+            p=nn.Parameter(torch.zeros(3)),
+            u=tensordict.UnbatchedTensor(torch.zeros(2)),
+            m=MemoryMappedTensor.from_tensor(torch.zeros(3)),
+            n=TensorDict(c=torch.zeros(3), batch_size=[3]),
+            batch_size=[3],
+        )
+        out = td.copy()
+        assert seen == [
+            (nn.Parameter, False),
+            (tensordict.UnbatchedTensor, False),
+            (MemoryMappedTensor, False),
+            (TensorDict, False),
+        ]
+        for key in ("a", "p", "u", "m"):
+            assert out._tensordict[key] is td._tensordict[key]
+        assert out["n"] is not td["n"]
+        assert out["n", "c"] is td["n", "c"]
+        # a deep copy clones every entry, as before
+        del seen[:]
+        cloned = td.clone()
+        for key in ("a", "p", "m", ("n", "c")):
+            assert cloned[key] is not td[key]
+
+    @pytest.mark.parametrize("reports_tensordict", [False, True])
+    def test_shallow_copy_select_exclude_subclass_new_unsafe(self, reports_tensordict):
+        # #3575: only an exact TensorDict builds its copy in one pass. A
+        # subclass whose _new_unsafe takes no `nested` argument keeps
+        # copy(), clone(), select, exclude and split_keys, also when its
+        # instances report TensorDict as their __class__.
+        class StrictNewUnsafe(TensorDict):
+            if reports_tensordict:
+                __class__ = property(lambda self: TensorDict)
+
+            @classmethod
+            def _new_unsafe(
+                cls,
+                source=None,
+                batch_size=None,
+                device=None,
+                names=None,
+                non_blocking=None,
+                lock=False,
+            ):
+                return super()._new_unsafe(
+                    source=source,
+                    batch_size=batch_size,
+                    device=device,
+                    names=names,
+                    non_blocking=non_blocking,
+                    lock=lock,
+                )
+
+        td = StrictNewUnsafe(
+            {"a": torch.zeros(3, 2), "b": torch.zeros(3), "n": {"c": torch.zeros(3)}},
+            batch_size=[3],
+        )
+
+        def check(out, keys, same_leaves=True):
+            assert type(out) is StrictNewUnsafe
+            assert out is not td
+            assert out.batch_size == td.batch_size
+            assert list(out.keys()) == keys
+            for key in out.keys(True, True):
+                assert (out[key] is td[key]) == same_leaves
+                assert (out[key] == td[key]).all()
+
+        check(td.copy(), ["a", "b", "n"])
+        check(td.clone(False), ["a", "b", "n"])
+        check(td.clone(), ["a", "b", "n"], same_leaves=False)
+        check(td.select("a", "n"), ["a", "n"])
+        check(td.select("b", ("n", "c")), ["b", "n"])
+        check(td.exclude("a"), ["b", "n"])
+        check(td.exclude(("n", "c")), ["a", "b", "n"])
+        first, second = td.split_keys(["a"])
+        check(first, ["a"])
+        check(second, ["b", "n"])
+        # as an entry of a TensorDict, and in place
+        parent = TensorDict(x=torch.zeros(3), sub=td, batch_size=[3])
+        for out in (parent.copy(), parent.select("sub"), parent.exclude("x")):
+            assert type(out["sub"]) is StrictNewUnsafe
+            assert out["sub", "a"] is td["a"]
+        src = td.copy()
+        assert src.select("a", inplace=True) is src
+        check(src, ["a"])
+
+    def test_shallow_copy_select_exclude_without_entries(self, monkeypatch):
+        # #3575: a result without entries has nothing to gain from the
+        # one-pass call, so it is built with the call that every result was
+        # built with before, without `nested`. So is each shallow copy of a
+        # NonTensorData, whose tensordict has no entries.
+        nested_args = []
+        new_unsafe = TensorDict._new_unsafe.__func__
+
+        def recording_new_unsafe(cls, *args, **kwargs):
+            nested_args.append(kwargs.get("nested"))
+            return new_unsafe(cls, *args, **kwargs)
+
+        monkeypatch.setattr(
+            TensorDict, "_new_unsafe", classmethod(recording_new_unsafe)
+        )
+        empty = TensorDict(batch_size=[3], names=["time"], device="cpu")
+        # without a device, the deep clone is built by the same call as the copy
+        no_device = TensorDict(batch_size=[3])
+        td = TensorDict(a=torch.zeros(3, 2), b=torch.zeros(3), batch_size=[3])
+        for src, call in (
+            (empty, lambda: empty.copy()),
+            (empty, lambda: empty.clone(False)),
+            (empty, lambda: empty.clone()),
+            (no_device, lambda: no_device.clone()),
+            (empty, lambda: empty.select()),
+            (empty, lambda: empty.exclude("a")),
+            (td, lambda: td.select()),
+            (td, lambda: td.select("missing", strict=False)),
+            (td, lambda: td.exclude("a", "b")),
+        ):
+            del nested_args[:]
+            out = call()
+            assert nested_args == [None]
+            assert type(out) is TensorDict
+            assert out is not src
+            assert out.batch_size == src.batch_size
+            assert out.names == src.names
+            assert out.device == src.device
+            assert out.is_empty()
+            assert not out.is_locked
+        data = NonTensorData("x", batch_size=[3])
+        for call in (data.copy, lambda: data.clone(False)):
+            del nested_args[:]
+            out = call()
+            assert nested_args and set(nested_args) == {None}
+            assert type(out) is NonTensorData
+            assert out is not data
+            assert out.data == "x"
+            assert out.batch_size == data.batch_size
+
     def test_separates(self):
         td = TensorDict(a=0, b=TensorDict(c=0, d=0))
         td_sep = td.separates("a", ("b", ("d",)))
