@@ -122,7 +122,7 @@ def _is_plain_td(td):
     )
 
 
-def _is_plain_leaf(tensor):
+def _is_plain_leaf(tensor, wrapped=False):
     if not (
         type(tensor) is torch.Tensor
         and tensor.layout is torch.strided
@@ -132,10 +132,10 @@ def _is_plain_leaf(tensor):
         and not tensor.is_meta
         and not (tensor.requires_grad and torch.is_grad_enabled())
         # a tensor that a torch.func transform wraps has no storage to compare;
-        # an empty one needs none. Dynamo has no rule for the check: skip it
-        # while compiling, as before (#3724)
+        # an empty one needs none (#3724). ``wrapped``: a transform is active
+        # and the call is not compiled (Dynamo has no rule for the check)
         and not (
-            not is_compiling()
+            wrapped
             and tensor.numel()
             and torch._C._functorch.is_functorch_wrapped_tensor(tensor)
         )
@@ -180,13 +180,15 @@ def _unsplit_keys(self, out, separator):
         # the op made two keys of out one, or the block changed the keys
         return None
     pairs = []
+    # leaves can be wrapped tensors only under a torch.func transform
+    wrapped = not is_compiling() and torch._C._are_functorch_transforms_active()
     for split_key, key in keys.items():
         value = self._get_tuple(split_key, None)
         dest = out._get_tuple(key, None)
         # write nothing unless every pair is known to be safe for copy_
         if not (
-            _is_plain_leaf(value)
-            and _is_plain_leaf(dest)
+            _is_plain_leaf(value, wrapped)
+            and _is_plain_leaf(dest, wrapped)
             and value.shape == dest.shape
             and value.device == dest.device
             and not (value.is_complex() and not dest.is_complex())
