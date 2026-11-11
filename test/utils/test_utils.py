@@ -1517,6 +1517,57 @@ def test_isin_2dim(dim):
     torch.testing.assert_close(in_ref, expected_in_ref)
 
 
+@pytest.mark.parametrize("dim", (0, 1))
+def test_isin_repeated_rows_not_in_reference(dim):
+    # #3607: a row that repeats in the input and is not in the reference came
+    # back as True once the reference had a dozen rows or more
+    x = torch.tensor([100, 100, 7, 100])
+    reference_x = torch.arange(20)
+    if dim == 1:
+        x, reference_x = x.expand(2, 4), reference_x.expand(2, 20)
+    td = TensorDict(x=x, batch_size=x.shape)
+    reference = TensorDict(x=reference_x, batch_size=reference_x.shape)
+    in_ref = isin(td, reference, key="x", dim=dim)
+    assert in_ref.tolist() == [False, False, True, False]
+
+
+def test_isin_random_sweep():
+    # #3607: a seeded sweep against a brute-force comparison of the rows
+    generator = torch.Generator().manual_seed(0)
+    for case in range(200):
+        n_ref, n_in, n_feature_dims = (
+            int(torch.randint(low, high, (), generator=generator))
+            for low, high in ((1, 40), (1, 12), (0, 3))
+        )
+        shape = (2,) * n_feature_dims
+        dtype = (torch.long, torch.float)[case % 2]
+        ref = torch.randint(0, 2, (n_ref, *shape), generator=generator).to(dtype)
+        inp = torch.randint(0, 3, (n_in, *shape), generator=generator).to(dtype)
+        in_ref = isin(
+            TensorDict(x=inp, batch_size=[n_in]),
+            TensorDict(x=ref, batch_size=[n_ref]),
+            key="x",
+        )
+        expected = inp.reshape(n_in, 1, -1) == ref.reshape(1, n_ref, -1)
+        expected = expected.all(-1).any(-1)
+        assert in_ref.dtype == torch.bool
+        assert in_ref.tolist() == expected.tolist(), (inp, ref)
+
+
+def test_isin_docstring_example():
+    # #3607: pins a mask that was right before the fix (a repeated row that is
+    # in the reference)
+    td = TensorDict(
+        x=torch.tensor([[1, 2], [3, 4], [1, 2], [5, 6]]),
+        y=torch.arange(4),
+        batch_size=[4],
+    )
+    reference = TensorDict(x=torch.tensor([[1, 2], [5, 6]]), batch_size=[2])
+    in_ref = isin(td, reference, key="x")
+    assert in_ref.dtype == torch.bool
+    assert in_ref.tolist() == [True, False, True, True]
+
+
 @pytest.mark.parametrize("key", ("tensor1", "tensor3", "next"))
 @pytest.mark.parametrize("dim", (0, 1, -1, -2))
 @pytest.mark.parametrize("device", get_available_devices())
