@@ -1004,12 +1004,23 @@ def _save_as_archive(
     archive_path = Path(archive_path)
     _check_archive_target(archive_path, existsok)
     saved_prefix = getattr(td, "_memmap_prefix", None)
+    is_memmap = td.is_memmap
+    # A field named ``is_memmap`` of a shadow tensorclass hides the method
+    # (#3693): ask its tensordict. As in _td_method, only for a tensorclass of
+    # its own.
+    hidden = not callable(is_memmap) and "_is_tensorclass" in vars(type(td))
+    if hidden:
+        is_memmap = td._tensordict.is_memmap
     if (
-        td.is_memmap()
+        is_memmap()
         and isinstance(saved_prefix, Path)
         and (saved_prefix / "meta.json").exists()
     ):
-        return pack_memmap(saved_prefix, archive_path, compression=compression)
+        if not hidden:
+            return pack_memmap(saved_prefix, archive_path, compression=compression)
+        # Written, which keeps the class: the pack leaves it out (#3585). Like
+        # the pack, copy the files of the leaves whatever ``copy_existing`` says.
+        copy_existing = True
     return _write_archive_from_td(
         td,
         archive_path,
