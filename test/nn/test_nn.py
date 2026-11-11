@@ -7,6 +7,7 @@ import argparse
 import contextlib
 import copy
 import functools
+import gc
 import importlib
 import inspect
 import os
@@ -6775,6 +6776,649 @@ class TestTensorDictParams:
         assert result.missing_keys == result.unexpected_keys == []
         result = module.load_state_dict(module.state_dict())
         assert result.missing_keys == result.unexpected_keys == []
+
+    @pytest.mark.parametrize(
+        "swap",
+        [
+            False,
+            pytest.param(
+                True,
+                marks=pytest.mark.xfail(
+                    strict=True,
+                    reason="#3613: with swap_module_params_on_conversion, detach() keeps the old tensors",
+                ),
+            ),
+        ],
+    )
+    def test_load_state_dict_assign_locked(self, swap):
+        # #3572: detach() and arithmetic on a locked TensorDictParams, called
+        # before the load too, give the tensors that assign=True put in.
+        params = TensorDictParams(TensorDict(w=torch.zeros(3)))
+        module = self._parent(params)
+        params.lock_()
+        params.detach(), params + 0
+        sd = {"params.w": torch.ones(3)}
+        prev = torch.__future__.get_swap_module_params_on_conversion()
+        torch.__future__.set_swap_module_params_on_conversion(swap)
+        try:
+            module.load_state_dict(sd, assign=True)
+        finally:
+            torch.__future__.set_swap_module_params_on_conversion(prev)
+        assert params["w"].data_ptr() == sd["params.w"].data_ptr()
+        assert params.detach()["w"].data_ptr() == sd["params.w"].data_ptr()
+        assert ((params + 0)["w"] == 1).all()
+
+    @pytest.mark.parametrize("assign", [True, False])
+    @pytest.mark.parametrize("lock", [None, "lock_", "content", "parent"])
+    def test_load_state_dict_locked_reads(self, lock, assign):
+        # #3572: a locked tensordict caches reads such as detach() and the list
+        # of its leaves. After assign=True, the reads of the TensorDictParams,
+        # of its nested tensordicts and of a locked tensordict that holds it
+        # give the assigned tensors. Unlocked (lock=None) or with assign=False,
+        # they already did.
+        params = TensorDictParams(
+            TensorDict(
+                w=torch.zeros(3),
+                n=TensorDict(v=torch.zeros(2)),
+                sub=TensorDictParams(TensorDict(u=torch.zeros(2))),
+            ),
+            lock=lock == "content",
+        )
+        module = self._parent(params)
+        root = TensorDict(p=params) if lock == "parent" else params
+        if lock in ("lock_", "parent"):
+            root.lock_()
+        tds = [root, params, params["n"], params["sub"]]
+        for td in tds:
+            # the reads that fill the caches of a locked tensordict
+            td.detach(), td + 0, td.flatten_keys(), td.zero_grad()
+            td.requires_grad_()
+        sd = {key: torch.ones_like(val) for key, val in module.state_dict().items()}
+        module.load_state_dict(sd, assign=assign)
+        live = dict(module.named_parameters())
+        assert set(live) == {"params.w", "params.n.v", "params.sub.u"}
+        for name, param in live.items():
+            assert (param.data_ptr() == sd[name].data_ptr()) is assign
+            assert params.get(tuple(name.split(".")[1:])) is param
+        pointers = {param.data_ptr() for param in live.values()}
+        for td in tds:
+            detached = td.detach()
+            assert {leaf.data_ptr() for leaf in detached.values(True, True)} <= pointers
+            assert (detached == 1).all()
+            assert (td + 0 == 1).all()
+            assert all(
+                any(leaf is p for p in live.values())
+                for leaf in td.flatten_keys().values()
+            )
+        # zero_grad and requires_grad_ reach the live parameters
+        sum(param.sum() for param in live.values()).backward()
+        params["n"].zero_grad()
+        assert live["params.n.v"].grad is None
+        assert live["params.w"].grad is not None
+        root.zero_grad()
+        assert all(param.grad is None for param in live.values())
+        root.requires_grad_(False)
+        assert not any(param.requires_grad for param in live.values())
+        root.requires_grad_(True)
+        # an optimizer step shows in the reads
+        optim = torch.optim.SGD(module.parameters(), lr=1.0)
+        sum(param.sum() for param in module.parameters()).backward()
+        optim.step()
+        for td in tds:
+            assert (td.detach() == 0).all()
+            assert (td + 0 == 0).all()
+
+    @pytest.mark.parametrize(
+        "layout,assign,swap",
+        [
+            ("as_module", True, False),
+            ("as_module", False, False),
+            ("content", True, False),
+            ("content", False, False),
+            ("unlocked", True, False),
+            ("unlocked", False, False),
+            ("unlocked", True, True),
+        ]
+        + [
+            pytest.param(
+                layout,
+                True,
+                True,
+                marks=pytest.mark.xfail(
+                    strict=True,
+                    reason="#3613: with swap_module_params_on_conversion, the load raises after a vmapped forward",
+                ),
+            )
+            for layout in ("as_module", "content")
+        ],
+    )
+    def test_load_state_dict_vmap(self, layout, assign, swap):
+        # #3572: a vmapped forward that ran before the load computes with the
+        # loaded weights after it. A locked tensordict caches its view under
+        # vmap: the TensorDictParams that from_modules(as_module=True) returns,
+        # and the content of a TensorDictParams(td, lock=True). With
+        # swap_module_params_on_conversion, the load of a locked one still
+        # raises (#3613).
+        nets = [nn.Linear(3, 1) for _ in range(2)]
+        if layout == "as_module":
+            params = TensorDict.from_modules(*nets, as_module=True)
+        else:
+            stacked = TensorDict(
+                weight=torch.randn(2, 1, 3), bias=torch.randn(2, 1), batch_size=[2]
+            )
+            params = TensorDictParams(stacked, lock=layout == "content")
+        assert params.is_locked is (layout == "as_module")
+        assert params._param_td.is_locked is (layout != "unlocked")
+        module = self._parent(params)
+
+        def call(params, x):
+            with params.to_module(nets[0]):
+                return nets[0](x)
+
+        forward = torch.vmap(call, (0, None))
+        x = torch.ones(4, 3)
+        assert forward(params, x).shape == (2, 4, 1)
+        params.detach()
+        sd = {key: torch.ones_like(val) for key, val in module.state_dict().items()}
+        prev = torch.__future__.get_swap_module_params_on_conversion()
+        torch.__future__.set_swap_module_params_on_conversion(swap)
+        try:
+            module.load_state_dict(sd, assign=assign)
+        finally:
+            torch.__future__.set_swap_module_params_on_conversion(prev)
+        assert all((param == 1).all() for param in module.parameters())
+        assert (forward(params, x) == 4).all()
+        assert (params.detach() == 1).all()
+
+    @pytest.mark.parametrize("assign", [True, False])
+    @pytest.mark.parametrize("lock", [False, True])
+    @pytest.mark.parametrize("root", [False, True])
+    def test_load_state_dict_tensorclass(self, root, lock, assign):
+        # #3572: with a tensorclass in the TensorDictParams, nested or as its
+        # content, the load does not warn, and the cached reads give the
+        # loaded tensors.
+        data = InputTensorClass(a=torch.zeros(2), b=torch.zeros(2))
+        params = TensorDictParams(data if root else TensorDict(t=data))
+        module = self._parent(params)
+        if lock:
+            params.lock_()
+        tc = params if root else params["t"]
+        params.detach(), tc.detach()
+        sd = {key: torch.ones_like(val) for key, val in module.state_dict().items()}
+        assert len(sd) == 2
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            module.load_state_dict(sd, assign=assign)
+        key = "params.a" if root else "params.t.a"
+        assert (tc.get("a").data_ptr() == sd[key].data_ptr()) is assign
+        assert all((leaf == 1).all() for leaf in params.detach().values(True, True))
+        assert (tc.detach().get("b") == 1).all()
+
+    @pytest.mark.parametrize("assign", [True, False])
+    def test_load_state_dict_nested_holder(self, assign):
+        # #3572: a locked tensordict that holds only a nested tensordict of a
+        # TensorDictParams that was never locked.
+        params = TensorDictParams(TensorDict(n=TensorDict(v=torch.zeros(2))))
+        module = self._parent(params)
+        holder = TensorDict(x=params["n"]).lock_()
+        holder.detach()
+        module.load_state_dict({"params.n.v": torch.ones(2)}, assign=assign)
+        assert not params.is_locked
+        assert (holder.detach()["x", "v"] == 1).all()
+
+    @pytest.mark.parametrize("assign", [True, False])
+    @pytest.mark.parametrize("lock", [True, False])
+    def test_load_state_dict_freed(self, lock, assign):
+        # #3572: the load keeps no reference to the TensorDictParams, which is
+        # freed when its last reference is dropped, without the garbage
+        # collector.
+        enabled = gc.isenabled()
+        gc.disable()
+        try:
+            params = TensorDictParams(
+                TensorDict(w=torch.zeros(3), n=TensorDict(v=torch.zeros(2)))
+            )
+            module = self._parent(params)
+            if lock:
+                params.lock_()
+            state_dict = {k: torch.ones_like(v) for k, v in module.state_dict().items()}
+            module.load_state_dict(state_dict, assign=assign)
+            ref = weakref.ref(params)
+            del module, params
+            assert ref() is None
+        finally:
+            if enabled:
+                gc.enable()
+
+    @staticmethod
+    def _params_with_extra(kind, no_convert=False, leaves=True):
+        # A buffer or a parameter that is registered and is not a leaf of the
+        # tensordict: state_dict() does not write it.
+        td = TensorDict(a=torch.zeros(3)) if leaves else TensorDict()
+        params = TensorDictParams(td, no_convert=no_convert)
+        value = torch.full((2,), 5.0)
+        if kind == "buffer":
+            params.register_buffer("extra", value)
+            return params, params._buffers
+        params.register_parameter("extra", nn.Parameter(value))
+        return params, params._parameters
+
+    @pytest.mark.parametrize("assign", [True, False])
+    @pytest.mark.parametrize("strict", [True, False])
+    @pytest.mark.parametrize("locked", [True, False])
+    @pytest.mark.parametrize("no_convert", [True, False])
+    @pytest.mark.parametrize("kind", ["buffer", "parameter"])
+    def test_load_state_dict_not_a_leaf(self, kind, no_convert, locked, strict, assign):
+        # #3652: a module loads its own state dict when the TensorDictParams
+        # has a persistent buffer, or a parameter, that is not a leaf. The
+        # state dict has no key for it: it is not reported as missing, and
+        # assign=True keeps it.
+        params, registry = self._params_with_extra(kind, no_convert)
+        extra = registry["extra"]
+        if locked:
+            params.lock_()
+        module = self._parent(params)
+        sd = {k: v.detach() + 1 for k, v in module.state_dict().items()}
+        assert set(sd) == {"params.a"}
+        result = module.load_state_dict(sd, strict=strict, assign=assign)
+        assert result.missing_keys == result.unexpected_keys == []
+        assert (params["a"] == 1).all()
+        assert (params["a"].data_ptr() == sd["params.a"].data_ptr()) is assign
+        assert registry["extra"] is extra
+        assert (extra == 5).all()
+        named = (
+            module.named_buffers() if kind == "buffer" else module.named_parameters()
+        )
+        assert dict(named)["params.extra"] is extra
+        assert params.is_locked is locked
+        assert set(module.state_dict()) == {"params.a"}
+        # A second load of each kind sees the entry that the first one kept.
+        for again in (True, False):
+            result = module.load_state_dict(module.state_dict(), assign=again)
+            assert result.missing_keys == result.unexpected_keys == []
+            assert registry["extra"] is extra
+
+    @pytest.mark.parametrize("assign", [True, False])
+    @pytest.mark.parametrize("strict", [True, False])
+    @pytest.mark.parametrize("kind", ["buffer", "parameter"])
+    def test_load_state_dict_not_a_leaf_none_value(self, kind, strict, assign):
+        # #3652: a None value reads as no key, here too.
+        params, registry = self._params_with_extra(kind)
+        extra = registry["extra"]
+        module = self._parent(params)
+        sd = {"params.a": torch.ones(3), "params.extra": None}
+        result = module.load_state_dict(sd, strict=strict, assign=assign)
+        assert result.missing_keys == result.unexpected_keys == []
+        assert (params["a"] == 1).all()
+        assert registry["extra"] is extra
+
+    @pytest.mark.parametrize("assign", [True, False])
+    @pytest.mark.parametrize("strict", [True, False])
+    def test_load_state_dict_not_a_leaf_prefix(self, strict, assign):
+        # #3652: under a longer prefix, next to a module with a buffer of the
+        # same name, which is still reported as missing.
+        params, registry = self._params_with_extra("buffer")
+        extra = registry["extra"]
+        root = nn.Module()
+        root.child = self._parent(params)
+        root.other = nn.Module()
+        root.other.register_buffer("extra", torch.zeros(2))
+        sd = {"child.params.a": torch.ones(3)}
+        if strict:
+            with pytest.raises(
+                RuntimeError, match=r'Missing key\(s\) in state_dict: "other.extra"\. $'
+            ):
+                root.load_state_dict(sd, assign=assign)
+        else:
+            result = root.load_state_dict(sd, strict=False, assign=assign)
+            assert result.missing_keys == ["other.extra"]
+            assert result.unexpected_keys == []
+        sd["other.extra"] = torch.ones(2)
+        result = root.load_state_dict(sd, strict=strict, assign=assign)
+        assert result.missing_keys == result.unexpected_keys == []
+        assert (params["a"] == 1).all()
+        assert registry["extra"] is extra
+        assert (extra == 5).all()
+
+    @pytest.mark.parametrize("assign", [True, False])
+    @pytest.mark.parametrize("no_convert", [True, False])
+    def test_load_state_dict_not_a_leaf_nested(self, no_convert, assign):
+        # #3652: assign=True keeps the buffer and the parameter of a nested
+        # TensorDictParams that are not leaves.
+        inner, _ = self._params_with_extra("buffer", no_convert)
+        inner.register_parameter("weight", nn.Parameter(torch.full((2,), 6.0)))
+        buffer, weight = inner._buffers["extra"], inner._parameters["weight"]
+        outer = TensorDictParams(TensorDict(b=torch.zeros(2)), no_convert=no_convert)
+        outer["sub"] = inner
+        module = self._parent(outer)
+        sd = {"params.b": torch.ones(2), "params.sub.a": torch.ones(3)}
+        result = module.load_state_dict(sd, assign=assign)
+        assert result.missing_keys == result.unexpected_keys == []
+        assert (outer["b"] == 1).all() and (inner["a"] == 1).all()
+        assert outer["sub"] is inner
+        assert inner._buffers["extra"] is buffer
+        assert inner._parameters["weight"] is weight
+        assert set(module.state_dict()) == set(sd)
+        assert set(outer._parameters) | set(outer._buffers) == {"b", "sub.a"}
+
+    @pytest.mark.parametrize("assign", [True, False])
+    @pytest.mark.parametrize("strict", [True, False])
+    def test_load_state_dict_not_a_leaf_with_other_buffers(self, strict, assign):
+        # #3652: next to a None buffer and a non-persistent buffer, which
+        # load as before: a value for either is an unexpected key.
+        params, registry = self._params_with_extra("buffer", True)
+        params.register_buffer("unused", None)
+        params.register_buffer("np", torch.full((2,), 7.0), persistent=False)
+        extra, np_buffer = registry["extra"], registry["np"]
+        module = self._parent(params)
+        sd = {"params.a": torch.ones(3)}
+        result = module.load_state_dict(sd, strict=strict, assign=assign)
+        assert result.missing_keys == result.unexpected_keys == []
+        assert list(registry) == ["a", "extra", "unused", "np"]
+        assert registry["extra"] is extra and registry["np"] is np_buffer
+        assert registry["unused"] is None
+        assert params._non_persistent_buffers_set == {"np"}
+        sd.update({"params.unused": torch.ones(1), "params.np": 3.0})
+        result = module.load_state_dict(sd, strict=False, assign=assign)
+        assert result.missing_keys == []
+        assert result.unexpected_keys == ["params.unused", "params.np"]
+        assert registry["extra"] is extra and registry["np"] is np_buffer
+        assert (extra == 5).all() and (np_buffer == 7).all()
+
+    @pytest.mark.parametrize("assign", [True, False])
+    @pytest.mark.parametrize("extra", [None, "non_persistent", "buffer", "parameter"])
+    def test_load_state_dict_missing_leaf_still_reported(self, extra, assign):
+        # #3652: a leaf with no key in the state dict is still a missing key,
+        # a buffer as a parameter, with and without an entry that is not a
+        # leaf.
+        params = TensorDictParams(
+            TensorDict(a=torch.zeros(3), n={"b": nn.Parameter(torch.zeros(2))}),
+            no_convert=True,
+        )
+        if extra == "non_persistent":
+            params.register_buffer("extra", torch.zeros(2), persistent=False)
+        elif extra == "buffer":
+            params.register_buffer("extra", torch.zeros(2))
+        elif extra == "parameter":
+            params.register_parameter("extra", nn.Parameter(torch.zeros(2)))
+        module = self._parent(params)
+        assert set(module.state_dict()) == {"params.a", "params.n.b"}
+        for sd, missing in (
+            ({"params.n.b": torch.ones(2)}, ["params.a"]),
+            ({"params.a": torch.ones(3)}, ["params.n.b"]),
+        ):
+            names = ", ".join(f'"{key}"' for key in missing)
+            with pytest.raises(
+                RuntimeError, match=rf"Missing key\(s\) in state_dict: {names}\. $"
+            ):
+                module.load_state_dict(sd, assign=assign)
+            result = module.load_state_dict(sd, strict=False, assign=assign)
+            assert result.missing_keys == missing
+            assert result.unexpected_keys == []
+
+    @pytest.mark.parametrize("assign", [True, False])
+    @pytest.mark.parametrize("leaves", [True, False])
+    @pytest.mark.parametrize("kind", ["buffer", "parameter"])
+    def test_load_state_dict_not_a_leaf_no_key(self, kind, leaves, assign):
+        # #3652: a state dict with no key for the TensorDictParams (it has no
+        # leaves, or the checkpoint lacks the module) loads as before. Without
+        # assign the entry is a missing key, as in 0.15.4. assign=True drops
+        # it, and so does not report it.
+        params, registry = self._params_with_extra(kind, leaves=leaves)
+        extra = registry["extra"]
+        root = nn.Module()
+        root.child = self._parent(params)
+        root.other = nn.Linear(1, 1)
+        sd = {"other.weight": torch.ones(1, 1), "other.bias": torch.ones(1)}
+        missing = ["child.params.a"] * leaves + ["child.params.extra"] * (not assign)
+        if missing:
+            names = ", ".join(f'"{key}"' for key in missing)
+            with pytest.raises(
+                RuntimeError, match=rf"Missing key\(s\) in state_dict: {names}\. $"
+            ):
+                root.load_state_dict(sd, assign=assign)
+        result = root.load_state_dict(sd, strict=False, assign=assign)
+        assert result.missing_keys == missing
+        assert result.unexpected_keys == []
+        if assign:
+            assert "extra" not in registry
+        else:
+            assert registry["extra"] is extra
+
+    @pytest.mark.parametrize("assign", [True, False])
+    @pytest.mark.parametrize("kind", ["buffer", "parameter"])
+    def test_load_state_dict_not_a_leaf_setattr(self, kind, assign):
+        # #3652: an entry added by attribute assignment loads as one added by
+        # register_buffer or register_parameter.
+        params = TensorDictParams(TensorDict(a=torch.zeros(3)))
+        value = torch.full((2,), 5.0)
+        if kind == "buffer":
+            params.extra = nn.Buffer(value)
+            registry = params._buffers
+        else:
+            params.extra = nn.Parameter(value)
+            registry = params._parameters
+        extra = registry["extra"]
+        module = self._parent(params)
+        result = module.load_state_dict(module.state_dict(), assign=assign)
+        assert result.missing_keys == result.unexpected_keys == []
+        assert registry["extra"] is extra
+        assert (extra == 5).all()
+
+    @pytest.mark.parametrize("assign", [True, False])
+    @pytest.mark.parametrize(
+        "copy_fn",
+        [
+            TensorDictParams,
+            copy.copy,
+            lambda params: pickle.loads(pickle.dumps(params)),
+        ],
+        ids=["TensorDictParams", "copy", "pickle"],
+    )
+    @pytest.mark.parametrize("kind", ["buffer", "parameter"])
+    def test_load_state_dict_not_a_leaf_copy(self, kind, copy_fn, assign):
+        # #3652: the copies that keep the entry load too, and assign=True
+        # keeps it in them.
+        params = copy_fn(self._params_with_extra(kind)[0])
+        registry = params._buffers if kind == "buffer" else params._parameters
+        extra = registry["extra"]
+        module = self._parent(params)
+        result = module.load_state_dict(module.state_dict(), assign=assign)
+        assert result.missing_keys == result.unexpected_keys == []
+        assert registry["extra"] is extra
+        assert (extra == 5).all()
+
+    @pytest.mark.parametrize("how", ["del", "pop", "rename", "source"])
+    def test_load_state_dict_stale_name(self, how):
+        # #3652: a name stays registered when its leaf is deleted or renamed
+        # through a nested handle, or in the source tensordict of
+        # no_convert=True. It was registered as a leaf, not after the leaves,
+        # so it loads as before: it is a missing key, and assign=True drops
+        # it.
+        td = TensorDict(
+            a=torch.zeros(3),
+            c=torch.zeros(1),
+            n={"b": torch.zeros(2), "d": torch.zeros(1)},
+        )
+        params = TensorDictParams(td, no_convert=how == "source")
+        module = self._parent(params)
+        old = {key: value.clone() for key, value in module.state_dict().items()}
+        stale, new = "n.b", []
+        if how == "del":
+            del params["n"]["b"]
+        elif how == "pop":
+            params["n"].pop("b")
+        elif how == "rename":
+            params["n"].rename_key_("b", "e")
+            new = ["n.e"]
+        else:
+            del td["c"]
+            stale = "c"
+        registry = params._buffers if how == "source" else params._parameters
+        assert stale in registry
+        with pytest.raises(
+            RuntimeError, match=rf'Missing key\(s\) in state_dict: "params.{stale}"'
+        ):
+            module.load_state_dict(module.state_dict())
+        assert stale in registry
+        result = module.load_state_dict(module.state_dict(), strict=False, assign=True)
+        assert result.missing_keys == []
+        assert result.unexpected_keys == [f"params.{key}" for key in new]
+        leaves = [key for key in ("a", "c", "n.b", "n.d") if key != stale] + new
+        assert list(registry) == leaves
+        # An older checkpoint, which has the leaf.
+        result = module.load_state_dict(old, strict=False, assign=True)
+        assert result.missing_keys == [f"params.{key}" for key in new]
+        assert result.unexpected_keys == [f"params.{stale}"]
+        assert list(registry) == leaves
+
+    @pytest.mark.parametrize("over", [False, True])
+    @pytest.mark.parametrize("assign", [True, False])
+    def test_load_state_dict_stale_name_and_entry(self, over, assign):
+        # #3652: next to a name whose leaf is gone, an entry registered after
+        # the leaves loads as in test_load_state_dict_not_a_leaf, and the
+        # stale name loads as before, also when register_buffer is called
+        # with that name: it keeps its place among the leaves.
+        td = TensorDict(a=torch.zeros(3), c=torch.zeros(1))
+        params = TensorDictParams(td, no_convert=True)
+        del td["c"]
+        assert list(params._buffers) == ["a", "c"]
+        if over:
+            params.register_buffer("c", torch.ones(1))
+        params.register_buffer("extra", torch.full((2,), 5.0))
+        extra = params._buffers["extra"]
+        module = self._parent(params)
+        result = module.load_state_dict(
+            module.state_dict(), strict=False, assign=assign
+        )
+        assert result.missing_keys == ([] if assign else ["params.c"])
+        assert result.unexpected_keys == []
+        assert list(params._buffers) == (
+            ["a", "extra"] if assign else ["a", "c", "extra"]
+        )
+        assert params._buffers["extra"] is extra
+
+    @pytest.mark.parametrize("assign", [True, False])
+    @pytest.mark.parametrize(
+        "steps,kept",
+        [
+            # A write through the root drops the entry (#3547): unchanged.
+            (["extra", "write"], []),
+            (["extra", "del extra"], []),
+            (["extra", "write", "other"], ["other"]),
+            (["extra", "other", "del extra"], ["other"]),
+            (["extra", "del extra", "other", "extra"], ["other", "extra"]),
+            (["extra", "double"], ["extra"]),
+            (["extra", "half"], ["extra"]),
+        ],
+        ids=lambda val: "-".join(val).replace(" ", "_") or "none",
+    )
+    def test_load_state_dict_not_a_leaf_order(self, steps, kept, assign):
+        # #3652: the entries are the names registered after the leaves. The
+        # ones that are still registered at the load are kept and are not
+        # reported, in any order of registrations, deletions and writes.
+        params = TensorDictParams(TensorDict(a=torch.zeros(3), n={"b": torch.zeros(2)}))
+        module = self._parent(params)
+        for step in steps:
+            if step == "write":
+                params["c"] = torch.zeros(1)
+            elif step == "double":
+                module.double()
+            elif step == "half":
+                module.half().float()
+            elif step.startswith("del "):
+                delattr(params, step[4:])
+            else:
+                params.register_buffer(step, torch.full((2,), 5.0))
+        leaves = list(params.keys(True, True))
+        entries = {name: params._buffers[name] for name in kept}
+        assert list(params._buffers) == kept
+        sd = {key: value.detach() + 1 for key, value in module.state_dict().items()}
+        assert len(sd) == len(leaves)
+        result = module.load_state_dict(sd, assign=assign)
+        assert result.missing_keys == result.unexpected_keys == []
+        assert list(params._buffers) == kept
+        for name, entry in entries.items():
+            assert params._buffers[name] is entry
+            assert (entry == 5).all()
+        for key in leaves:
+            assert (params[key] == 1).all()
+
+    def test_load_state_dict_not_a_leaf_no_leaves_two_loads(self):
+        # #3652: a TensorDictParams with no leaves loads as before, whatever
+        # the state dict has under its prefix: its own state dict has no key
+        # to tell the entry by. assign=True drops the entry, so the strict
+        # load of the own state dict returns afterwards.
+        params, registry = self._params_with_extra("buffer", leaves=False)
+        module = self._parent(params)
+        with pytest.raises(
+            RuntimeError, match=r'Missing key\(s\) in state_dict: "params.extra"'
+        ):
+            module.load_state_dict(module.state_dict())
+        result = module.load_state_dict(
+            {"params.bogus": torch.ones(1)}, strict=False, assign=False
+        )
+        assert result.missing_keys == ["params.extra"]
+        assert result.unexpected_keys == ["params.bogus"]
+        assert "extra" in registry
+        result = module.load_state_dict(
+            {"params.bogus": torch.ones(1)}, strict=False, assign=True
+        )
+        assert result.missing_keys == []
+        assert result.unexpected_keys == ["params.bogus"]
+        assert "extra" not in registry
+        result = module.load_state_dict(module.state_dict())
+        assert result.missing_keys == result.unexpected_keys == []
+
+    @pytest.mark.parametrize("assign", [True, False])
+    @pytest.mark.parametrize("strict", [True, False])
+    @pytest.mark.parametrize("kind", ["buffer", "parameter"])
+    def test_load_state_dict_not_a_leaf_swap(self, kind, strict, assign):
+        # #3652: with swap_module_params_on_conversion, assign=True does not
+        # register the leaves again, so the entry was never dropped: it was
+        # reported as missing, as with assign=False. It loads as in
+        # test_load_state_dict_not_a_leaf.
+        params, registry = self._params_with_extra(kind)
+        extra = registry["extra"]
+        module = self._parent(params)
+        sd = {k: v.detach() + 1 for k, v in module.state_dict().items()}
+        assert set(sd) == {"params.a"}
+        prev = torch.__future__.get_swap_module_params_on_conversion()
+        torch.__future__.set_swap_module_params_on_conversion(True)
+        try:
+            result = module.load_state_dict(sd, strict=strict, assign=assign)
+        finally:
+            torch.__future__.set_swap_module_params_on_conversion(prev)
+        assert result.missing_keys == result.unexpected_keys == []
+        assert (params["a"] == 1).all()
+        assert registry["extra"] is extra
+        assert (extra == 5).all()
+
+    def test_load_state_dict_stale_name_compiled_copy(self, monkeypatch):
+        # #3652: under torch.compile, _new_unsafe registers the leaves of a
+        # copy again, so the copy has counts of its own and keeps them. A leaf
+        # that the counts of the source do not cover is then not an entry of
+        # the copy, and its name loads as in test_load_state_dict_stale_name
+        # once the leaf is gone. is_compiling is patched so that the copy
+        # takes that branch without compiling.
+        td = TensorDict(a=torch.zeros(3))
+        params = TensorDictParams(td, no_convert="skip")
+        td["c"] = torch.zeros(1)
+        assert list(params._buffers) == ["a"]
+        with monkeypatch.context() as patch:
+            patch.setattr("tensordict.nn.params.is_compiling", lambda: True)
+            copied = params.copy()
+        assert list(copied._buffers) == ["a", "c"]
+        del copied._param_td["c"]
+        module = self._parent(copied)
+        with pytest.raises(
+            RuntimeError, match=r'Missing key\(s\) in state_dict: "params.c"'
+        ):
+            module.load_state_dict(module.state_dict())
+        assert list(copied._buffers) == ["a", "c"]
+        result = module.load_state_dict(module.state_dict(), strict=False, assign=True)
+        assert result.missing_keys == result.unexpected_keys == []
+        assert list(copied._buffers) == ["a"]
 
     @staticmethod
     def _apply_params(device=None):

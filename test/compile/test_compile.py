@@ -7,6 +7,7 @@ import contextlib
 import dataclasses
 import importlib.util
 import inspect
+import io
 import platform
 import re
 import sys
@@ -64,6 +65,8 @@ from tensordict.tensorclass import TensorClass
 from tensordict.utils import (
     _unravel_key_to_tuple,
     _unravel_keys,
+    expand_as_right,
+    isin,
     unravel_key,
     unravel_key_list,
 )
@@ -614,6 +617,62 @@ def test_comparison_tensor_fullgraph():
     assert (result == fn(td, other)).all()
 
 
+def _expand_as_right_before_3609(tensor, dest):
+    # the body of expand_as_right before #3609, without the error texts
+    if dest.ndimension() < tensor.ndimension():
+        raise RuntimeError
+    if any(
+        tensor.shape[i] != dest.shape[i] and tensor.shape[i] != 1
+        for i in range(tensor.ndimension())
+    ):
+        raise RuntimeError
+    for _ in range(dest.ndimension() - tensor.ndimension()):
+        tensor = tensor.unsqueeze(-1)
+    return tensor.expand(dest.shape)
+
+
+@pytest.mark.parametrize("dynamic", [None, True])
+def test_expand_as_right_compiled_graphs(dynamic):
+    # #3609: compiled, expand_as_right traces the graphs of its earlier body, also
+    # once the batch dim is dynamic and a new key puts a leaf with a static shape
+    # in front (a shape read before the check gave that leaf a runtime size)
+    def graphs(expand):
+        torch._dynamo.reset()
+        backend = EagerAndRecordGraphs()
+        fn = torch.compile(
+            lambda td, mask: [expand(mask, v) for v in td.values()],
+            backend=backend,
+            dynamic=dynamic,
+        )
+        g = torch.Generator().manual_seed(0)
+        for b, keys in [(4, "p"), (6, "p"), (4, "xp"), (5, "xp"), (4, "pq")]:
+            td = TensorDict(
+                {k: torch.randn(b, 3, *(2,) * (k == "q"), generator=g) for k in keys},
+                batch_size=[b],
+            )
+            mask = torch.rand(b, generator=g) < 0.5
+            assert all(
+                (out == old).all()
+                for out, old in zip(
+                    fn(td, mask), [expand_as_right(mask, v) for v in td.values()]
+                )
+            )
+        torch._dynamo.reset()
+        out = []
+        for gm in backend.graphs:
+            # nodes by position: Dynamo may name a value after a local variable
+            index = {n: i for i, n in enumerate(gm.graph.nodes)}
+            out.append(
+                [
+                    (n.op, str(n.target), str(torch.fx.map_arg(n.args, index.get)))
+                    for n in gm.graph.nodes
+                ]
+            )
+        return out
+
+    assert graphs(expand_as_right) == graphs(_expand_as_right_before_3609)
+
+
 _NESTED_DEVICE_CASES = {
     # #2647: a nested tensordict without a device, in a tensordict on CPU
     "nested_td": lambda x: TensorDict(
@@ -676,6 +735,33 @@ def test_construction_empty_then_full_source(device):
     result = compiled(x, {"a": x, "b": {"c": x}})
     assert set(result.keys(True, True)) == {"a", ("b", "c")}
     assert (result["b", "c"] == x).all()
+
+
+@pytest.mark.parametrize(
+    "call", ["from_tensor", "zeros", "memmap", "memmap_", "memmap_like"]
+)
+def test_empty_anonymous_memmap_compile(call):
+    # #3566: compiled code builds an anonymous memory map of a tensor with no
+    # elements as eager code does, also after a call on a tensor with elements
+    def fn(td):
+        if call == "from_tensor":
+            return MemoryMappedTensor.from_tensor(td["a"])
+        if call == "zeros":
+            return MemoryMappedTensor.zeros(td["a"].shape)
+        return getattr(td, call)()
+
+    compiled = torch.compile(fn, backend="eager")
+    for width in (3, 0, 3):
+        td = TensorDict(a=torch.ones(4, width), batch_size=[4])
+        result = compiled(td.clone())
+        expected = fn(td.clone())
+        if call.startswith("memmap"):
+            assert result.is_memmap()
+            result, expected = result["a"], expected["a"]
+        assert type(result) is type(expected) is MemoryMappedTensor
+        assert result.shape == expected.shape == (4, width)
+        assert result.dtype == expected.dtype
+        assert (result == expected).all()
 
 
 def _index_tensordict_without_shortcut():
@@ -939,6 +1025,44 @@ class TestTD:
         data0 = TensorDict({"a": {"b": torch.arange(3)}}, [3])
         data1 = TensorDict({"a": {"b": torch.arange(3)}}, [3])
         assert (stack_tds(data0, data1) == stack_tds_c(data0, data1)).all()
+
+    def test_stack_lazy_stacks_other_stack_dims(self, mode):
+        # #3587: a compiled stack of lazy stacks with different stack dims
+        # pairs their members as before, also where the slices of the second
+        # one along the stack dim of the first cannot be stacked (ragged)
+        def make(ragged):
+            return [
+                lazy_stack(
+                    [
+                        TensorDict(
+                            x=torch.zeros(2),
+                            r=torch.zeros(2, i + 1 if ragged else 1),
+                            batch_size=[2],
+                        )
+                        for i in range(2)
+                    ],
+                    stack_dim,
+                )
+                for stack_dim in (0, 1)
+            ]
+
+        def stack_tds(td0, td1):
+            return torch.stack([td0, td1])
+
+        stack_tds_c = torch.compile(stack_tds, mode=mode)
+        for ragged in (False, True):
+            expected = stack_tds(*make(ragged))
+            result = stack_tds_c(*make(ragged))
+            assert type(result) is LazyStackedTensorDict
+            assert result.stack_dim == expected.stack_dim == 1
+            assert result.batch_size == expected.batch_size == (2, 2, 2)
+            for member, expected_member in zip(
+                result.tensordicts, expected.tensordicts
+            ):
+                assert type(member) is TensorDict
+                assert member.batch_size == expected_member.batch_size
+                assert member["r"].shape == expected_member["r"].shape
+                assert (member["x"] == 0).all()
 
     def test_stack_refine_names_nested(self, mode):
         def stack_and_refine(td0, td1):
@@ -1472,6 +1596,34 @@ class TestTD:
             assert clone_c(data)["a", "c"] is not data["a", "c"]
         else:
             assert clone_c(data)["a", "c"] is data["a", "c"]
+
+    def test_clone_device_keeps_negative_zero(self, mode):
+        # #3581: the clone of a tensordict that has a device turned -0.0 into 0.0
+        def clone(td: TensorDict):
+            return td.clone()
+
+        clone_c = torch.compile(clone, fullgraph=True, mode=mode)
+        data = TensorDict(
+            {
+                "f32": torch.tensor([-0.0, 0.0, 1.0]),
+                "a": {
+                    "f64": torch.tensor([0.0, -0.0, 2.0], dtype=torch.float64),
+                    "bool": torch.tensor([True, False, True]),
+                },
+            },
+            batch_size=[3],
+            device="cpu",
+        )
+        for _ in range(2):
+            data_c = clone_c(data)
+            for key, value in data.items(True, True):
+                assert data_c[key] is not value
+                # a copy, not a new tensor over the source's memory
+                assert data_c[key].data_ptr() != value.data_ptr()
+                assert data_c[key].dtype == value.dtype
+                assert (data_c[key] == value).all()
+            assert torch.signbit(data_c["f32"]).tolist() == [True, False, False]
+            assert torch.signbit(data_c["a", "f64"]).tolist() == [False, True, False]
 
     @pytest.mark.parametrize("recurse", [True, False])
     def test_flatten_keys(self, recurse, mode):
@@ -3458,7 +3610,8 @@ class TestNN:
         torch.testing.assert_close(sample, td["loc"])
         with set_interaction_type(InteractionType.RANDOM):
             sample = prob_mod_c(td.copy())["sample"]
-        assert (sample != td["loc"]).all()
+        # not .all(): about 1 in 17,000 draws of 1000 values holds an exact 0.0
+        assert (sample != td["loc"]).float().mean() > 0.99
         with set_interaction_type(InteractionType.MEAN):
             sample = prob_mod_c(td.copy())["sample"]
         torch.testing.assert_close(sample, td["loc"])
@@ -3479,12 +3632,12 @@ class TestNN:
             torch.testing.assert_close(sample, td["loc"])
             with set_interaction_type(InteractionType.RANDOM, thread_local=True):
                 sample = prob_mod_c(td.copy())["sample"]
-            assert (sample != td["loc"]).all()
+            assert (sample != td["loc"]).float().mean() > 0.99
             sample = prob_mod_c(td.copy())["sample"]
             torch.testing.assert_close(sample, td["loc"])
             with set_interaction_type(InteractionType.RANDOM, thread_local=True):
                 sample = prob_mod_c(td.copy())["sample"]
-            assert (sample != td["loc"]).all()
+            assert (sample != td["loc"]).float().mean() > 0.99
 
     @pytest.mark.parametrize("method", [False, True])
     def test_tdparams_gather(self, mode, method):
@@ -3852,6 +4005,31 @@ class TestExport:
         assert out.batch_size == torch.Size([4, 6])
         torch.testing.assert_close(out["y"], out["x"] * 2)
 
+    @pytest.mark.parametrize("strict", [False, True])
+    def test_export_isin_dynamic_batch_size(self, strict):
+        # #3607: pins that isin exports with both batch sizes dynamic, and that
+        # one program serves short and long references and inputs
+        class Mod(torch.nn.Module):
+            def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+                return isin(
+                    TensorDict(x=x, batch_size=x.shape[0]),
+                    TensorDict(x=y, batch_size=y.shape[0]),
+                    key="x",
+                )
+
+        ep = torch.export.export(
+            Mod(),
+            args=(torch.arange(4) * 3, torch.arange(20)),
+            strict=strict,
+            dynamic_shapes={
+                "x": {0: torch.export.Dim("m")},
+                "y": {0: torch.export.Dim("n")},
+            },
+        )
+        for m, n in ((6, 3), (6, 30), (300, 5), (300, 300), (4, 11), (4, 12)):
+            x, y = torch.arange(m) * 3, torch.arange(n)
+            assert ep.module()(x, y).tolist() == torch.isin(x, y).tolist()
+
     class _TDInOutModule(torch.nn.Module):
         def forward(self, td: TensorDict) -> TensorDict:
             return TensorDict(c=td["a"] * 2 + td["b"], batch_size=td.batch_size)
@@ -3933,6 +4111,36 @@ class TestExport:
         out = ep.module()(td)
         assert out.names == ["n"]
         torch.testing.assert_close(out["a"], td["a"])
+
+    @pytest.mark.parametrize("strict", [False, True])
+    def test_export_clone_device_keeps_negative_zero(self, strict):
+        # #3581: a program that clones a tensordict with a device keeps the
+        # -0.0 of its floating leaves, also after it is saved and loaded
+        class Mod(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.td = TensorDict(
+                    x=torch.tensor([-0.0, 0.0, 1.0]),
+                    y=torch.tensor([0.0, -0.0, 2.0], dtype=torch.float64),
+                    batch_size=[3],
+                    device="cpu",
+                )
+
+            def forward(self, a):
+                clone = self.td.clone()
+                return clone["x"] * a, clone["y"] * a
+
+        a = torch.full((3,), 2.0)
+        ep = torch.export.export(Mod(), (a,), strict=strict)
+        buffer = io.BytesIO()
+        torch.export.save(ep, buffer)
+        buffer.seek(0)
+        for module in (ep.module(), torch.export.load(buffer).module()):
+            out_x, out_y = module(a)
+            assert torch.signbit(out_x).tolist() == [True, False, False]
+            assert torch.signbit(out_y).tolist() == [False, True, False]
+            assert out_x.tolist() == [-0.0, 0.0, 2.0]
+            assert out_y.tolist() == [0.0, -0.0, 4.0]
 
     @pytest.mark.parametrize("strict", [False])  # , True])
     def test_export_with_td_params(self, strict):
@@ -5228,6 +5436,37 @@ class TestGuardCount:
         for _ in range(2):
             out, miss = compiled(td)
             torch.testing.assert_close(out, torch.ones(3))
+            assert miss is None
+        assert counter.frame_count == 1, f"Recompilation: {counter.frame_count} frames"
+
+    def test_lazy_stack_get_leaf_no_recompile(self):
+        # #3573: eager code stacks the members' entries for a leaf read of a
+        # lazy stack; a compiled read returns the same result and is traced
+        # once
+        def fn(td):
+            return td.get("observation") + 1, td["observation"], td.get("zz", None)
+
+        counter = CompileCounterWithBackend("eager")
+        compiled = torch.compile(fn, backend=counter, fullgraph=True)
+        for _ in range(2):
+            td = lazy_stack(
+                [
+                    TensorDict(
+                        {
+                            "observation": torch.randn(3, 4),
+                            "next": {"r": torch.ones(3)},
+                        },
+                        batch_size=[3],
+                    )
+                    for _ in range(4)
+                ]
+            )
+            out, item, miss = compiled(td)
+            expected = torch.stack([member["observation"] for member in td.tensordicts])
+            assert type(item) is torch.Tensor
+            assert (item == expected).all()
+            assert (item == td.get("observation")).all()
+            assert (out == expected + 1).all()
             assert miss is None
         assert counter.frame_count == 1, f"Recompilation: {counter.frame_count} frames"
 

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import contextlib
 import functools
+import itertools
 from functools import partial
 from typing import Any, Callable, Sequence, Tuple, TypeVar
 
@@ -15,6 +16,7 @@ from tensordict._lazy import LazyStackedTensorDict
 from tensordict._td import TensorDict
 from tensordict._unbatched import _unbatched_with_batch_size
 from tensordict.base import (
+    _get_eval_frame_callback,
     _is_leaf_nontensor,
     _is_tensor_collection,
     _TD_HANDLED_FUNCTIONS,
@@ -762,6 +764,73 @@ def _stack(
                     # If the number of sub-tensordicts is the same, we can stack them internally
                     # and lazy stack them on the outside.
                     lazy_stack_dim = list_of_tensordicts[0].stack_dim
+                    same_stack_dim = True
+                    # Not under torch.compile, also not in a frame that
+                    # Dynamo runs eagerly: a traced frame reads no other
+                    # input's stack_dim.
+                    if (
+                        not is_compiling()
+                        and _get_eval_frame_callback is not None
+                        and _get_eval_frame_callback() is None
+                    ):
+                        for td in list_of_tensordicts:
+                            if td.stack_dim != lazy_stack_dim:
+                                same_stack_dim = False
+                                break
+                    result = None
+                    if (
+                        not same_stack_dim
+                        and 0 <= dim <= len(batch_size)
+                        and all(
+                            0 <= td.stack_dim < len(batch_size)
+                            for td in list_of_tensordicts
+                        )
+                        and not any(
+                            # A lazy stack comes before its entries and ends
+                            # the scan: reading them would stack them, which
+                            # raises for ragged ones.
+                            isinstance(
+                                getattr(value, "_tensordict", value),
+                                LazyStackedTensorDict,
+                            )
+                            or _pass_through(value)
+                            for td in list_of_tensordicts
+                            for member in td.tensordicts
+                            for value in itertools.chain((member,), member.values(True))
+                        )
+                    ):
+                        # Member i of the first stack pairs with member i of
+                        # another stack only if both are stacked along one
+                        # dim. Otherwise it pairs with slice i of the other
+                        # stack along the first one's stack dim. Members that
+                        # hold lazy stacks or non-tensor data, inputs that
+                        # cannot be stacked densely that way, and compiled
+                        # calls are paired member by member as before.
+                        try:
+                            result = LazyStackedTensorDict(
+                                *[
+                                    _stack(
+                                        list(subtds),
+                                        dim=dim - (dim > lazy_stack_dim),
+                                        maybe_dense_stack=False,
+                                    )
+                                    for subtds in _zip_strict(
+                                        *[
+                                            td.tensordicts
+                                            if td.stack_dim == lazy_stack_dim
+                                            else td.unbind(lazy_stack_dim)
+                                            for td in list_of_tensordicts
+                                        ]
+                                    )
+                                ],
+                                stack_dim=lazy_stack_dim + (dim <= lazy_stack_dim),
+                            )
+                        except Exception:
+                            result = None
+                    if result is not None:
+                        if is_tc:
+                            return clz._from_tensordict(result)
+                        return result
                     if dim <= lazy_stack_dim:
                         lazy_stack_dim += 1
                     else:
@@ -1237,11 +1306,20 @@ def _grad(
         )
 
     if grad_outputs is not None:
-        tup_grad_outputs = tuple(grad_outputs._values_list(True, True))
+        grad_keys, tup_grad_outputs = grad_outputs._items_list(True, True)
     else:
         tup_grad_outputs = None
 
-    tup_outputs = tuple(outputs._values_list(True, True))
+    out_keys, tup_outputs = outputs._items_list(True, True)
+    tup_outputs = tuple(tup_outputs)
+
+    if tup_grad_outputs is not None:
+        # torch pairs grad_outputs with outputs by position: put a grad_outputs
+        # with the keys of outputs in another order into their order (#3619)
+        if grad_keys != out_keys and set(grad_keys) == set(out_keys):
+            source = dict(zip(grad_keys, tup_grad_outputs))
+            tup_grad_outputs = [source[key] for key in out_keys]
+        tup_grad_outputs = tuple(tup_grad_outputs)
 
     keys, all_inputs_raw = inputs._items_list(True, True)
 

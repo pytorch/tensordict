@@ -179,12 +179,33 @@ class _LazyStackedTensorDictKeysView(_TensorDictKeysView):
         # entry_class() reads every member for non-tensor and tensorclass
         # entries. The default is_leaf rejects every tensor collection, so with
         # it the entry of the first member decides.
-        if self.is_leaf is _default_is_leaf:
-            data_type = _first_entry_class(self.tensordict.tensordicts[0], key)
-            if _is_tensor_collection(data_type):
-                return LazyStackedTensorDict
-            return data_type
-        return self.tensordict.entry_class(key)
+        try:
+            if self.is_leaf is _default_is_leaf:
+                data_type = _first_entry_class(self.tensordict.tensordicts[0], key)
+                if _is_tensor_collection(data_type):
+                    return LazyStackedTensorDict
+                return data_type
+            return self.tensordict.entry_class(key)
+        except RuntimeError as err:
+            if not str(err).startswith(_STACK_ERROR):
+                raise
+            # Both read the class with get(), which cannot stack the leaves of
+            # a lazy stack on the path of the key when their shapes differ.
+            # The first leaf then gives the class, as it does when the nested
+            # keys are listed and in a one-level lazy stack (#3580). Any other
+            # key keeps the stack error.
+            td = self.tensordict
+            for subkey in _unravel_key_to_tuple(key):
+                while isinstance(td := _unwrap(td), LazyStackedTensorDict):
+                    td = td.tensordicts[0]
+                if not _is_tensor_collection(type(td)):
+                    # the key goes through a leaf
+                    raise
+                td = td._get_str(subkey, None)
+            if td is None or _is_tensor_collection(type(td)):
+                # not a leaf
+                raise
+            return type(td)
 
     def _iter_leaves(self) -> Iterator[str]:
         for key in self._keys():
@@ -2059,28 +2080,73 @@ class LazyStackedTensorDict(TensorDictBase):
         _batch_size = td0.batch_size
         stack_dim = self.stack_dim
 
-        for td in tensordicts[1:]:
-            if not is_tensor_collection(td):
-                raise TypeError(
-                    "Expected all inputs to be TensorDictBase instances but got "
-                    f"{type(td)} instead."
-                )
-            _bs = td.batch_size
-            _device = td.device
-            if device != _device:
-                raise RuntimeError(f"devices differ, got {device} and {_device}")
-            if _bs != _batch_size:
-                if strict_shape or len(_bs) != len(_batch_size):
-                    raise RuntimeError(
-                        f"batch sizes in tensordicts differs, LazyStackedTensorDict "
-                        f"cannot be created. Got td[0].batch_size={_batch_size} "
-                        f"and td[i].batch_size={_bs}. If the length match and you wish "
-                        f"to stack these tensordicts, set strict_shape to False."
-                    )
-                else:
-                    _batch_size = torch.Size(
-                        [s if _bs[i] == s else -1 for i, s in enumerate(_batch_size)]
-                    )
+        # This runs for every member of every stack that is built. In eager mode,
+        # a stack whose first member's type is exactly TensorDict takes the first
+        # loop, which reads the batch size and the device of each member whose
+        # type is exactly TensorDict from its attributes: they are what the two
+        # properties return. The checks that follow the reads are the same in
+        # both loops: keep them identical.
+        if num_tds > 1:
+            if type(td0) is TensorDict and not is_compiling():
+                for td in tensordicts[1:]:
+                    if type(td) is TensorDict:
+                        _bs = td._batch_size
+                        _device = td._device
+                    else:
+                        if not is_tensor_collection(td):
+                            raise TypeError(
+                                "Expected all inputs to be TensorDictBase instances but got "
+                                f"{type(td)} instead."
+                            )
+                        _bs = td.batch_size
+                        _device = td.device
+                    if device != _device:
+                        raise RuntimeError(
+                            f"devices differ, got {device} and {_device}"
+                        )
+                    if _bs != _batch_size:
+                        if strict_shape or len(_bs) != len(_batch_size):
+                            raise RuntimeError(
+                                f"batch sizes in tensordicts differs, LazyStackedTensorDict "
+                                f"cannot be created. Got td[0].batch_size={_batch_size} "
+                                f"and td[i].batch_size={_bs}. If the length match and you wish "
+                                f"to stack these tensordicts, set strict_shape to False."
+                            )
+                        else:
+                            _batch_size = torch.Size(
+                                [
+                                    s if _bs[i] == s else -1
+                                    for i, s in enumerate(_batch_size)
+                                ]
+                            )
+            else:
+                for td in tensordicts[1:]:
+                    if not is_tensor_collection(td):
+                        raise TypeError(
+                            "Expected all inputs to be TensorDictBase instances but got "
+                            f"{type(td)} instead."
+                        )
+                    _bs = td.batch_size
+                    _device = td.device
+                    if device != _device:
+                        raise RuntimeError(
+                            f"devices differ, got {device} and {_device}"
+                        )
+                    if _bs != _batch_size:
+                        if strict_shape or len(_bs) != len(_batch_size):
+                            raise RuntimeError(
+                                f"batch sizes in tensordicts differs, LazyStackedTensorDict "
+                                f"cannot be created. Got td[0].batch_size={_batch_size} "
+                                f"and td[i].batch_size={_bs}. If the length match and you wish "
+                                f"to stack these tensordicts, set strict_shape to False."
+                            )
+                        else:
+                            _batch_size = torch.Size(
+                                [
+                                    s if _bs[i] == s else -1
+                                    for i, s in enumerate(_batch_size)
+                                ]
+                            )
         self._batch_size = self._compute_batch_size(_batch_size, stack_dim, num_tds)
 
     def _reset_member_batch_size(self) -> None:
@@ -2897,8 +2963,45 @@ class LazyStackedTensorDict(TensorDictBase):
         padding_value: float | int | bool = 0.0,
     ) -> CompatibleType:
         # we can handle the case where the key is a tuple of length 1
+        tensordicts = self.tensordicts
         tensors = []
-        for td in self.tensordicts:
+        # The first members that are TensorDict instances and hold the key as
+        # a plain tensor are read from their dicts: their _get_str would
+        # return that leaf. The general path below reads the members that
+        # are left, and stacks. Member 0 first: most keys that do not
+        # qualify stop there.
+        if tensordicts:
+            first = tensordicts[0]
+            if (
+                type(first) is TensorDict
+                and key in first._tensordict
+                and type(first._tensordict[key]) is Tensor
+                and as_list is False
+                and as_padded_tensor is False
+                and as_nested_tensor is False
+                and self._hook_out is None
+                and not is_compiling()
+                and type(self) is LazyStackedTensorDict
+                and self._hook_in is None
+                and not self._is_vmapped
+            ):
+                for td in tensordicts:
+                    if type(td) is not TensorDict:
+                        break
+                    leaf = td._tensordict.get(key)
+                    if type(leaf) is not Tensor:
+                        if leaf is None and default is None:
+                            # The member's _get_str(key, None) returns None here,
+                            # and the loop below returns it at once.
+                            return default
+                        break
+                    tensors.append(leaf)
+                else:
+                    # every member was read: nothing is left for the loop below
+                    tensordicts = ()
+                if tensordicts:
+                    tensordicts = islice(tensordicts, len(tensors), None)
+        for td in tensordicts:
             # tensors.append(td._get_str(key, default=default))
             tensors.append(
                 td._get_str(
@@ -4175,7 +4278,16 @@ class LazyStackedTensorDict(TensorDictBase):
                 f"batch_size={batch_size}, device={device}, names={names}, constructor_kwargs={constructor_kwargs}"
             )
         if out is not None:
-            out_tensordicts = self._apply_out_tensordicts(out)
+            out_td = out
+            if (
+                not isinstance(out, LazyStackedTensorDict)
+                and is_tensorclass(out)
+                and getattr(out, "_tensordict", None) is self
+            ):
+                # The in-place walk of a lazy stack of tensorclasses: out is
+                # the tensorclass over this stack
+                out_td = out._tensordict
+            out_tensordicts = self._apply_out_tensordicts(out_td)
             if out_tensordicts is None and not inplace:
                 result = self._apply_nest(
                     fn,
@@ -6303,6 +6415,16 @@ class LazyStackedTensorDict(TensorDictBase):
                 # torch broadcasts a 0-d or one-element repeats to the size of dim
                 repeats = [repeats.tolist()] if repeats.ndim == 0 else repeats.tolist()
                 repeats = repeats * num_members
+            elif (
+                not isinstance(repeats, torch.Tensor)
+                and isinstance(repeats, np.integer)
+                and not isinstance(repeats, np.timedelta64)
+                and operator.index(repeats) != 0
+            ):
+                # torch reads a NumPy integer as an int. A count of 0 keeps
+                # its TypeError: the stack would keep no members, and with
+                # them no inner batch dims or keys.
+                repeats = [operator.index(repeats)] * num_members
             else:
                 repeats = repeats.tolist()
                 if len(repeats) != num_members:

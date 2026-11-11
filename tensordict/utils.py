@@ -291,24 +291,65 @@ def expand_as_right(
                 [2, 2]])
 
     """
-    if dest.ndimension() < tensor.ndimension():
+    # Called once per leaf by where, masked_fill and the pointwise ops: each
+    # shape is read once, and equal leading dims skip the scan (#3609). When
+    # compiling, the scan always runs and expand reads dest.shape again after
+    # it: with dynamic shapes the shortcut would be traced as dead nodes, and
+    # a shape read before the check would give expand a runtime size where
+    # the check has made the dim a constant.
+    dest_ndim = dest.ndimension()
+    ndim = tensor.ndimension()
+    if dest_ndim < ndim:
         raise RuntimeError(
             "expand_as_right requires the destination tensor to have at least "
             f"as many dimensions as the input tensor, got"
-            f" tensor.ndimension()={tensor.ndimension()} and "
-            f"dest.ndimension()={dest.ndimension()}"
+            f" tensor.ndimension()={ndim} and "
+            f"dest.ndimension()={dest_ndim}"
         )
-    if any(
-        tensor.shape[i] != dest.shape[i] and tensor.shape[i] != 1
-        for i in range(tensor.ndimension())
-    ):
-        raise RuntimeError(
-            f"tensor shape is incompatible with dest shape, "
-            f"got: tensor.shape={tensor.shape}, dest={dest.shape}"
-        )
-    for _ in range(dest.ndimension() - tensor.ndimension()):
+    expand_shape = None
+    if ndim:
+        dest_shape = dest.shape
+        shape = tensor.shape
+        compiling = is_compiling()
+        if (compiling or shape != dest_shape[:ndim]) and any(
+            shape[i] != dest_shape[i] and shape[i] != 1 for i in range(ndim)
+        ):
+            raise RuntimeError(
+                f"tensor shape is incompatible with dest shape, "
+                f"got: tensor.shape={shape}, dest={dest_shape}"
+            )
+        if not compiling:
+            expand_shape = dest_shape
+    for _ in range(dest_ndim - ndim):
         tensor = tensor.unsqueeze(-1)
-    return tensor.expand(dest.shape)
+    return tensor.expand(dest.shape if expand_shape is None else expand_shape)
+
+
+def _expand_as_right_by_shape(
+    expanded: dict, tensor: torch.Tensor, dest: Any
+) -> torch.Tensor | TensorDictBase:
+    """``expand_as_right(tensor, dest)``, kept in ``expanded`` by the shape of ``dest``.
+
+    ``expanded`` is a dict that lives for one call of where, masked_fill or a
+    pointwise op: the leaves of one shape share one expanded view, since
+    ``expand_as_right`` reads nothing but the shape of ``dest`` (#3609). Each
+    leaf keeps its own view under ``torch.compile``, where a size used as a
+    dict key would be specialized, and for a tensor that requires grad, whose
+    gradient autograd would sum over the leaves in another order. The checks
+    are made per leaf, not once per call: a call before the first leaf would
+    add a frame without tensor operations for ``torch.compile`` to trace.
+    """
+    if is_compiling() or not isinstance(tensor, Tensor) or tensor.requires_grad:
+        return expand_as_right(tensor, dest)
+    shape = dest.shape
+    try:
+        out = expanded.get(shape)
+    except TypeError:
+        # the symbolic sizes of a traced tensor do not hash
+        return expand_as_right(tensor, dest)
+    if out is None:
+        out = expanded[shape] = expand_as_right(tensor, dest)
+    return out
 
 
 def expand_right(tensor: Tensor, shape: Sequence[int]) -> Tensor:
@@ -941,6 +982,10 @@ def _is_tensorclass(cls: type) -> bool:
     return out
 
 
+class _CallableInCacheKey(Exception):
+    """Raised by ``_unfold_sequence`` for a call that must not be cached."""
+
+
 def _unfold_sequence(seq):
     for item in seq:
         if isinstance(item, (list, tuple)):
@@ -948,22 +993,33 @@ def _unfold_sequence(seq):
         else:
             if isinstance(item, (str, int, slice)) or item is Ellipsis:
                 yield item
-            else:
+            elif item is None or not callable(item):
                 yield id(item)
+            else:
+                # A function made on the spot is freed after the call, and the
+                # next one can get its id(): it would find the result of the
+                # first under that key.
+                raise _CallableInCacheKey
 
 
 def _make_cache_key(args, kwargs):
-    """Creates a key for the cache such that memory footprint is minimized."""
+    """Creates a key for the cache such that memory footprint is minimized.
+
+    Returns ``None`` if an argument is callable: such a call is not cached.
+    """
     # Fast path for the common args
     if not args and not kwargs:
         return ((), ())
     elif not kwargs and len(args) == 1 and type(args[0]) is str:
         return (args, ())
     else:
-        return (
-            tuple(_unfold_sequence(args)),
-            tuple(_unfold_sequence(sorted(kwargs.items()))),
-        )
+        try:
+            return (
+                tuple(_unfold_sequence(args)),
+                tuple(_unfold_sequence(sorted(kwargs.items()))),
+            )
+        except _CallableInCacheKey:
+            return None
 
 
 def _cache_while_locked(fun):
@@ -971,7 +1027,8 @@ def _cache_while_locked(fun):
 
     This decorator will cache the values returned by a method as long as the
     input arguments match.
-    Leaves (tensors and such) are not cached.
+    Leaves (tensors and such) are not cached, and neither is a call with a
+    callable argument.
     The cache is stored within the tensordict such that it can be erased at any
     point in time.
 
@@ -1000,7 +1057,7 @@ def _cache_while_locked(fun):
         key = _make_cache_key(args, kwargs)
         if key not in cache:
             out = fun(_self, *args, **kwargs)
-            if not isinstance(out, Tensor):
+            if key is not None and not isinstance(out, Tensor):
                 # we don't cache tensors to avoid filling the mem and / or
                 # stacking them from their origin
                 cache[key] = out
@@ -3409,7 +3466,12 @@ def isin(
     _, unique_indices = torch.unique(
         cat_data, dim=dim, sorted=True, return_inverse=True
     )
-    out = torch.isin(unique_indices[N:], unique_indices[:N], assume_unique=True)
+    # Mark the ids of the reference, then look up those of the input. The ids
+    # of equal slices repeat, so torch.isin(assume_unique=True) is wrong here.
+    in_reference = torch.zeros_like(unique_indices, dtype=torch.bool)
+    # 1, not True: torch.jit.trace has no index_fill_ with a bool value
+    in_reference.index_fill_(0, unique_indices[:N], 1)
+    out = in_reference.index_select(0, unique_indices[N:])
 
     return out
 

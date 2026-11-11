@@ -611,9 +611,16 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
     ``class State(TypedTensorDict, frozen=True)``. Subclasses inherit them.
 
     - ``shadow``: allows a field to have the name of a
-      :class:`~tensordict.TensorDictBase` attribute (``batch_size``,
+      :class:`~tensordict.TensorDictBase` attribute (``data``,
       ``sum``, ...), which it then hides. Without it, such a field raises an
-      ``AttributeError`` when the class is defined.
+      ``AttributeError`` when the class is defined. The field hides the
+      attribute from the methods of the object too, so a name that other
+      methods use does not work: a field ``keys`` breaks printing and
+      arithmetic. The constructor reads the keywords ``batch_size``,
+      ``device`` and ``names`` as its own arguments, so it cannot take a
+      field with one of these names by keyword. A field ``batch_size`` or
+      ``device`` also hides the batch size or the device, and breaks
+      :func:`torch.stack`.
     - ``frozen``: the constructor locks the instance.
 
     The ``autocast``, ``nocast`` and ``tensor_only`` options of
@@ -967,7 +974,9 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
     # them, as indexing the stack does; the base method would stack copies of
     # the flat leaves (#2759). Other sources, and members whose reads return
     # copies (files, stores), index as before.
-    def _index_tensordict(self, index, new_batch_size=None, names=None):
+    def _index_tensordict(
+        self, index, new_batch_size=None, names=None, list_index=None
+    ):
         source = self._source
         if (
             isinstance(source, LazyStackedTensorDict)

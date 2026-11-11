@@ -389,6 +389,11 @@ class _DeviceOps:
         vals = self._values_list(True, True)
         for v in vals:
             count_bytes(v)
+        # count_bytes refers to itself through its closure; break that cycle
+        # so that the leaves held by set_of_tensors are freed without the
+        # garbage collector. Rebinding (not ``del``) keeps the frame
+        # compilable on every supported Python version.
+        count_bytes = None  # ty: ignore[invalid-assignment]
         total = 0
         for tensor in set_of_tensors:
             total += tensor.numel() * tensor.dtype.itemsize

@@ -20,6 +20,7 @@ loadable archive (unaligned entries silently fall back to a copying read).
 
 from __future__ import annotations
 
+import functools
 import io
 import os
 import posixpath
@@ -856,6 +857,29 @@ def _check_archive_target(archive_path: Path, existsok: bool) -> None:
     archive_path.parent.mkdir(parents=True, exist_ok=True)
 
 
+def _td_method(td, name: str):
+    """Returns ``getattr(td, name)``, or the method that a field of that name hides.
+
+    The fields of a shadow tensorclass hide the methods that they are named
+    after (#3676, #3695).
+    """
+    cls = type(td)
+    if (
+        # a tensorclass of its own, not a plain subclass of one, which can
+        # define a method over a field of its parent
+        "_is_tensorclass" in vars(cls)
+        and name in cls.__expected_keys__
+        and not callable(getattr(cls, name, None))
+    ):
+        # circular import: tensorclass imports base, which imports this module
+        from tensordict.tensorclass import TensorClass
+
+        # TensorClass holds the method that every tensorclass gets under
+        # that name, and it works on a class that is only decorated too
+        return functools.partial(getattr(TensorClass, name), td)
+    return getattr(td, name)
+
+
 def _write_archive_from_td(
     td,
     archive_path: Path,
@@ -883,7 +907,8 @@ def _write_archive_from_td(
     # circular import: base imports this module
     from tensordict.base import _NESTED_TENSORS_AS_LISTS
 
-    leaves = list(td.values(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS))
+    values = _td_method(td, "values")
+    leaves = list(values(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS))
     if any(_is_unbatched(value) for value in leaves):
         # meta.json has no place for the class (#3264)
         _warn_unbatched_saved_as_plain()
@@ -893,7 +918,9 @@ def _write_archive_from_td(
         # cannot map a nested tensor: fail before anything is written
         key, value = next(
             (key, value)
-            for key, value in td.items(True, True, is_leaf=_NESTED_TENSORS_AS_LISTS)
+            for key, value in _td_method(td, "items")(
+                True, True, is_leaf=_NESTED_TENSORS_AS_LISTS
+            )
             if getattr(value, "is_nested", False)
         )
         _raise_if_jagged(value, key)
@@ -916,7 +943,7 @@ def _write_archive_from_td(
             # archive is loaded.
             token = None if like else _SKIP_TENSORCLASS_POST_INIT.set(True)
             try:
-                td_stage = td.memmap_like(
+                td_stage = _td_method(td, "memmap_like")(
                     prefix=staging,
                     copy_existing=copy_existing,
                     share_non_tensor=share_non_tensor,
@@ -927,7 +954,7 @@ def _write_archive_from_td(
                 if token is not None:
                     _SKIP_TENSORCLASS_POST_INIT.reset(token)
             if not like:
-                staged_leaves = td_stage.values(
+                staged_leaves = _td_method(td_stage, "values")(
                     True, True, is_leaf=_NESTED_TENSORS_AS_LISTS
                 )
                 file_to_source = {}
@@ -938,7 +965,7 @@ def _write_archive_from_td(
         else:
             # nested tensors cannot be streamed by _tensor_chunks: fall back
             # to writing the data to the staging directory
-            td.memmap(
+            _td_method(td, "memmap")(
                 prefix=staging,
                 copy_existing=copy_existing,
                 num_threads=num_threads,
@@ -1001,8 +1028,15 @@ def _save_as_archive(
     archive_path = Path(archive_path)
     _check_archive_target(archive_path, existsok)
     saved_prefix = getattr(td, "_memmap_prefix", None)
+    is_memmap = td.is_memmap
+    # A field named ``is_memmap`` of a shadow tensorclass hides the method
+    # (#3693): ask its tensordict. As in _td_method, only for a tensorclass of
+    # its own.
+    hidden = not callable(is_memmap) and "_is_tensorclass" in vars(type(td))
+    if hidden:
+        is_memmap = td._tensordict.is_memmap
     if (
-        td.is_memmap()
+        is_memmap()
         and isinstance(saved_prefix, Path)
         and (saved_prefix / "meta.json").exists()
     ):
@@ -1010,8 +1044,11 @@ def _save_as_archive(
         # subdirectory of its save: packing it leaves out the ``meta.json``
         # that records the class, one level up, so the object is written
         # instead. A tree with a shadow tensorclass is still packed: its fields
-        # can hide the methods that the writer calls.
-        if not _is_tensorclass(type(td)) or _holds_shadow_tensorclass(td):
+        # can hide the methods that the writer calls. The exception is a shadow
+        # tensorclass whose field hides ``is_memmap``, which is written (#3693).
+        if not hidden and (
+            not _is_tensorclass(type(td)) or _holds_shadow_tensorclass(td)
+        ):
             return pack_memmap(saved_prefix, archive_path, compression=compression)
         # Like the pack, copy the files of the leaves whatever
         # ``copy_existing`` says.
