@@ -153,6 +153,12 @@ def test_plain_set_nested(benchmark):
     benchmark(lambda: td.set(key, tensor))
 
 
+def test_plain_set_scalar(benchmark):
+    # a Python scalar: the class of the value is checked against the accepted classes
+    td = TensorDict(a=torch.zeros(3))
+    benchmark(lambda: td.set("x", 1.0))
+
+
 def test_plain_set_stack_nested(benchmark):
     td = big_nested_stacked_td()[0][0]
     key = tuple(str(j) for j in range(20, 0, -1))
@@ -649,6 +655,17 @@ def test_clone_device(benchmark, td):
     benchmark(td.to("cpu").clone)
 
 
+@pytest.mark.parametrize("source", ["padding", "offset"])
+def test_consolidate(benchmark, source):
+    # 20 float32 leaves, about 2 MiB: each has an odd number of elements and
+    # needs padding to a multiple of 8 bytes, or has a storage offset (td[1:])
+    if source == "padding":
+        td = _rl_step_td(4097, 9)
+    else:
+        td = _rl_step_td(4097, 8)[1:]
+    benchmark(td.consolidate)
+
+
 @pytest.mark.parametrize(
     "index",
     [
@@ -739,6 +756,24 @@ def test_getitem_memmap_on_disk(benchmark, tmp_path, index):
     td = TensorDict({**step(), "next": step()}, batch_size=[1000])
     td = td.memmap_like(tmp_path)
     index = {"int": 5, "slice": slice(10, 42)}[index]
+    benchmark(td.__getitem__, index)
+
+
+@pytest.mark.parametrize("indices", [256, 1024])
+def test_getitem_int_list(benchmark, indices):
+    # a batch of DataLoader(td, collate_fn=lambda x: x): 5 leaves, 2 of them
+    # nested, read with a list of ints
+    rows = 4096
+    td = TensorDict(
+        {
+            "a": torch.randn(rows, 3),
+            "b": torch.randn(rows, 4),
+            "c": torch.randn(rows, 5),
+            "meta": {"id": torch.arange(rows), "weight": torch.rand(rows)},
+        },
+        batch_size=[rows],
+    )
+    index = torch.randint(0, rows, (indices,)).tolist()
     benchmark(td.__getitem__, index)
 
 
@@ -1134,6 +1169,15 @@ def test_lazy_stack_get_nested(benchmark, size, key):
         [_rl_step_td(batch, features) for _ in range(8)], 0
     )
     benchmark(td.get, key)
+
+
+@pytest.mark.parametrize("members", [4, 32])
+def test_lazy_stack_get_leaf(benchmark, members):
+    # a top-level leaf read from a lazy stack
+    td = LazyStackedTensorDict.lazy_stack(
+        [_rl_step_td(32, 4) for _ in range(members)], 0
+    )
+    benchmark(td.get, "obs")
 
 
 def test_select(benchmark, td, c):

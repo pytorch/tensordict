@@ -940,6 +940,44 @@ class TestTD:
         data1 = TensorDict({"a": {"b": torch.arange(3)}}, [3])
         assert (stack_tds(data0, data1) == stack_tds_c(data0, data1)).all()
 
+    def test_stack_lazy_stacks_other_stack_dims(self, mode):
+        # #3587: a compiled stack of lazy stacks with different stack dims
+        # pairs their members as before, also where the slices of the second
+        # one along the stack dim of the first cannot be stacked (ragged)
+        def make(ragged):
+            return [
+                lazy_stack(
+                    [
+                        TensorDict(
+                            x=torch.zeros(2),
+                            r=torch.zeros(2, i + 1 if ragged else 1),
+                            batch_size=[2],
+                        )
+                        for i in range(2)
+                    ],
+                    stack_dim,
+                )
+                for stack_dim in (0, 1)
+            ]
+
+        def stack_tds(td0, td1):
+            return torch.stack([td0, td1])
+
+        stack_tds_c = torch.compile(stack_tds, mode=mode)
+        for ragged in (False, True):
+            expected = stack_tds(*make(ragged))
+            result = stack_tds_c(*make(ragged))
+            assert type(result) is LazyStackedTensorDict
+            assert result.stack_dim == expected.stack_dim == 1
+            assert result.batch_size == expected.batch_size == (2, 2, 2)
+            for member, expected_member in zip(
+                result.tensordicts, expected.tensordicts
+            ):
+                assert type(member) is TensorDict
+                assert member.batch_size == expected_member.batch_size
+                assert member["r"].shape == expected_member["r"].shape
+                assert (member["x"] == 0).all()
+
     def test_stack_refine_names_nested(self, mode):
         def stack_and_refine(td0, td1):
             out = torch.stack([td0, td1], 0)
@@ -5228,6 +5266,37 @@ class TestGuardCount:
         for _ in range(2):
             out, miss = compiled(td)
             torch.testing.assert_close(out, torch.ones(3))
+            assert miss is None
+        assert counter.frame_count == 1, f"Recompilation: {counter.frame_count} frames"
+
+    def test_lazy_stack_get_leaf_no_recompile(self):
+        # #3573: eager code stacks the members' entries for a leaf read of a
+        # lazy stack; a compiled read returns the same result and is traced
+        # once
+        def fn(td):
+            return td.get("observation") + 1, td["observation"], td.get("zz", None)
+
+        counter = CompileCounterWithBackend("eager")
+        compiled = torch.compile(fn, backend=counter, fullgraph=True)
+        for _ in range(2):
+            td = lazy_stack(
+                [
+                    TensorDict(
+                        {
+                            "observation": torch.randn(3, 4),
+                            "next": {"r": torch.ones(3)},
+                        },
+                        batch_size=[3],
+                    )
+                    for _ in range(4)
+                ]
+            )
+            out, item, miss = compiled(td)
+            expected = torch.stack([member["observation"] for member in td.tensordicts])
+            assert type(item) is torch.Tensor
+            assert (item == expected).all()
+            assert (item == td.get("observation")).all()
+            assert (out == expected + 1).all()
             assert miss is None
         assert counter.frame_count == 1, f"Recompilation: {counter.frame_count} frames"
 
