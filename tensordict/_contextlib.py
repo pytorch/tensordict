@@ -131,6 +131,8 @@ def _is_plain_leaf(tensor):
         and not tensor.is_inference()
         and not tensor.is_meta
         and not (tensor.requires_grad and torch.is_grad_enabled())
+        # a tensor that a torch.func transform wraps has no storage to compare
+        and not torch._C._functorch.is_functorch_wrapped_tensor(tensor)
     ):
         return False
     # no expanded or internally overlapping dims
