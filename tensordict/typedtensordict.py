@@ -826,6 +826,11 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
     def _erase_cache(self):
         self._cache = None
 
+    # Override: the source has a lock cache and lock parents of its own.
+    def _erase_cache_and_parents(self) -> None:
+        super()._erase_cache_and_parents()
+        self._source._erase_cache_and_parents()
+
     # ------------------------------------------------------------------
     # _select / _exclude: special handling for inplace
     # ------------------------------------------------------------------

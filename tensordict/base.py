@@ -5246,6 +5246,32 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     def _erase_cache(self):
         self._cache = None
 
+    def _erase_cache_and_parents(self) -> None:
+        """Erases the lock cache of this tensordict and of the locked tensordicts that hold it.
+
+        Call it on a locked tensordict after a write that the lock lets
+        through and that adds or replaces a leaf, such as ``make_memmap``:
+        the cached leaf lists, ``detach()`` and ``flatten_keys()`` of the
+        tensordict and of its lock parents would keep the old leaf (#3589).
+        A write into the storage of a leaf needs no call. Eager only: compiled
+        code would guard on the cache.
+        """
+        # Skip what holds no cache: the setattr of a TensorDictParams parent
+        # (nn.Module.__setattr__) costs more than the check
+        if self._cache is not None:
+            self._erase_cache()
+        if type(self)._lock_parents_weakrefs is TensorDictBase._lock_parents_weakrefs:
+            # The property stores an empty list on its first read: leave the
+            # tensordict as it is. A lazy stack lists the parents of its
+            # members instead
+            parents = self.__dict__.get("__lock_parents_weakrefs") or ()
+        else:
+            parents = self._lock_parents_weakrefs
+        for ref in parents:
+            parent = ref()
+            if parent is not None and parent._cache is not None:
+                parent._erase_cache()
+
     # Dim names functionality
     @property
     def names(self):
