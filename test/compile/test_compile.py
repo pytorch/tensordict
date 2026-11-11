@@ -7,6 +7,7 @@ import contextlib
 import dataclasses
 import importlib.util
 import inspect
+import io
 import platform
 import re
 import sys
@@ -64,6 +65,7 @@ from tensordict.tensorclass import TensorClass
 from tensordict.utils import (
     _unravel_key_to_tuple,
     _unravel_keys,
+    expand_as_right,
     isin,
     unravel_key,
     unravel_key_list,
@@ -613,6 +615,62 @@ def test_comparison_tensor_fullgraph():
     other = torch.ones(4)
     result = torch.compile(fn, fullgraph=True, backend="eager")(td, other)
     assert (result == fn(td, other)).all()
+
+
+def _expand_as_right_before_3609(tensor, dest):
+    # the body of expand_as_right before #3609, without the error texts
+    if dest.ndimension() < tensor.ndimension():
+        raise RuntimeError
+    if any(
+        tensor.shape[i] != dest.shape[i] and tensor.shape[i] != 1
+        for i in range(tensor.ndimension())
+    ):
+        raise RuntimeError
+    for _ in range(dest.ndimension() - tensor.ndimension()):
+        tensor = tensor.unsqueeze(-1)
+    return tensor.expand(dest.shape)
+
+
+@pytest.mark.parametrize("dynamic", [None, True])
+def test_expand_as_right_compiled_graphs(dynamic):
+    # #3609: compiled, expand_as_right traces the graphs of its earlier body, also
+    # once the batch dim is dynamic and a new key puts a leaf with a static shape
+    # in front (a shape read before the check gave that leaf a runtime size)
+    def graphs(expand):
+        torch._dynamo.reset()
+        backend = EagerAndRecordGraphs()
+        fn = torch.compile(
+            lambda td, mask: [expand(mask, v) for v in td.values()],
+            backend=backend,
+            dynamic=dynamic,
+        )
+        g = torch.Generator().manual_seed(0)
+        for b, keys in [(4, "p"), (6, "p"), (4, "xp"), (5, "xp"), (4, "pq")]:
+            td = TensorDict(
+                {k: torch.randn(b, 3, *(2,) * (k == "q"), generator=g) for k in keys},
+                batch_size=[b],
+            )
+            mask = torch.rand(b, generator=g) < 0.5
+            assert all(
+                (out == old).all()
+                for out, old in zip(
+                    fn(td, mask), [expand_as_right(mask, v) for v in td.values()]
+                )
+            )
+        torch._dynamo.reset()
+        out = []
+        for gm in backend.graphs:
+            # nodes by position: Dynamo may name a value after a local variable
+            index = {n: i for i, n in enumerate(gm.graph.nodes)}
+            out.append(
+                [
+                    (n.op, str(n.target), str(torch.fx.map_arg(n.args, index.get)))
+                    for n in gm.graph.nodes
+                ]
+            )
+        return out
+
+    assert graphs(expand_as_right) == graphs(_expand_as_right_before_3609)
 
 
 _NESTED_DEVICE_CASES = {
@@ -1538,6 +1596,34 @@ class TestTD:
             assert clone_c(data)["a", "c"] is not data["a", "c"]
         else:
             assert clone_c(data)["a", "c"] is data["a", "c"]
+
+    def test_clone_device_keeps_negative_zero(self, mode):
+        # #3581: the clone of a tensordict that has a device turned -0.0 into 0.0
+        def clone(td: TensorDict):
+            return td.clone()
+
+        clone_c = torch.compile(clone, fullgraph=True, mode=mode)
+        data = TensorDict(
+            {
+                "f32": torch.tensor([-0.0, 0.0, 1.0]),
+                "a": {
+                    "f64": torch.tensor([0.0, -0.0, 2.0], dtype=torch.float64),
+                    "bool": torch.tensor([True, False, True]),
+                },
+            },
+            batch_size=[3],
+            device="cpu",
+        )
+        for _ in range(2):
+            data_c = clone_c(data)
+            for key, value in data.items(True, True):
+                assert data_c[key] is not value
+                # a copy, not a new tensor over the source's memory
+                assert data_c[key].data_ptr() != value.data_ptr()
+                assert data_c[key].dtype == value.dtype
+                assert (data_c[key] == value).all()
+            assert torch.signbit(data_c["f32"]).tolist() == [True, False, False]
+            assert torch.signbit(data_c["a", "f64"]).tolist() == [False, True, False]
 
     @pytest.mark.parametrize("device", [None, "cpu"])
     @pytest.mark.parametrize("lock", [True, False])
@@ -4145,6 +4231,36 @@ class TestExport:
         out = ep.module()(td)
         assert out.names == ["n"]
         torch.testing.assert_close(out["a"], td["a"])
+
+    @pytest.mark.parametrize("strict", [False, True])
+    def test_export_clone_device_keeps_negative_zero(self, strict):
+        # #3581: a program that clones a tensordict with a device keeps the
+        # -0.0 of its floating leaves, also after it is saved and loaded
+        class Mod(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.td = TensorDict(
+                    x=torch.tensor([-0.0, 0.0, 1.0]),
+                    y=torch.tensor([0.0, -0.0, 2.0], dtype=torch.float64),
+                    batch_size=[3],
+                    device="cpu",
+                )
+
+            def forward(self, a):
+                clone = self.td.clone()
+                return clone["x"] * a, clone["y"] * a
+
+        a = torch.full((3,), 2.0)
+        ep = torch.export.export(Mod(), (a,), strict=strict)
+        buffer = io.BytesIO()
+        torch.export.save(ep, buffer)
+        buffer.seek(0)
+        for module in (ep.module(), torch.export.load(buffer).module()):
+            out_x, out_y = module(a)
+            assert torch.signbit(out_x).tolist() == [True, False, False]
+            assert torch.signbit(out_y).tolist() == [False, True, False]
+            assert out_x.tolist() == [-0.0, 0.0, 2.0]
+            assert out_y.tolist() == [0.0, -0.0, 4.0]
 
     @pytest.mark.parametrize("strict", [False])  # , True])
     def test_export_with_td_params(self, strict):
