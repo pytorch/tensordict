@@ -1814,6 +1814,9 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         out: TensorDictBase = super()._apply(fn, recurse=recurse)
         replaced = {}
         for key, val in bufs.items():
+            if val is None:
+                # register_buffer(name, None): nn.Module._apply skips it too
+                continue
             new = self._buffers[key]
             if new is not val and not torch._has_compatible_shallow_copy_type(val, new):
                 # .data cannot be set across these tensor types (meta and
@@ -1857,7 +1860,10 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                     non_blocking=False,
                 )
             for owner in owners:
+                # _reset_params registers the leaves only: keep the None buffers
+                none_buffers = {k: v for k, v in owner._buffers.items() if v is None}
                 owner._reset_params()
+                owner._buffers.update(none_buffers)
         # Check device and shape
         cbs = out._check_batch_size(raise_exception=False)
         if not cbs:

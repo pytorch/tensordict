@@ -7515,6 +7515,183 @@ class TestTensorDictParams:
         self._check_registered(params)
         self._check_registered(params["sub"])
 
+    def _apply_params_with_none(self, none, nested, op):
+        # _apply_params with a None buffer ("buffer"), a non-persistent None
+        # buffer ("non_persistent"), a None parameter ("parameter") or neither
+        # (None), on the nested TensorDictParams or on the top one.
+        if op == "to_empty":
+            with torch.device("meta"):
+                params = self._apply_params()
+        else:
+            params = self._apply_params()
+        holder = params["sub"] if nested else params
+        if none == "parameter":
+            holder.register_parameter("unused", None)
+        elif none is not None:
+            holder.register_buffer("unused", None, persistent=none == "buffer")
+        return params
+
+    @staticmethod
+    def _convert(module, op):
+        # A conversion that goes through nn.Module._apply. "swap" and
+        # "overwrite" are a double() with that flag of torch.__future__ set.
+        if op in ("swap", "overwrite"):
+            name = f"{op}_module_params_on_conversion"
+            prev = getattr(torch.__future__, f"get_{name}")()
+            getattr(torch.__future__, f"set_{name}")(True)
+            try:
+                module.double()
+            finally:
+                getattr(torch.__future__, f"set_{name}")(prev)
+        elif op == "to_dtype":
+            module.to(torch.float64)
+        elif op == "to_device_dtype":
+            module.to("cpu", torch.float64)
+        elif op == "meta":
+            module.to("meta")
+        elif op == "to_empty":
+            module.to_empty(device="cpu")
+        else:
+            getattr(module, op)()
+
+    @staticmethod
+    def _registered(params):
+        # The registered tensors, parameters first, in order.
+        return [
+            (name, type(val), val.dtype, val.device)
+            for registry in (params._parameters, params._buffers)
+            for name, val in registry.items()
+            if val is not None
+        ]
+
+    # the conversions that keep the leaves, then the ones that replace them
+    _CONVERSIONS = [
+        "to_dtype",
+        "to_device_dtype",
+        "double",
+        "float",
+        "half",
+        "cpu",
+        "share_memory",
+        "swap",
+        "meta",
+        "to_empty",
+        "overwrite",
+    ]
+
+    @pytest.mark.parametrize("locked", [False, True])
+    @pytest.mark.parametrize("nested", [False, True])
+    @pytest.mark.parametrize("none", ["buffer", "non_persistent"])
+    @pytest.mark.parametrize("op", _CONVERSIONS)
+    def test_apply_none_buffer(self, op, none, nested, locked):
+        # #3726: a None buffer made module.to() and its siblings raise an
+        # AttributeError. As in nn.Module, the conversion skips it and it stays
+        # registered: the rest converts as it does without the None buffer.
+        # On a nested TensorDictParams it never raised, but a conversion that
+        # replaces the leaves dropped it.
+        params = self._apply_params_with_none(none, nested, op)
+        ref = self._apply_params_with_none(None, nested, op)
+        params.lock_() if locked else params.unlock_()
+        ref.lock_() if locked else ref.unlock_()
+        module, ref_module = self._parent(params), self._parent(ref)
+        leaves = dict(params.items(True, True))
+        values = {key: leaf.clone() for key, leaf in leaves.items()}
+        self._convert(module, op)
+        self._convert(ref_module, op)
+        # a conversion puts a copy of the nested TensorDictParams in params
+        holder = params["sub"] if nested else params
+        ref_holder = ref["sub"] if nested else ref
+        # the None buffer is registered under its name, after the leaves
+        assert list(holder._buffers) == [*ref_holder._buffers, "unused"]
+        assert holder._buffers["unused"] is None and holder.unused is None
+        if not nested:
+            # the copy of a nested TensorDictParams forgets the flag, as before
+            non_persistent = {"unused"} if none == "non_persistent" else set()
+            assert holder._non_persistent_buffers_set == non_persistent
+        # the rest is what the module without the None buffer gives
+        assert params.is_locked is locked
+        assert self._registered(params) == self._registered(ref)
+        assert self._registered(params["sub"]) == self._registered(ref["sub"])
+        assert set(module.state_dict()) == set(ref_module.state_dict())
+        assert params.device == ref.device
+        self._check_registered(params)
+        self._check_registered(params["sub"])
+        if op in ("meta", "to_empty", "overwrite"):
+            assert all(params[key] is not leaves[key] for key in ("w", ("sub", "v")))
+        else:
+            for key, leaf in params.items(True, True):
+                assert leaf is leaves[key], key
+        if op not in ("meta", "to_empty"):
+            for key, leaf in params.items(True, True):
+                assert (leaf == values[key].to(leaf.dtype)).all(), key
+        result = module.load_state_dict(module.state_dict())
+        assert result.missing_keys == result.unexpected_keys == []
+
+    def test_apply_none_buffer_plain_module(self):
+        # #3726: the script of the issue, next to a plain nn.Module.
+        params = TensorDictParams(TensorDict(a=torch.zeros(3)))
+        params.register_buffer("unused", None)
+        plain = nn.Module()
+        plain.a = nn.Parameter(torch.zeros(3))
+        plain.register_buffer("unused", None)
+        for module in (self._parent(params), plain):
+            module.to(torch.float64)
+        assert params["a"].dtype == plain.a.dtype == torch.float64
+        assert list(params._buffers) == list(plain._buffers) == ["unused"]
+        assert params.unused is None and plain.unused is None
+
+    @pytest.mark.parametrize("none", ["buffer", "non_persistent", "parameter"])
+    def test_none_registration_unchanged_calls(self, none):
+        # #3726: these never reached the loop that raised, and work as before.
+        params = self._apply_params_with_none(none, False, None)
+        module = self._parent(params)
+        leaves = dict(params.items(True, True))
+        module.requires_grad_(False)
+        assert not any(leaf.requires_grad for leaf in params.values(True, True))
+        module.requires_grad_(True)
+        module.zero_grad()
+        assert "params.unused" not in module.state_dict()
+        converted = params.to(torch.float64)
+        assert all(leaf.dtype == torch.float64 for leaf in converted.values(True, True))
+        assert all(params[key] is leaf for key, leaf in leaves.items())
+        assert params.unused is None
+
+    @pytest.mark.parametrize("nested", [False, True])
+    @pytest.mark.parametrize(
+        "op",
+        [
+            *_CONVERSIONS[:8],
+            *(
+                # #3547: where the conversion replaces the leaves, the
+                # registrations that are not leaves are lost, a None parameter
+                # among them. The fix of #3726 keeps the None buffers only.
+                pytest.param(
+                    op,
+                    marks=pytest.mark.xfail(
+                        strict=True,
+                        reason="#3547: a conversion that replaces the leaves drops a None parameter",
+                    ),
+                )
+                for op in _CONVERSIONS[8:]
+            ),
+        ],
+    )
+    def test_apply_none_parameter(self, op, nested):
+        # #3726: a None parameter never raised: it converts as before.
+        params = self._apply_params_with_none("parameter", nested, op)
+        ref = self._apply_params_with_none(None, nested, op)
+        module, ref_module = self._parent(params), self._parent(ref)
+        self._convert(module, op)
+        self._convert(ref_module, op)
+        holder = params["sub"] if nested else params
+        ref_holder = ref["sub"] if nested else ref
+        assert self._registered(params) == self._registered(ref)
+        assert self._registered(params["sub"]) == self._registered(ref["sub"])
+        self._check_registered(params)
+        self._check_registered(params["sub"])
+        assert list(holder._parameters) == [*ref_holder._parameters, "unused"]
+        assert holder.unused is None
+
     def test_inplace_ops(self):
         td = TensorDict(
             {
