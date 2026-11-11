@@ -899,8 +899,10 @@ class _Serialization:
                 file keep their data; its disk space is freed once none of
                 them maps it. With ``use_buffer=True``, or on Windows while the
                 file is open (for example mapped by a tensordict), the file
-                is written in place. Defaults to ``None``, which keeps the
-                storage in memory.
+                is written in place, and the tensordicts that map it see the
+                new bytes. Without a buffer, a larger file then keeps its
+                size: the metadata is padded up to its end. Defaults to
+                ``None``, which keeps the storage in memory.
 
         Keyword Args:
             num_threads (int, optional): the number of threads that copy the
@@ -1399,7 +1401,20 @@ class _Serialization:
                 with open(filename, "w+b") as f:
                     f.write(total_storage._handler.buffer)
             result._consolidated["filename"] = Path(filename).resolve()
-            result._consolidated["file_id"] = _file_id(filename)
+            file_id = result._consolidated["file_id"] = _file_id(filename)
+            if (
+                not use_buffer
+                and file_id is not None
+                and file_id[2] > total_storage.numel()
+            ):
+                # #3672: a larger file that could not be replaced keeps its
+                # size. This comes after the copies, which read the leaves of
+                # a source that views the file.
+                if consolidate_futures is not None:
+                    wait(consolidate_futures)
+                _pad_consolidated_metadata(
+                    filename, filesize, metadata_dict_json.numel()
+                )
         if consolidate_futures is not None:
             return TensorDictFuture(consolidate_futures, result)
         return result
@@ -2832,6 +2847,28 @@ def _write_consolidated_metadata(filename, metadata: dict, data_size: int) -> No
         f.seek(data_size)
         f.write(metadata_json)
         f.write(len_metadata.view(torch.uint8).numpy().tobytes())
+
+
+def _pad_consolidated_metadata(filename, data_size: int, metadata_size: int) -> None:
+    """Pads the ``metadata_size`` bytes of metadata that follow the ``data_size`` bytes of leaves up to the end of a larger consolidated file.
+
+    :meth:`~tensordict.TensorDictBase.from_consolidated` reads the length of
+    the metadata in the last 8 bytes of the file, and the metadata before it.
+    The padding is made of spaces, as in :func:`_write_consolidated_metadata`,
+    and is written through a map of the file rather than built in memory.
+    """
+    file = torch.from_file(
+        str(filename),
+        size=os.path.getsize(filename),
+        dtype=torch.uint8,
+        shared=True,
+        # needed when device ctx differs
+        device=torch.device("cpu"),
+    )
+    file[data_size + metadata_size : -8] = 32
+    file[-8:] = torch.tensor(
+        [file.numel() - data_size - 8], dtype=torch.int64, device=file.device
+    ).view(torch.uint8)
 
 
 def _update_consolidated_metadata(td, metadata: dict) -> None:

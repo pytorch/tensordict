@@ -1903,6 +1903,128 @@ class TestGeneric:
         assert filename.stat().st_size == size
         assert [p.name for p in tmp_path.iterdir()] == ["td.bin"]
 
+    @pytest.mark.parametrize(
+        "num_threads,return_early", [(0, False), (2, False), (2, True)]
+    )
+    @pytest.mark.parametrize(
+        "old_key,old_count",
+        [
+            # larger files: the new content ends before the old metadata,
+            # inside it, and 3 bytes before the end of the file
+            ("a", 100),
+            ("a", 3),
+            ("abcd", 2),
+            # a file of the same size, and a smaller one
+            ("a", 2),
+            ("a", 1),
+        ],
+    )
+    def test_consolidated_file_overwrite_replace_fails_reads_back(
+        self, tmp_path, old_key, old_count, num_threads, return_early
+    ):
+        # #3672: a larger file that cannot be replaced is written in place and
+        # keeps its size. The metadata is padded up to the end of the file,
+        # where from_consolidated reads it: the file reads back what was saved
+        filename = tmp_path / "td.bin"
+        TensorDict(
+            {old_key: torch.arange(old_count)}, batch_size=[old_count]
+        ).consolidate(filename=filename)
+        size = filename.stat().st_size
+        expected = TensorDict(z=torch.tensor([500, 501]), batch_size=[2])
+        expected.consolidate(filename=tmp_path / "fresh.bin")
+        fresh_size = (tmp_path / "fresh.bin").stat().st_size
+        os.remove(tmp_path / "fresh.bin")
+        with mock.patch("os.replace", side_effect=PermissionError):
+            saved = expected.consolidate(
+                filename=filename, num_threads=num_threads, return_early=return_early
+            )
+            if return_early:
+                saved = saved.result()
+        assert filename.stat().st_size == max(size, fresh_size)
+        assert [p.name for p in tmp_path.iterdir()] == ["td.bin"]
+        loaded = TensorDict.from_consolidated(filename)
+        assert list(loaded.keys()) == ["z"]
+        assert loaded.batch_size == (2,)
+        assert_allclose_td(loaded, expected)
+        assert_allclose_td(saved, expected)
+        assert_allclose_td(pickle.loads(pickle.dumps(saved)), expected)
+        # the storage of the result, and of what is read back, is the leaves
+        assert saved._consolidated["storage"].numel() == 16
+        assert loaded._consolidated["storage"].numel() == 16
+        # the result rewrites the metadata of its file
+        saved.names = ["x"]
+        assert saved.consolidate(filename=filename) is saved
+        assert filename.stat().st_size == max(size, fresh_size)
+        loaded = TensorDict.from_consolidated(filename)
+        assert loaded.names == ["x"]
+        assert_allclose_td(loaded, expected)
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS, reason="simulates the in-place write of Windows with a mock"
+    )
+    @pytest.mark.parametrize(
+        "num_threads,return_early", [(0, False), (2, False), (2, True)]
+    )
+    @pytest.mark.parametrize("source_kind", ["rows", "last_leaf"])
+    def test_consolidated_file_overwrite_replace_fails_source_view(
+        self, tmp_path, source_kind, num_threads, return_early
+    ):
+        # #3672: part of a tensordict that was read from a file is saved over
+        # this file, which cannot be replaced. The file reads back what was
+        # saved
+        filename = tmp_path / "td.bin"
+        if source_kind == "rows":
+            TensorDict(
+                a=torch.arange(6.0), b=torch.arange(12.0).reshape(6, 2), batch_size=[6]
+            ).consolidate(filename=filename)
+            source = TensorDict.from_consolidated(filename)[:5]
+        else:
+            # the leaf lies past the new content and its metadata: it is read
+            # before the padding is written there
+            TensorDict(a=torch.arange(200.0), b=torch.arange(4.0) + 100).consolidate(
+                filename=filename
+            )
+            source = TensorDict.from_consolidated(filename).select("b")
+        size = filename.stat().st_size
+        expected = source.clone()
+        with mock.patch("os.replace", side_effect=PermissionError):
+            saved = source.consolidate(
+                filename=filename, num_threads=num_threads, return_early=return_early
+            )
+            if return_early:
+                saved = saved.result()
+        assert filename.stat().st_size == size
+        loaded = TensorDict.from_consolidated(filename)
+        assert set(loaded.keys()) == set(expected.keys())
+        assert loaded.batch_size == expected.batch_size
+        assert_allclose_td(saved, expected)
+        assert_allclose_td(loaded, expected)
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS or os.geteuid() == 0, reason="needs POSIX file permissions"
+    )
+    def test_consolidated_file_overwrite_read_only_directory(self, tmp_path):
+        # #3672: a file in a directory the caller cannot write is not
+        # replaced either: it is written in place, and reads back what was
+        # saved
+        directory = tmp_path / "data"
+        directory.mkdir()
+        filename = directory / "td.bin"
+        TensorDict(a=torch.arange(100), batch_size=[100]).consolidate(filename=filename)
+        size = filename.stat().st_size
+        expected = TensorDict(z=torch.tensor([500, 501]), batch_size=[2])
+        directory.chmod(0o555)
+        try:
+            saved = expected.consolidate(filename=filename)
+        finally:
+            directory.chmod(0o755)
+        assert filename.stat().st_size == size
+        assert [p.name for p in directory.iterdir()] == ["td.bin"]
+        loaded = TensorDict.from_consolidated(filename)
+        assert list(loaded.keys()) == ["z"]
+        assert_allclose_td(saved, expected)
+        assert_allclose_td(loaded, expected)
+
     @pytest.mark.skipif(
         _IS_WINDOWS, reason="simulates the in-place write of Windows with a mock"
     )
