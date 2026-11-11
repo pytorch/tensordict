@@ -2833,8 +2833,12 @@ class TensorDict(TensorDictBase):
 
         if not recurse and is_compiling():
             # TensorDict comes first in the comparison: Dynamo then checks
-            # type(self) with the guard it already has on that global, and
-            # adds none for an exact TensorDict.
+            # type(self) with the guard it already has on that global, and a
+            # function that only copies exact TensorDicts gets no new guard.
+            # One that has already read a TensorDict's class another way
+            # (type(td) or td.__class__, as an entry read and select do) gets
+            # aliasing guards between the classes of the TensorDicts it
+            # copies, one for each member of a nested lazy stack.
             if TensorDict is type(self):
                 result = TensorDict(
                     batch_size=self.batch_size,

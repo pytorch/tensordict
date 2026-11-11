@@ -1579,8 +1579,8 @@ class TestTD:
         assert out.device == eager.device == td.device
         assert out.names == eager.names == ["x", "y"]
         assert not out.is_locked and not eager.is_locked
-        # neither mode runs MyTD.__init__ for the copy
-        assert not hasattr(eager, "scale") and not hasattr(out, "scale")
+        # the copy has the instance attributes that the eager copy has
+        assert hasattr(out, "scale") == hasattr(eager, "scale")
         # another instance does not recompile
         with torch._dynamo.config.patch(error_on_recompile=True):
             assert type(shallow_c(make())) is MyTD
@@ -5801,9 +5801,11 @@ class TestGuardCount:
     @pytest.mark.parametrize("op", ["clone", "copy"])
     def test_clone_shallow_exact_tensordict_guards(self, op, monkeypatch):
         # #3673: the compiled clone(False) and copy() check the class, to keep
-        # a TensorDict subclass. For an exact TensorDict, nested ones included,
-        # that check adds no guard: the guards are those of the same code
-        # without it.
+        # a TensorDict subclass. In a function that only copies an exact
+        # TensorDict, nested ones included, that check adds no guard: the
+        # guards are those of the same code without it. (A function that has
+        # read the class another way before the copy, as an entry read or
+        # select does, gets aliasing guards between the classes.)
         from torch._dynamo.eval_frame import _debug_get_cache_entry_list
 
         def shallow(td):
