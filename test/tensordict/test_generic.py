@@ -30,6 +30,7 @@ import weakref
 from collections import defaultdict, namedtuple, OrderedDict, UserDict
 from copy import deepcopy
 from dataclasses import dataclass, field
+from multiprocessing.reduction import ForkingPickler
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, get_type_hints
@@ -212,6 +213,19 @@ def _leaf_storage(td, key):
 class _AppendMemmapRows:
     x: torch.Tensor
     label: str
+
+
+def _save_and_load(data, save):
+    # A copy of data made with pickle, with torch.save, or with the pickler of
+    # the multiprocessing queues and pipes (test_pickle_in_*_block)
+    if save == "pickle":
+        return pickle.loads(pickle.dumps(data))
+    if save == "ForkingPickler":
+        return pickle.loads(ForkingPickler.dumps(data))
+    buffer = io.BytesIO()
+    torch.save(data, buffer)
+    buffer.seek(0)
+    return torch.load(buffer, weights_only=False)
 
 
 class TestGeneric:
@@ -1956,6 +1970,115 @@ class TestGeneric:
         result = pickle.loads(pickle.dumps(td))
         assert result.names == ["x", "y"]
         assert result[0]["b"].names == ["y"]
+
+    @pytest.mark.parametrize("save", ["pickle", "torch.save", "ForkingPickler"])
+    @pytest.mark.parametrize(
+        "kind",
+        [
+            "td",
+            "tensorclass",
+            "lazy_stack",
+            pytest.param(
+                "h5",
+                marks=pytest.mark.skipif(not _has_h5py, reason="h5py not installed"),
+            ),
+        ],
+    )
+    def test_pickle_in_lock_block(self, kind, save, tmp_path):
+        # #3578: a tensor collection can be pickled inside its own
+        # `with data.unlock_():` or `with data.lock_():` block. The copy is in
+        # no block, and the block of the original still ends as it should.
+        x = torch.arange(3.0)
+        if kind == "td":
+            data = TensorDict(x=x, batch_size=[3])
+        elif kind == "tensorclass":
+            data = _AppendMemmapRows(x=x, label="a", batch_size=[3])
+        elif kind == "lazy_stack":
+            data = lazy_stack([TensorDict(x=x), TensorDict(x=x + 1)])
+            x = torch.stack([x, x + 1])
+        else:
+            data = PersistentTensorDict.from_dict(
+                {"x": x}, filename=tmp_path / "td.h5", batch_size=[3]
+            )
+        copies = []
+        try:
+            data.lock_()
+            with data.unlock_():
+                copy = _save_and_load(data, save)
+                copies.append(copy)
+                assert type(copy) is type(data)
+                assert not copy.is_locked
+                torch.testing.assert_close(copy.get("x"), x)
+                with copy.lock_():
+                    assert copy.is_locked
+                assert not copy.is_locked
+            assert data.is_locked
+            data.unlock_()
+            with data.lock_():
+                copy = _save_and_load(data, save)
+                copies.append(copy)
+                assert copy.is_locked
+                torch.testing.assert_close(copy.get("x"), x)
+                with copy.unlock_():
+                    assert not copy.is_locked
+                assert copy.is_locked
+            assert not data.is_locked
+            # outside a block, as before
+            copy = _save_and_load(data, save)
+            copies.append(copy)
+            assert not copy.is_locked
+            torch.testing.assert_close(copy.get("x"), x)
+        finally:
+            if kind == "h5":
+                for td in (data, *copies):
+                    td.close()
+
+    @pytest.mark.parametrize("save", ["pickle", "torch.save", "ForkingPickler"])
+    @pytest.mark.parametrize(
+        "op",
+        [
+            lambda td: td.flatten_keys(),
+            lambda td: td.view(-1),
+            lambda td: td.to(torch.float64),
+        ],
+        ids=["flatten_keys", "view", "to"],
+    )
+    def test_pickle_in_write_back_block(self, op, save):
+        # #3578: the result of an operation can be pickled inside the block
+        # that writes it back, and the block still writes it back.
+        td = TensorDict(
+            a=torch.zeros(3, 4),
+            n=TensorDict(b=torch.zeros(3, 4), batch_size=[3, 4]),
+            batch_size=[3, 4],
+        )
+        with op(td) as other:
+            copy = _save_and_load(other, save)
+            assert copy.batch_size == other.batch_size
+            assert_allclose_td(copy, other)
+            for key in list(other.keys(True, True)):
+                other[key] = other[key] + 1
+            with copy.lock_():
+                assert copy.is_locked
+            assert not copy.is_locked
+        assert (td == 1).all()
+        assert (copy == 0).all()
+
+    @pytest.mark.parametrize("save", ["pickle", "torch.save", "ForkingPickler"])
+    def test_pickle_in_to_module_block(self, save):
+        # #3578: `with params.to_module(module) as swapped:` is a block of the
+        # tensordict that to_module returns, which holds the parameters that
+        # the module had. It can be pickled inside the block.
+        module = nn.Linear(2, 2)
+        weight = module.weight.detach().clone()
+        params = TensorDict.from_module(module).data.clone().zero_()
+        with params.to_module(module) as swapped:
+            assert (module.weight == 0).all()
+            copy = _save_and_load(swapped, save)
+            torch.testing.assert_close(copy["weight"].data, weight)
+            torch.testing.assert_close(
+                _save_and_load(params, save)["weight"], params["weight"]
+            )
+        torch.testing.assert_close(module.weight.data, weight)
 
     def test_to_device_batch_size_nested_only(self):
         # When the device changes and the root holds only nested tensordicts,
@@ -8520,6 +8643,24 @@ class TestGeneric:
         assert type(td_load) is type(td)
         assert td_load.batch_size == td.batch_size
         assert td_load.names == td.names
+        assert (td_load == td).all()
+
+    @pytest.mark.parametrize("inside", [False, True])
+    def test_torch_load_weights_only_with_block(self, inside, tmpdir):
+        # #3578: the save of a tensordict that is, or has been, the subject of
+        # a with block does not hold the records of its blocks (a deque, which
+        # weights_only=True does not load).
+        td = TensorDict(a=torch.arange(3.0), batch_size=[3]).lock_()
+        filename = Path(tmpdir) / "td.pt"
+        with td.unlock_():
+            td["b"] = torch.ones(3)
+            if inside:
+                torch.save(td, filename)
+        if not inside:
+            torch.save(td, filename)
+        td_load = torch.load(filename, weights_only=True)
+        assert type(td_load) is TensorDict
+        assert td_load.is_locked is not inside
         assert (td_load == td).all()
 
     @pytest.mark.parametrize(
