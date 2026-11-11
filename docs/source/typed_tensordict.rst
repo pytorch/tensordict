@@ -185,6 +185,20 @@ Class options
   ``data`` or ``sum``. Without this option, such a name raises
   ``AttributeError`` when the class is defined.
 
+  The field hides the attribute from the methods of the object too, so not
+  every name works. A field named after a method that other methods call
+  breaks those methods: with a field ``keys``, printing, arithmetic, and
+  ``torch.stack`` raise ``TypeError: 'Tensor' object is not callable``. With
+  a ``TensorClass["shadow"]``, these three calls work: a tensorclass runs
+  them on the ``TensorDict`` that it wraps, which the field does not hide.
+
+  The keyword constructor reads ``batch_size``, ``device``, ``names``,
+  ``lock``, and ``non_blocking`` as its own arguments, so it cannot take a
+  field with one of these names by keyword: a required field raises
+  ``TypeError``, and a field with a default keeps its default. A field
+  ``batch_size`` or ``device`` also hides the batch size or the device of the
+  object, so ``torch.stack`` raises even when the field is passed in a dict.
+
 ``"frozen"``
   Locks the tensordict after construction. Attribute assignment and new keys
   raise ``RuntimeError``. In-place writes to tensor fields, such as
