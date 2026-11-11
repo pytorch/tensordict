@@ -678,6 +678,33 @@ def test_construction_empty_then_full_source(device):
     assert (result["b", "c"] == x).all()
 
 
+@pytest.mark.parametrize(
+    "call", ["from_tensor", "zeros", "memmap", "memmap_", "memmap_like"]
+)
+def test_empty_anonymous_memmap_compile(call):
+    # #3566: compiled code builds an anonymous memory map of a tensor with no
+    # elements as eager code does, also after a call on a tensor with elements
+    def fn(td):
+        if call == "from_tensor":
+            return MemoryMappedTensor.from_tensor(td["a"])
+        if call == "zeros":
+            return MemoryMappedTensor.zeros(td["a"].shape)
+        return getattr(td, call)()
+
+    compiled = torch.compile(fn, backend="eager")
+    for width in (3, 0, 3):
+        td = TensorDict(a=torch.ones(4, width), batch_size=[4])
+        result = compiled(td.clone())
+        expected = fn(td.clone())
+        if call.startswith("memmap"):
+            assert result.is_memmap()
+            result, expected = result["a"], expected["a"]
+        assert type(result) is type(expected) is MemoryMappedTensor
+        assert result.shape == expected.shape == (4, width)
+        assert result.dtype == expected.dtype
+        assert (result == expected).all()
+
+
 def _index_tensordict_without_shortcut():
     # TensorDictBase._index_tensordict with its eager shortcut cut out, which
     # is the loop of the base branch
