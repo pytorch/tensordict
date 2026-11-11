@@ -88,6 +88,7 @@ from tensordict.utils import (
 from torch import nn
 from torch._subclasses import FakeTensor, FakeTensorMode
 from torch.autograd import forward_ad
+from torch.multiprocessing.reductions import StorageWeakRef
 from torch.nn.parameter import UninitializedTensorMixin
 from torch.utils._python_dispatch import TorchDispatchMode
 from torch.utils._pytree import tree_leaves
@@ -1256,6 +1257,110 @@ class TestGeneric:
             )
         with pytest.raises(NotImplementedError, match="non_blocking"):
             td.consolidate(num_threads=4, return_early=True, non_blocking=True)
+
+    @pytest.mark.parametrize(
+        "call", ["consolidate", "to", "pickle", "from_consolidated"]
+    )
+    def test_consolidate_frees_buffer_without_gc(self, call, tmp_path):
+        # #3563: a reference cycle kept the buffer of a consolidated tensordict
+        # alive until the garbage collector ran
+        td = TensorDict(a=torch.zeros(3), b={"c": torch.ones(2, dtype=torch.int64)})
+        consolidated = td.consolidate(metadata=True)
+        data = pickle.dumps(consolidated)
+        path = tmp_path / "td.bin"
+        td.consolidate(filename=path)
+        # drop the cycles that the calls above leave without the fix
+        gc.collect()
+        gc.disable()
+        try:
+            if call == "consolidate":
+                result = td.consolidate()
+            elif call == "to":
+                result = consolidated.to("cpu")
+                # the result shares the storage of its source
+                del consolidated
+            elif call == "pickle":
+                result = pickle.loads(data)
+            else:
+                result = TensorDict.from_consolidated(path)
+            assert (result == td).all()
+            ref = StorageWeakRef(result._consolidated["storage"].untyped_storage())
+            assert not ref.expired()
+            del result
+            assert ref.expired()
+        finally:
+            gc.enable()
+
+    @pytest.mark.parametrize("kind", ["njt", "tensorclass", "lazy_stack"])
+    def test_consolidate_recursive_entries(self, kind, tmp_path):
+        # #3563: consolidate(), to(device), unpickling and from_consolidated()
+        # each drop a function that calls itself on nested tensors and nested
+        # tensordicts once they are done with it
+        if kind == "njt":
+            njt = torch.nested.nested_tensor(
+                [torch.arange(3.0), torch.arange(5.0)], layout=torch.jagged
+            )
+            source = TensorDict(
+                njt=njt, x=torch.arange(4.0), n={"y": torch.ones(2, dtype=torch.int64)}
+            )
+        elif kind == "tensorclass":
+            source = TensorDict(
+                a=torch.arange(2.0),
+                tc=_AppendMemmapRows(x=torch.arange(6.0).view(2, 3), label="a label"),
+            )
+        else:
+            source = lazy_stack(
+                [
+                    TensorDict(a=torch.zeros(3), n={"b": torch.ones(1)}),
+                    TensorDict(a=torch.ones(3), n={"b": torch.zeros(1)}),
+                ]
+            )
+
+        def check(result):
+            assert type(result) is type(source)
+            assert result.is_consolidated()
+            assert result.bytes() == source.bytes()
+            expected = source
+            if kind == "njt":
+                assert [t.tolist() for t in result["njt"].unbind()] == [
+                    [0.0, 1.0, 2.0],
+                    [0.0, 1.0, 2.0, 3.0, 4.0],
+                ]
+                result, expected = result.exclude("njt"), source.exclude("njt")
+            elif kind == "tensorclass":
+                assert type(result["tc"]) is _AppendMemmapRows
+                assert result["tc"].label == "a label"
+            assert (result == expected).all()
+
+        for kwargs in ({}, {"metadata": True}, {"num_threads": 2}):
+            consolidated = source.consolidate(**kwargs)
+            check(consolidated)
+            check(consolidated.to("cpu"))
+            if kind != "tensorclass":
+                # with threads, a nested tensorclass comes back as a TensorDict
+                check(consolidated.to("cpu", num_threads=2))
+            check(pickle.loads(pickle.dumps(consolidated)))
+        path = tmp_path / "td.bin"
+        check(source.consolidate(filename=path))
+        check(TensorDict.from_consolidated(path))
+
+    def test_consolidate_threads_after_closure_drop(self):
+        # #3563: the worker threads are done with the functions that
+        # consolidate() and to(device) drop before these return
+        td = TensorDict(
+            {f"key{i}": torch.full((i % 5 + 1,), float(i)) for i in range(20)}
+        )
+        td["nested"] = TensorDict(a=torch.arange(3), s="a string!")
+        for _ in range(3):
+            consolidated = td.consolidate(num_threads=2)
+            assert (consolidated == td).all()
+            future = td.consolidate(num_threads=2, return_early=True)
+            assert isinstance(future, TensorDictFuture)
+            assert (future.result() == td).all()
+            moved = consolidated.to("cpu", num_threads=2)
+            assert moved.is_consolidated()
+            assert (moved == td).all()
+            assert moved["nested", "s"] == "a string!"
 
     def test_consolidate_pin_memory_consolidated(self, monkeypatch, tmpdir):
         # consolidate(pin_memory=True) copies a consolidated tensordict whose
