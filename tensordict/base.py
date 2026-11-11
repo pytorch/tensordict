@@ -9582,7 +9582,16 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     "batch_size and out.batch_size must be equal when both are provided."
                 )
             if device is not NO_DEFAULT and device != out.device:
-                if not checked or device is None:
+                nodes = (
+                    list(out.values(True, True, is_leaf=_is_tensor_collection))
+                    if checked and device is not None
+                    else None
+                )
+                # A lazy stack of tensorclasses cannot be written through out:
+                # it raises as before, before a device is set on any node
+                if nodes is None or any(
+                    is_tensorclass(node) and node._tensordict._lazy for node in nodes
+                ):
                     raise RuntimeError(
                         "device and out.device must be equal when both are provided."
                     )
@@ -9591,7 +9600,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 # tensordict (#3645)
                 device = torch.device(device)
                 out._device = device
-                for node in out.values(True, True, is_leaf=_is_tensor_collection):
+                for node in nodes:
                     if is_tensorclass(node):
                         node._tensordict._device = device
                     else:
