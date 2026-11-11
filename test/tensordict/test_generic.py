@@ -9318,6 +9318,188 @@ class TestGeneric:
         )
         assert (out == ref).all()
 
+    @pytest.mark.parametrize("lazy", [False, True])
+    @pytest.mark.parametrize(
+        "integer", [np.int64, np.int32, np.intp], ids=["int64", "int32", "intp"]
+    )
+    @pytest.mark.parametrize(
+        "call",
+        [
+            lambda td, i: td.repeat_interleave(i(2), 0),
+            lambda td, i: td.repeat_interleave(i(2), dim=i(-1)),
+            lambda td, i: td.repeat_interleave(i(2)),
+            lambda td, i: torch.repeat_interleave(td, i(2), 0),
+            lambda td, i: td.roll(1, i(0)),
+            lambda td, i: td.roll(i(1), dims=i(-1)),
+            lambda td, i: torch.roll(td, 1, i(1)),
+            lambda td, i: td.flip(i(1)),
+            lambda td, i: td.movedim(i(0), i(1)),
+            lambda td, i: td.tile(i(2)),
+            lambda td, i: td.tensor_split(i(2), i(1)),
+        ],
+        ids=[
+            "repeat_interleave",
+            "repeat_interleave-negative_dim",
+            "repeat_interleave-no_dim",
+            "torch.repeat_interleave",
+            "roll",
+            "roll-negative_dim",
+            "torch.roll",
+            "flip",
+            "movedim",
+            "tile",
+            "tensor_split",
+        ],
+    )
+    def test_numpy_integer_count_and_dim(self, call, integer, lazy):
+        # #3586: a NumPy integer as a count or a dim gives what the Python int
+        # gives, with the batch size that the leaves have
+        def build():
+            td = self._build_nested_td()
+            return lazy_stack(td.unbind(0)) if lazy else td
+
+        out, ref = call(build(), integer), call(build(), int)
+        if not isinstance(out, tuple):
+            out, ref = (out,), (ref,)
+        assert len(out) == len(ref)
+        for o, r in zip(out, ref):
+            assert type(o) is type(r)
+            assert o.batch_size == r.batch_size
+            assert o["a"].shape[: o.batch_dims] == o.batch_size
+            assert o["nested"].batch_size == o.batch_size
+            assert (o == r).all()
+
+    @pytest.mark.parametrize(
+        "integer", [np.int64, np.int32, np.intp], ids=["int64", "int32", "intp"]
+    )
+    def test_numpy_integer_count_and_dim_inplace(self, integer):
+        # #3586: as above, with inplace=True
+        td = self._build_nested_td()
+        ref = self._build_nested_td().repeat_interleave(2, 0)
+        assert td.repeat_interleave(integer(2), 0, inplace=True) is td
+        assert td.batch_size == td["nested"].batch_size == torch.Size([6, 4])
+        assert (td == ref).all()
+        ref = td.roll(1, 1)
+        assert td.roll(1, integer(1), inplace=True) is td
+        assert (td == ref).all()
+
+    @pytest.mark.parametrize(
+        "dtype",
+        [torch.int64, torch.int32, torch.uint8],
+        ids=["int64", "int32", "uint8"],
+    )
+    def test_split_zero_dim_tensor(self, dtype):
+        # #3586: a 0-d integer tensor is the size of each piece, as for
+        # torch.split
+        td = self._build_nested_td()
+        out = td.split(torch.tensor(3, dtype=dtype), 1)
+        ref = td.split(3, 1)
+        assert [o.batch_size for o in out] == [(3, 3), (3, 1)]
+        assert all((o == r).all() for o, r in zip(out, ref, strict=True))
+        assert all(
+            (o == r).all()
+            for o, r in zip(torch.split(td, torch.tensor(3, dtype=dtype), 1), ref)
+        )
+
+    @pytest.mark.parametrize("size", [0, -1])
+    def test_split_zero_dim_tensor_not_positive(self, size):
+        # #3586: a 0-d tensor that is not a positive size raises TypeError,
+        # as before
+        td = self._build_nested_td()
+        with pytest.raises(TypeError, match="must be int or list of ints"):
+            td.split(torch.tensor(size), 1)
+        with pytest.raises(TypeError, match="must be int or list of ints"):
+            lazy_stack(td.unbind(0)).split(torch.tensor(size), 1)
+
+    def test_numpy_integer_count_zero(self):
+        # #3586: a NumPy count of 0 gives what the int 0 gives, except along
+        # the stack dim of a lazy stack, which keeps no members: there it
+        # raises TypeError, as before, rather than lose the inner batch dims
+        td = self._build_nested_td()
+        out, ref = td.repeat_interleave(np.int64(0), 1), td.repeat_interleave(0, 1)
+        assert out.batch_size == ref.batch_size == out["a"].shape[:2] == (3, 0)
+        assert out["nested"].batch_size == (3, 0)
+        lazy = lazy_stack(td.unbind(0))
+        out = lazy.repeat_interleave(np.int64(0), 1)
+        assert out.batch_size == out["a"].shape[:2] == (3, 0)
+        with pytest.raises(TypeError, match="has no len"):
+            lazy.repeat_interleave(np.int64(0), 0)
+        parent = TensorDict(n=lazy, batch_size=lazy.batch_size)
+        with pytest.raises(TypeError, match="has no len"):
+            parent.repeat_interleave(np.int64(0), 0)
+
+    def test_numpy_integer_count_negative_lazy_stack_dim(self):
+        # #3586: a negative NumPy count along the stack dim of a lazy stack
+        # raises what the same Python int raises
+        lazy = lazy_stack(self._build_nested_td().unbind(0))
+        parent = TensorDict(n=lazy, batch_size=lazy.batch_size)
+        for call in (
+            lambda r: lazy.repeat_interleave(r, 0),
+            lambda r: torch.repeat_interleave(lazy, r, 0),
+            lambda r: parent.repeat_interleave(r, 0),
+        ):
+            with pytest.raises(Exception) as int_error:
+                call(-1)
+            with pytest.raises(type(int_error.value)) as numpy_error:
+                call(np.int64(-1))
+            assert str(numpy_error.value) == str(int_error.value)
+
+    def test_split_zero_dim_tensor_unreadable(self):
+        # #3586: a 0-d tensor whose value cannot be read raises TypeError, as
+        # before
+        td = self._build_nested_td()
+        lazy = lazy_stack(td.unbind(0))
+        for call in (
+            lambda: td.split(torch.tensor(2, device="meta"), 1),
+            lambda: lazy.split(torch.tensor(2, device="meta"), 1),
+            lambda: torch.vmap(lambda s: td.split(s, 1))(torch.tensor([2, 2])),
+        ):
+            with pytest.raises(TypeError, match="must be int or list of ints"):
+                call()
+
+    @pytest.mark.parametrize("unit", ["ns", "D"])
+    def test_numpy_timedelta_unchanged(self, unit):
+        # #3586: NumPy makes timedelta64 an integer, but it keeps the errors
+        # it raised before
+        td = self._build_nested_td()
+        lazy = lazy_stack(td.unbind(0))
+        t = np.timedelta64(2 if unit == "ns" else 1, unit)
+        for call, match in (
+            (lambda: td.roll(1, t), "has no len"),
+            (lambda: td.flip(t), "is not iterable"),
+            (lambda: td.movedim(t, 1), "has no len"),
+            (lambda: td.movedim(0, t), "has no len"),
+            (lambda: td.tile(t), "has no len"),
+            (lambda: lazy.repeat_interleave(t, 0), "has no len"),
+        ):
+            with pytest.raises(TypeError, match=match):
+                call()
+        with pytest.raises(TypeError):
+            td.repeat_interleave(t, 0)
+        with pytest.raises(ValueError, match="indices_or_sections must be"):
+            td.tensor_split(t, 1)
+
+    def test_non_integer_count_and_dim_unchanged(self):
+        # #3586: the counts and dims that are not integers keep their
+        # behaviour. A bool is an int, a float raises.
+        td = self._build_nested_td()
+        assert (td.movedim(False, True) == td.movedim(0, 1)).all()
+        assert (td.tile(True) == td.tile(1)).all()
+        out, ref = td.tensor_split(True, 1), td.tensor_split(1, 1)
+        assert all((o == r).all() for o, r in zip(out, ref, strict=True))
+        for call in (
+            lambda: td.roll(1, 0.0),
+            lambda: td.flip(0.0),
+            lambda: td.movedim(0.0, 1),
+            lambda: td.movedim(0, 1.0),
+            lambda: td.tile(2.0),
+            lambda: td.split(2.0, 1),
+        ):
+            with pytest.raises(TypeError):
+                call()
+        with pytest.raises(ValueError, match="indices_or_sections must be"):
+            td.tensor_split(2.0, 1)
+
     @pytest.mark.parametrize(
         "op",
         [
