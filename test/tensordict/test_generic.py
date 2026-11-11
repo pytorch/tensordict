@@ -2626,7 +2626,7 @@ class TestGeneric:
                     mock.patch("os.replace", side_effect=PermissionError),
                 ):
                     warnings.simplefilter("ignore")
-                    saved = torch.compile(save)(source)
+                    saved = torch.compile(save, backend="aot_eager")(source)
             except Exception as err:
                 outcomes.append(type(err))
                 continue
@@ -2636,6 +2636,46 @@ class TestGeneric:
             assert_allclose_td(TensorDict.from_consolidated(path), source)
             outcomes.append(None)
         assert outcomes[0] is outcomes[1]
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS, reason="simulates the in-place write of Windows with a mock"
+    )
+    def test_consolidated_file_overwrite_replace_fails_no_recompile(self, tmp_path):
+        # #3672: under torch.compile the size of a file that is written in
+        # place is not read, so a second in-place write, over a file of
+        # another size, compiles nothing more
+        filename = tmp_path / "td.bin"
+        source = TensorDict(a=torch.arange(6.0), b=torch.ones(6, 2), batch_size=[6])
+
+        def save(td):
+            return td.consolidate(filename=filename)
+
+        torch._dynamo.reset()
+        try:
+            compiled = torch.compile(save, backend="eager")
+            frames = torch._dynamo.utils.counters["frames"]
+            outcomes = []
+            compiled_frames = []
+            for old_size in (1, 600):
+                TensorDict(a=torch.zeros(old_size)).consolidate(filename=filename)
+                try:
+                    with (
+                        warnings.catch_warnings(),
+                        mock.patch("os.replace", side_effect=PermissionError),
+                    ):
+                        warnings.simplefilter("ignore")
+                        saved = compiled(source)
+                except Exception as err:
+                    outcomes.append(type(err))
+                else:
+                    assert_allclose_td(saved, source)
+                    outcomes.append(None)
+                compiled_frames.append(frames["total"])
+        finally:
+            torch._dynamo.reset()
+        assert outcomes[0] is outcomes[1]
+        if outcomes[0] is None:
+            assert compiled_frames[1] == compiled_frames[0]
 
     @pytest.mark.skipif(
         _IS_WINDOWS, reason="simulates the in-place write of Windows with a mock"

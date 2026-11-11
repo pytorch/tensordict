@@ -1094,10 +1094,12 @@ class _Serialization:
                 )
             suffix = len_metadata.numel() + metadata_dict_json.numel()
             if not use_buffer:
-                inplace_filesize = _replace_existing_file(filename)
-                if inplace_filesize and is_compiling():
-                    # under torch.compile the file is written as before
-                    inplace_filesize = 0
+                if is_compiling():
+                    # under torch.compile the file is written as before: the
+                    # size is not read, so that Dynamo has no value to guard
+                    _replace_existing_file(filename)
+                else:
+                    inplace_filesize = _replace_existing_file(filename)
                 total_storage = torch.from_file(
                     str(filename),
                     size=filesize + suffix,
