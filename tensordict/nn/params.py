@@ -1588,99 +1588,112 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                 state_dict = dict(state_dict)
             # The TensorDictParams on the path of each leaf register it again.
             owners = {self}
-            for name, dest in local_state.items():
-                val = state_dict.get(prefix + name)
-                if val is None or val is dest:
-                    continue
-                if name not in keys and name in self._non_persistent_buffers_set:
-                    unexpected.add(prefix + name)
-                    continue
-                key = _unravel_key_to_tuple(keys[name])
-                path = key[:-1]
-                parent = nodes.get(path)
-                if parent is None:
-                    parent = _node_at(self, path, nodes, owners)
-                if isinstance(parent, TensorDictParams):
-                    parent = parent._param_td
-                # Cast before wrapping: the cast of a Parameter is a plain
-                # tensor, which would be registered as a buffer. Detach it so
-                # that it is a leaf, and keep its type and requires_grad as a
-                # load from the same device does.
-                if parent.device is not None and val.device != parent.device:
-                    is_param = isinstance(val, nn.Parameter)
-                    requires_grad = val.requires_grad
-                    val = val.detach().to(parent.device)
-                    if is_param:
-                        val = nn.Parameter(val, requires_grad=requires_grad)
-                    else:
-                        val.requires_grad_(requires_grad)
-                if isinstance(dest, nn.Parameter):
-                    if isinstance(val, nn.Parameter):
-                        val.requires_grad_(dest.requires_grad)
-                    else:
-                        val = nn.Parameter(val, requires_grad=dest.requires_grad)
-                # The base's copy_ of a tensor into itself is a no-op.
-                state_dict[prefix + name] = val
-                parent._set_str(
-                    key[-1],
-                    val,
-                    inplace=False,
-                    # The shapes match: only a device may need a cast.
-                    validated=val.device == dest.device,
-                    ignore_lock=True,
-                    non_blocking=False,
-                )
-            for owner in owners:
-                # _reset_params only registers the leaves of _param_td: keep
-                # the None entries, the non-persistent buffers that are not
-                # leaves, and the registered names that are not leaves.
-                kept = owner._non_persistent_buffers_set
-                added = registered if owner is self else owner._added_names()
-                if added:
-                    kept = kept | added
-                if kept:
-                    kept = kept.difference(
-                        keys if owner is self else owner._leaf_keys()
+            # Whether to register the leaves again: once the loop ends, and
+            # also when an entry raises after another one was assigned.
+            register = False
+            try:
+                for name, dest in local_state.items():
+                    val = state_dict.get(prefix + name)
+                    if val is None or val is dest:
+                        continue
+                    if name not in keys and name in self._non_persistent_buffers_set:
+                        unexpected.add(prefix + name)
+                        continue
+                    key = _unravel_key_to_tuple(keys[name])
+                    path = key[:-1]
+                    parent = nodes.get(path)
+                    if parent is None:
+                        parent = _node_at(self, path, nodes, owners)
+                    if isinstance(parent, TensorDictParams):
+                        parent = parent._param_td
+                    # Cast before wrapping: the cast of a Parameter is a plain
+                    # tensor, which would be registered as a buffer. Detach it so
+                    # that it is a leaf, and keep its type and requires_grad as a
+                    # load from the same device does.
+                    if parent.device is not None and val.device != parent.device:
+                        is_param = isinstance(val, nn.Parameter)
+                        requires_grad = val.requires_grad
+                        val = val.detach().to(parent.device)
+                        if is_param:
+                            val = nn.Parameter(val, requires_grad=requires_grad)
+                        else:
+                            val.requires_grad_(requires_grad)
+                    if isinstance(dest, nn.Parameter):
+                        if isinstance(val, nn.Parameter):
+                            val.requires_grad_(dest.requires_grad)
+                        else:
+                            val = nn.Parameter(val, requires_grad=dest.requires_grad)
+                    # The base's copy_ of a tensor into itself is a no-op.
+                    state_dict[prefix + name] = val
+                    parent._set_str(
+                        key[-1],
+                        val,
+                        inplace=False,
+                        # The shapes match: only a device may need a cast.
+                        validated=val.device == dest.device,
+                        ignore_lock=True,
+                        non_blocking=False,
                     )
-                if added:
-                    params = {
-                        k: v
-                        for k, v in owner._parameters.items()
-                        if v is None or (k in added and k in kept)
-                    }
-                else:
-                    params = {k: v for k, v in owner._parameters.items() if v is None}
-                buffers = {
-                    k: v for k, v in owner._buffers.items() if v is None or k in kept
-                }
-                owner._reset_params()
-                owner._parameters.update(params)
-                owner._buffers.update(buffers)
-        # A locked tensordict caches some of its reads, such as detach(), its
-        # view under vmap and the list of its leaves: erase them in the
-        # tensordicts above an assigned leaf, and in the locked tensordicts
-        # that hold those.
-        for td in nodes.values():
-            while True:
-                # Most of them are TensorDicts, which need neither check.
-                plain = type(td) is TensorDict
-                if not plain and not isinstance(td, TensorDictBase):
-                    # A tensorclass: the cache is in the tensordict it wraps.
-                    td = td._tensordict
-                # An empty cache is left alone: a tensordict below another
-                # one lists the same parents again, and setting an attribute
-                # of a TensorDictParams, an nn.Module, costs more than the
-                # check.
-                if td._cache is not None:
-                    td._erase_cache()
-                if td.is_locked:
-                    for ref in td._lock_parents_weakrefs:
-                        holder = ref()
-                        if holder is not None and holder._cache is not None:
-                            holder._erase_cache()
-                if plain or not isinstance(td, TensorDictParams):
-                    break
-                td = td._param_td
+                    register = True
+                register = True
+            finally:
+                if register:
+                    for owner in owners:
+                        # _reset_params only registers the leaves of _param_td: keep
+                        # the None entries, the non-persistent buffers that are not
+                        # leaves, and the registered names that are not leaves.
+                        kept = owner._non_persistent_buffers_set
+                        added = registered if owner is self else owner._added_names()
+                        if added:
+                            kept = kept | added
+                        if kept:
+                            kept = kept.difference(
+                                keys if owner is self else owner._leaf_keys()
+                            )
+                        if added:
+                            params = {
+                                k: v
+                                for k, v in owner._parameters.items()
+                                if v is None or (k in added and k in kept)
+                            }
+                        else:
+                            params = {
+                                k: v for k, v in owner._parameters.items() if v is None
+                            }
+                        buffers = {
+                            k: v
+                            for k, v in owner._buffers.items()
+                            if v is None or k in kept
+                        }
+                        owner._reset_params()
+                        owner._parameters.update(params)
+                        owner._buffers.update(buffers)
+                    # A locked tensordict caches some of its reads, such as detach(),
+                    # its view under vmap and the list of its leaves: erase them in
+                    # the tensordicts above an assigned leaf, and in the locked
+                    # tensordicts that hold those.
+                    for td in nodes.values():
+                        while True:
+                            # Most of them are TensorDicts, which need neither check.
+                            plain = type(td) is TensorDict
+                            if not plain and not isinstance(td, TensorDictBase):
+                                # A tensorclass: the cache is in the tensordict it
+                                # wraps.
+                                td = td._tensordict
+                            # An empty cache is left alone: a tensordict below another
+                            # one lists the same parents again, and setting an attribute
+                            # of a TensorDictParams, an nn.Module, costs more than the
+                            # check.
+                            if td._cache is not None:
+                                td._erase_cache()
+                            if td.is_locked:
+                                for ref in td._lock_parents_weakrefs:
+                                    holder = ref()
+                                    if holder is not None and holder._cache is not None:
+                                        holder._erase_cache()
+                            if plain or not isinstance(td, TensorDictParams):
+                                break
+                            td = td._param_td
         n = len(unexpected_keys)
         n_missing = len(missing_keys)
         # The base now copies each entry into the (assigned) leaf, and reports

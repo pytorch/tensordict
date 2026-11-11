@@ -19,10 +19,12 @@ from tensordict import (
     NonTensorData,
     NonTensorStack,
     PersistentTensorDict,
+    TensorClass,
     TensorDict,
 )
 from tensordict._td import _SubTensorDict
 from tensordict.base import _is_leaf_nontensor, is_tensor_collection
+from tensordict.nn import TensorDictParams
 from tensordict.utils import _NUMPY_TO_TORCH_DTYPE_DICT, is_non_tensor
 from torch import multiprocessing as mp
 from torch.utils.data import BatchSampler, DataLoader, SequentialSampler
@@ -51,6 +53,24 @@ class _CustomNonTensor:
         return isinstance(other, _CustomNonTensor)
 
 
+def _nested_source():
+    # n.y and n.m.y differ, so a write that reaches the wrong one shows
+    return TensorDict(
+        a=torch.zeros(3, 2),
+        n=TensorDict(
+            y=torch.arange(6.0).view(3, 2),
+            m=TensorDict(y=torch.zeros(3, 2), batch_size=[3]),
+            batch_size=[3],
+        ),
+        batch_size=[3],
+    )
+
+
+class _NestedData(TensorClass):
+    a: torch.Tensor
+    n: TensorDict
+
+
 try:
     import zarr
 
@@ -69,6 +89,30 @@ _ZARR_DTYPES = [
 
 @pytest.mark.skipif(not _has_zarr, reason="zarr>=3.0 not found.")
 class TestZarrRoundTrip:
+    @pytest.mark.parametrize("key", [("n", "y"), ("n", "m", "y")])
+    @pytest.mark.parametrize("method", ["set", "set_"])
+    def test_nested_set_returns_root(self, tmp_path, key, method):
+        source = TensorDict(
+            n=TensorDict(
+                y=torch.zeros(3),
+                m=TensorDict(y=torch.zeros(3), batch_size=[3]),
+                batch_size=[3],
+            ),
+            batch_size=[3],
+        )
+        td = PersistentTensorDict.from_dict(
+            source, filename=tmp_path / "nested.zarr", backend="zarr"
+        )
+        try:
+            result = getattr(td, method)(key, torch.ones(3))
+            assert result is td
+            result.set("z", torch.full((3,), 2.0))
+            torch.testing.assert_close(td[key], torch.ones(3))
+            torch.testing.assert_close(td["z"], torch.full((3,), 2.0))
+            assert "z" not in td["n"].keys()
+        finally:
+            td.close()
+
     def test_to_from_zarr(self, tmp_path):
         td = TensorDict(
             {
@@ -1313,6 +1357,61 @@ class TestZarrWriteOps:
     def test_set_replace_warns(self, ztd):
         with pytest.warns(UserWarning, match="Replacing an array"):
             ztd.set("a", torch.rand(3, 4), inplace=False)
+
+    @pytest.fixture
+    def nested_td(self, tmp_path):
+        td = PersistentTensorDict.from_dict(
+            _nested_source(), filename=tmp_path / "nested.zarr", backend="zarr"
+        )
+        try:
+            yield td
+        finally:
+            td.close()
+
+    @pytest.mark.parametrize("method", ["set", "set_"])
+    def test_nested_set_tensorclass(self, nested_td, method):
+        # before #3642, set wrote the value over n.y and set_ raised
+        tc = _NestedData.from_tensordict(nested_td)
+        result = getattr(tc, method)(("n", "m", "y"), torch.ones(3, 2))
+        assert result is tc
+        torch.testing.assert_close(nested_td["n", "m", "y"], torch.ones(3, 2))
+        torch.testing.assert_close(nested_td["n", "y"], _nested_source()["n", "y"])
+
+    def test_nested_set_params(self, nested_td):
+        params = TensorDictParams(nested_td, no_convert=True)
+        result = params.set(("n", "m", "y"), torch.ones(3, 2))
+        assert result is params
+        torch.testing.assert_close(nested_td["n", "m", "y"], torch.ones(3, 2))
+        torch.testing.assert_close(nested_td["n", "y"], _nested_source()["n", "y"])
+
+    @pytest.mark.parametrize(
+        "method,op", [("stack_tensors", torch.stack), ("cat_tensors", torch.cat)]
+    )
+    def test_nested_out_key_returns_root(self, nested_td, method, op):
+        source = _nested_source()
+        result = getattr(nested_td, method)("a", ("n", "y"), out_key=("n", "c"), dim=-1)
+        assert result is nested_td
+        torch.testing.assert_close(
+            nested_td["n", "c"], op([source["a"], source["n", "y"]], dim=-1)
+        )
+        torch.testing.assert_close(nested_td["n", "m", "y"], torch.zeros(3, 2))
+
+    def test_nested_set_locked_chain(self, nested_td):
+        # before #3642, the second set_ ran on td["n"] and raised a KeyError
+        nested_td.lock_()
+        result = nested_td.set_(("n", "y"), torch.ones(3, 2)).set_(
+            "a", torch.full((3, 2), 2.0)
+        )
+        assert result is nested_td
+        torch.testing.assert_close(nested_td["n", "y"], torch.ones(3, 2))
+        torch.testing.assert_close(nested_td["a"], torch.full((3, 2), 2.0))
+        torch.testing.assert_close(nested_td["n", "m", "y"], torch.zeros(3, 2))
+
+    def test_nested_set_inplace_returns_root(self, nested_td):
+        result = nested_td.set(("n", "y"), torch.ones(3, 2), inplace=True)
+        assert result is nested_td
+        torch.testing.assert_close(nested_td["n", "y"], torch.ones(3, 2))
+        torch.testing.assert_close(nested_td["n", "m", "y"], torch.zeros(3, 2))
 
     def test_fill_zero(self, ztd):
         ztd.fill_("a", 1.0)

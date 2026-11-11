@@ -6808,6 +6808,163 @@ class TestTensorDictParams:
         assert params.detach()["w"].data_ptr() == sd["params.w"].data_ptr()
         assert ((params + 0)["w"] == 1).all()
 
+    @pytest.mark.parametrize("locked", [False, True])
+    @pytest.mark.parametrize("layout", ["flat", "nested", "nested_params"])
+    @pytest.mark.parametrize("bad", ["int", "bool", "inference"])
+    def test_load_state_dict_assign_raises(self, bad, layout, locked):
+        # #3683: when an entry raises, the entries assigned before it are
+        # registered: parameters() and the tensordict hold the same tensors,
+        # the cached reads are current, and a later load reaches both.
+        content = {"a": torch.zeros(2), "b": torch.zeros(2)}
+        last = "b"
+        if layout != "flat":
+            sub = TensorDict(c=torch.zeros(2), d=torch.zeros(2))
+            content["sub"] = TensorDictParams(sub) if layout == "nested_params" else sub
+            last = "sub.d"
+        params = TensorDictParams(TensorDict(content))
+        module = self._parent(params)
+        if locked:
+            params.lock_()
+        # cached on a locked tensordict
+        params.detach(), params.flatten_keys()
+        names = [name for name, _ in module.named_parameters()]
+        state_dict = {name: torch.ones(2) for name in names}
+        # a value that cannot become a parameter that requires grad
+        if bad == "inference":
+            with torch.inference_mode():
+                state_dict["params." + last] = torch.ones(2)
+        else:
+            dtype = torch.int64 if bad == "int" else torch.bool
+            state_dict["params." + last] = torch.ones(2, dtype=dtype)
+        with pytest.raises(RuntimeError, match="require"):
+            module.load_state_dict(state_dict, assign=True)
+
+        def check(value):
+            named = dict(module.named_parameters())
+            assert list(named) == names
+            flat = params.flatten_keys()
+            for name in names:
+                key = tuple(name.split(".")[1:])
+                leaf = params.get(key)
+                assert leaf is named[name], name
+                assert flat[name[len("params.") :]] is leaf, name
+                assert (params.detach().get(key) == leaf).all(), name
+                if name != "params." + last:
+                    assert (leaf == value).all(), name
+            if layout == "nested_params":
+                inner = params._param_td.get("sub")
+                assert list(inner._parameters) == ["c", "d"]
+                for key, leaf in inner._parameters.items():
+                    assert leaf is inner.get(key)
+            assert all(
+                (val == named[name]).all() for name, val in module.state_dict().items()
+            )
+
+        check(1)
+        # the entry that raised keeps its tensor
+        assert (params.get(tuple(last.split("."))) == 0).all()
+        module.load_state_dict({name: torch.full((2,), 2.0) for name in names})
+        check(2)
+        assert (params.get(tuple(last.split("."))) == 2).all()
+        assert params.is_locked is locked
+
+    @pytest.mark.parametrize("locked", [False, True])
+    def test_load_state_dict_assign_raises_registered_buffer(self, locked):
+        # #3683: a value for a buffer added with register_buffer raises after
+        # the leaves were assigned. They are registered, and the buffer stays.
+        params = TensorDictParams(TensorDict(a=torch.zeros(2), b=torch.zeros(2)))
+        params.register_buffer("stats", torch.zeros(2))
+        module = self._parent(params)
+        if locked:
+            params.lock_()
+        params.detach()
+        state_dict = {
+            "params.a": torch.ones(2),
+            "params.b": torch.ones(2),
+            "params.stats": torch.ones(2),
+        }
+        with pytest.raises((KeyError, RuntimeError)):
+            module.load_state_dict(state_dict, assign=True)
+        named = dict(module.named_parameters())
+        assert list(named) == ["params.a", "params.b"]
+        for key in ("a", "b"):
+            assert params.get(key) is named["params." + key]
+            assert (params.detach().get(key) == params.get(key)).all()
+        assert [name for name, _ in module.named_buffers()] == ["params.stats"]
+        assert (params.stats == 0).all()
+        good = {"params.a": torch.full((2,), 2.0), "params.b": torch.full((2,), 2.0)}
+        module.load_state_dict(good)
+        assert (params["a"] == 2).all() and (params["b"] == 2).all()
+        assert (params.detach()["a"] == 2).all()
+
+    @pytest.mark.parametrize("leaves", [True, False])
+    @pytest.mark.parametrize("locked", [False, True])
+    def test_load_state_dict_assign_raises_first_entry(self, locked, leaves):
+        # #3683: when the first entry raises, nothing was assigned, and the
+        # module is as it was: the same tensors under the same names, with the
+        # entries that register_buffer and register_parameter added.
+        content = {"a": torch.zeros(2), "b": torch.zeros(2)} if leaves else {}
+        params = TensorDictParams(TensorDict(content))
+        params.register_buffer("stats", torch.zeros(2))
+        params.register_buffer("scratch", torch.zeros(2), persistent=False)
+        params.register_buffer("unused", None)
+        params.register_parameter("unused_p", None)
+        module = self._parent(params)
+        if locked:
+            params.lock_()
+        detached = params.detach()
+        parameters = list(params._parameters.items())
+        buffers = list(params._buffers.items())
+        if leaves:
+            # an integer tensor cannot become a parameter that requires grad
+            state_dict = {
+                "params.a": torch.ones(2, dtype=torch.int64),
+                "params.b": torch.ones(2),
+            }
+        else:
+            state_dict = {"params.stats": torch.ones(2)}
+        with pytest.raises((KeyError, RuntimeError)):
+            module.load_state_dict(state_dict, assign=True)
+        for before, after in (
+            (parameters, list(params._parameters.items())),
+            (buffers, list(params._buffers.items())),
+        ):
+            assert [name for name, _ in before] == [name for name, _ in after]
+            assert all(old is new for (_, old), (_, new) in zip(before, after))
+        assert params._non_persistent_buffers_set == {"scratch"}
+        assert all(params.get(key) is params._parameters[key] for key in content)
+        assert (params.stats == 0).all()
+        if locked:
+            assert params.detach() is detached
+
+    @pytest.mark.parametrize("locked", [False, True])
+    def test_load_state_dict_assign_raises_swap(self, locked):
+        # With torch's swap_module_params_on_conversion flag, nn.Module swaps
+        # the values in: an entry that raises is reported with the other
+        # errors, and the tensordict and parameters() keep the same tensors.
+        params = TensorDictParams(TensorDict(a=torch.zeros(2), b=torch.zeros(2)))
+        module = self._parent(params)
+        if locked:
+            params.lock_()
+        before = dict(module.named_parameters())
+        state_dict = {
+            "params.a": torch.ones(2),
+            "params.b": torch.ones(2, dtype=torch.int64),
+        }
+        prev = torch.__future__.get_swap_module_params_on_conversion()
+        torch.__future__.set_swap_module_params_on_conversion(True)
+        try:
+            with pytest.raises(RuntimeError, match="Error.s. in loading state_dict"):
+                module.load_state_dict(state_dict, assign=True)
+        finally:
+            torch.__future__.set_swap_module_params_on_conversion(prev)
+        named = dict(module.named_parameters())
+        assert list(named) == ["params.a", "params.b"]
+        for key in ("a", "b"):
+            assert named["params." + key] is before["params." + key]
+            assert params.get(key) is named["params." + key]
+        assert (params["a"] == 1).all() and (params["b"] == 0).all()
+
     @pytest.mark.parametrize("assign", [True, False])
     @pytest.mark.parametrize("lock", [None, "lock_", "content", "parent"])
     def test_load_state_dict_locked_reads(self, lock, assign):
