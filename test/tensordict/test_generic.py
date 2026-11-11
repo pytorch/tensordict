@@ -221,6 +221,11 @@ class _LazyStackPoint:
     x: torch.Tensor
 
 
+@tensorclass
+class _LazyStackHolder:
+    held: TensorDictBase
+
+
 def _save_and_load(data, save):
     # A copy of data made with pickle, with torch.save, or with the pickler of
     # the multiprocessing queues and pipes (test_pickle_in_*_block)
@@ -1876,6 +1881,125 @@ class TestGeneric:
             pass
         assert type(td["points"]) is _LazyStackPoint
         assert type(td["points"][0]) is _LazyStackPoint
+
+    @pytest.mark.parametrize("device", ["cpu", "meta"])
+    @pytest.mark.parametrize(
+        "layout",
+        [
+            "entry",
+            "nested",
+            "tensorclass",
+            "tensorclass_members",
+            "nested_members",
+            "consolidated",
+        ],
+    )
+    def test_to_inplace_ragged_lazy_stack(self, layout, device):
+        # #3701: to(device, inplace=True) raised "Failed to stack tensors"
+        # when the tensordict held a lazy stack whose members differ in
+        # shape, and left td.device on the new device with no leaf moved. The
+        # tensordict has no device, so "cpu" is a change of device too.
+        if layout == "tensorclass_members":
+            members = [
+                _LazyStackPoint(x=torch.zeros(3)),
+                _LazyStackPoint(x=torch.ones(4)),
+            ]
+        elif layout == "nested_members":
+            members = [
+                TensorDict(x=torch.zeros(3), n=TensorDict(y=torch.zeros(5)), t="a"),
+                TensorDict(x=torch.ones(4), n=TensorDict(y=torch.ones(6)), t="b"),
+            ]
+        else:
+            members = [TensorDict(x=torch.zeros(3)), TensorDict(x=torch.ones(4))]
+        stack = lazy_stack(members)
+        if layout == "nested":
+            stack = TensorDict(held=stack, batch_size=[2])
+        elif layout == "tensorclass":
+            stack = _LazyStackHolder(held=stack, batch_size=[2])
+        td = TensorDict(a=torch.arange(2.0), s=stack, batch_size=[2])
+        if layout == "consolidated":
+            td = td.consolidate()
+        result = td.to(device, inplace=True)
+        device = torch.device(device)
+        assert result is td
+        assert td.device == device
+        assert td["a"].device == device
+        assert td.is_locked == (layout == "consolidated")
+        assert td.is_consolidated() == (layout == "consolidated")
+        stack = td["s"]
+        assert stack.device == device
+        if layout == "nested":
+            stack = stack["held"]
+        elif layout == "tensorclass":
+            assert type(stack) is _LazyStackHolder
+            stack = stack.held
+        elif layout == "tensorclass_members":
+            assert type(stack) is _LazyStackPoint
+            stack = stack._tensordict
+        assert type(stack) is LazyStackedTensorDict
+        for i, member in enumerate(stack.tensordicts):
+            assert member.device == device
+            leaves = [member["x"]]
+            if layout == "nested_members":
+                assert member["n"].device == device
+                assert member["t"] == "ab"[i]
+                leaves.append(member["n", "y"])
+            for leaf, length in zip(leaves, (3 + i, 5 + i), strict=False):
+                assert leaf.device == device
+                assert leaf.shape == (length,)
+                if device.type != "meta":
+                    assert (leaf == i).all()
+
+    @pytest.mark.parametrize("device", ["cpu", "meta"])
+    def test_to_inplace_lazy_stack_unbatched_does_not_warn(self, device):
+        # #3701: this call returned, with a UserWarning that the walk over
+        # the nested tensordicts raised when it read the stacked entry:
+        # "Stacking UnbatchedTensors with different data storage. Only the
+        # first element's data will be kept". The call stacks nothing, and
+        # each member keeps its own data.
+        members = [
+            TensorDict(
+                u=tensordict.UnbatchedTensor(torch.full((5,), float(i))),
+                x=torch.zeros(3),
+            )
+            for i in range(2)
+        ]
+        td = TensorDict(a=torch.zeros(2), s=lazy_stack(members), batch_size=[2])
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            result = td.to(device, inplace=True)
+        device = torch.device(device)
+        assert result is td
+        assert td.device == device
+        assert td["a"].device == device
+        for i, member in enumerate(td["s"].tensordicts):
+            assert member.device == device
+            assert member["x"].device == device
+            unbatched = member.get("u")
+            assert type(unbatched) is tensordict.UnbatchedTensor
+            assert unbatched.device == device
+            assert unbatched.data.device == device
+            if device.type != "meta":
+                assert (unbatched.data == i).all()
+
+    def test_to_inplace_non_tensor_stack_and_params_keep_device(self):
+        # #3701: the entries whose device the in-place to does not set are
+        # left as they were
+        td = TensorDict(
+            a=torch.zeros(2),
+            nt=NonTensorStack("a", "b"),
+            p=TensorDictParams(TensorDict(b=torch.zeros(2), batch_size=[2])),
+            batch_size=[2],
+        )
+        params = td["p"]
+        assert td.to("meta", inplace=True) is td
+        assert td.device == torch.device("meta")
+        assert td["a"].device == torch.device("meta")
+        assert type(td.get("nt")) is NonTensorStack
+        assert td.get("nt").device is None
+        assert td["nt"] == ["a", "b"]
+        assert td["p"] is params
+        assert params.device is None
 
     def test_consolidate_to_inplace_locked_raises(self):
         # A tensordict that the user locked keeps raising

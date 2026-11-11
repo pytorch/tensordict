@@ -1836,6 +1836,29 @@ def _is_leaf_written(cls: Type) -> bool:
     return issubclass(cls, torch.Tensor)
 
 
+def _nested_nodes(td: TensorDictBase) -> Iterator[TensorCollection]:
+    """Yields the nested tensor collections of ``td`` that are not inside a lazy stack.
+
+    ``td.values(True, True, is_leaf=_is_tensor_collection)`` yields the same
+    nodes and, below a lazy stack, the stacked entries of its members. It has
+    to read those, which raises for members of different shapes (#3701). They
+    are built on the fly, so a walk that sets an attribute of each node has
+    no use for them.
+    """
+    if type(td) is not _TENSORDICT_TYPE:
+        yield from td.values(True, True, is_leaf=_is_tensor_collection)
+        return
+    for value in td._tensordict.values():
+        if not _is_tensor_collection(type(value)):
+            continue
+        yield value
+        if _pass_through(value):
+            continue
+        node = value._tensordict if is_tensorclass(value) else value
+        if not node._lazy:
+            yield from _nested_nodes(node)
+
+
 def _skip_non_tensor_dest(fn: Callable) -> Callable:
     """Wraps the function of a walk of ``update_`` under a nested tensordict that the destination lacks.
 
@@ -10040,7 +10063,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 else:
                     device = torch.device(device)
                     out._device = device
-                    for node in out.values(True, True, is_leaf=_is_tensor_collection):
+                    for node in _nested_nodes(out):
                         if is_tensorclass(node):
                             node._tensordict._device = device
                         else:
