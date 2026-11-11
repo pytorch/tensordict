@@ -702,12 +702,15 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         n_params, n_buffers = counts
         if len(self._parameters) <= n_params and len(self._buffers) <= n_buffers:
             return None
+        # A non-persistent buffer has no key in a state dict, and the load
+        # keeps it already: leave it out, so that the load takes the plain path.
+        non_persistent = self._non_persistent_buffers_set
         return {
             name
             for names, n in ((self._parameters, n_params), (self._buffers, n_buffers))
             for name in islice(names, n, None)
-            if "." not in name
-        }
+            if "." not in name and name not in non_persistent
+        } or None
 
     def _reset_params(self, params: dict | None = None, buffers: dict | None = None):
         parameters = self._param_td
