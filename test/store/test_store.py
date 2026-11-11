@@ -195,6 +195,24 @@ def _assert_store_matches(store, expected):
             torch.testing.assert_close(element[key], expected[i][key])
 
 
+def _nested_source():
+    # n.y and n.m.y differ, so a write that reaches the wrong one shows
+    return TensorDict(
+        a=torch.zeros(10, 2),
+        n=TensorDict(
+            y=torch.arange(20.0).view(10, 2),
+            m=TensorDict(y=torch.zeros(10, 2), batch_size=[10]),
+            batch_size=[10],
+        ),
+        batch_size=[10],
+    )
+
+
+class _NestedData(TensorClass):
+    a: torch.Tensor
+    n: TensorDict
+
+
 class TestTensorDictStore:
     """Tests for TensorDictStore requiring a running store server."""
 
@@ -229,6 +247,49 @@ class TestTensorDictStore:
         torch.testing.assert_close(store_td[key], expected)
         torch.testing.assert_close(store_td["z"], torch.full((10,), 2.0))
         assert "z" not in store_td["n"].keys()
+
+    @pytest.fixture
+    def nested_td(self, store_td):
+        store_td.update(_nested_source())
+        return store_td
+
+    @pytest.mark.parametrize("method", ["set", "set_"])
+    def test_nested_set_tensorclass(self, nested_td, method):
+        # before #3642, set wrote the value over n.y and set_ raised
+        tc = _NestedData.from_tensordict(nested_td)
+        result = getattr(tc, method)(("n", "m", "y"), torch.ones(10, 2))
+        assert result is tc
+        torch.testing.assert_close(nested_td["n", "m", "y"], torch.ones(10, 2))
+        torch.testing.assert_close(nested_td["n", "y"], _nested_source()["n", "y"])
+
+    @pytest.mark.parametrize(
+        "method,op", [("stack_tensors", torch.stack), ("cat_tensors", torch.cat)]
+    )
+    def test_nested_out_key_returns_root(self, nested_td, method, op):
+        source = _nested_source()
+        result = getattr(nested_td, method)("a", ("n", "y"), out_key=("n", "c"), dim=-1)
+        assert result is nested_td
+        torch.testing.assert_close(
+            nested_td["n", "c"], op([source["a"], source["n", "y"]], dim=-1)
+        )
+        torch.testing.assert_close(nested_td["n", "m", "y"], torch.zeros(10, 2))
+
+    def test_nested_set_locked_chain(self, nested_td):
+        # before #3642, the second set_ ran on td["n"] and raised a KeyError
+        nested_td.lock_()
+        result = nested_td.set_(("n", "y"), torch.ones(10, 2)).set_(
+            "a", torch.full((10, 2), 2.0)
+        )
+        assert result is nested_td
+        torch.testing.assert_close(nested_td["n", "y"], torch.ones(10, 2))
+        torch.testing.assert_close(nested_td["a"], torch.full((10, 2), 2.0))
+        torch.testing.assert_close(nested_td["n", "m", "y"], torch.zeros(10, 2))
+
+    def test_nested_set_inplace_returns_root(self, nested_td):
+        result = nested_td.set(("n", "y"), torch.ones(10, 2), inplace=True)
+        assert result is nested_td
+        torch.testing.assert_close(nested_td["n", "y"], torch.ones(10, 2))
+        torch.testing.assert_close(nested_td["n", "m", "y"], torch.zeros(10, 2))
 
     def test_basic_set_get(self, store_td):
         """Store and retrieve a tensor."""
