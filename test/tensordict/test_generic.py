@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import abc
 import argparse
 import asyncio
 import contextlib
@@ -29,6 +30,7 @@ import weakref
 from collections import defaultdict, namedtuple, OrderedDict, UserDict
 from copy import deepcopy
 from dataclasses import dataclass, field
+from multiprocessing.reduction import ForkingPickler
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, get_type_hints
@@ -212,6 +214,19 @@ def _leaf_storage(td, key):
 class _AppendMemmapRows:
     x: torch.Tensor
     label: str
+
+
+def _save_and_load(data, save):
+    # A copy of data made with pickle, with torch.save, or with the pickler of
+    # the multiprocessing queues and pipes (test_pickle_in_*_block)
+    if save == "pickle":
+        return pickle.loads(pickle.dumps(data))
+    if save == "ForkingPickler":
+        return pickle.loads(ForkingPickler.dumps(data))
+    buffer = io.BytesIO()
+    torch.save(data, buffer)
+    buffer.seek(0)
+    return torch.load(buffer, weights_only=False)
 
 
 class TestGeneric:
@@ -1956,6 +1971,115 @@ class TestGeneric:
         result = pickle.loads(pickle.dumps(td))
         assert result.names == ["x", "y"]
         assert result[0]["b"].names == ["y"]
+
+    @pytest.mark.parametrize("save", ["pickle", "torch.save", "ForkingPickler"])
+    @pytest.mark.parametrize(
+        "kind",
+        [
+            "td",
+            "tensorclass",
+            "lazy_stack",
+            pytest.param(
+                "h5",
+                marks=pytest.mark.skipif(not _has_h5py, reason="h5py not installed"),
+            ),
+        ],
+    )
+    def test_pickle_in_lock_block(self, kind, save, tmp_path):
+        # #3578: a tensor collection can be pickled inside its own
+        # `with data.unlock_():` or `with data.lock_():` block. The copy is in
+        # no block, and the block of the original still ends as it should.
+        x = torch.arange(3.0)
+        if kind == "td":
+            data = TensorDict(x=x, batch_size=[3])
+        elif kind == "tensorclass":
+            data = _AppendMemmapRows(x=x, label="a", batch_size=[3])
+        elif kind == "lazy_stack":
+            data = lazy_stack([TensorDict(x=x), TensorDict(x=x + 1)])
+            x = torch.stack([x, x + 1])
+        else:
+            data = PersistentTensorDict.from_dict(
+                {"x": x}, filename=tmp_path / "td.h5", batch_size=[3]
+            )
+        copies = []
+        try:
+            data.lock_()
+            with data.unlock_():
+                copy = _save_and_load(data, save)
+                copies.append(copy)
+                assert type(copy) is type(data)
+                assert not copy.is_locked
+                torch.testing.assert_close(copy.get("x"), x)
+                with copy.lock_():
+                    assert copy.is_locked
+                assert not copy.is_locked
+            assert data.is_locked
+            data.unlock_()
+            with data.lock_():
+                copy = _save_and_load(data, save)
+                copies.append(copy)
+                assert copy.is_locked
+                torch.testing.assert_close(copy.get("x"), x)
+                with copy.unlock_():
+                    assert not copy.is_locked
+                assert copy.is_locked
+            assert not data.is_locked
+            # outside a block, as before
+            copy = _save_and_load(data, save)
+            copies.append(copy)
+            assert not copy.is_locked
+            torch.testing.assert_close(copy.get("x"), x)
+        finally:
+            if kind == "h5":
+                for td in (data, *copies):
+                    td.close()
+
+    @pytest.mark.parametrize("save", ["pickle", "torch.save", "ForkingPickler"])
+    @pytest.mark.parametrize(
+        "op",
+        [
+            lambda td: td.flatten_keys(),
+            lambda td: td.view(-1),
+            lambda td: td.to(torch.float64),
+        ],
+        ids=["flatten_keys", "view", "to"],
+    )
+    def test_pickle_in_write_back_block(self, op, save):
+        # #3578: the result of an operation can be pickled inside the block
+        # that writes it back, and the block still writes it back.
+        td = TensorDict(
+            a=torch.zeros(3, 4),
+            n=TensorDict(b=torch.zeros(3, 4), batch_size=[3, 4]),
+            batch_size=[3, 4],
+        )
+        with op(td) as other:
+            copy = _save_and_load(other, save)
+            assert copy.batch_size == other.batch_size
+            assert_allclose_td(copy, other)
+            for key in list(other.keys(True, True)):
+                other[key] = other[key] + 1
+            with copy.lock_():
+                assert copy.is_locked
+            assert not copy.is_locked
+        assert (td == 1).all()
+        assert (copy == 0).all()
+
+    @pytest.mark.parametrize("save", ["pickle", "torch.save", "ForkingPickler"])
+    def test_pickle_in_to_module_block(self, save):
+        # #3578: `with params.to_module(module) as swapped:` is a block of the
+        # tensordict that to_module returns, which holds the parameters that
+        # the module had. It can be pickled inside the block.
+        module = nn.Linear(2, 2)
+        weight = module.weight.detach().clone()
+        params = TensorDict.from_module(module).data.clone().zero_()
+        with params.to_module(module) as swapped:
+            assert (module.weight == 0).all()
+            copy = _save_and_load(swapped, save)
+            torch.testing.assert_close(copy["weight"].data, weight)
+            torch.testing.assert_close(
+                _save_and_load(params, save)["weight"], params["weight"]
+            )
+        torch.testing.assert_close(module.weight.data, weight)
 
     def test_to_device_batch_size_nested_only(self):
         # When the device changes and the root holds only nested tensordicts,
@@ -4834,6 +4958,400 @@ class TestGeneric:
             with pytest.raises(RuntimeError, match="batch dimension mismatch"):
                 update()
         assert (tc.a == 0).all()
+
+    def test_is_accepted_class_matches_issubclass(self, monkeypatch):
+        # #3569: _is_accepted_class memoizes issubclass(cls, _ACCEPTED_CLASSES).
+        # It returns what that call returns for every class, also after the
+        # accepted classes change.
+        is_accepted = tensordict_base._is_accepted_class
+
+        def check(*classes):
+            for cls in classes:
+                expected = issubclass(cls, tensordict_base._ACCEPTED_CLASSES)
+                # a first check, then a memoized one
+                assert is_accepted(cls) is expected, cls
+                assert is_accepted(cls) is expected, cls
+
+        @dataclass
+        class Data:
+            x: int
+
+        class SubTensor(torch.Tensor):
+            pass
+
+        class SubTensorDict(TensorDict):
+            pass
+
+        @tensorclass
+        class EarlyTensorClass:
+            x: torch.Tensor
+
+        zoo = [
+            torch.Tensor,
+            nn.Parameter,
+            nn.Buffer,
+            MemoryMappedTensor,
+            tensordict.UnbatchedTensor,
+            tensordict_base.ftdim.Tensor,
+            SubTensor,
+            TensorDictBase,
+            TensorDict,
+            SubTensorDict,
+            _SubTensorDict,
+            LazyStackedTensorDict,
+            PersistentTensorDict,
+            TensorDictParams,
+            TypedTensorDict,
+            TensorClass,
+            EarlyTensorClass,
+            NonTensorData,
+            NonTensorStack,
+            MetaData,
+            np.ndarray,
+            np.float32,
+            np.float64,
+            np.int64,
+            np.bool_,
+            float,
+            int,
+            bool,
+            complex,
+            str,
+            bytes,
+            list,
+            tuple,
+            dict,
+            set,
+            type(None),
+            object,
+            Data,
+            namedtuple("Point", "x y"),
+        ]
+        check(*zoo)
+        # only the classes that is_tensor_collection has seen are memoized
+        for cls in zoo:
+            is_tensor_collection(cls)
+        check(*zoo)
+        accepted = [cls for cls in zoo if is_accepted(cls)]
+        assert torch.Tensor in accepted and TensorDict in accepted
+        assert EarlyTensorClass in accepted and float not in accepted
+
+        # classes that are defined, and registered, after the first checks
+        @tensorclass
+        class LateTensorClass:
+            x: torch.Tensor
+
+        class LateTensorClassSub(TensorClass):
+            x: torch.Tensor
+
+        class LateTyped(TypedTensorDict):
+            x: torch.Tensor
+
+        late = [LateTensorClass, LateTensorClassSub, LateTyped]
+        check(*late, *zoo)
+        assert all(is_accepted(cls) for cls in late)
+
+        # a class that becomes accepted, and is not any more
+        class Late:
+            pass
+
+        is_tensor_collection(Late)
+        check(Late)
+        assert not is_accepted(Late)
+        with monkeypatch.context() as m:
+            m.setattr(
+                tensordict_base,
+                "_ACCEPTED_CLASSES",
+                (*tensordict_base._ACCEPTED_CLASSES, Late),
+            )
+            check(Late, *zoo)
+            assert is_accepted(Late)
+        check(Late, *zoo)
+        assert not is_accepted(Late)
+
+        # a class that is registered as a virtual subclass after its first check
+        class Virtual:
+            pass
+
+        LocalABC = abc.ABCMeta("LocalABC", (), {})
+        is_tensor_collection(Virtual)
+        with monkeypatch.context() as m:
+            m.setattr(
+                tensordict_base,
+                "_ACCEPTED_CLASSES",
+                (*tensordict_base._ACCEPTED_CLASSES, LocalABC),
+            )
+            check(Virtual)
+            assert not is_accepted(Virtual)
+            LocalABC.register(Virtual)
+            check(Virtual, *zoo)
+            assert is_accepted(Virtual)
+
+        # a class with a metaclass is checked without the memo: issubclass
+        # accepts a Tensor subclass that cannot be hashed when Tensor comes
+        # before every ABC in the tuple, and raises when an ABC, which hashes
+        # the class, comes first
+        class UnhashableMeta(type(torch.Tensor)):
+            def __eq__(cls, other):
+                return cls is other
+
+        class UnhashableTensor(torch.Tensor, metaclass=UnhashableMeta):
+            pass
+
+        class RaisingHashMeta(type(torch.Tensor)):
+            def __eq__(cls, other):
+                return cls is other
+
+            def __hash__(cls):
+                raise ValueError("no hash")
+
+        class RaisingHashTensor(torch.Tensor, metaclass=RaisingHashMeta):
+            pass
+
+        # issubclass reads no attribute of the metaclass
+        class NoReadMetaMeta(type):
+            def __getattribute__(cls, name):
+                if name == "__hash__":
+                    raise RuntimeError("no attribute read")
+                return super().__getattribute__(name)
+
+        class NoReadMeta(type(torch.Tensor), metaclass=NoReadMetaMeta):
+            pass
+
+        class NoReadTensor(torch.Tensor, metaclass=NoReadMeta):
+            pass
+
+        def outcome(func, *args):
+            try:
+                return func(*args)
+            except (TypeError, ValueError) as err:
+                return str(err)
+
+        others = [
+            cls for cls in tensordict_base._ACCEPTED_CLASSES if cls is not torch.Tensor
+        ]
+        for classes in ((torch.Tensor, *others), (*others, torch.Tensor)):
+            with monkeypatch.context() as m:
+                m.setattr(tensordict_base, "_ACCEPTED_CLASSES", classes)
+                for cls in (UnhashableTensor, RaisingHashTensor, NoReadTensor):
+                    expected = outcome(issubclass, cls, classes)
+                    assert classes[0] is not torch.Tensor or expected is True
+                    for _ in range(2):
+                        assert outcome(is_accepted, cls) == expected
+
+        # two classes that hash and compare equal through their metaclasses
+        # do not share a result, whichever is checked first, also when the
+        # __hash__ attribute of the metaclasses reads as the one of type
+        class EqualMeta:
+            def __eq__(cls, other):
+                return isinstance(other, EqualMeta)
+
+            def __hash__(cls):
+                return 0
+
+        class LyingMetaMeta(type):
+            def __getattribute__(cls, name):
+                if name == "__hash__":
+                    return type.__hash__
+                return super().__getattribute__(name)
+
+        for metameta in (type, LyingMetaMeta):
+
+            class EqualTensorMeta(EqualMeta, type(torch.Tensor), metaclass=metameta):
+                pass
+
+            class EqualPlainMeta(EqualMeta, type, metaclass=metameta):
+                pass
+
+            for tensor_first in (True, False):
+
+                class EqualTensor(torch.Tensor, metaclass=EqualTensorMeta):
+                    pass
+
+                class EqualPlain(metaclass=EqualPlainMeta):
+                    pass
+
+                assert EqualTensor == EqualPlain
+                assert hash(EqualTensor) == hash(EqualPlain)
+                pair = [EqualTensor, EqualPlain]
+                if not tensor_first:
+                    pair.reverse()
+                # as a write of a value of each class does before the check
+                for cls in pair:
+                    is_tensor_collection(cls)
+                check(*pair, *pair)
+                assert is_accepted(EqualTensor) and not is_accepted(EqualPlain)
+
+    def test_is_accepted_class_follows_bases_and_metaclasses(self, monkeypatch):
+        # #3569: _is_accepted_class gives what issubclass gives after the
+        # __bases__ of a checked class, or of one of its ancestors, are
+        # reassigned, and while an accepted class has a metaclass whose
+        # __subclasscheck__ answers from state of its own, in both directions.
+        is_accepted = tensordict_base._is_accepted_class
+
+        def check(*classes):
+            out = []
+            for cls in classes:
+                # as a write of a value of the class does before the check
+                is_tensor_collection(cls)
+                expected = issubclass(cls, tensordict_base._ACCEPTED_CLASSES)
+                assert is_accepted(cls) is expected, cls
+                assert is_accepted(cls) is expected, cls
+                out.append(expected)
+            return out
+
+        @tensorclass
+        class Base:
+            x: torch.Tensor
+
+        class Plain:
+            pass
+
+        class ToTensorClass(Plain):
+            pass
+
+        class FromTensorClass(Base):
+            pass
+
+        class Ancestor(Plain):
+            pass
+
+        class Descendant(Ancestor):
+            pass
+
+        classes = (ToTensorClass, FromTensorClass, Descendant)
+        assert check(*classes) == [False, True, False]
+        ToTensorClass.__bases__ = (Base,)
+        FromTensorClass.__bases__ = (Plain,)
+        Ancestor.__bases__ = (Base,)
+        assert check(*classes) == [True, False, True]
+        ToTensorClass.__bases__ = (Plain,)
+        FromTensorClass.__bases__ = (Base,)
+        Ancestor.__bases__ = (Plain,)
+        assert check(*classes) == [False, True, False]
+
+        class RegistryMeta(type):
+            registry = set()
+
+            def __subclasscheck__(cls, subclass):
+                return subclass in RegistryMeta.registry or type.__subclasscheck__(
+                    cls, subclass
+                )
+
+        Registered = RegistryMeta("Registered", (), {})
+
+        class Joins:
+            pass
+
+        class Leaves:
+            pass
+
+        RegistryMeta.registry.add(Leaves)
+        with monkeypatch.context() as m:
+            m.setattr(
+                tensordict_base,
+                "_ACCEPTED_CLASSES",
+                (*tensordict_base._ACCEPTED_CLASSES, Registered),
+            )
+            assert check(Joins, Leaves) == [False, True]
+            RegistryMeta.registry.add(Joins)
+            RegistryMeta.registry.discard(Leaves)
+            assert check(Joins, Leaves) == [True, False]
+
+    def test_is_accepted_class_keeps_no_class_alive(self):
+        # #3569: the memo of _is_accepted_class does not keep alive a class
+        # that is created at run time.
+        class Local:
+            pass
+
+        ref = weakref.ref(Local)
+        assert not tensordict_base._is_accepted_class(Local)
+        assert not tensordict_base._is_accepted_class(Local)
+        del Local
+        gc.collect()
+        assert ref() is None
+
+    def test_write_value_class_checked_once(self, monkeypatch):
+        # #3569: a write of a float, an int, a bool, an array or a string
+        # tested the class of the value against each of the accepted classes
+        # (22 or more, most of them ABCs) at every call. The result is
+        # memoized.
+        td = TensorDict(a=torch.zeros(3))
+        array = np.zeros(3, dtype=np.float32)
+        writes = [
+            lambda: td.set("x", 1.0),
+            lambda: td.set("n", array),
+            lambda: td.set("s", "a string"),
+            lambda: td.update({"x": 2.0, "s": "another"}),
+            lambda: TensorDict({"a": 1.0, "b": 2, "c": True}),
+            lambda: tensordict_base._is_accepted_class(float),
+        ]
+        for write in writes:
+            write()
+        value_classes = (float, int, bool, np.ndarray, str)
+        accepted_classes = tensordict_base._ACCEPTED_CLASSES
+        calls = []
+        subclasscheck = abc.ABCMeta.__subclasscheck__
+
+        def recorded_subclasscheck(cls, subclass):
+            if subclass in value_classes and cls in accepted_classes:
+                calls.append((cls, subclass))
+            return subclasscheck(cls, subclass)
+
+        monkeypatch.setattr(abc.ABCMeta, "__subclasscheck__", recorded_subclasscheck)
+        for write in writes:
+            write()
+        monkeypatch.undo()
+        assert not calls
+
+    def test_write_scalar_array_and_row_values(self):
+        # #3569: the values that these writes store, which the memo of
+        # _is_accepted_class must not change.
+        for _ in range(2):
+            td = TensorDict(a=torch.zeros(3))
+            td.set("x", 1.0)
+            td.set("i", 2)
+            td.set("n", np.arange(3, dtype=np.float64))
+            td.set("s", "a string")
+            assert type(td.get("x")) is torch.Tensor
+            assert td["x"].dtype == torch.float32 and td["x"].shape == ()
+            assert td["x"] == 1.0
+            assert td["i"].dtype == torch.int64 and td["i"] == 2
+            assert td["n"].dtype == torch.float64
+            assert td["n"].tolist() == [0.0, 1.0, 2.0]
+            assert isinstance(td.get("s"), NonTensorData) and td["s"] == "a string"
+            td = TensorDict({"a": 1.0, "b": 2, "c": True})
+            assert list(td.keys()) == ["a", "b", "c"]
+            assert td.batch_size == ()
+            assert [td[key].dtype for key in "abc"] == [
+                torch.float32,
+                torch.int64,
+                torch.bool,
+            ]
+            assert [td[key].item() for key in "abc"] == [1.0, 2, True]
+
+            td = TensorDict(
+                obs=torch.zeros(4, 3),
+                done=torch.zeros(4, 1, dtype=torch.bool),
+                param=torch.zeros(4, 2),
+                next=TensorDict(reward=torch.zeros(4, 1), batch_size=[4]),
+                batch_size=[4],
+            )
+            row = TensorDict(
+                obs=torch.ones(3),
+                done=torch.ones(1, dtype=torch.bool),
+                param=nn.Parameter(torch.ones(2)),
+                next=TensorDict(reward=torch.full((1,), 2.0)),
+            )
+            obs = td["obs"]
+            assert td.update_at_(row, 0) is td
+            assert td["obs"] is obs
+            assert td["obs"].tolist() == [[1.0] * 3, [0.0] * 3, [0.0] * 3, [0.0] * 3]
+            assert td["done"].dtype == torch.bool
+            assert td["done"].squeeze(-1).tolist() == [True, False, False, False]
+            assert type(td.get("param")) is torch.Tensor
+            assert td["param"].sum(-1).tolist() == [2.0, 0.0, 0.0, 0.0]
+            assert td["next", "reward"].squeeze(-1).tolist() == [2.0, 0.0, 0.0, 0.0]
 
     @pytest.mark.parametrize(
         "kwargs",
@@ -8128,6 +8646,24 @@ class TestGeneric:
         assert td_load.names == td.names
         assert (td_load == td).all()
 
+    @pytest.mark.parametrize("inside", [False, True])
+    def test_torch_load_weights_only_with_block(self, inside, tmpdir):
+        # #3578: the save of a tensordict that is, or has been, the subject of
+        # a with block does not hold the records of its blocks (a deque, which
+        # weights_only=True does not load).
+        td = TensorDict(a=torch.arange(3.0), batch_size=[3]).lock_()
+        filename = Path(tmpdir) / "td.pt"
+        with td.unlock_():
+            td["b"] = torch.ones(3)
+            if inside:
+                torch.save(td, filename)
+        if not inside:
+            torch.save(td, filename)
+        td_load = torch.load(filename, weights_only=True)
+        assert type(td_load) is TensorDict
+        assert td_load.is_locked is not inside
+        assert (td_load == td).all()
+
     @pytest.mark.parametrize(
         "method,kwargs",
         [
@@ -9318,6 +9854,188 @@ class TestGeneric:
             == torch.empty(3, 4).repeat_interleave(repeats, dim=dim).shape
         )
         assert (out == ref).all()
+
+    @pytest.mark.parametrize("lazy", [False, True])
+    @pytest.mark.parametrize(
+        "integer", [np.int64, np.int32, np.intp], ids=["int64", "int32", "intp"]
+    )
+    @pytest.mark.parametrize(
+        "call",
+        [
+            lambda td, i: td.repeat_interleave(i(2), 0),
+            lambda td, i: td.repeat_interleave(i(2), dim=i(-1)),
+            lambda td, i: td.repeat_interleave(i(2)),
+            lambda td, i: torch.repeat_interleave(td, i(2), 0),
+            lambda td, i: td.roll(1, i(0)),
+            lambda td, i: td.roll(i(1), dims=i(-1)),
+            lambda td, i: torch.roll(td, 1, i(1)),
+            lambda td, i: td.flip(i(1)),
+            lambda td, i: td.movedim(i(0), i(1)),
+            lambda td, i: td.tile(i(2)),
+            lambda td, i: td.tensor_split(i(2), i(1)),
+        ],
+        ids=[
+            "repeat_interleave",
+            "repeat_interleave-negative_dim",
+            "repeat_interleave-no_dim",
+            "torch.repeat_interleave",
+            "roll",
+            "roll-negative_dim",
+            "torch.roll",
+            "flip",
+            "movedim",
+            "tile",
+            "tensor_split",
+        ],
+    )
+    def test_numpy_integer_count_and_dim(self, call, integer, lazy):
+        # #3586: a NumPy integer as a count or a dim gives what the Python int
+        # gives, with the batch size that the leaves have
+        def build():
+            td = self._build_nested_td()
+            return lazy_stack(td.unbind(0)) if lazy else td
+
+        out, ref = call(build(), integer), call(build(), int)
+        if not isinstance(out, tuple):
+            out, ref = (out,), (ref,)
+        assert len(out) == len(ref)
+        for o, r in zip(out, ref):
+            assert type(o) is type(r)
+            assert o.batch_size == r.batch_size
+            assert o["a"].shape[: o.batch_dims] == o.batch_size
+            assert o["nested"].batch_size == o.batch_size
+            assert (o == r).all()
+
+    @pytest.mark.parametrize(
+        "integer", [np.int64, np.int32, np.intp], ids=["int64", "int32", "intp"]
+    )
+    def test_numpy_integer_count_and_dim_inplace(self, integer):
+        # #3586: as above, with inplace=True
+        td = self._build_nested_td()
+        ref = self._build_nested_td().repeat_interleave(2, 0)
+        assert td.repeat_interleave(integer(2), 0, inplace=True) is td
+        assert td.batch_size == td["nested"].batch_size == torch.Size([6, 4])
+        assert (td == ref).all()
+        ref = td.roll(1, 1)
+        assert td.roll(1, integer(1), inplace=True) is td
+        assert (td == ref).all()
+
+    @pytest.mark.parametrize(
+        "dtype",
+        [torch.int64, torch.int32, torch.uint8],
+        ids=["int64", "int32", "uint8"],
+    )
+    def test_split_zero_dim_tensor(self, dtype):
+        # #3586: a 0-d integer tensor is the size of each piece, as for
+        # torch.split
+        td = self._build_nested_td()
+        out = td.split(torch.tensor(3, dtype=dtype), 1)
+        ref = td.split(3, 1)
+        assert [o.batch_size for o in out] == [(3, 3), (3, 1)]
+        assert all((o == r).all() for o, r in zip(out, ref, strict=True))
+        assert all(
+            (o == r).all()
+            for o, r in zip(torch.split(td, torch.tensor(3, dtype=dtype), 1), ref)
+        )
+
+    @pytest.mark.parametrize("size", [0, -1])
+    def test_split_zero_dim_tensor_not_positive(self, size):
+        # #3586: a 0-d tensor that is not a positive size raises TypeError,
+        # as before
+        td = self._build_nested_td()
+        with pytest.raises(TypeError, match="must be int or list of ints"):
+            td.split(torch.tensor(size), 1)
+        with pytest.raises(TypeError, match="must be int or list of ints"):
+            lazy_stack(td.unbind(0)).split(torch.tensor(size), 1)
+
+    def test_numpy_integer_count_zero(self):
+        # #3586: a NumPy count of 0 gives what the int 0 gives, except along
+        # the stack dim of a lazy stack, which keeps no members: there it
+        # raises TypeError, as before, rather than lose the inner batch dims
+        td = self._build_nested_td()
+        out, ref = td.repeat_interleave(np.int64(0), 1), td.repeat_interleave(0, 1)
+        assert out.batch_size == ref.batch_size == out["a"].shape[:2] == (3, 0)
+        assert out["nested"].batch_size == (3, 0)
+        lazy = lazy_stack(td.unbind(0))
+        out = lazy.repeat_interleave(np.int64(0), 1)
+        assert out.batch_size == out["a"].shape[:2] == (3, 0)
+        with pytest.raises(TypeError, match="has no len"):
+            lazy.repeat_interleave(np.int64(0), 0)
+        parent = TensorDict(n=lazy, batch_size=lazy.batch_size)
+        with pytest.raises(TypeError, match="has no len"):
+            parent.repeat_interleave(np.int64(0), 0)
+
+    def test_numpy_integer_count_negative_lazy_stack_dim(self):
+        # #3586: a negative NumPy count along the stack dim of a lazy stack
+        # raises what the same Python int raises
+        lazy = lazy_stack(self._build_nested_td().unbind(0))
+        parent = TensorDict(n=lazy, batch_size=lazy.batch_size)
+        for call in (
+            lambda r: lazy.repeat_interleave(r, 0),
+            lambda r: torch.repeat_interleave(lazy, r, 0),
+            lambda r: parent.repeat_interleave(r, 0),
+        ):
+            with pytest.raises(Exception) as int_error:
+                call(-1)
+            with pytest.raises(type(int_error.value)) as numpy_error:
+                call(np.int64(-1))
+            assert str(numpy_error.value) == str(int_error.value)
+
+    def test_split_zero_dim_tensor_unreadable(self):
+        # #3586: a 0-d tensor whose value cannot be read raises TypeError, as
+        # before
+        td = self._build_nested_td()
+        lazy = lazy_stack(td.unbind(0))
+        for call in (
+            lambda: td.split(torch.tensor(2, device="meta"), 1),
+            lambda: lazy.split(torch.tensor(2, device="meta"), 1),
+            lambda: torch.vmap(lambda s: td.split(s, 1))(torch.tensor([2, 2])),
+        ):
+            with pytest.raises(TypeError, match="must be int or list of ints"):
+                call()
+
+    @pytest.mark.parametrize("unit", ["ns", "D"])
+    def test_numpy_timedelta_unchanged(self, unit):
+        # #3586: NumPy makes timedelta64 an integer, but it keeps the errors
+        # it raised before
+        td = self._build_nested_td()
+        lazy = lazy_stack(td.unbind(0))
+        t = np.timedelta64(2 if unit == "ns" else 1, unit)
+        for call, match in (
+            (lambda: td.roll(1, t), "has no len"),
+            (lambda: td.flip(t), "is not iterable"),
+            (lambda: td.movedim(t, 1), "has no len"),
+            (lambda: td.movedim(0, t), "has no len"),
+            (lambda: td.tile(t), "has no len"),
+            (lambda: lazy.repeat_interleave(t, 0), "has no len"),
+        ):
+            with pytest.raises(TypeError, match=match):
+                call()
+        with pytest.raises(TypeError):
+            td.repeat_interleave(t, 0)
+        with pytest.raises(ValueError, match="indices_or_sections must be"):
+            td.tensor_split(t, 1)
+
+    def test_non_integer_count_and_dim_unchanged(self):
+        # #3586: the counts and dims that are not integers keep their
+        # behaviour. A bool is an int, a float raises.
+        td = self._build_nested_td()
+        assert (td.movedim(False, True) == td.movedim(0, 1)).all()
+        assert (td.tile(True) == td.tile(1)).all()
+        out, ref = td.tensor_split(True, 1), td.tensor_split(1, 1)
+        assert all((o == r).all() for o, r in zip(out, ref, strict=True))
+        for call in (
+            lambda: td.roll(1, 0.0),
+            lambda: td.flip(0.0),
+            lambda: td.movedim(0.0, 1),
+            lambda: td.movedim(0, 1.0),
+            lambda: td.tile(2.0),
+            lambda: td.split(2.0, 1),
+        ):
+            with pytest.raises(TypeError):
+                call()
+        with pytest.raises(ValueError, match="indices_or_sections must be"):
+            td.tensor_split(2.0, 1)
 
     @pytest.mark.parametrize(
         "op",

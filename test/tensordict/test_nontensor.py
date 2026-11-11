@@ -30,9 +30,11 @@ import torch
 from tensordict import (
     _utils_key_json,
     capture_non_tensor_stack,
+    is_leaf_nontensor,
     lazy_stack,
     LazyStackedTensorDict,
     MemoryMappedTensor,
+    merge_tensordicts,
     set_capture_non_tensor_stack,
     TensorClass,
     tensorclass,
@@ -2248,6 +2250,369 @@ class TestNonTensorData:
         td.update_(source)
         assert (td["x"] == 1).all()
         assert td["s"] == "hello"
+
+    @pytest.mark.parametrize("locked", [False, True])
+    @pytest.mark.parametrize("kind", ["str", "int", "rows"])
+    @pytest.mark.parametrize("nested_first", [True, False])
+    @pytest.mark.parametrize("write", ["update_", "update_clone", "copy_"])
+    def test_update__missing_node_keeps_same_name_entry(
+        self, write, nested_first, kind, locked
+    ):
+        # #3605: a sub-tensordict of the source that the destination lacks is
+        # skipped. Its non-tensor entries are not written into the entries of
+        # the same name one level up, in the destination or in the source.
+        if kind == "str":
+            old, top, nested = "old", "obs text", "next text"
+        elif kind == "int":
+            old, top, nested = NonTensorData(0), NonTensorData(3), NonTensorData(7)
+        else:
+            old = NonTensorStack("r0", "r1")
+            top = NonTensorStack("o0", "o1")
+            nested = NonTensorStack("n0", "n1")
+        td = TensorDict(reward=torch.zeros(2), text=old, batch_size=[2])
+        if locked:
+            td.lock_()
+        entries = {"reward": torch.ones(2), "next": {"text": nested}, "text": top}
+        if not nested_first:
+            entries["next"] = entries.pop("next")
+        source = TensorDict(entries, batch_size=[2])
+        assert (list(source.keys())[1] == "next") is nested_first
+        expected = source.clone()
+        if write == "update_":
+            td.update_(source)
+        elif write == "update_clone":
+            td.update_(source, clone=True)
+        else:
+            td.copy_(source)
+        assert (td["reward"] == 1).all()
+        assert list(td.keys()) == ["reward", "text"]
+        assert td.get("text").tolist() == expected.get("text").tolist()
+        assert list(source.keys()) == list(expected.keys())
+        assert source.get("text").tolist() == expected.get("text").tolist()
+        assert (
+            source.get(("next", "text")).tolist()
+            == expected.get(("next", "text")).tolist()
+        )
+
+    @pytest.mark.parametrize("write", ["update_", "copy_"])
+    def test_update__missing_node_keeps_same_name_sub_tensordict(self, write):
+        # #3605: the same one level down. The sub-tensordict that the
+        # destination lacks holds a sub-tensordict, whose name is also the
+        # name of a sub-tensordict of the source one level up.
+        td = TensorDict(
+            reward=torch.zeros(2),
+            sub=TensorDict(text="old", batch_size=[2]),
+            batch_size=[2],
+        )
+        source = TensorDict(
+            reward=torch.ones(2),
+            sub=TensorDict(text="top sub", batch_size=[2]),
+            next=TensorDict(
+                sub=TensorDict(text="next sub", batch_size=[2]), batch_size=[2]
+            ),
+            batch_size=[2],
+        )
+        getattr(td, write)(source)
+        assert (td["reward"] == 1).all()
+        assert list(td.keys()) == ["reward", "sub"]
+        assert td["sub", "text"] == "top sub"
+        assert source["sub", "text"] == "top sub"
+        assert source["next", "sub", "text"] == "next sub"
+
+    def test_update__missing_node_unchanged_cases(self):
+        # #3605: the neighbours of the fixed case behave as before
+        def make():
+            td = TensorDict(reward=torch.zeros(2), text="old", batch_size=[2])
+            source = TensorDict(
+                reward=torch.ones(2),
+                next=TensorDict(text="next text", obs=torch.ones(2), batch_size=[2]),
+                text="obs text",
+                batch_size=[2],
+            )
+            return td, source
+
+        # a nested tensor that the destination lacks is skipped, and the
+        # top-level non-tensor entry is written
+        td, source = make()
+        del source["next", "text"]
+        td.update_(source)
+        assert (td["reward"] == 1).all()
+        assert td["text"] == "obs text"
+        assert list(td.keys()) == ["reward", "text"]
+        td, source = make()
+        td.update_(source, keys_to_update=["reward", "text"])
+        assert td["text"] == "obs text" and source["text"] == "obs text"
+        assert list(td.keys()) == ["reward", "text"]
+        td, source = make()
+        td.update(source, inplace=True)
+        assert td["text"] == "obs text" and source["text"] == "obs text"
+        assert td["next", "text"] == "next text"
+
+    def test_apply_default_missing_node_operands(self):
+        # #3605: under a sub-tensordict that the other tensordict lacks, a
+        # leaf whose name the parent does not hold is paired with the default,
+        # not with itself, and the leaves of the tensordict are not changed
+        td = TensorDict(
+            reward=torch.ones(2),
+            next=TensorDict(other="x", obs=torch.full((2,), 2.0), batch_size=[2]),
+            text="obs text",
+            batch_size=[2],
+        )
+        other = TensorDict(reward=torch.zeros(2), text="old", batch_size=[2])
+        seen = {}
+
+        def fn(x, y):
+            seen[x[0].item() if isinstance(x, torch.Tensor) else x.data] = y
+            return x
+
+        td.apply(
+            fn,
+            other,
+            default=None,
+            is_leaf=lambda cls: issubclass(
+                cls, (torch.Tensor, NonTensorData, NonTensorStack)
+            ),
+        )
+        # keyed by the value of the leaf of td
+        assert set(seen) == {1.0, 2.0, "x", "obs text"}
+        assert seen["x"] is None
+        assert seen[2.0] is None
+        assert (seen[1.0] == 0).all()
+        assert seen["obs text"].data == "old"
+        assert td["text"] == "obs text" and td["next", "other"] == "x"
+
+    @pytest.mark.parametrize("label", [False, True])
+    @pytest.mark.parametrize("write", ["update_", "copy_"])
+    def test_update__missing_node_same_name_tensorclass(self, write, label):
+        # #3605: the entry of the same name one level up is a tensorclass
+        # whose __post_init__ reads a field. It is not built again, and with
+        # a non-tensor field, that field is not written into the source.
+        if label:
+
+            @tensorclass
+            class Obs:
+                pixels: torch.Tensor
+                label: str
+
+                def __post_init__(self):
+                    self.pixels = self.pixels.float()
+
+        else:
+
+            @tensorclass
+            class Obs:
+                pixels: torch.Tensor
+
+                def __post_init__(self):
+                    self.pixels = self.pixels.float()
+
+        def obs(value):
+            kwargs = {"label": f"label {value}"} if label else {}
+            return Obs(pixels=torch.full((2,), value), batch_size=[2], **kwargs)
+
+        td = TensorDict(reward=torch.zeros(2), obs=obs(0), task="old", batch_size=[2])
+        source = TensorDict(
+            reward=torch.ones(2),
+            next=TensorDict(obs=obs(2), done=torch.zeros(2), batch_size=[2]),
+            obs=obs(1),
+            task="pick",
+            batch_size=[2],
+        )
+        getattr(td, write)(source)
+        assert (td["reward"] == 1).all()
+        assert list(td.keys()) == ["reward", "obs", "task"]
+        assert td["task"] == "pick"
+        assert (td["obs"].pixels == 1).all()
+        assert (source["obs"].pixels == 1).all()
+        assert (source["next", "obs"].pixels == 2).all()
+        if label:
+            assert td["obs"].label == "label 1"
+            assert source["obs"].label == "label 1"
+            assert source["next", "obs"].label == "label 2"
+
+    @pytest.mark.parametrize("keys_to_update", [["obs"], ["reward", "obs"]])
+    def test_update__missing_node_keys_to_update_tensorclass(self, keys_to_update):
+        # #3605: keys_to_update names a tensorclass that both sides hold. The
+        # source's holds a nested tensordict that the destination's lacks,
+        # with an entry named like a non-tensor field of the tensorclass.
+        @tensorclass
+        class Obs:
+            pixels: torch.Tensor
+            text: str
+            inner: TensorDict = None
+
+        td = TensorDict(
+            reward=torch.zeros(2),
+            obs=Obs(pixels=torch.zeros(2), text="old", batch_size=[2]),
+            batch_size=[2],
+        )
+        source = TensorDict(
+            reward=torch.ones(2),
+            obs=Obs(
+                pixels=torch.ones(2),
+                text="obs text",
+                inner=TensorDict(text="inner text", batch_size=[2]),
+                batch_size=[2],
+            ),
+            batch_size=[2],
+        )
+        td.update_(source, keys_to_update=keys_to_update)
+        assert (td["reward"] == ("reward" in keys_to_update)).all()
+        assert (td["obs"].pixels == 1).all()
+        assert td["obs"].text == "obs text"
+        assert td["obs"].inner is None
+        assert source["obs"].text == "obs text"
+        assert source["obs"].inner["text"] == "inner text"
+
+    @pytest.mark.parametrize("write", ["update_", "copy_"])
+    def test_update__missing_node_cyclic_value(self, write):
+        # #3605: a value that contains itself, under the same name in the
+        # sub-tensordict that the destination lacks and one level up, is not
+        # copied
+        value = {"a": 1}
+        value["self"] = value
+        td = TensorDict(reward=torch.zeros(2), text="old", batch_size=[2])
+        source = TensorDict(
+            reward=torch.ones(2),
+            next=TensorDict(text=NonTensorData(value, batch_size=[2]), batch_size=[2]),
+            text=NonTensorData(value, batch_size=[2]),
+            batch_size=[2],
+        )
+        getattr(td, write)(source)
+        assert (td["reward"] == 1).all()
+        assert list(td.keys()) == ["reward", "text"]
+        assert td["text"]["self"]["a"] == 1
+        assert source["text"] is value
+        assert source["next", "text"] is value
+
+    @pytest.mark.parametrize("write", ["update_", "copy_"])
+    def test_update__missing_node_shared_source(self, write):
+        # #3605: the same with a source in shared memory
+        td = TensorDict(reward=torch.zeros(2), text="old", batch_size=[2])
+        source = TensorDict(
+            reward=torch.ones(2),
+            next=TensorDict(text="next text", batch_size=[2]),
+            text="obs text",
+            batch_size=[2],
+        ).share_memory_()
+        getattr(td, write)(source)
+        assert (td["reward"] == 1).all()
+        assert td["text"] == "obs text"
+        assert source["text"] == "obs text"
+        assert source["next", "text"] == "next text"
+
+    @pytest.mark.parametrize("write", ["update_", "copy_"])
+    def test_update__missing_node_shared_source_no_warning(self, write):
+        # #3605: a source in shared memory with an int in the sub-tensordict
+        # that the destination lacks, under the name of a string one level
+        # up. The shared buffer of that string cannot store an int, so the
+        # write into it was skipped with the warning "update_() skipped the
+        # non-tensor entries [('next', 'text')]", for a destination that is
+        # not shared and does not hold that key.
+        td = TensorDict(reward=torch.zeros(2), text="old", batch_size=[2])
+        source = TensorDict(
+            reward=torch.ones(2),
+            next=TensorDict(text=NonTensorData(5), batch_size=[2]),
+            text="obs text",
+            batch_size=[2],
+        ).share_memory_()
+        with warnings.catch_warnings(record=True) as record:
+            warnings.simplefilter("always")
+            getattr(td, write)(source)
+        assert not [w for w in record if "skipped" in str(w.message)]
+        assert (td["reward"] == 1).all()
+        assert td["text"] == "obs text"
+        assert source["text"] == "obs text"
+        assert source["next", "text"] == 5
+
+    @pytest.mark.parametrize("write", ["update_", "copy_"])
+    def test_update__missing_node_rows_under_same_name(self, write):
+        # #3605: per-row strings in the sub-tensordict that the destination
+        # lacks, under the name of a single value one level up. Where no
+        # tensor of the source matches a tensor of the destination, the write
+        # into that value raised "Cannot update a NonTensorDataBase with a
+        # NonTensorStack object".
+        td = TensorDict(text="old", batch_size=[2])
+        source = TensorDict(
+            next=TensorDict(text=NonTensorStack("a", "b"), batch_size=[2]),
+            text="top",
+            batch_size=[2],
+        )
+        getattr(td, write)(source)
+        assert list(td.keys()) == ["text"]
+        assert td["text"] == "top"
+        assert source["text"] == "top"
+        assert source.get(("next", "text")).tolist() == ["a", "b"]
+
+    def test_named_apply_is_leaf_nontensor_missing_node(self):
+        # #3605: only update_ and copy_ skip entries. With is_leaf_nontensor,
+        # named_apply calls its function for every leaf of the tensordict,
+        # also under a sub-tensordict that the other tensordict lacks.
+        td = TensorDict(
+            reward=torch.ones(2),
+            next=TensorDict(text="next text", obs=torch.ones(2), batch_size=[2]),
+            text="obs text",
+            batch_size=[2],
+        )
+        other = TensorDict(reward=torch.zeros(2), text="old", batch_size=[2])
+        seen = []
+        td.named_apply(
+            lambda name, x, y: seen.append(name),
+            other,
+            default=None,
+            nested_keys=True,
+            is_leaf=is_leaf_nontensor,
+        )
+        assert seen == ["reward", ("next", "text"), ("next", "obs"), "text"]
+        assert td["text"] == "obs text" and td["next", "text"] == "next text"
+
+    @pytest.mark.parametrize("compiled", [False, True])
+    @pytest.mark.parametrize("kind", ["tensor", "str", "tensorclass"])
+    def test_merge_tensordicts_missing_node(self, kind, compiled):
+        # #3605: merge_tensordicts does not write into its operands, and is
+        # as before where the second tensordict lacks a sub-tensordict of
+        # the first that holds an entry of the same name as its parent
+        @tensorclass
+        class Obs:
+            pixels: torch.Tensor
+
+            def __post_init__(self):
+                self.pixels = self.pixels.float()
+
+        def obs(value):
+            if kind == "tensor":
+                return torch.full((2,), value)
+            if kind == "str":
+                return f"obs {value}"
+            return Obs(pixels=torch.full((2,), value), batch_size=[2])
+
+        def value(entry):
+            if kind == "tensor":
+                return entry.tolist()
+            if kind == "str":
+                return entry
+            return entry.pixels.tolist()
+
+        td = TensorDict(
+            reward=torch.ones(2),
+            obs=obs(1),
+            next=TensorDict(obs=obs(2), done=torch.zeros(2), batch_size=[2]),
+            batch_size=[2],
+        )
+        other = TensorDict(reward=torch.zeros(2), obs=obs(0), batch_size=[2])
+        merge = merge_tensordicts
+        if compiled:
+            merge = torch.compile(merge_tensordicts, backend="eager")
+        result = merge(td, other)
+        assert set(result.keys(True, True, is_leaf=is_leaf_nontensor)) == set(
+            td.keys(True, True, is_leaf=is_leaf_nontensor)
+        )
+        assert (result["reward"] == 1).all()
+        assert (result["next", "done"] == 0).all()
+        for td_ in (result, td):
+            assert value(td_["obs"]) == value(obs(1))
+            assert value(td_["next", "obs"]) == value(obs(2))
+        assert value(other["obs"]) == value(obs(0))
 
     @pytest.mark.parametrize(
         "source",

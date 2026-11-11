@@ -3450,7 +3450,12 @@ def isin(
     _, unique_indices = torch.unique(
         cat_data, dim=dim, sorted=True, return_inverse=True
     )
-    out = torch.isin(unique_indices[N:], unique_indices[:N], assume_unique=True)
+    # Mark the ids of the reference, then look up those of the input. The ids
+    # of equal slices repeat, so torch.isin(assume_unique=True) is wrong here.
+    in_reference = torch.zeros_like(unique_indices, dtype=torch.bool)
+    # 1, not True: torch.jit.trace has no index_fill_ with a bool value
+    in_reference.index_fill_(0, unique_indices[:N], 1)
+    out = in_reference.index_select(0, unique_indices[N:])
 
     return out
 

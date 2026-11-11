@@ -2080,28 +2080,73 @@ class LazyStackedTensorDict(TensorDictBase):
         _batch_size = td0.batch_size
         stack_dim = self.stack_dim
 
-        for td in tensordicts[1:]:
-            if not is_tensor_collection(td):
-                raise TypeError(
-                    "Expected all inputs to be TensorDictBase instances but got "
-                    f"{type(td)} instead."
-                )
-            _bs = td.batch_size
-            _device = td.device
-            if device != _device:
-                raise RuntimeError(f"devices differ, got {device} and {_device}")
-            if _bs != _batch_size:
-                if strict_shape or len(_bs) != len(_batch_size):
-                    raise RuntimeError(
-                        f"batch sizes in tensordicts differs, LazyStackedTensorDict "
-                        f"cannot be created. Got td[0].batch_size={_batch_size} "
-                        f"and td[i].batch_size={_bs}. If the length match and you wish "
-                        f"to stack these tensordicts, set strict_shape to False."
-                    )
-                else:
-                    _batch_size = torch.Size(
-                        [s if _bs[i] == s else -1 for i, s in enumerate(_batch_size)]
-                    )
+        # This runs for every member of every stack that is built. In eager mode,
+        # a stack whose first member's type is exactly TensorDict takes the first
+        # loop, which reads the batch size and the device of each member whose
+        # type is exactly TensorDict from its attributes: they are what the two
+        # properties return. The checks that follow the reads are the same in
+        # both loops: keep them identical.
+        if num_tds > 1:
+            if type(td0) is TensorDict and not is_compiling():
+                for td in tensordicts[1:]:
+                    if type(td) is TensorDict:
+                        _bs = td._batch_size
+                        _device = td._device
+                    else:
+                        if not is_tensor_collection(td):
+                            raise TypeError(
+                                "Expected all inputs to be TensorDictBase instances but got "
+                                f"{type(td)} instead."
+                            )
+                        _bs = td.batch_size
+                        _device = td.device
+                    if device != _device:
+                        raise RuntimeError(
+                            f"devices differ, got {device} and {_device}"
+                        )
+                    if _bs != _batch_size:
+                        if strict_shape or len(_bs) != len(_batch_size):
+                            raise RuntimeError(
+                                f"batch sizes in tensordicts differs, LazyStackedTensorDict "
+                                f"cannot be created. Got td[0].batch_size={_batch_size} "
+                                f"and td[i].batch_size={_bs}. If the length match and you wish "
+                                f"to stack these tensordicts, set strict_shape to False."
+                            )
+                        else:
+                            _batch_size = torch.Size(
+                                [
+                                    s if _bs[i] == s else -1
+                                    for i, s in enumerate(_batch_size)
+                                ]
+                            )
+            else:
+                for td in tensordicts[1:]:
+                    if not is_tensor_collection(td):
+                        raise TypeError(
+                            "Expected all inputs to be TensorDictBase instances but got "
+                            f"{type(td)} instead."
+                        )
+                    _bs = td.batch_size
+                    _device = td.device
+                    if device != _device:
+                        raise RuntimeError(
+                            f"devices differ, got {device} and {_device}"
+                        )
+                    if _bs != _batch_size:
+                        if strict_shape or len(_bs) != len(_batch_size):
+                            raise RuntimeError(
+                                f"batch sizes in tensordicts differs, LazyStackedTensorDict "
+                                f"cannot be created. Got td[0].batch_size={_batch_size} "
+                                f"and td[i].batch_size={_bs}. If the length match and you wish "
+                                f"to stack these tensordicts, set strict_shape to False."
+                            )
+                        else:
+                            _batch_size = torch.Size(
+                                [
+                                    s if _bs[i] == s else -1
+                                    for i, s in enumerate(_batch_size)
+                                ]
+                            )
         self._batch_size = self._compute_batch_size(_batch_size, stack_dim, num_tds)
 
     def _reset_member_batch_size(self) -> None:
@@ -2918,8 +2963,45 @@ class LazyStackedTensorDict(TensorDictBase):
         padding_value: float | int | bool = 0.0,
     ) -> CompatibleType:
         # we can handle the case where the key is a tuple of length 1
+        tensordicts = self.tensordicts
         tensors = []
-        for td in self.tensordicts:
+        # The first members that are TensorDict instances and hold the key as
+        # a plain tensor are read from their dicts: their _get_str would
+        # return that leaf. The general path below reads the members that
+        # are left, and stacks. Member 0 first: most keys that do not
+        # qualify stop there.
+        if tensordicts:
+            first = tensordicts[0]
+            if (
+                type(first) is TensorDict
+                and key in first._tensordict
+                and type(first._tensordict[key]) is Tensor
+                and as_list is False
+                and as_padded_tensor is False
+                and as_nested_tensor is False
+                and self._hook_out is None
+                and not is_compiling()
+                and type(self) is LazyStackedTensorDict
+                and self._hook_in is None
+                and not self._is_vmapped
+            ):
+                for td in tensordicts:
+                    if type(td) is not TensorDict:
+                        break
+                    leaf = td._tensordict.get(key)
+                    if type(leaf) is not Tensor:
+                        if leaf is None and default is None:
+                            # The member's _get_str(key, None) returns None here,
+                            # and the loop below returns it at once.
+                            return default
+                        break
+                    tensors.append(leaf)
+                else:
+                    # every member was read: nothing is left for the loop below
+                    tensordicts = ()
+                if tensordicts:
+                    tensordicts = islice(tensordicts, len(tensors), None)
+        for td in tensordicts:
             # tensors.append(td._get_str(key, default=default))
             tensors.append(
                 td._get_str(
@@ -6324,6 +6406,16 @@ class LazyStackedTensorDict(TensorDictBase):
                 # torch broadcasts a 0-d or one-element repeats to the size of dim
                 repeats = [repeats.tolist()] if repeats.ndim == 0 else repeats.tolist()
                 repeats = repeats * num_members
+            elif (
+                not isinstance(repeats, torch.Tensor)
+                and isinstance(repeats, np.integer)
+                and not isinstance(repeats, np.timedelta64)
+                and operator.index(repeats) != 0
+            ):
+                # torch reads a NumPy integer as an int. A count of 0 keeps
+                # its TypeError: the stack would keep no members, and with
+                # them no inner batch dims or keys.
+                repeats = [operator.index(repeats)] * num_members
             else:
                 repeats = repeats.tolist()
                 if len(repeats) != num_members:
