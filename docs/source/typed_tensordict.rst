@@ -187,12 +187,12 @@ Class options
 
   The field hides the attribute from the methods of the object too, so not
   every name works. A field named after a method that other methods call
-  breaks those methods: with a field ``keys``, printing, arithmetic and
-  ``torch.stack`` raise ``TypeError: 'Tensor' object is not callable``. The
-  constructor cannot take a field named ``batch_size``, ``device`` or
-  ``names``, because it reads these keywords as its own arguments. A
-  ``TensorClass["shadow"]`` runs its methods on an inner ``TensorDict``,
-  which such a field does not hide.
+  breaks those methods: with a field ``keys``, printing, arithmetic, and
+  ``torch.stack`` raise ``TypeError: 'Tensor' object is not callable``. With
+  a ``TensorClass["shadow"]``, these three calls work: it runs them on an
+  inner ``TensorDict``, which the field does not hide. The keyword
+  constructor cannot take a field named ``batch_size``, ``device``, or
+  ``names``, because it reads these keywords as its own arguments.
 
 ``"frozen"``
   Locks the tensordict after construction. Attribute assignment and new keys

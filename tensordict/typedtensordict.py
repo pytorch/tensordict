@@ -616,8 +616,9 @@ class TypedTensorDict(_StateFromSource, TensorDictBase, metaclass=_TypedTensorDi
       ``AttributeError`` when the class is defined. The field hides the
       attribute from the methods of the object too, so a name that other
       methods use does not work: a field ``keys`` breaks printing and
-      arithmetic, and the constructor cannot take a field ``batch_size``,
-      ``device`` or ``names``.
+      arithmetic. The constructor reads ``batch_size``, ``device`` and
+      ``names`` as its own arguments, so it cannot take a field with one of
+      these names by keyword.
     - ``frozen``: the constructor locks the instance.
 
     The ``autocast``, ``nocast`` and ``tensor_only`` options of
