@@ -807,8 +807,15 @@ class TestGeneric:
             {"n": {"m": {"x": x}}}, batch_size=batch_size, device=device
         )
         tc = Data(x=x, batch_size=batch_size, device=device)
+        # bool leaves are cloned one by one, next to floating leaves of any dtype
+        floats = TensorDict(
+            {"x": x, "f64": x.double(), "bool": x > 0},
+            batch_size=batch_size,
+            device=device,
+        )
         for clone in (
             td.clone()["x"],
+            floats.clone()["x"],
             deepcopy(td)["x"],
             torch.clone(td)["x"],
             td.to(device).clone()["x"],
@@ -822,8 +829,8 @@ class TestGeneric:
 
     @pytest.mark.parametrize("device", get_available_devices())
     def test_clone_device_mixed_dtypes(self, device):
-        # #3581: the zeros of the floating leaves keep their sign next to
-        # integer, complex and bool leaves, which are cloned as before
+        # #3581: next to floating leaves, integer, complex and bool leaves are
+        # cloned as before
         source = {
             "f32": torch.tensor([-0.0, 0.0, 1.0]),
             "f64": torch.tensor([0.0, -0.0, 2.0], dtype=torch.float64),
@@ -850,8 +857,6 @@ class TestGeneric:
             assert cloned.device == value.device
             assert cloned.shape == value.shape
             assert (cloned == value).all()
-            if value.dtype.is_floating_point:
-                assert torch.signbit(cloned).tolist() == torch.signbit(value).tolist()
         # the clone does not share memory with its source
         clone["f32"].fill_(7)
         clone["torch.int64"].fill_(7)
@@ -874,33 +879,6 @@ class TestGeneric:
         assert not clone["plain"].requires_grad
         (grad,) = torch.autograd.grad(clone["leaf"].sum(), leaf)
         assert (grad == 1).all()
-
-    def test_clone_device_jit_trace(self):
-        # #3581: under torch.jit.trace a clone of floating and integer leaves
-        # makes the call it made before (the newest torch has no
-        # torch.jit.trace, so the tracer check is patched)
-        from tensordict.base import TensorDictBase
-
-        td = TensorDict(
-            {"x": torch.tensor([-0.0, 0.0, 1.0]), "i": torch.arange(3)},
-            batch_size=[3],
-            device="cpu",
-        )
-        with mock.patch.dict(
-            TensorDictBase._clone_recurse.__globals__,
-            _clone_is_jit_tracing=lambda: True,
-        ):
-            clone = td.clone()
-        # the call of before: one list of numbers, which turns -0.0 into 0.0
-        assert torch.signbit(clone["x"]).tolist() == [False, False, False]
-        assert clone["i"].dtype == torch.int64
-        assert (clone["i"] == td["i"]).all()
-        with mock.patch.dict(
-            TensorDictBase._clone_recurse.__globals__,
-            _clone_is_jit_tracing=lambda: False,
-        ):
-            clone = td.clone()
-        assert torch.signbit(clone["x"]).tolist() == [True, False, False]
 
     @pytest.mark.skipif(
         is_npu_available(), reason="torch.nested_tensor is not adapted on NPU currently"

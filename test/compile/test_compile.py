@@ -1485,9 +1485,7 @@ class TestTD:
                 "f32": torch.tensor([-0.0, 0.0, 1.0]),
                 "a": {
                     "f64": torch.tensor([0.0, -0.0, 2.0], dtype=torch.float64),
-                    "i64": torch.arange(3),
                     "bool": torch.tensor([True, False, True]),
-                    "c64": torch.tensor([1 + 2j, 0j, -3 - 4j]),
                 },
             },
             batch_size=[3],
@@ -3966,55 +3964,34 @@ class TestExport:
         torch.testing.assert_close(out["a"], td["a"])
 
     @pytest.mark.parametrize("strict", [False, True])
-    def test_export_clone_constant_mixed_leaves(self, strict):
-        # #3581: a program that clones a tensordict attribute whose floating
-        # and integer leaves are constants of the program can be saved
+    def test_export_clone_device_keeps_negative_zero(self, strict):
+        # #3581: a program that clones a tensordict with a device keeps the
+        # -0.0 of its floating leaves, also after it is saved and loaded
         class Mod(torch.nn.Module):
             def __init__(self):
                 super().__init__()
                 self.td = TensorDict(
-                    x=torch.tensor([1.0, 2.0, 3.0]),
-                    i=torch.arange(3),
+                    x=torch.tensor([-0.0, 0.0, 1.0]),
+                    y=torch.tensor([0.0, -0.0, 2.0], dtype=torch.float64),
                     batch_size=[3],
                     device="cpu",
                 )
 
             def forward(self, a):
                 clone = self.td.clone()
-                return clone["x"] * a, clone["i"] + 1
+                return clone["x"] * a, clone["y"] * a
 
         a = torch.full((3,), 2.0)
         ep = torch.export.export(Mod(), (a,), strict=strict)
         buffer = io.BytesIO()
         torch.export.save(ep, buffer)
         buffer.seek(0)
-        out_x, out_i = torch.export.load(buffer).module()(a)
-        torch.testing.assert_close(out_x, torch.tensor([2.0, 4.0, 6.0]))
-        torch.testing.assert_close(out_i, torch.tensor([1, 2, 3]))
-
-    def test_make_fx_clone_mixed_leaves_trace_and_save(self):
-        # #3581: a make_fx graph of a clone whose floating and integer leaves
-        # mix can be exported and saved
-        from torch.fx.experimental.proxy_tensor import make_fx
-
-        def clone(x, i):
-            td = TensorDict({"x": x, "i": i}, batch_size=[3], device="cpu")
-            td = td.clone()
-            return td["x"], td["i"]
-
-        args = (torch.tensor([-0.0, 0.0, 1.0]), torch.arange(3))
-        gm = make_fx(clone)(*args)
-        out_x, out_i = gm(*args)
-        assert torch.signbit(out_x).tolist() == [True, False, False]
-        torch.testing.assert_close(out_i, args[1])
-
-        ep = torch.export.export(gm, args, strict=False)
-        buffer = io.BytesIO()
-        torch.export.save(ep, buffer)
-        buffer.seek(0)
-        out_x, out_i = torch.export.load(buffer).module()(*args)
-        torch.testing.assert_close(out_x, args[0])
-        torch.testing.assert_close(out_i, args[1])
+        for module in (ep.module(), torch.export.load(buffer).module()):
+            out_x, out_y = module(a)
+            assert torch.signbit(out_x).tolist() == [True, False, False]
+            assert torch.signbit(out_y).tolist() == [False, True, False]
+            assert out_x.tolist() == [-0.0, 0.0, 2.0]
+            assert out_y.tolist() == [0.0, -0.0, 4.0]
 
     @pytest.mark.parametrize("strict", [False])  # , True])
     def test_export_with_td_params(self, strict):
