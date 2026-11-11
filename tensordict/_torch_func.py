@@ -1306,11 +1306,20 @@ def _grad(
         )
 
     if grad_outputs is not None:
-        tup_grad_outputs = tuple(grad_outputs._values_list(True, True))
+        grad_keys, tup_grad_outputs = grad_outputs._items_list(True, True)
     else:
         tup_grad_outputs = None
 
-    tup_outputs = tuple(outputs._values_list(True, True))
+    out_keys, tup_outputs = outputs._items_list(True, True)
+    tup_outputs = tuple(tup_outputs)
+
+    if tup_grad_outputs is not None:
+        # torch pairs grad_outputs with outputs by position: put a grad_outputs
+        # with the keys of outputs in another order into their order (#3619)
+        if grad_keys != out_keys and set(grad_keys) == set(out_keys):
+            source = dict(zip(grad_keys, tup_grad_outputs))
+            tup_grad_outputs = [source[key] for key in out_keys]
+        tup_grad_outputs = tuple(tup_grad_outputs)
 
     keys, all_inputs_raw = inputs._items_list(True, True)
 
