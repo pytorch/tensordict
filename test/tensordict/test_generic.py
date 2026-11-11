@@ -17284,6 +17284,37 @@ class TestGeneric:
         assert td_dest["a"] is a and td_dest["b"] is b
         assert a == 4 and b == 3 and td_dest["c"] == 2
 
+    @pytest.mark.parametrize("stack", [False, True])
+    def test_update_tuple_of_numbers(self, stack):
+        a = torch.ones(2)
+
+        def make_td():
+            if stack:
+                return lazy_stack(
+                    [
+                        TensorDict({"a": torch.zeros(()), "b": torch.zeros(())})
+                        for _ in range(2)
+                    ]
+                )
+            return TensorDict(
+                {"a": torch.zeros(2), "b": torch.zeros(2)}, batch_size=[2]
+            )
+
+        td = make_td()
+        td.update_({"a": a, "b": (1, 2)})
+        assert (td["a"] == 1).all()
+        assert (td["b"] == torch.tensor([1, 2])).all()
+
+        td = make_td()
+        td.update_({"b": (1, 2)})
+        assert (td["a"] == 0).all()
+        assert (td["b"] == torch.tensor([1, 2])).all()
+
+        td = make_td()
+        td.update({"a": a, "b": (1, 2)})
+        assert (td["a"] == 1).all()
+        assert (td["b"] == torch.tensor([1, 2])).all()
+
     def test_update_kwargs(self):
         # update: kwargs create new keys
         td = TensorDict({"a": torch.zeros(3)}, batch_size=[3])

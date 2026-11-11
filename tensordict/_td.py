@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import contextvars
 import os
 import weakref
 from collections import defaultdict, UserDict
@@ -52,6 +53,7 @@ from tensordict.base import (
     _is_leaf_nontensor,
     _IS_LEAF_WITHOUT_NODES,
     _is_tensor_collection,
+    _is_tuple_of_numbers,
     _key_through_leaf_error,
     _load_metadata,
     _members_hold_leaf,
@@ -249,6 +251,9 @@ def _propagate_lock_dense(td, lock_parents_weakrefs):
             _propagate_lock_dense(value, lock_parents_weakrefs)
         elif _is_tensor_collection(cls):
             value._propagate_lock(lock_parents_weakrefs, is_compiling=False)
+
+
+_IN_FROM_ANY = contextvars.ContextVar("_IN_FROM_ANY", default=False)
 
 
 class TensorDict(TensorDictBase):
@@ -1300,6 +1305,28 @@ class TensorDict(TensorDictBase):
         return result
 
     @classmethod
+    def from_any(
+        cls,
+        obj,
+        *,
+        auto_batch_size: bool = False,
+        batch_dims: int | None = None,
+        device: torch.device | None = None,
+        batch_size: torch.Size | None = None,
+    ):
+        token = _IN_FROM_ANY.set(True)
+        try:
+            return super().from_any(
+                obj,
+                auto_batch_size=auto_batch_size,
+                batch_dims=batch_dims,
+                device=device,
+                batch_size=batch_size,
+            )
+        finally:
+            _IN_FROM_ANY.reset(token)
+
+    @classmethod
     def from_dict(
         cls,
         input_dict: dict[Any, Any] | TensorDictBase,
@@ -1346,10 +1373,21 @@ class TensorDict(TensorDictBase):
         batch_size_set = torch.Size(()) if batch_size is None else batch_size
         input_dict = dict(input_dict)
         for key, value in list(input_dict.items()):
-            if not non_tensor_scalars and isinstance(value, (dict, UserDict)):
+            if isinstance(value, (dict, UserDict)):
                 input_dict[key] = TensorDict._from_dict_impl(
-                    value, auto_batch_size=False, device=device, batch_size=batch_size
+                    value,
+                    auto_batch_size=False,
+                    device=device,
+                    batch_size=batch_size,
+                    non_tensor_scalars=non_tensor_scalars,
                 )
+                continue
+            if (
+                not _IN_FROM_ANY.get()
+                and type(value) is tuple
+                and _is_tuple_of_numbers(value)
+            ):
+                input_dict[key] = torch.as_tensor(value, device=device)
                 continue
             # we don't know if another tensor of smaller size is coming
             # so we can't be sure that the batch-size will still be valid later
