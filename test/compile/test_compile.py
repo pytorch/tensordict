@@ -3524,7 +3524,7 @@ class TestNN:
         torch.testing.assert_close(sample, td["loc"])
         with set_interaction_type(InteractionType.RANDOM):
             sample = prob_mod_c(td.copy())["sample"]
-        # not .all(): about one draw of 1000 values in 13,000 holds an exact 0.0
+        # not .all(): about 1 in 17,000 draws of 1000 values holds an exact 0.0
         assert (sample != td["loc"]).float().mean() > 0.99
         with set_interaction_type(InteractionType.MEAN):
             sample = prob_mod_c(td.copy())["sample"]
