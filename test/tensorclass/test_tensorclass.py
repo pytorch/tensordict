@@ -2901,6 +2901,52 @@ def test_non_tensor_classes_keep_their_docstrings(cls):
     assert not cls.__doc__.startswith(cls.__name__ + "(")
 
 
+# #3456: the methods that a tensorclass forwards to its tensordict had no
+# docstring, so help(MyClass.to) showed nothing.
+@pytest.mark.parametrize(
+    "name", ["to", "float", "where", "setdefault", "clone", "apply", "sum"]
+)
+def test_forwarded_methods_have_the_tensordict_docstring(name):
+    class C(TensorClass):
+        x: torch.Tensor
+
+    expected = getattr(TensorDict, name).__doc__
+    assert expected
+    assert getattr(C, name).__doc__ == expected
+
+
+@pytest.mark.parametrize("name", ["to", "apply", "sum"])
+def test_non_tensor_data_forwarded_methods_have_the_tensordict_docstring(name):
+    # #3456
+    assert getattr(NonTensorData, name).__doc__ == getattr(TensorDict, name).__doc__
+
+
+def test_forwarded_methods_keep_their_signature_and_own_docstrings():
+    class C(TensorClass):
+        x: torch.Tensor
+
+    # The forwarded methods are not marked as wrappers of the TensorDict ones
+    assert str(inspect.signature(C.to)) == "(self, *args, **kwargs)"
+    assert not hasattr(C.to, "__wrapped__")
+    # The methods that a tensorclass defines keep their own docstring
+    assert C.unbind.__doc__ != TensorDict.unbind.__doc__
+    assert C.update_.__doc__ != TensorDict.update_.__doc__
+
+
+def test_eq_compares_non_tensor_fields_of_a_subclass():
+    # The class keeps the tensorclass __eq__ and __ne__, not the ones that the
+    # TensorClass base forwards to its tensordict.
+    class Foo(TensorClass):
+        x: torch.Tensor
+        name: str
+
+    a = Foo(x=torch.zeros(3), name="a", batch_size=[3])
+    b = Foo(x=torch.zeros(3), name="b", batch_size=[3])
+    assert (a == b).x.all()
+    assert not (a == b).name.any()
+    assert (a != b).name.all()
+
+
 class TestTensorClass:
     @pytest.mark.parametrize("tensor_only", [False, True])
     @pytest.mark.parametrize("frozen", [False, True])
