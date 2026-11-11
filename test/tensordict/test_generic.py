@@ -1498,6 +1498,7 @@ class TestGeneric:
             {"inplace": True},
             {"filename": True},
             {"filename": True, "num_threads": 2},
+            {"filename": True, "use_buffer": True},
         ],
         ids=[
             "default",
@@ -1507,10 +1508,12 @@ class TestGeneric:
             "inplace",
             "filename",
             "filename_threads",
+            "filename_buffer",
         ],
     )
     @pytest.mark.parametrize(
-        "holder", ["top", "after_plain", "nested", "lazy_stack", "tensorclass"]
+        "holder",
+        ["top", "after_plain", "nested", "lazy_stack", "tensorclass", "nested_tensor"],
     )
     def test_consolidate_quantized_raises(self, holder, kwargs, tmp_path):
         # #3716: consolidate() ended the process with a segmentation fault
@@ -1528,8 +1531,11 @@ class TestGeneric:
             td, key = TensorDict(n={"x": q}), "('n', 'x')"
         elif holder == "lazy_stack":
             td, key = lazy_stack([TensorDict(x=q), TensorDict(x=q)]), "('0', 'x')"
-        else:
+        elif holder == "tensorclass":
             td, key = TensorDict(tc=_LazyStackPoint(x=q)), "('tc', 'x')"
+        else:
+            njt = torch.nested.nested_tensor([q, q], layout=torch.jagged)
+            td, key = TensorDict(x=njt), "'x'"
         kwargs = dict(kwargs)
         path = tmp_path / "td.bin"
         TensorDict(a=torch.arange(3.0)).consolidate(filename=path)
@@ -1549,6 +1555,47 @@ class TestGeneric:
             assert td["x"] is q
         assert q.is_quantized
         assert q.int_repr().tolist() == [0, 10, 20, 30]
+
+    @pytest.mark.parametrize(
+        "case", ["device", "device_filename", "unbatched", "buffer_early", "metadata"]
+    )
+    def test_consolidate_quantized_other_error(self, case, tmp_path):
+        # #3716: a call that raises for another reason before the file is
+        # touched keeps that exception when a leaf is quantized too
+        q = self._quantized_tensor()
+        td = TensorDict(x=q)
+        path = tmp_path / "td.bin"
+        TensorDict(a=torch.arange(3.0)).consolidate(filename=path)
+        saved = path.read_bytes()
+        if case == "device":
+            kwargs, error = {"device": "nonsense"}, RuntimeError
+            message = "Expected one of cpu, cuda"
+        elif case == "device_filename":
+            kwargs, error = {"filename": path, "device": "meta"}, RuntimeError
+            message = "device and filename are mutually exclusive arguments."
+        elif case == "unbatched":
+            td["u"] = tensordict.UnbatchedTensor(torch.zeros(5))
+            kwargs, error = {"filename": path}, NotImplementedError
+            message = "UnbatchedTensor entries cannot be consolidated yet, but 'u'"
+        elif case == "buffer_early":
+            kwargs = {
+                "filename": path,
+                "use_buffer": True,
+                "num_threads": 2,
+                "return_early": True,
+            }
+            error = NotImplementedError
+            message = "return_early=True is not supported with use_buffer=True"
+        else:
+            td["o"] = NonTensorData(object())
+            kwargs, error = {"filename": path}, RuntimeError
+            message = "Failed to convert the metadata to json"
+        with pytest.raises(error, match=f"^{re.escape(message)}") as excinfo:
+            td.consolidate(**kwargs)
+        assert type(excinfo.value) is error
+        assert path.read_bytes() == saved
+        assert not td.is_consolidated()
+        assert not td.is_locked
 
     @pytest.mark.parametrize("num_threads", [0, 2])
     def test_consolidate_quantized_values(self, num_threads, tmp_path):
