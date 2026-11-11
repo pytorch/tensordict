@@ -126,11 +126,6 @@ from tensordict.utils import (
     unravel_key_list,
 )
 from torch import _foreach_copy_, multiprocessing as mp, nn, Tensor
-from torch._C import (
-    _is_any_autocast_enabled,
-    _len_torch_dispatch_stack,
-    _len_torch_function_stack,
-)
 from torch.autograd import forward_ad
 from torch.compiler import allow_in_graph, is_compiling, is_dynamo_compiling
 from torch.jit import is_tracing as _is_jit_tracing
@@ -198,6 +193,21 @@ try:
     )
 except ImportError:
     _get_eval_frame_callback = None
+# Private torch functions that update_ and copy_ from a lazy stack check before
+# they skip the stack of its leaves (#3593). Without them, the walk is kept.
+try:
+    from torch._C import (
+        _is_any_autocast_enabled,
+        _len_torch_dispatch_stack,
+        _len_torch_function_stack,
+    )
+    from torch._C._functorch import (
+        is_functorch_wrapped_tensor as _is_functorch_wrapped_tensor,
+    )
+
+    _HAS_STACK_GATES = True
+except ImportError:
+    _HAS_STACK_GATES = False
 
 T = TypeVar("T", bound="TensorCollection")
 
@@ -3143,6 +3153,7 @@ def _has_typed_tensordict(td: TensorDictBase) -> bool:
         # autocast and the torch modes change what torch.stack does, or see
         # its calls: they keep the walk too. torch.set_default_device sets a
         # torch function mode.
+        and _HAS_STACK_GATES
         and not _is_any_autocast_enabled()
         and not _len_torch_dispatch_stack()
         and not _len_torch_function_stack()
@@ -3219,14 +3230,16 @@ def _stack_is_tensor(tensors: list, dim: int) -> bool:
         return False
     shape = first.shape
     device = first.device
+    # one lookup of the global per key; None on a torch without named dims
+    has_names = _TENSOR_HAS_NAMES
     return -len(shape) - 1 <= dim <= len(shape) and all(
         tensor.layout is torch.strided
         and not tensor.is_nested
         and tensor.shape == shape
         and tensor.device == device
-        and not (_TENSOR_HAS_NAMES is not None and _TENSOR_HAS_NAMES(tensor))
+        and not (has_names is not None and has_names(tensor))
         # a leaf that outlived a torch.func transform
-        and not torch._C._functorch.is_functorch_wrapped_tensor(tensor)
+        and not _is_functorch_wrapped_tensor(tensor)
         for tensor in tensors
     )
 
