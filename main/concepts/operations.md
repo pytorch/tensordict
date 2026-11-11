@@ -412,6 +412,10 @@ tensor([[2., 2., 2.],
  [2., 2., 2.]])
 ```
 
+A `grad_outputs` that has the leaf keys of `outputs` is paired with them
+by key, whatever the order of its keys. Any other `grad_outputs` is paired
+by position, as PyTorch pairs two tuples.
+
 `outputs` and `inputs` must each be one tensordict. A tensor output with
 tensordict inputs raises `ValueError: torch.autograd.grad for TensorDict
 only supports TensorDictBase as output`. To differentiate a scalar loss,
