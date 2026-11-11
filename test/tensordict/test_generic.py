@@ -15034,6 +15034,36 @@ class TestGeneric:
         td1b = torch.squeeze(td2, dim=1)
         assert td1b.batch_size == td1.batch_size
 
+    @pytest.mark.parametrize("batch_size", [[1], [1, 1]])
+    def test_squeeze_all_dims_leaf_without_feature_dims(self, batch_size):
+        # #3647: squeeze() raised a TypeError when every batch dim has size 1
+        # and a leaf has no dims after the batch dims
+        td = TensorDict(
+            a=torch.arange(1.0).view(batch_size),
+            b=torch.ones(*batch_size, 2),
+            nested=TensorDict(c=torch.zeros(batch_size), batch_size=batch_size),
+            batch_size=batch_size,
+            names=[f"d{i}" for i in range(len(batch_size))],
+        )
+        for out in (td.squeeze(), torch.squeeze(td)):
+            assert out.batch_size == torch.Size([])
+            assert out.names == []
+            assert out["a"].shape == torch.Size([])
+            assert out["a"].data_ptr() == td["a"].data_ptr()
+            assert out["b"].shape == torch.Size([2])
+            assert out["nested"].batch_size == torch.Size([])
+            assert out["nested", "c"].shape == torch.Size([])
+            assert (out == td.reshape(())).all()
+
+        @tensorclass
+        class MyData:
+            a: torch.Tensor
+
+        data = MyData(a=torch.zeros(batch_size), batch_size=batch_size)
+        out = data.squeeze()
+        assert out.batch_size == torch.Size([])
+        assert out.a.shape == torch.Size([])
+
     def test_stack_from_tensordict(self):
         td = TensorDict(
             {"a": torch.zeros(3, 4), "b": {"c": torch.ones(3, 4)}}, batch_size=[3, 4]
