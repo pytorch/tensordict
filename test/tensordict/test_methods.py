@@ -7902,6 +7902,59 @@ class TestBackward:
         (y * 2).backward(gradient)
         assert torch.allclose(x.grad, y.grad)
 
+    @pytest.mark.parametrize("nested", [False, True])
+    @pytest.mark.parametrize("reordered", [False, True])
+    def test_autograd_grad_pairs_grad_outputs_by_key(self, nested, reordered):
+        # #3619: torch.autograd.grad paired grad_outputs with the outputs by
+        # position, so a grad_outputs in another key order weighted each output
+        # with the entry of another key
+        a = torch.tensor([1.0, 2.0], requires_grad=True)
+        b = torch.tensor([1.0, 2.0], requires_grad=True)
+        x = TensorDict(a=a, b=b)
+        w1, w2 = torch.tensor(10.0), torch.tensor(1.0)
+        o1, o2 = (a**2).sum(), (b * 5).sum()
+        if nested:
+            out = TensorDict(n=TensorDict(o1=o1), o2=o2)
+            weights = TensorDict(n=TensorDict(o1=w1), o2=w2)
+        else:
+            out = TensorDict(o1=o1, o2=o2)
+            weights = TensorDict(o1=w1, o2=w2)
+        if reordered:
+            weights = weights.select("o2", "n" if nested else "o1")
+            assert list(weights.keys(True, True))[0] == "o2"
+        ref = torch.autograd.grad([o1, o2], [a, b], [w1, w2], retain_graph=True)
+        grad = torch.autograd.grad(out, x, weights)
+        assert isinstance(grad, TensorDict)
+        assert list(grad.keys()) == ["a", "b"]
+        torch.testing.assert_close(grad["a"], ref[0])
+        torch.testing.assert_close(grad["b"], ref[1])
+
+    @pytest.mark.parametrize("lazy", [False, True])
+    def test_autograd_grad_reordered_grad_outputs_batched(self, lazy):
+        # #3619: the same with a batch size, a lazy stack and a locked grad_outputs
+        a = torch.tensor([1.0, 2.0], requires_grad=True)
+        x = TensorDict(a=a, batch_size=[2])
+        out = TensorDict(o1=a**2, o2=a * 5, batch_size=[2])
+        weights = TensorDict(
+            o2=torch.ones(2), o1=torch.full((2,), 10.0), batch_size=[2]
+        )
+        if lazy:
+            out = lazy_stack(list(out.unbind(0)))
+            weights = lazy_stack(list(weights.unbind(0)))
+        weights.lock_()
+        grad = torch.autograd.grad(out, x, weights)
+        torch.testing.assert_close(grad["a"], 20 * a.detach() + 5)
+
+    def test_autograd_grad_reordered_grad_outputs_shape_mismatch(self):
+        # #3619: a reordered grad_outputs whose entries fit the outputs only by
+        # position raises, as the same call on plain tensors does
+        a = torch.ones(3, requires_grad=True)
+        c = torch.ones(4, requires_grad=True)
+        out = TensorDict(o1=(a**2).sum(), o2=c * 2)
+        weights = TensorDict(o2=torch.tensor(3.0), o1=torch.full((4,), 10.0))
+        with pytest.raises(RuntimeError, match="Mismatch in shape"):
+            torch.autograd.grad(out, TensorDict(a=a, c=c), weights)
+
 
 def _to_float(td, td_name, tmpdir):
     if hasattr(td, "_source"):

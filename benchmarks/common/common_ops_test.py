@@ -153,6 +153,12 @@ def test_plain_set_nested(benchmark):
     benchmark(lambda: td.set(key, tensor))
 
 
+def test_plain_set_scalar(benchmark):
+    # a Python scalar: the class of the value is checked against the accepted classes
+    td = TensorDict(a=torch.zeros(3))
+    benchmark(lambda: td.set("x", 1.0))
+
+
 def test_plain_set_stack_nested(benchmark):
     td = big_nested_stacked_td()[0][0]
     key = tuple(str(j) for j in range(20, 0, -1))
@@ -645,8 +651,29 @@ def test_clone(benchmark, td):
     benchmark(td.clone)
 
 
+@pytest.mark.parametrize("kind", ["rl_step", "flat100"])
+def test_shallow_copy(benchmark, kind):
+    # copy() is clone(False): a new tensordict that holds the same leaves
+    if kind == "rl_step":
+        td = _rl_step_td(32, 4)
+    else:
+        td = TensorDict({f"x{i}": torch.zeros(3) for i in range(100)}, batch_size=[3])
+    benchmark(td.copy)
+
+
 def test_clone_device(benchmark, td):
     benchmark(td.to("cpu").clone)
+
+
+@pytest.mark.parametrize("source", ["padding", "offset"])
+def test_consolidate(benchmark, source):
+    # 20 float32 leaves, about 2 MiB: each has an odd number of elements and
+    # needs padding to a multiple of 8 bytes, or has a storage offset (td[1:])
+    if source == "padding":
+        td = _rl_step_td(4097, 9)
+    else:
+        td = _rl_step_td(4097, 8)[1:]
+    benchmark(td.consolidate)
 
 
 @pytest.mark.parametrize(
@@ -739,6 +766,24 @@ def test_getitem_memmap_on_disk(benchmark, tmp_path, index):
     td = TensorDict({**step(), "next": step()}, batch_size=[1000])
     td = td.memmap_like(tmp_path)
     index = {"int": 5, "slice": slice(10, 42)}[index]
+    benchmark(td.__getitem__, index)
+
+
+@pytest.mark.parametrize("indices", [256, 1024])
+def test_getitem_int_list(benchmark, indices):
+    # a batch of DataLoader(td, collate_fn=lambda x: x): 5 leaves, 2 of them
+    # nested, read with a list of ints
+    rows = 4096
+    td = TensorDict(
+        {
+            "a": torch.randn(rows, 3),
+            "b": torch.randn(rows, 4),
+            "c": torch.randn(rows, 5),
+            "meta": {"id": torch.arange(rows), "weight": torch.rand(rows)},
+        },
+        batch_size=[rows],
+    )
+    index = torch.randint(0, rows, (indices,)).tolist()
     benchmark(td.__getitem__, index)
 
 
@@ -1136,6 +1181,26 @@ def test_lazy_stack_get_nested(benchmark, size, key):
     benchmark(td.get, key)
 
 
+@pytest.mark.parametrize("members", [4, 32])
+def test_lazy_stack_get_leaf(benchmark, members):
+    # a top-level leaf read from a lazy stack
+    td = LazyStackedTensorDict.lazy_stack(
+        [_rl_step_td(32, 4) for _ in range(members)], 0
+    )
+    benchmark(td.get, "obs")
+
+
+@pytest.mark.parametrize("members", [8, 256])
+@pytest.mark.parametrize("op", ["build", "slice"])
+def test_lazy_stack_build_slice(benchmark, op, members):
+    # building a lazy stack of tensordicts, and slicing one
+    tds = [_rl_step_td(32, 4) for _ in range(members)]
+    if op == "build":
+        benchmark(LazyStackedTensorDict.lazy_stack, tds, 0)
+    else:
+        benchmark(LazyStackedTensorDict.lazy_stack(tds, 0).__getitem__, slice(1, None))
+
+
 def test_select(benchmark, td, c):
     def exec_select():
         tdc = td.clone()
@@ -1489,6 +1554,20 @@ def test_pointwise_nested(benchmark, op):
         "add": lambda td: td + td,
     }[op]
     benchmark(fn, td)
+
+
+def test_where_nested(benchmark):
+    # two RL steps merged by a mask over the rows, as in a partial reset: 20
+    # leaves of two shapes in two levels
+    def level():
+        obs = {f"obs{i}": torch.randn(32, 4) for i in range(8)}
+        return {**obs, "reward": torch.randn(32, 1), "value": torch.randn(32, 1)}
+
+    td, other = (
+        TensorDict({**level(), "next": level()}, batch_size=[32]) for _ in range(2)
+    )
+    mask = torch.rand(32) < 0.5
+    benchmark(td.where, mask, other)
 
 
 @pytest.mark.parametrize(

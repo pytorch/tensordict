@@ -57,6 +57,8 @@ from tensordict._indexing import (
     _getitem_batch_size,
     _getitem_names,
     _is_new_dim_index,
+    _LIST_INDEX_MIN_LEN,
+    _list_to_indices,
     _mask_to_indices,
     _read_element,
     _read_index,
@@ -78,6 +80,7 @@ from tensordict.utils import (
     _convert_list_to_stack,
     _copy_cached_result,
     _erase_cache_first,
+    _expand_as_right_by_shape,
     _foreach,
     _GENERIC_NESTED_ERR,
     _get_item,
@@ -220,6 +223,11 @@ _SELF_NESTING_ERROR = (
 
 # Context-manager ops whose inverse __exit__ runs also when the body raises
 _UNDO_ON_ERROR_OPS = frozenset({"to_module", "lock_", "unlock_"})
+
+# The dtypes that _clone_recurse clones one leaf at a time: adding a number
+# turns a bool leaf into an integer one. A set, because the test runs once per
+# leaf and looking up torch.bool there costs more than the membership test.
+_CLONE_PER_LEAF_DTYPES = frozenset((torch.bool,))
 
 _GET_DEFAULTS_TO_NONE_REPLACEMENT = "td[key] to raise a KeyError for a missing key"
 
@@ -1193,12 +1201,16 @@ def _maybe_broadcast_other(
                         is_leaf=is_leaf,
                     )
 
+                expanded = [{} if flag else None for flag in is_operand]
+
                 def leaf_fn(x):
                     return leaf_op(
                         x,
                         *[
-                            expand_as_right(other, x) if flag else other
-                            for other, flag in zip(others_map, is_operand)
+                            other
+                            if memo is None
+                            else _expand_as_right_by_shape(memo, other, x)
+                            for other, memo in zip(others_map, expanded)
                         ],
                         *args,
                         **kwargs,
@@ -1494,8 +1506,19 @@ def _register_tensor_class(cls):
     _ACCEPTED_CLASSES = tuple(_ACCEPTED_CLASSES)
 
 
+# What the results of _is_accepted_class were computed for, and the results:
+# the _ACCEPTED_CLASSES tuple, abc.get_cache_token(), which changes when a class
+# is registered as a virtual subclass of an ABC (most accepted classes are ABCs),
+# whether results may be stored, and a {cls: (bool, cls.__mro__)} dict.
+_ACCEPTED_CLASS_MEMO_STATE = (None, None, False, {})
+
+
 def _is_accepted_class(cls: type) -> bool:
     """Returns True if ``cls`` is a subclass of one of the ``_ACCEPTED_CLASSES``."""
+    global _ACCEPTED_CLASS_MEMO_STATE
+    if cls is Tensor:
+        # The most common entry type: skip is_compiling() and the memo lookup.
+        return True
     if is_compiling():
         # Dynamo guards on the length of _ACCEPTED_CLASSES, which
         # _register_tensor_class rebinds each time a tensorclass is defined,
@@ -1504,7 +1527,59 @@ def _is_accepted_class(cls: type) -> bool:
         return issubclass(
             cls, (Tensor, TensorDictBase, ftdim.Tensor)
         ) or _is_tensorclass(cls)
-    return issubclass(cls, _ACCEPTED_CLASSES)
+    if type(cls) is not type:
+        # A class with a metaclass: no memo. The memo hashes the class, which
+        # issubclass does not do when Tensor comes before every ABC, and a
+        # metaclass can make the hash raise, or make two classes hash and
+        # compare equal, which would then share an entry. With type as its
+        # metaclass, a class hashes and compares by identity.
+        return issubclass(cls, _ACCEPTED_CLASSES)
+    classes, token, store, memo = _ACCEPTED_CLASS_MEMO_STATE
+    if classes is not _ACCEPTED_CLASSES or token != abc.get_cache_token():
+        if classes is not _ACCEPTED_CLASSES:
+            # A new tuple (a tensorclass was defined). A new token alone
+            # (an ABC registration) changes no metaclass, so the flag stays.
+            classes = _ACCEPTED_CLASSES
+            # issubclass calls the __subclasscheck__ of the metaclass of each
+            # class in the tuple. Those of type and ABCMeta answer from the
+            # __mro__ of cls and from caches that a new token clears; any
+            # other one may answer from state of its own, so nothing is
+            # stored then.
+            store = type(classes) is tuple
+            for accepted in classes if store else ():
+                meta = type(accepted)
+                check = (
+                    getattr(meta, "__subclasscheck__", None)
+                    if type(meta) is type
+                    else None
+                )
+                if (
+                    check is not type.__subclasscheck__
+                    and check is not abc.ABCMeta.__subclasscheck__
+                ):
+                    store = False
+                    break
+        # A new dict, not a cleared one: a call of another thread that began
+        # before the change then stores its result in the dict it read.
+        memo = {}
+        _ACCEPTED_CLASS_MEMO_STATE = (classes, abc.get_cache_token(), store, memo)
+    if not store:
+        return issubclass(cls, _ACCEPTED_CLASSES)
+    # A new __mro__ tuple is built for a class and its subclasses when
+    # __bases__ is assigned; the entry keeps the old one alive.
+    mro = cls.__mro__
+    hit = memo.get(cls)
+    if hit is not None and hit[1] is mro:
+        return hit[0]
+    # issubclass walks the tuple, in an order that changes from process to
+    # process, and calls ABCMeta.__subclasscheck__ for each ABC in it.
+    out = issubclass(cls, _ACCEPTED_CLASSES)
+    if cls in _TENSOR_COLLECTION_MEMO:
+        # Only a class that _TENSOR_COLLECTION_MEMO keeps alive already, as
+        # it does for the class of every value that is set: this memo must
+        # not keep alive a class that is created at run time.
+        memo[cls] = (out, mro)
+    return out
 
 
 _TENSOR_COLLECTION_MEMO = {}
@@ -1715,11 +1790,41 @@ def _is_leaf_nontensor(cls: Type) -> bool:
 
     .. seealso:: :func:`~tensordict.default_is_leaf`.
     """
+    # ``_is_leaf_written`` below repeats this body: change both together.
     if cls is Tensor:
         return True
     if _is_tensor_collection(cls):
         return _pass_through_cls(cls)
     return issubclass(cls, torch.Tensor)
+
+
+def _is_leaf_written(cls: Type) -> bool:
+    """``_is_leaf_nontensor`` for the walks of ``update_``, whose function writes into its last operand.
+
+    ``_apply_nest`` tells these walks by it: under a nested tensordict that
+    the destination lacks, they skip the non-tensor entries (#3605).
+    """
+    if cls is Tensor:
+        return True
+    if _is_tensor_collection(cls):
+        return _pass_through_cls(cls)
+    return issubclass(cls, torch.Tensor)
+
+
+def _skip_non_tensor_dest(fn: Callable) -> Callable:
+    """Wraps the function of a walk of ``update_`` under a nested tensordict that the destination lacks.
+
+    There, ``_apply_nest`` pairs a leaf with the entry of the same name of an
+    empty copy of the parent of the nested tensordict. A non-tensor entry of
+    this copy is the entry of the source itself: ``fn`` would write into the
+    source, so it is not called (#3605).
+    """
+
+    def skip_non_tensor_dest(name, source, dest):
+        if dest is None or not _is_non_tensor(type(dest)):
+            return fn(name, source, dest)
+
+    return skip_non_tensor_dest
 
 
 def _load_metadata(prefix: Path):
@@ -4208,6 +4313,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         result = dict(self.__dict__)
         for key in (
             "_last_op",
+            # the records of the with blocks that self is in: they hold
+            # weakrefs, and the copy is in no block
+            "_last_op_queue",
             "_cache",
             "__lock_parents_weakrefs",
         ):
@@ -7469,7 +7577,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                             default=None,
                             prefix=name,
                             filter_empty=True,
-                            is_leaf=_is_leaf_nontensor,
+                            is_leaf=_is_leaf_written,
                             out=None,
                             call_on_unbatched=False,
                         )
@@ -7529,7 +7637,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             default=None,
             filter_empty=True,
             named=named,
-            is_leaf=_is_leaf_nontensor,
+            is_leaf=_is_leaf_written,
         )
         if written:
             self._write_back(*zip(*written), "update_")
@@ -7662,7 +7770,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 default=None,
                 filter_empty=True,
                 named=True,
-                is_leaf=_is_leaf_nontensor,
+                is_leaf=_is_leaf_written,
             )
             if skipped:
                 _warn_update_skipped(skipped)
@@ -9582,9 +9690,29 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     "batch_size and out.batch_size must be equal when both are provided."
                 )
             if device is not NO_DEFAULT and device != out.device:
-                raise RuntimeError(
-                    "device and out.device must be equal when both are provided."
+                nodes = (
+                    list(out.values(True, True, is_leaf=_is_tensor_collection))
+                    if checked and device is not None
+                    else None
                 )
+                # A lazy stack of tensorclasses cannot be written through out:
+                # it raises as before, before a device is set on any node
+                if nodes is None or any(
+                    is_tensorclass(node) and node._tensordict._lazy for node in nodes
+                ):
+                    raise RuntimeError(
+                        "device and out.device must be equal when both are provided."
+                    )
+                # As in _apply_nest: the caller moves every leaf of out to
+                # device, such as to(device, inplace=True) of a consolidated
+                # tensordict (#3645)
+                device = torch.device(device)
+                out._device = device
+                for node in nodes:
+                    if is_tensorclass(node):
+                        node._tensordict._device = device
+                    else:
+                        node._device = device
         else:
 
             def make_result(names=names, batch_size=batch_size):
@@ -9817,8 +9945,12 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 not call_on_nested and not is_leaf(type(item))
                 # and not is_non_tensor(item)
             ):
+                nested_fn = fn
                 if default is not NO_DEFAULT:
                     _others = [_other._get_str(key, default=None) for _other in others]
+                    if is_leaf is _is_leaf_written and _others[0] is None:
+                        # a walk of update_, which has one other tensordict
+                        nested_fn = _skip_non_tensor_dest(fn)
                     _others = [
                         self.empty(recurse=True) if _other is None else _other
                         for _other in _others
@@ -9829,7 +9961,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     ]
 
                 item_trsf = item._apply_nest(
-                    fn,
+                    nested_fn,
                     *_others,
                     inplace=inplace,
                     batch_size=batch_size,
@@ -10666,23 +10798,34 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
     def _clone_recurse(self) -> Self:
         keys, vals = self._items_list(True, True)
         foreach_vals = {}
+        all_float = True
         iter_vals = {}
         for key, val in zip(keys, vals):
             if (
                 type(val) is torch.Tensor
                 and not val.requires_grad
-                and val.dtype not in (torch.bool,)
+                and (dtype := val.dtype) not in _CLONE_PER_LEAF_DTYPES
             ):
                 foreach_vals[key] = val
+                if all_float and not dtype.is_floating_point:
+                    all_float = False
             else:
                 iter_vals[key] = val
         if foreach_vals:
-            foreach_vals = dict(
-                _zip_strict(
-                    foreach_vals.keys(),
-                    _foreach("add", tuple(foreach_vals.values()), 0),
-                )
-            )
+            leaves = tuple(foreach_vals.values())
+            # x + -0.0 returns both zeros of a floating x as they are, where
+            # x + 0 turns -0.0 into 0.0. Only when every leaf is floating:
+            # integer and complex leaves need the 0, and a call of their own or
+            # a list of numbers changes the CUDA kernel that runs and the graph
+            # that a trace records. The calls are what _foreach("add", ...)
+            # makes, without its scans for unbatched tensors: every leaf here
+            # is an exact Tensor.
+            other = -0.0 if all_float else 0
+            if torch._C._are_functorch_transforms_active():
+                clones = [leaf.add(other) for leaf in leaves]
+            else:
+                clones = torch._foreach_add(leaves, other)
+            foreach_vals = dict(_zip_strict(foreach_vals.keys(), clones))
         if iter_vals:
             iter_vals = dict(
                 _zip_strict(
@@ -11539,8 +11682,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         fill without reading the leaves (a file) or must split the mask over
         its members (a lazy stack).
         """
+        expanded = {}
         for item in self.values():
-            mask_expand = expand_as_right(mask, item)
+            mask_expand = _expand_as_right_by_shape(expanded, mask, item)
             item.masked_fill_(mask_expand, value)
         return self
 
@@ -12204,6 +12348,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
         index: IndexType,
         new_batch_size: torch.Size | None = None,
         names: List[str] | None = None,
+        list_index: Tensor | None = None,
     ) -> Self:
         TensorDict = _TENSORDICT_TYPE
         batch_size = self.batch_size
@@ -12232,17 +12377,53 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
 
         _check_for_invalid_index(index)
 
+        # perf: in eager mode an exact Tensor, which is neither unbatched nor a
+        # TensorDict, goes straight to _get_item. Under torch.compile, also in
+        # a frame that Dynamo runs eagerly, the loop takes the generic path, so
+        # that the frames Dynamo compiles do not change.
+        eager = (
+            not is_compiling()
+            and _get_eval_frame_callback is not None
+            and _get_eval_frame_callback() is None
+        )
         if new_batch_size is not None:
             batch_size = new_batch_size
         else:
-            if (
-                type(index) is tuple
-                and len(index) == 1
-                and type(index[0]) is Tensor
-                and index[0].dtype is torch.bool
-                and not is_compiling()
-            ):
-                index = _mask_to_indices(index, batch_size, self.device)
+            if type(index) is tuple and len(index) == 1:
+                cls = type(index[0])
+                if cls is Tensor:
+                    if index[0].dtype is torch.bool and not is_compiling():
+                        index = _mask_to_indices(index, batch_size, self.device)
+                elif (
+                    cls is list
+                    and eager
+                    and len(index[0]) >= _LIST_INDEX_MIN_LEN
+                    and type(index[0][0]) is int
+                    and type(self) is TensorDict
+                    and len(self._tensordict) > 1
+                ):
+                    # perf: torch turns a list of ints, the index that a
+                    # DataLoader passes, into an index tensor once per leaf.
+                    # In eager mode, a TensorDict whose first two entries are
+                    # tensors on the CPU builds that tensor once, as
+                    # list_index, for a list that is long enough to earn the
+                    # tensor back. Looking at two entries only keeps the test
+                    # cheap for the tensordicts in which a single entry would
+                    # read it. A tensordict that starts with a leaf on another
+                    # device keeps the list: two such leaves earn the tensor
+                    # back only with a longer list.
+                    values = iter(self._tensordict.values())
+                    first = next(values)
+                    cls = type(first)
+                    if cls is Tensor or cls is MemoryMappedTensor:
+                        second = next(values)
+                        cls = type(second)
+                        if (
+                            (cls is Tensor or cls is MemoryMappedTensor)
+                            and first.is_cpu
+                            and second.is_cpu
+                        ):
+                            list_index = _list_to_indices(index[0])
             try:
                 batch_size = _getitem_batch_size(batch_size, index)
             except IndexError:
@@ -12256,28 +12437,44 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             names = self._get_names_idx(index)
 
         source = {}
-        # perf: in eager mode an exact Tensor, which is neither unbatched nor a
-        # TensorDict, goes straight to _get_item. Under torch.compile, also in
-        # a frame that Dynamo runs eagerly, the loop takes the generic path, so
-        # that the frames Dynamo compiles do not change.
-        eager = (
-            not is_compiling()
-            and _get_eval_frame_callback is not None
-            and _get_eval_frame_callback() is None
-        )
-        for key, item in self.items():
-            if eager and type(item) is Tensor:
-                source[key] = _get_item(item, index)
-            elif _is_unbatched(item):
-                source[key] = _unbatched_with_batch_size(item, batch_size)
-            elif isinstance(item, TensorDict):
-                # this is the simplest case, we can pre-compute the batch size easily
-                new_batch_size = batch_size + item.batch_size[batch_dims:]
-                source[key] = item._index_tensordict(
-                    index, new_batch_size=new_batch_size
-                )
-            else:
-                source[key] = _get_item(item, index)
+        if list_index is None:
+            for key, item in self.items():
+                if eager and type(item) is Tensor:
+                    source[key] = _get_item(item, index)
+                elif _is_unbatched(item):
+                    source[key] = _unbatched_with_batch_size(item, batch_size)
+                elif isinstance(item, TensorDict):
+                    # this is the simplest case, we can pre-compute the batch size easily
+                    new_batch_size = batch_size + item.batch_size[batch_dims:]
+                    source[key] = item._index_tensordict(
+                        index, new_batch_size=new_batch_size
+                    )
+                else:
+                    source[key] = _get_item(item, index)
+        else:
+            # The plain tensors (on any device: torch moves the index, as it
+            # moves the one it builds from the list), the memory-mapped tensors
+            # and the nested TensorDicts take list_index; everything else keeps
+            # the list, also a memory-mapped tensor without elements, whose
+            # result records its index.
+            for key, item in self.items():
+                cls = type(item)
+                if cls is Tensor or (cls is MemoryMappedTensor and item.numel()):
+                    source[key] = _get_item(item, list_index)
+                elif _is_unbatched(item):
+                    source[key] = _unbatched_with_batch_size(item, batch_size)
+                elif isinstance(item, TensorDict):
+                    new_batch_size = batch_size + item.batch_size[batch_dims:]
+                    if cls is TensorDict:
+                        source[key] = item._index_tensordict(
+                            index, new_batch_size=new_batch_size, list_index=list_index
+                        )
+                    else:
+                        source[key] = item._index_tensordict(
+                            index, new_batch_size=new_batch_size
+                        )
+                else:
+                    source[key] = _get_item(item, index)
         result = self._new_unsafe(
             source=source,
             batch_size=batch_size,

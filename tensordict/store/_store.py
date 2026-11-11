@@ -1153,7 +1153,9 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
 
     # ---- Key access / mutation ----
 
-    def _index_tensordict(self, index, new_batch_size=None, names=None):
+    def _index_tensordict(
+        self, index, new_batch_size=None, names=None, list_index=None
+    ):
         """Eagerly fetch all leaf tensors for the given index in a single pipeline.
 
         Overrides the default ``TensorDict._index_tensordict`` (which iterates

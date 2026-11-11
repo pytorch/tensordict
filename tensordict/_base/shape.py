@@ -20,6 +20,7 @@ import warnings
 from collections.abc import Iterable
 from typing import Callable, List, overload, Sequence, TYPE_CHECKING
 
+import numpy as np
 import torch
 from tensordict._nestedkey import NestedKey
 from tensordict._tensorcollection import TensorCollection
@@ -68,6 +69,20 @@ def _unsqueeze_dim(dim: int) -> int:
     return dim
 
 
+def _is_numpy_integer(x) -> bool:
+    # torch reads a NumPy integer as an int, but it is not one for isinstance.
+    # roll, flip, movedim and tile ask this only after their own code has
+    # raised, and through this function: a method that names NumPy or torch
+    # is compiled by torch.compile as a frame of its own. NumPy makes
+    # timedelta64 an integer too: it keeps the error it raised.
+    return isinstance(x, np.integer) and not isinstance(x, np.timedelta64)
+
+
+def _is_zero_dim_non_bool_tensor(x) -> bool:
+    # for split, as _is_numpy_integer
+    return isinstance(x, Tensor) and x.ndim == 0 and x.dtype != torch.bool
+
+
 def _repeat_interleave_batch_size(
     batch_size: torch.Size, repeats: torch.Tensor | int, dim: int
 ) -> torch.Size:
@@ -85,6 +100,13 @@ def _repeat_interleave_batch_size(
             ):
                 # torch broadcasts a 0-d or one-element repeats to the size of dim
                 new_batch_size.append(s * int(repeats))
+            elif (
+                not isinstance(repeats, torch.Tensor)
+                and isinstance(repeats, np.integer)
+                and not isinstance(repeats, np.timedelta64)
+            ):
+                # the sum() of a NumPy integer is the count itself
+                new_batch_size.append(s * operator.index(repeats))
             else:
                 new_batch_size.append(repeats.sum().item())
         else:
@@ -476,9 +498,13 @@ class _ShapeOps:
 
         """
         if not isinstance(indices_or_sections, (int, list, tuple, torch.Tensor)):
-            raise ValueError(
-                "indices_or_sections must be an integer, a list of integers, or a 1D tensor of integers"
-            )
+            if not isinstance(indices_or_sections, np.integer) or isinstance(
+                indices_or_sections, np.timedelta64
+            ):
+                raise ValueError(
+                    "indices_or_sections must be an integer, a list of integers, or a 1D tensor of integers"
+                )
+            indices_or_sections = operator.index(indices_or_sections)
         if isinstance(indices_or_sections, torch.Tensor):
             if (
                 indices_or_sections.dtype != torch.long
@@ -1754,6 +1780,16 @@ class _ShapeOps:
             try:
                 split_sizes = [operator.index(x) for x in split_size]
             except TypeError:
+                if _is_zero_dim_non_bool_tensor(split_size):
+                    # a positive integer one is the size of each piece, as for
+                    # torch.split
+                    try:
+                        split_size = operator.index(split_size)
+                    except (TypeError, RuntimeError):
+                        # a value that cannot be read, in vmap or on meta
+                        raise TypeError(WRONG_TYPE) from None
+                    if split_size > 0:
+                        return self.split(split_size, dim)
                 raise TypeError(WRONG_TYPE) from None
         else:
             raise TypeError(WRONG_TYPE)
@@ -2282,11 +2318,19 @@ class _ShapeOps:
         if isinstance(destination, int):
             destination = (destination,)
 
-        if len(source) != len(destination):
-            raise ValueError(
-                f"movedim: source and destination must have the same number of elements, "
-                f"got {len(source)} and {len(destination)}"
-            )
+        try:
+            if len(source) != len(destination):
+                raise ValueError(
+                    f"movedim: source and destination must have the same number of elements, "
+                    f"got {len(source)} and {len(destination)}"
+                )
+        except TypeError:
+            # a NumPy integer has no len(): read it as an int, as torch does
+            if _is_numpy_integer(source):
+                return self.movedim(operator.index(source), destination)
+            if _is_numpy_integer(destination):
+                return self.movedim(source, operator.index(destination))
+            raise
 
         # Normalize negative indices
         source = tuple(s if s >= 0 else ndim + s for s in source)
@@ -2365,7 +2409,14 @@ class _ShapeOps:
             dims = (dims,)
 
         ndim = self.ndim
-        dims = tuple(d if d >= 0 else ndim + d for d in dims)
+        try:
+            dims = tuple(d if d >= 0 else ndim + d for d in dims)
+        except TypeError:
+            # a NumPy integer is not iterable: read it as an int, as torch does
+            if not _is_numpy_integer(dims):
+                raise
+            dims = operator.index(dims)
+            dims = (dims if dims >= 0 else ndim + dims,)
 
         # Validate dimensions
         for d in dims:
@@ -2483,9 +2534,15 @@ class _ShapeOps:
         # size, and roll the flattened batch (not the whole leaf) by default,
         # so that the feature dims of the leaves are left in place.
         batch_dims = self.batch_dims
-        if dims is not None and not isinstance(dims, int) and not len(dims):
-            # torch rolls the flattened tensor for empty dims too
-            dims = None
+        try:
+            if dims is not None and not isinstance(dims, int) and not len(dims):
+                # torch rolls the flattened tensor for empty dims too
+                dims = None
+        except TypeError:
+            # a NumPy integer has no len(): read it as an int, as torch does
+            if not _is_numpy_integer(dims):
+                raise
+            dims = operator.index(dims)
         if dims is None:
             # -1 would be ambiguous for a leaf with an empty feature dim
             numel = self.batch_size.numel()
@@ -2673,7 +2730,15 @@ class _ShapeOps:
 
         # Calculate new batch size
         ndim = self.ndim
-        if len(dims) > ndim:
+        try:
+            num_dims = len(dims)
+        except TypeError:
+            # a NumPy integer has no len(): read it as an int, as torch does
+            if not _is_numpy_integer(dims):
+                raise
+            dims = (operator.index(dims),)
+            num_dims = 1
+        if num_dims > ndim:
             # If more dims than batch dims, prepend 1s to batch_size
             new_batch_size = [1] * (len(dims) - ndim) + list(self.batch_size)
             for i, d in enumerate(dims):
