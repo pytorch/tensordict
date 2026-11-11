@@ -9745,6 +9745,24 @@ class TestAutoCasting:
         assert obj.tc.tc is None
 
 
+# Module level, so that loading an archive resolves these classes whatever the
+# test order.
+class _ShadowValues(TensorClass["shadow"]):
+    indices: torch.Tensor
+    values: torch.Tensor
+
+
+@tensorclass(shadow=True)
+class _ShadowMemmapLike:
+    indices: torch.Tensor
+    memmap_like: torch.Tensor
+
+
+class _ShadowItems(TensorClass["shadow"]):
+    indices: torch.Tensor
+    items: torch.Tensor
+
+
 class TestShadow:
     def test_no_shadow(self):
         with pytest.raises(AttributeError):
@@ -10039,6 +10057,106 @@ class TestShadow:
         assert isinstance(copy.deepcopy(c), TensorDict)
         assert isinstance(copy.copy(c), TensorDict)
         assert calls == ["clone", "copy"]
+
+    @pytest.mark.parametrize("method", ["save", "memmap", "dumps"])
+    @pytest.mark.parametrize("cls", [_ShadowValues, _ShadowMemmapLike])
+    def test_shadow_field_save_archive(self, cls, method, tmp_path):
+        # #3676: the archive writer called the shadow field named values or
+        # memmap_like
+        name = "values" if cls is _ShadowValues else "memmap_like"
+        c = cls(indices=torch.arange(3), **{name: torch.arange(3.0)}, batch_size=[3])
+        saved = getattr(c, method)(tmp_path / "data.tdz")
+        loaded = TensorDict.load(tmp_path / "data.tdz")
+        for result in (saved, loaded):
+            assert type(result) is cls
+            assert result.batch_size == torch.Size([3])
+            assert (result.indices == torch.arange(3)).all()
+            assert (getattr(result, name) == torch.arange(3.0)).all()
+
+    @pytest.mark.parametrize("mapped", [False, True])
+    def test_shadow_field_memmap_like_archive(self, mapped, tmp_path):
+        # #3676: memmap_like to an archive called the shadow field named values
+        c = _ShadowValues(indices=torch.arange(3), values=torch.ones(3), batch_size=[3])
+        if mapped:
+            c = c.memmap_(tmp_path / "source")
+        like = c.memmap_like(tmp_path / "like.tdz")
+        loaded = TensorDict.load(tmp_path / "like.tdz")
+        for result in (like, loaded):
+            assert type(result) is _ShadowValues
+            assert result.batch_size == torch.Size([3])
+            assert result.values.dtype == torch.float32
+            assert (result.values == 0).all()
+        assert (c.values == 1).all()
+
+    @pytest.mark.parametrize("cls", [_ShadowValues, _ShadowItems])
+    def test_shadow_field_nested_tensor_archive(self, cls, tmp_path):
+        # #3676: for a nested tensor, the archive writer also called the shadow
+        # field named items
+        name = "values" if cls is _ShadowValues else "items"
+        rows = [torch.ones(2), torch.ones(3), torch.ones(1)]
+        with warnings.catch_warnings():
+            # the strided layout is a prototype
+            warnings.simplefilter("ignore", UserWarning)
+            nested = torch.nested.nested_tensor(rows)
+        c = cls(indices=torch.arange(3), **{name: nested}, batch_size=[3])
+        saved = c.save(tmp_path / "data.tdz")
+        loaded = TensorDict.load(tmp_path / "data.tdz")
+        for result in (saved, loaded):
+            assert type(result) is cls
+            for row, expected in zip(getattr(result, name).unbind(0), rows):
+                assert (row == expected).all()
+        # as for a class whose fields hide no method
+        with pytest.raises(NotImplementedError, match="nested tensors in archive"):
+            c.memmap_like(tmp_path / "like.tdz")
+        assert not (tmp_path / "like.tdz").exists()
+
+    def test_shadow_field_lazy_stack_save_archive(self, tmp_path):
+        # #3676: the same for a lazy stack of shadow tensorclasses
+        c = lazy_stack(
+            [
+                _ShadowValues(
+                    indices=torch.arange(3),
+                    values=torch.full((3,), float(i)),
+                    batch_size=[3],
+                )
+                for i in range(2)
+            ]
+        )
+        saved = c.save(tmp_path / "data.tdz")
+        loaded = TensorDict.load(tmp_path / "data.tdz")
+        for result in (saved, loaded):
+            assert type(result) is _ShadowValues
+            assert result.batch_size == torch.Size([2, 3])
+            assert (result.values == torch.tensor([[0.0] * 3, [1.0] * 3])).all()
+
+    def test_shadow_field_items_save_archive(self, tmp_path):
+        # #3676: a field that hides a method that the archive writer does not
+        # call was saved before the fix too
+        c = _ShadowItems(indices=torch.arange(3), items=torch.ones(3), batch_size=[3])
+        for method in ("save", "memmap", "dumps", "memmap_like"):
+            saved = getattr(c, method)(tmp_path / f"{method}.tdz")
+            loaded = TensorDict.load(tmp_path / f"{method}.tdz")
+            for result in (saved, loaded):
+                assert type(result) is _ShadowItems
+                assert (result.items == (method != "memmap_like")).all()
+
+    def test_save_archive_calls_overridden_method(self, tmp_path):
+        # #3676: the archive writer still calls the class's own memmap_like
+        # when no field shadows it
+        calls = []
+
+        class MyClass(TensorClass["shadow"]):
+            x: torch.Tensor
+
+            def memmap_like(self, *args, **kwargs):
+                calls.append("memmap_like")
+                return TensorDictBase.memmap_like(self, *args, **kwargs)
+
+        c = MyClass(x=torch.arange(3), batch_size=[3])
+        saved = c.save(tmp_path / "data.tdz")
+        assert calls == ["memmap_like"]
+        assert type(saved) is MyClass
+        assert (saved.x == torch.arange(3)).all()
 
     # A TensorClass subclass inherits TensorClass methods and properties, which
     # dataclass() used to take as the defaults of fields with the same name.
