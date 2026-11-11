@@ -215,6 +215,14 @@ class _AppendMemmapRows:
     label: str
 
 
+class _ReportsOtherDevice(torch.Tensor):
+    # A CPU tensor that stands in for a leaf on a GPU
+
+    @property
+    def device(self):
+        return torch.device("cuda", 0)
+
+
 def _save_and_load(data, save):
     # A copy of data made with pickle, with torch.save, or with the pickler of
     # the multiprocessing queues and pipes (test_pickle_in_*_block)
@@ -2522,6 +2530,112 @@ class TestGeneric:
         expected = TensorDict(b=torch.arange(6.0) + 300, a=a)
         assert_allclose_td(saved, expected)
         assert_allclose_td(TensorDict.from_consolidated(filename), expected)
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS, reason="simulates the in-place write of Windows with a mock"
+    )
+    @pytest.mark.parametrize("num_threads,return_early", [(0, False), (2, True)])
+    def test_consolidated_file_overwrite_replace_fails_func_transform(
+        self, tmp_path, num_threads, return_early
+    ):
+        # #3672: inside a torch.func transform a leaf is a wrapper with no
+        # storage to look at. When the file is written in place, it is read
+        # where it is, as before
+        filename = tmp_path / "td.bin"
+        TensorDict(q=torch.zeros(3), x=torch.zeros(4)).consolidate(filename=filename)
+        size = filename.stat().st_size
+
+        def loss(x):
+            source = TensorDict(q=torch.arange(3.0), x=x * 2)
+            with mock.patch("os.replace", side_effect=PermissionError):
+                saved = source.consolidate(
+                    filename=filename,
+                    num_threads=num_threads,
+                    return_early=return_early,
+                )
+                if return_early:
+                    saved.result()
+            return (x**2).sum()
+
+        x = torch.arange(4.0)
+        assert (torch.func.grad(loss)(x) == 2 * x).all()
+        assert filename.stat().st_size == size
+        assert_allclose_td(
+            TensorDict.from_consolidated(filename),
+            TensorDict(q=torch.arange(3.0), x=x * 2),
+        )
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS, reason="simulates the in-place write of Windows with a mock"
+    )
+    @pytest.mark.parametrize("return_early", [False, True])
+    def test_consolidated_file_overwrite_replace_fails_sparse_several_devices(
+        self, tmp_path, return_early
+    ):
+        # #3672: a sparse leaf has no storage to look at, so it is not copied
+        # before the workers start. Beside a leaf on another device, the
+        # worker that reads it raises as before, with return_early from
+        # result()
+        filename = tmp_path / "td.bin"
+        TensorDict(a=torch.arange(300.0)).consolidate(filename=filename)
+        source = TensorDict(
+            q=torch.arange(3.0),
+            sparse=torch.eye(3).to_sparse(),
+            other=torch.tensor([1.0, 2.0]).as_subclass(_ReportsOtherDevice),
+        )
+        with mock.patch("os.replace", side_effect=PermissionError):
+            if return_early:
+                future = source.consolidate(
+                    filename=filename, num_threads=2, return_early=True
+                )
+                with pytest.raises(RuntimeError) as excinfo:
+                    future.result()
+            else:
+                with pytest.raises(RuntimeError) as excinfo:
+                    source.consolidate(filename=filename, num_threads=2)
+        # not the NotImplementedError of a tensor without a storage
+        assert type(excinfo.value) is RuntimeError
+
+    @pytest.mark.skipif(
+        _IS_WINDOWS, reason="simulates the in-place write of Windows with a mock"
+    )
+    @pytest.mark.parametrize("old_file", ["same_size", "smaller"])
+    def test_consolidated_file_overwrite_replace_fails_compiled(
+        self, tmp_path, old_file
+    ):
+        # #3672: under torch.compile a file that cannot be replaced is
+        # written as before. The compiled call ends as the same compiled call
+        # on a new file does: both return the source and a file that reads
+        # it back, or both raise the same exception
+        filename = tmp_path / "td.bin"
+        source = TensorDict(a=torch.arange(6.0), b=torch.ones(6, 2), batch_size=[6])
+        if old_file == "same_size":
+            (source * 0).consolidate(filename=filename)
+        else:
+            TensorDict(a=torch.zeros(1)).consolidate(filename=filename)
+        outcomes = []
+        for path in (filename, tmp_path / "fresh.bin"):
+
+            def save(td, path=path):
+                return td.consolidate(filename=path)
+
+            torch._dynamo.reset()
+            try:
+                with (
+                    warnings.catch_warnings(),
+                    mock.patch("os.replace", side_effect=PermissionError),
+                ):
+                    warnings.simplefilter("ignore")
+                    saved = torch.compile(save)(source)
+            except Exception as err:
+                outcomes.append(type(err))
+                continue
+            finally:
+                torch._dynamo.reset()
+            assert_allclose_td(saved, source)
+            assert_allclose_td(TensorDict.from_consolidated(path), source)
+            outcomes.append(None)
+        assert outcomes[0] is outcomes[1]
 
     @pytest.mark.skipif(
         _IS_WINDOWS, reason="simulates the in-place write of Windows with a mock"

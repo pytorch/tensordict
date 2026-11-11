@@ -1095,6 +1095,9 @@ class _Serialization:
             suffix = len_metadata.numel() + metadata_dict_json.numel()
             if not use_buffer:
                 inplace_filesize = _replace_existing_file(filename)
+                if inplace_filesize and is_compiling():
+                    # under torch.compile the file is written as before
+                    inplace_filesize = 0
                 total_storage = torch.from_file(
                     str(filename),
                     size=filesize + suffix,
@@ -2894,7 +2897,12 @@ def _may_map_file(
     one: as :func:`os.path.samefile` does, its file is compared by device and
     inode, with one ``os.stat`` per leaf.
     """
-    storage = tensor.untyped_storage()
+    try:
+        storage = tensor.untyped_storage()
+    except NotImplementedError:
+        # a sparse tensor or a torch.func wrapper has no storage to look at:
+        # it is read where it is, as before
+        return False
     if storage.resizable() or storage.nbytes() > filesize:
         return False
     mapped = getattr(tensor, "_filename", None)
