@@ -1477,6 +1477,192 @@ class TestGeneric:
         check(source.consolidate(filename=path))
         check(TensorDict.from_consolidated(path))
 
+    @staticmethod
+    def _quantized_tensor():
+        with warnings.catch_warnings():
+            # recent torch releases warn that quantized tensors are deprecated
+            warnings.filterwarnings(
+                "ignore",
+                "torch.quantize_per_tensor, torch.quantize_per_channel",
+                UserWarning,
+            )
+            return torch.quantize_per_tensor(torch.arange(4.0), 0.1, 0, torch.quint8)
+
+    @staticmethod
+    def _quantized_holder(holder, q):
+        # a tensordict that holds q, and the key of q in the error message
+        if holder == "top":
+            return TensorDict(x=q), "'x'"
+        if holder == "after_plain":
+            return TensorDict(a=torch.zeros(3), x=q), "'x'"
+        if holder == "nested":
+            return TensorDict(n={"x": q}), "('n', 'x')"
+        if holder == "lazy_stack":
+            return lazy_stack([TensorDict(x=q), TensorDict(x=q)]), "('0', 'x')"
+        if holder == "tensorclass":
+            return TensorDict(tc=_LazyStackPoint(x=q)), "('tc', 'x')"
+        njt = torch.nested.nested_tensor([q, q], layout=torch.jagged)
+        return TensorDict(x=njt), "'x'"
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {},
+            {"metadata": True},
+            {"num_threads": 2},
+            {"num_threads": 2, "return_early": True},
+            {"inplace": True},
+            {"filename": True},
+            {"filename": True, "num_threads": 2},
+            {"filename": True, "use_buffer": True},
+        ],
+        ids=[
+            "default",
+            "metadata",
+            "threads",
+            "return_early",
+            "inplace",
+            "filename",
+            "filename_threads",
+            "filename_buffer",
+        ],
+    )
+    @pytest.mark.parametrize(
+        "holder",
+        ["top", "after_plain", "nested", "lazy_stack", "tensorclass", "nested_tensor"],
+    )
+    def test_consolidate_quantized_raises(self, holder, kwargs, tmp_path):
+        # #3716: consolidate() ended the process with a segmentation fault
+        # when a leaf was a quantized tensor, because torch crashes when the
+        # bytes of such a tensor are copied. It raises instead, before it
+        # copies a leaf or touches the file. With a plain leaf copied first
+        # (after_plain), some of the calls raised a NotImplementedError of
+        # torch's instead.
+        q = self._quantized_tensor()
+        td, key = self._quantized_holder(holder, q)
+        kwargs = dict(kwargs)
+        path = tmp_path / "td.bin"
+        TensorDict(a=torch.arange(3.0)).consolidate(filename=path)
+        saved = path.read_bytes()
+        if kwargs.pop("filename", False):
+            kwargs["filename"] = path
+        message = (
+            f"Quantized tensors cannot be consolidated yet, but {key} is one. "
+            "Store its int_repr() or dequantize() instead."
+        )
+        with pytest.raises(NotImplementedError, match=f"^{re.escape(message)}$"):
+            td.consolidate(**kwargs)
+        assert path.read_bytes() == saved
+        assert not td.is_consolidated()
+        assert not td.is_locked
+        if holder == "top":
+            assert td["x"] is q
+        assert q.is_quantized
+        assert q.int_repr().tolist() == [0, 10, 20, 30]
+
+    @pytest.mark.parametrize("return_early", [False, True])
+    @pytest.mark.parametrize(
+        "holder",
+        ["top", "after_plain", "nested", "lazy_stack", "tensorclass", "nested_tensor"],
+    )
+    def test_consolidate_quantized_meta(self, holder, return_early):
+        # #3716: no bytes are copied into a meta storage, so with
+        # device="meta" a quantized leaf keeps the result it had: with worker
+        # threads, a meta leaf of dtype quint8; without them (one leaf and
+        # return_early=False), torch's NotImplementedError
+        q = self._quantized_tensor()
+        td, _ = self._quantized_holder(holder, q)
+        kwargs = {"device": "meta", "num_threads": 2, "return_early": return_early}
+        if holder in ("top", "nested", "tensorclass") and not return_early:
+            with pytest.raises(NotImplementedError) as excinfo:
+                td.consolidate(**kwargs)
+            assert "Quantized tensors cannot be consolidated" not in str(excinfo.value)
+            return
+        result = td.consolidate(**kwargs)
+        if return_early:
+            result = result.result()
+        assert result.is_consolidated()
+        if holder == "lazy_stack":
+            result = result.tensordicts[0]
+        key = {"nested": ("n", "x"), "tensorclass": ("tc", "x")}.get(holder, "x")
+        leaf = result.get(key)
+        assert leaf.dtype == torch.quint8
+        assert leaf.device.type == "meta"
+        if holder == "nested_tensor":
+            assert leaf.is_nested
+        else:
+            assert leaf.shape == q.shape
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            "device",
+            "num_threads",
+            "device_filename",
+            "unbatched",
+            "buffer_early",
+            "metadata",
+        ],
+    )
+    def test_consolidate_quantized_other_error(self, case, tmp_path):
+        # #3716: a call that raises for another reason before the file is
+        # touched keeps that exception when a leaf is quantized too
+        q = self._quantized_tensor()
+        td = TensorDict(x=q)
+        path = tmp_path / "td.bin"
+        TensorDict(a=torch.arange(3.0)).consolidate(filename=path)
+        saved = path.read_bytes()
+        if case == "device":
+            # the text is torch's: only the type is pinned
+            kwargs, error, message = {"device": "nonsense"}, RuntimeError, ""
+        elif case == "num_threads":
+            # the text is Python's: only the type is pinned
+            kwargs, error, message = {"num_threads": "2"}, TypeError, ""
+        elif case == "device_filename":
+            kwargs, error = {"filename": path, "device": "meta"}, RuntimeError
+            message = "device and filename are mutually exclusive arguments."
+        elif case == "unbatched":
+            td["u"] = tensordict.UnbatchedTensor(torch.zeros(5))
+            kwargs, error = {"filename": path}, NotImplementedError
+            message = "UnbatchedTensor entries cannot be consolidated yet, but 'u'"
+        elif case == "buffer_early":
+            kwargs = {
+                "filename": path,
+                "use_buffer": True,
+                "num_threads": 2,
+                "return_early": True,
+            }
+            error = NotImplementedError
+            message = "return_early=True is not supported with use_buffer=True"
+        else:
+            td["o"] = NonTensorData(object())
+            kwargs, error = {"filename": path}, RuntimeError
+            message = "Failed to convert the metadata to json"
+        with pytest.raises(error, match=f"^{re.escape(message)}") as excinfo:
+            td.consolidate(**kwargs)
+        assert type(excinfo.value) is error
+        assert path.read_bytes() == saved
+        assert not td.is_consolidated()
+        assert not td.is_locked
+
+    @pytest.mark.parametrize("num_threads", [0, 2])
+    def test_consolidate_quantized_values(self, num_threads, tmp_path):
+        # #3716: the integer and the float values of a quantized tensor, which
+        # the error names, consolidate as any other leaf
+        q = self._quantized_tensor()
+        td = TensorDict(i=q.int_repr(), f=q.dequantize(), a=torch.zeros(3))
+        path = tmp_path / "td.bin"
+        for td_c in (
+            td.consolidate(num_threads=num_threads),
+            td.consolidate(filename=path, num_threads=num_threads),
+            TensorDict.from_consolidated(path),
+        ):
+            assert td_c.is_consolidated()
+            assert td_c["i"].dtype == torch.uint8
+            assert td_c["i"].tolist() == [0, 10, 20, 30]
+            assert td_c["f"].dtype == torch.float32
+            assert_allclose_td(td_c, td)
+
     def test_consolidate_threads_after_closure_drop(self):
         # #3563: the worker threads are done with the functions that
         # consolidate() and to(device) drop before these return

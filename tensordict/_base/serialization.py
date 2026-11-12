@@ -633,7 +633,7 @@ class _Serialization:
         }
 
     def _reduce_vals_and_metadata(self, *, dtype=NO_DEFAULT, requires_metadata):
-        """Returns a nested dictionary of metadata, a flat Dict[NestedKey, Tensor] containing tensor data and a list of tensor sizes."""
+        """Returns a nested dictionary of metadata, a flat Dict[NestedKey, Tensor] containing tensor data, a list of tensor sizes, whether the leaves need padding, and the keys of the quantized leaves."""
         from tensordict.base import TensorDictBase
 
         if dtype is NO_DEFAULT:
@@ -666,6 +666,8 @@ class _Serialization:
 
         flat_size = []
         start = 0
+        # keys of the quantized leaves, which consolidate() rejects
+        quantized = []
 
         def add_single_value(
             value, key, metadata_dict, dtype, shape, flat_size, ragged_idx=None
@@ -765,6 +767,8 @@ class _Serialization:
                 if value.layout is torch.jagged:
                     # Get the values
                     values = value._values
+                    if values.is_quantized:
+                        quantized.append(total_key)
                     shape = [v if isinstance(v, int) else -1 for v in values.shape]
                     # Get the offsets
                     offsets = value._offsets
@@ -820,6 +824,8 @@ class _Serialization:
                         "NST is not supported, please use layout=torch.jagged when building the nested tensor."
                     )
                 return
+            if value.is_quantized:
+                quantized.append(total_key)
             flat_key_values[total_key] = value
             add_single_value(
                 value,
@@ -844,7 +850,7 @@ class _Serialization:
             # leaves would stay alive until the garbage collector runs. Not
             # under torch.compile, which cannot always trace this del.
             del assign
-        return metadata_dict, flat_key_values, flat_size, need_padding
+        return metadata_dict, flat_key_values, flat_size, need_padding, quantized
 
     def consolidate(
         self,
@@ -1059,6 +1065,7 @@ class _Serialization:
             flat_dict,
             flat_size,
             need_padding,
+            quantized,
         ) = self._reduce_vals_and_metadata(
             requires_metadata=filename is not None or metadata, dtype=None
         )
@@ -1090,6 +1097,13 @@ class _Serialization:
                 )
             suffix = len_metadata.numel() + metadata_dict_json.numel()
             if not use_buffer:
+                if quantized:
+                    # raised here too, before the file is replaced
+                    raise NotImplementedError(
+                        f"Quantized tensors cannot be consolidated yet, but "
+                        f"{unravel_key(quantized[0])!r} is one. Store its "
+                        f"int_repr() or dequantize() instead."
+                    )
                 _replace_existing_file(filename)
                 total_storage = torch.from_file(
                     str(filename),
@@ -1132,6 +1146,14 @@ class _Serialization:
                     "the storage cannot be synchronized once the copies are done."
                 )
         use_threads = num_threads > 1 and (return_early or len(flat_dict) > 1)
+        if quantized and storage.device.type != "meta":
+            # torch ends the process when the bytes of a quantized tensor are
+            # copied (no bytes are copied into a meta storage)
+            raise NotImplementedError(
+                f"Quantized tensors cannot be consolidated yet, but "
+                f"{unravel_key(quantized[0])!r} is one. Store its int_repr() "
+                f"or dequantize() instead."
+            )
         if use_threads and filename is not None and not return_early:
             # Concurrent writes into a freshly created memory-mapped file are
             # dominated by page-fault and writeback contention and measure
