@@ -2813,8 +2813,12 @@ def _consolidated_metadata_json(metadata: dict) -> bytes:
 
 @torch.compiler.disable
 def _consolidate_eager(td, filename, **kwargs):
-    """Calls ``td.consolidate(filename, **kwargs)`` outside of ``torch.compile``."""
-    return td.consolidate(filename, **kwargs)
+    """Runs ``consolidate(filename, **kwargs)`` on ``td`` outside of ``torch.compile``.
+
+    It calls ``_Serialization.consolidate`` rather than ``td.consolidate``, so a
+    subclass whose ``consolidate`` calls ``super()`` does not run twice.
+    """
+    return _Serialization.consolidate(td, filename, **kwargs)
 
 
 def _tensorclass_names_in_metadata(metadata: dict) -> dict:
