@@ -1,81 +1,53 @@
 {
-  "generated_at": "2026-11-11T06:24:35.942536+00:00",
+  "generated_at": "2026-11-12T06:23:49.312816+00:00",
   "repository": "pytorch/tensordict",
   "analysis_period": {
-    "start": "2026-11-08",
-    "end": "2026-11-11",
+    "start": "2026-11-11",
+    "end": "2026-11-12",
     "runs_analyzed": 30
   },
   "summary": {
-    "total_tests": 78632,
-    "flaky_count": 2,
-    "flaky_case_count": 2,
-    "new_flaky_count": 2,
-    "resolved_count": 0
+    "total_tests": 79426,
+    "flaky_count": 1,
+    "flaky_case_count": 1,
+    "new_flaky_count": 0,
+    "resolved_count": 1
   },
   "flaky_tests": [
     {
-      "nodeid": "test.compile.test_compile.TestNN::test_prob_module_thread_local_interaction_type[reduce-overhead]",
-      "family": "test.compile.test_compile.TestNN::test_prob_module_thread_local_interaction_type",
+      "nodeid": "test.memmap.test_memmap::test_anonymous_file_descriptors[shape0]",
+      "family": "test.memmap.test_memmap::test_anonymous_file_descriptors",
       "executions": 31,
       "passed": 30,
       "failed": 1,
       "error": 0,
       "recent_failures": [
-        "2026-11-11T03:30:25Z"
+        "2026-11-11T06:07:23Z"
       ],
       "environments": [
         "test-linux.yml / test-results-cpu-3.14t"
       ],
       "confirmed_revisions": [
         {
-          "sha": "f78b35cec29c7270961b19a7183ffbaab16eb8f9",
-          "date": "2026-11-11T03:30:25+00:00",
+          "sha": "767d51c4f9998e47df25ea9b3fe2b7b09c401463",
+          "date": "2026-11-11T06:07:23+00:00",
           "environment": "test-linux.yml / test-results-cpu-3.14t",
           "run_ids": [
-            42953197253
+            42970208772
           ]
         }
       ],
       "failures": 1,
       "failure_rate": 0.0323,
-      "avg_duration_s": 0.431,
-      "first_seen_flaky": "2026-11-11T03:30:25+00:00",
-      "last_failed": "2026-11-11T03:30:25+00:00",
-      "is_new": true
-    },
-    {
-      "nodeid": "test.memmap.test_memmap::test_anonymous_file_descriptors[shape0]",
-      "family": "test.memmap.test_memmap::test_anonymous_file_descriptors",
-      "executions": 3,
-      "passed": 2,
-      "failed": 1,
-      "error": 0,
-      "recent_failures": [
-        "2026-11-11T05:43:46Z"
-      ],
-      "environments": [
-        "test-linux.yml / test-results-cpu-3.14t"
-      ],
-      "confirmed_revisions": [
-        {
-          "sha": "3b948615aad6211a2cbc3db929c6eb34c7146caa",
-          "date": "2026-11-11T05:43:46+00:00",
-          "environment": "test-linux.yml / test-results-cpu-3.14t",
-          "run_ids": [
-            42967640435
-          ]
-        }
-      ],
-      "failures": 1,
-      "failure_rate": 0.3333,
-      "avg_duration_s": 0.497,
-      "first_seen_flaky": "2026-11-11T05:43:46+00:00",
-      "last_failed": "2026-11-11T05:43:46+00:00",
-      "is_new": true
+      "avg_duration_s": 0.821,
+      "first_seen_flaky": "2026-11-11T06:07:23+00:00",
+      "last_failed": "2026-11-11T06:07:23+00:00",
+      "is_new": false
     }
   ],
-  "resolved_test_families": [],
+  "resolved_test_families": [
+    "test.compile.test_compile.TestNN::test_prob_module_thread_local_interaction_type"
+  ],
   "thresholds": {
     "active_failure_days": 14,
     "evidence": "fail_and_pass_on_same_revision_and_environment"
