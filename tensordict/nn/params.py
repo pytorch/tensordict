@@ -1822,15 +1822,16 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                     key = found[0]
                     val = state_dict[key]
                     dest = local_state[key[len(prefix) :]]
-                    if (
-                        copied
-                        and isinstance(val, Tensor)
-                        and val.shape == dest.shape
+                    plain = (
+                        isinstance(val, Tensor)
                         and type(dest).module_load is Tensor.module_load
                         and not torch.overrides.has_torch_function_variadic(dest, val)
-                    ):
+                    )
+                    if copied and plain and val.shape == dest.shape:
                         val = dest
-                    elif copied:
+                    elif copied or not plain:
+                        # a module_load of a tensor subclass may write into
+                        # the leaf whatever assign says
                         retry = state_dict
                         break
                     retry[key] = val

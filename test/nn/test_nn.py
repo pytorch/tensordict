@@ -7379,12 +7379,13 @@ class TestTensorDictParams:
         if case == "alias_later" and not assign:
             assert (params["w"] == 2).all()
 
+    @pytest.mark.parametrize("value", ["plain", "subclass"])
     @pytest.mark.parametrize("assign", [True, False])
-    def test_load_state_dict_swap_loads_refused_again(self, assign):
-        # #3761: after a refused swap, the second load reads the refused entries
-        # alone: the extra state is loaded once. With assign=False, a refused
-        # value with its own module_load makes it load every entry again, as
-        # on main.
+    def test_load_state_dict_swap_loads_refused_again(self, assign, value):
+        # #3761: after a refused swap of plain tensors, the second load reads
+        # the refused entries alone: the extra state is loaded once. A refused
+        # value with its own module_load (a tensor subclass) makes it load
+        # every entry again, as on main.
         class Counted(TensorDictParams):
             def get_extra_state(self):
                 return {}
@@ -7405,7 +7406,9 @@ class TestTensorDictParams:
         params = self._swap_params(True, Counted)
         extra = {"calls": 0}
         sd = {
-            "params.w": torch.ones(3).as_subclass(CountLoads),
+            "params.w": torch.ones(3).as_subclass(CountLoads)
+            if value == "subclass"
+            else torch.ones(3),
             "params.n.v": torch.ones(3),
             "params._extra_state": extra,
         }
@@ -7415,9 +7418,9 @@ class TestTensorDictParams:
             self._parent(params).load_state_dict(sd, assign=assign)
         finally:
             torch.__future__.set_swap_module_params_on_conversion(prev)
-        assert extra["calls"] == (1 if assign else 2)
+        assert extra["calls"] == (1 if value == "plain" else 2)
         # w was refused, and a value with its own module_load is read again.
-        assert CountLoads.loads == 2
+        assert CountLoads.loads == (2 if value == "subclass" else 0)
         assert (params["w"] == 1).all() and (params["n", "v"] == 1).all()
 
     @pytest.mark.parametrize("assign", [True, False])
