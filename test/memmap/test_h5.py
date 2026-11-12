@@ -3104,6 +3104,161 @@ def test_pickle_locked_after_nested_access(tmp_path):
     loaded.close()
 
 
+def _h5_nested_pickled_and_closed(path, mode):
+    """The pickle of a tensordict over a file with nested entries, read with ``mode`` and closed."""
+    td = PersistentTensorDict(filename=path, mode="w", batch_size=[3])
+    td["a"] = torch.arange(3.0)
+    td["n", "b"] = torch.ones(3, 2)
+    td["n", "m", "c"] = torch.zeros(3)
+    if mode != "w":
+        td.close()
+        td = PersistentTensorDict(filename=path, mode=mode, batch_size=[3])
+    # the root caches the nested tensordicts that were read
+    td["n"]["m"]
+    payload = pickle.dumps(td)
+    td.close()
+    return payload
+
+
+def _h5_sums(path):
+    with h5py.File(path, "r") as file:
+        return {key: float(file[key][()].sum()) for key in ("a", "n/b", "n/m/c")}
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+@pytest.mark.parametrize("mode", ["a", "r+"])
+def test_pickle_nested_loads_after_close(tmp_path, mode):
+    # #3678: the cached nested tensordicts reopened the file read-only before
+    # the root did, and HDF5 then refused to open it for writing. Nothing
+    # holds this file when the load runs: an open copy would hide the error.
+    path = tmp_path / "x.h5"
+    payload = _h5_nested_pickled_and_closed(path, mode)
+    loaded = pickle.loads(payload)
+    assert loaded.mode == mode
+    assert set(loaded.keys(True, True)) == {"a", ("n", "b"), ("n", "m", "c")}
+    assert (loaded["n", "b"] == 1).all()
+    # as before pickling, the nested tensordicts are groups of the root's file
+    assert loaded["n"].file.file.mode == loaded["n"]["m"].file.file.mode == "r+"
+    assert loaded["n"].batch_size == loaded["n"]["m"].batch_size == (3,)
+    # writes through the root and through the nested tensordicts reach the file
+    loaded.set_("a", torch.full((3,), 2.0))
+    loaded.set_(("n", "b"), torch.full((3, 2), 3.0))
+    loaded["n"]["m"].set_("c", torch.full((3,), 4.0))
+    loaded["n"]["d"] = torch.full((3,), 5.0)
+    assert (loaded["n", "d"] == 5).all()
+    loaded.close()
+    assert _h5_sums(path) == {"a": 6.0, "n/b": 18.0, "n/m/c": 12.0}
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_pickle_nested_loads_moved_group(tmp_path):
+    # #3678: a cached nested tensordict follows its group when the group is
+    # moved in the file. The copy holds that group, as before pickling, and
+    # not the group that is now at the key it was cached under.
+    path = tmp_path / "x.h5"
+    td = PersistentTensorDict(filename=path, mode="a", batch_size=[3])
+    td["n", "b"] = torch.ones(3, 2)
+    td["k", "e"] = torch.zeros(3)
+    td["n"]
+    td.file.move("n", "tmp")
+    td.file.move("k", "n")
+    td.file.move("tmp", "k")
+    assert td._nested_tensordicts[("n",)].file.name == "/k"
+    payload = pickle.dumps(td)
+    td.close()
+    loaded = pickle.loads(payload)
+    nested = loaded._nested_tensordicts[("n",)]
+    assert nested.file.name == "/k"
+    assert list(nested.keys()) == ["b"]
+    nested.set_("b", torch.full((3, 2), 3.0))
+    loaded.close()
+    with h5py.File(path, "r") as file:
+        assert file["k/b"][()].sum() == 18
+        assert file["n/e"][()].sum() == 0
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_pickle_nested_load_fails_as_before(tmp_path):
+    # #3678: when the nested tensordicts are not what keeps the file from
+    # opening, the load raises what it raised before, and holds no file after
+    path = tmp_path / "x.h5"
+    payload = _h5_nested_pickled_and_closed(path, "a")
+    with h5py.File(path, "r"):
+        with pytest.raises(OSError, match="already open") as info:
+            pickle.loads(payload)
+        assert type(info.value) is OSError
+        del info
+    # with a handle left, the file could not be opened for writing
+    loaded = pickle.loads(payload)
+    loaded.set_(("n", "b"), torch.full((3, 2), 3.0))
+    loaded.close()
+    assert _h5_sums(path) == {"a": 3.0, "n/b": 18.0, "n/m/c": 0.0}
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_pickle_nested_unchanged_modes(tmp_path):
+    # #3678: pins the loads that the fix leaves alone
+    # mode="r": the copy and its nested tensordicts are read-only
+    loaded = pickle.loads(_h5_nested_pickled_and_closed(tmp_path / "r.h5", "r"))
+    nested = [loaded["n"], loaded["n"]["m"]]
+    assert loaded.mode == loaded.file.mode == "r"
+    assert [td.file.file.mode for td in nested] == ["r", "r"]
+    assert (loaded["n", "m", "c"] == 0).all()
+    loaded.close()
+    for td in nested:
+        td.file.file.close()
+    # mode="w": the load raises, and the file keeps its entries
+    path = tmp_path / "w.h5"
+    payload = _h5_nested_pickled_and_closed(path, "w")
+    with pytest.raises(OSError, match="already open"):
+        pickle.loads(payload)
+    assert _h5_sums(path) == {"a": 3.0, "n/b": 6.0, "n/m/c": 0.0}
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_pickle_nested_external_link_fails_as_before(tmp_path):
+    # #3678: a cached nested tensordict behind an external link holds another
+    # file, and the load raises as before
+    path, ext = tmp_path / "x.h5", tmp_path / "ext.h5"
+    with h5py.File(ext, "w") as file:
+        file.create_dataset("g/v", data=np.ones((3, 4)))
+    td = PersistentTensorDict(filename=path, mode="w", batch_size=[3])
+    td["n", "b"] = torch.ones(3, 2)
+    td.close()
+    with h5py.File(path, "a") as file:
+        file["e"] = h5py.ExternalLink(str(ext), "/g")
+    td = PersistentTensorDict(filename=path, mode="a", batch_size=[3])
+    td["e"]
+    td["n"]
+    payload = pickle.dumps(td)
+    linked = td._nested_tensordicts[("e",)].file.file
+    assert Path(linked.filename) == ext
+    td.close()
+    linked.close()
+    with pytest.raises(OSError, match="already open") as info:
+        pickle.loads(payload)
+    assert type(info.value) is OSError
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+def test_pickle_nested_missing_group_fails_as_before(tmp_path):
+    # #3678: the root's group was deleted after the pickle: the load raises
+    # the error of the first open, and not the KeyError of the second one
+    path = tmp_path / "x.h5"
+    file = h5py.File(path, "a")
+    td = PersistentTensorDict(group=file.create_group("g"), batch_size=[3], mode="a")
+    td["n", "b"] = torch.ones(3, 2)
+    td["n"]
+    file.move("/g/n", "/out")
+    payload = pickle.dumps(td)
+    del file["g"]
+    file.close()
+    with pytest.raises(OSError, match="already open") as info:
+        pickle.loads(payload)
+    assert type(info.value) is OSError
+    assert info.value.__context__ is None
+
+
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 def test_vmap_raises(tmp_path):
     td = PersistentTensorDict.from_dict(
