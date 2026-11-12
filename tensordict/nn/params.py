@@ -1808,7 +1808,9 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                 # swap, and a value that shares storage with a leaf may have
                 # changed since: load the leaf into itself, a no-op copy. A
                 # leaf or value whose module_load is not torch's own (a tensor
-                # subclass) may load otherwise: load its value again.
+                # subclass) may load otherwise: load every entry again, as
+                # main does, since a later leaf that shares storage with it
+                # was written after it.
                 copied = not local_metadata.get("assign_to_params_buffers", False)
                 retry = {}
                 for i in refused:
@@ -1828,6 +1830,9 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                         and not torch.overrides.has_torch_function_variadic(dest, val)
                     ):
                         val = dest
+                    elif copied:
+                        retry = state_dict
+                        break
                     retry[key] = val
                 again = []
                 hooks = self._load_state_dict_pre_hooks

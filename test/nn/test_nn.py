@@ -7382,7 +7382,9 @@ class TestTensorDictParams:
     @pytest.mark.parametrize("assign", [True, False])
     def test_load_state_dict_swap_loads_refused_again(self, assign):
         # #3761: after a refused swap, the second load reads the refused entries
-        # alone: the extra state is loaded once.
+        # alone: the extra state is loaded once. With assign=False, a refused
+        # value with its own module_load makes it load every entry again, as
+        # on main.
         class Counted(TensorDictParams):
             def get_extra_state(self):
                 return {}
@@ -7413,7 +7415,7 @@ class TestTensorDictParams:
             self._parent(params).load_state_dict(sd, assign=assign)
         finally:
             torch.__future__.set_swap_module_params_on_conversion(prev)
-        assert extra["calls"] == 1
+        assert extra["calls"] == (1 if assign else 2)
         # w was refused, and a value with its own module_load is read again.
         assert CountLoads.loads == 2
         assert (params["w"] == 1).all() and (params["n", "v"] == 1).all()
