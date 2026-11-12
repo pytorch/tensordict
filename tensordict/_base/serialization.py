@@ -1452,8 +1452,7 @@ class _Serialization:
         Becomes ``False`` when the storage no longer matches the content: after
         :meth:`~.memmap_` moves the leaves out of it, after an in-place write
         into a non-tensor entry, or after an entry is replaced, added or
-        deleted in an unpickled copy (which is not locked) or through a lazy
-        stack that was unlocked. In-place writes
+        deleted in an unpickled copy (which is not locked). In-place writes
         into the tensor leaves keep it ``True``. Call :meth:`~.consolidate`
         to build a new consolidated copy.
 
