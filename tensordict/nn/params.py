@@ -1565,15 +1565,17 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         # unless a leaf has their name. They load as any other entry when the
         # state dict has no value under the prefix (as in 0.15.4), and when
         # there is no leaf: the state dict then has no key to tell it by.
-        registered = self._added_names()
-        if registered and not (
-            any(True for _ in self._param_td.keys(True, True))
-            and any(
+        # entries: the ones that assign=True keeps. It drops them when there
+        # is no leaf.
+        registered = entries = self._added_names()
+        if registered:
+            if not any(True for _ in self._param_td.keys(True, True)):
+                registered = entries = None
+            elif not any(
                 val is not None and key.startswith(prefix)
                 for key, val in state_dict.items()
-            )
-        ):
-            registered = None
+            ):
+                registered = None
         # The keys of non-persistent buffers that are not leaves, where the
         # leaf lookup below would raise: the base reports them as unexpected.
         unexpected = set()
@@ -1668,7 +1670,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                         # the None entries, the non-persistent buffers that are not
                         # leaves, and the registered names that are not leaves.
                         kept = owner._non_persistent_buffers_set
-                        added = registered if owner is self else owner._added_names()
+                        added = entries if owner is self else owner._added_names()
                         if added:
                             kept = kept | added
                         if kept:
