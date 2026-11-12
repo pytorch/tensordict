@@ -2604,7 +2604,7 @@ class PersistentTensorDict(
                     target_td.update(value, inplace=inplace)
             else:
                 if len(subkey):
-                    target_td.set_at_(subkey, value, idx=idx)
+                    target_td.set_at_(subkey, value, idx)
                 else:
                     target_td.update_at_(value, idx=idx)
 
