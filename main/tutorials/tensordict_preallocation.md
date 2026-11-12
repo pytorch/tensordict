@@ -122,7 +122,7 @@ tensors with `memmap_like`.
 - [Batched data loading with tensorclasses](tensorclass_imagenet.html#sphx-glr-tutorials-tensorclass-imagenet-py) fills a memory-mapped
 dataset batch by batch.
 
-**Total running time of the script:** (0 minutes 0.004 seconds)
+**Total running time of the script:** (0 minutes 0.003 seconds)
 
 [`Download Jupyter notebook: tensordict_preallocation.ipynb`](../_downloads/87e90875c043c2567fac8ec8a049a261/tensordict_preallocation.ipynb)
 
