@@ -1778,9 +1778,10 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             # The base swaps the content of each leaf with the loaded tensor,
             # which torch refuses while something else refers to the leaf, as
             # the cached view under vmap of a locked tensordict does. Erase the
-            # caches that the lock reaches, load once more without the
-            # pre-hooks, which ran already, and drop the refusals that the
-            # second load does not repeat. All else stays as the first load left it.
+            # caches that the lock reaches, load the refused entries once more
+            # without the pre-hooks, which ran already, and drop the refusals
+            # that the second load does not repeat. All else stays as the first
+            # load left it.
             head = f'While swapping the parameter named "{prefix}'
             refused = [
                 i
@@ -1793,17 +1794,58 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             ]
             if refused:
                 _erase_locked_caches(self)
+                # A message belongs to the key that starts it in torch's text.
+                # If no key or more than one key starts a message, load every
+                # entry again.
+                leads = {
+                    f'{head}{name}", whose dimensions in the model are ': key
+                    for name in local_state
+                    if (key := prefix + name) in state_dict
+                }
+                sizes = {len(lead) for lead in leads}
+                # With assign=False, torch's own module_load copied each entry
+                # of the leaf's shape into the leaf before torch refused the
+                # swap, and a value that shares storage with a leaf may have
+                # changed since: load the leaf into itself, a no-op copy. A
+                # leaf or value whose module_load is not torch's own (a tensor
+                # subclass) may load otherwise: load every entry again, as
+                # main does, since a later leaf that shares storage with it
+                # was written after it.
+                copied = not local_metadata.get("assign_to_params_buffers", False)
+                retry = {}
+                for i in refused:
+                    msg = error_msgs[i]
+                    found = [leads[msg[:n]] for n in sizes if msg[:n] in leads]
+                    if len(found) != 1:
+                        retry = state_dict
+                        break
+                    key = found[0]
+                    val = state_dict[key]
+                    dest = local_state[key[len(prefix) :]]
+                    plain = (
+                        isinstance(val, Tensor)
+                        and type(dest).module_load is Tensor.module_load
+                        and not torch.overrides.has_torch_function_variadic(dest, val)
+                    )
+                    if copied and plain and val.shape == dest.shape:
+                        val = dest
+                    elif copied or not plain:
+                        # a module_load of a tensor subclass may write into
+                        # the leaf whatever assign says
+                        retry = state_dict
+                        break
+                    retry[key] = val
                 again = []
                 hooks = self._load_state_dict_pre_hooks
                 saved = hooks.copy()
                 hooks.clear()
                 try:
                     nn.Module._load_from_state_dict(
-                        self, state_dict, prefix, local_metadata, strict, [], [], again
+                        self, retry, prefix, local_metadata, strict, [], [], again
                     )
                 finally:
                     hooks.update(saved)
-                # The key of a message is its text up to the first '", '.
+                # A refusal and its repeat share their text up to the first '", '.
                 again = {msg.split('", ', 1)[0] for msg in again}
                 for i in reversed(refused):
                     if error_msgs[i].split('", ', 1)[0] not in again:

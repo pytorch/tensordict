@@ -7323,6 +7323,303 @@ class TestTensorDictParams:
         assert (params["n", "v"] == 1).all()
         assert params["n", "v"].data_ptr() == sd["params.n.v"].data_ptr()
 
+    @staticmethod
+    def _swap_params(cached, cls=TensorDictParams, leaf=torch.Tensor):
+        # A locked TensorDictParams with leaves w and n.v and, if cached, a
+        # vmapped call that caches a view of its leaves.
+        params = cls(
+            TensorDict(
+                w=torch.full((3,), 5.0).as_subclass(leaf),
+                n=TensorDict(v=torch.full((3,), 2.0).as_subclass(leaf), batch_size=[3]),
+                batch_size=[3],
+            )
+        ).lock_()
+        if cached:
+            torch.vmap(lambda td: td["n", "v"])(params)
+        return params
+
+    @pytest.mark.parametrize("assign", [True, False])
+    @pytest.mark.parametrize("case", ["alias_later", "alias_earlier", "float64"])
+    def test_load_state_dict_swap_alias(self, case, assign):
+        # #3761: with swap_module_params_on_conversion, the load after a
+        # vmapped call on a locked TensorDictParams gives the result of the
+        # same load with nothing cached, also when a value of the state dict
+        # is a view of a later leaf. The second load copied every entry again,
+        # and read the view after the first load had written that leaf.
+        results = []
+        prev = torch.__future__.get_swap_module_params_on_conversion()
+        torch.__future__.set_swap_module_params_on_conversion(True)
+        try:
+            for cached in (False, True):
+                params = self._swap_params(cached)
+                if case == "alias_later":
+                    sd = {
+                        "params.w": params["n", "v"].detach(),
+                        "params.n.v": torch.full((3,), 21.0),
+                    }
+                elif case == "alias_earlier":
+                    sd = {
+                        "params.w": torch.full((3,), 21.0),
+                        "params.n.v": params["w"].detach(),
+                    }
+                else:
+                    sd = {
+                        "params.w": torch.ones(3),
+                        "params.n.v": torch.full((3,), 1.5, dtype=torch.float64),
+                    }
+                result = self._parent(params).load_state_dict(sd, assign=assign)
+                assert result.missing_keys == result.unexpected_keys == []
+                results.append(params)
+        finally:
+            torch.__future__.set_swap_module_params_on_conversion(prev)
+        expected, params = results
+        for key in ("w", ("n", "v")):
+            assert params[key].dtype == expected[key].dtype
+            assert (params[key] == expected[key]).all()
+        if case == "alias_later" and not assign:
+            assert (params["w"] == 2).all()
+
+    @pytest.mark.parametrize("value", ["plain", "subclass"])
+    @pytest.mark.parametrize("assign", [True, False])
+    def test_load_state_dict_swap_loads_refused_again(self, assign, value):
+        # #3761: after a refused swap of plain tensors, the second load reads
+        # the refused entries alone: the extra state is loaded once. A refused
+        # value with its own module_load (a tensor subclass) makes it load
+        # every entry again, as on main.
+        class Counted(TensorDictParams):
+            def get_extra_state(self):
+                return {}
+
+            def set_extra_state(self, state):
+                state["calls"] += 1
+
+        class CountLoads(torch.Tensor):
+            loads = 0
+
+            @classmethod
+            def __torch_function__(cls, func, types, args=(), kwargs=None):
+                if func is torch.Tensor.module_load:
+                    cls.loads += 1
+                with torch._C.DisableTorchFunctionSubclass():
+                    return func(*args, **(kwargs or {}))
+
+        params = self._swap_params(True, Counted)
+        extra = {"calls": 0}
+        sd = {
+            "params.w": torch.ones(3).as_subclass(CountLoads)
+            if value == "subclass"
+            else torch.ones(3),
+            "params.n.v": torch.ones(3),
+            "params._extra_state": extra,
+        }
+        prev = torch.__future__.get_swap_module_params_on_conversion()
+        torch.__future__.set_swap_module_params_on_conversion(True)
+        try:
+            self._parent(params).load_state_dict(sd, assign=assign)
+        finally:
+            torch.__future__.set_swap_module_params_on_conversion(prev)
+        assert extra["calls"] == (1 if value == "plain" else 2)
+        # w was refused, and a value with its own module_load is read again.
+        assert CountLoads.loads == (2 if value == "subclass" else 0)
+        assert (params["w"] == 1).all() and (params["n", "v"] == 1).all()
+
+    @pytest.mark.parametrize("assign", [True, False])
+    @pytest.mark.parametrize("case", ["value_new", "leaf_scaled"])
+    def test_load_state_dict_swap_subclass(self, case, assign):
+        # #3761: with swap_module_params_on_conversion, the load after a
+        # vmapped call on a locked TensorDictParams gives the result of the
+        # same load with nothing cached when a tensor subclass loads in its
+        # own way: a value whose module_load returns a new tensor, or a leaf
+        # whose module_load stores 2x the value.
+        class NewTensor(torch.Tensor):
+            @classmethod
+            def __torch_function__(cls, func, types, args=(), kwargs=None):
+                with torch._C.DisableTorchFunctionSubclass():
+                    if func is torch.Tensor.module_load:
+                        return args[1].detach().clone()
+                    return func(*args, **(kwargs or {}))
+
+        class Scaled(torch.Tensor):
+            @classmethod
+            def __torch_function__(cls, func, types, args=(), kwargs=None):
+                kwargs = kwargs or {}
+                if func is torch.Tensor.module_load:
+                    with torch._C.DisableTorchFunctionSubclass():
+                        self, other = args
+                        if kwargs.get("assign"):
+                            return (other * 2).detach().as_subclass(Scaled)
+                        return self.copy_(other * 2).detach()
+                return super().__torch_function__(func, types, args, kwargs)
+
+        leaf = Scaled if case == "leaf_scaled" else torch.Tensor
+        value = NewTensor if case == "value_new" else torch.Tensor
+        results = []
+        prev = torch.__future__.get_swap_module_params_on_conversion()
+        torch.__future__.set_swap_module_params_on_conversion(True)
+        try:
+            for cached in (False, True):
+                params = self._swap_params(cached, leaf=leaf)
+                sd = {
+                    "params.w": torch.ones(3).as_subclass(value),
+                    "params.n.v": torch.full((3,), 3.0).as_subclass(value),
+                }
+                self._parent(params).load_state_dict(sd, assign=assign)
+                results.append(params)
+        finally:
+            torch.__future__.set_swap_module_params_on_conversion(prev)
+        expected, params = results
+        scale = 2 if case == "leaf_scaled" else 1
+        for key, loaded in (("w", 1), (("n", "v"), 3)):
+            assert type(params[key]) is type(expected[key])
+            assert (expected[key] == scale * loaded).all()
+            assert (params[key] == expected[key]).all()
+
+    @pytest.mark.parametrize("assign", [True, False])
+    @pytest.mark.parametrize("case", ["scale", "add"])
+    def test_load_state_dict_swap_param_method(self, case, assign):
+        # #3761: with swap_module_params_on_conversion, the load after a
+        # vmapped call on a locked TensorDictParams gives the result of the
+        # same load with nothing cached when the leaves are an nn.Parameter
+        # subclass that overrides module_load as a method (Parameter turns
+        # __torch_function__ off): the transform is applied once.
+        class ScaleParam(nn.Parameter):
+            def module_load(self, other, assign=False):
+                if assign:
+                    return (other * 2).detach()
+                return self.copy_(other * 2).detach()
+
+        class AddParam(nn.Parameter):
+            def module_load(self, other, assign=False):
+                if assign:
+                    return (other + 1).detach()
+                return self.copy_(other + 1).detach()
+
+        leaf = ScaleParam if case == "scale" else AddParam
+        results = []
+        prev = torch.__future__.get_swap_module_params_on_conversion()
+        torch.__future__.set_swap_module_params_on_conversion(True)
+        try:
+            for cached in (False, True):
+                params = TensorDictParams(
+                    TensorDict(
+                        w=leaf(torch.full((3,), 5.0)),
+                        n=TensorDict(v=leaf(torch.full((3,), 2.0)), batch_size=[3]),
+                        batch_size=[3],
+                    )
+                ).lock_()
+                if cached:
+                    torch.vmap(lambda td: td["n", "v"])(params)
+                sd = {"params.w": torch.ones(3), "params.n.v": torch.full((3,), 3.0)}
+                self._parent(params).load_state_dict(sd, assign=assign)
+                results.append(params)
+        finally:
+            torch.__future__.set_swap_module_params_on_conversion(prev)
+        expected, params = results
+        for key, loaded in (("w", 1.0), (("n", "v"), 3.0)):
+            value = loaded * 2 if case == "scale" else loaded + 1
+            assert (expected[key] == value).all()
+            assert (params[key] == expected[key]).all()
+
+    @pytest.mark.parametrize("assign", [True, False])
+    @pytest.mark.parametrize(
+        "where,case",
+        [
+            ("key", "fresh"),
+            ("key", "alias_later"),
+            ("module", "fresh"),
+            ("module", "alias_later"),
+            ("two_keys", "fresh"),
+        ],
+    )
+    def test_load_state_dict_swap_quoted_name(self, where, case, assign):
+        # #3761: with swap_module_params_on_conversion, the load after a
+        # vmapped call on a locked TensorDictParams gives the result of the
+        # same load with nothing cached when a key of the tensordict, or the
+        # name of the module that holds it, contains '", ', the text that
+        # follows the key in torch's message. When the message of one key
+        # starts as that of another (two_keys), every entry loads again.
+        key = {
+            "key": 'a", b',
+            "module": "w",
+            "two_keys": 'w", whose dimensions in the model are x',
+        }[where]
+        name = 'q", r' if where == "module" else "params"
+        other = "w" if where == "two_keys" else "u"
+        results = []
+        prev = torch.__future__.get_swap_module_params_on_conversion()
+        torch.__future__.set_swap_module_params_on_conversion(True)
+        try:
+            for cached in (False, True):
+                params = TensorDictParams(
+                    TensorDict(
+                        {
+                            key: torch.full((3,), 5.0),
+                            "n": TensorDict(v=torch.full((3,), 2.0), batch_size=[3]),
+                            other: torch.full((3,), 5.0),
+                        },
+                        batch_size=[3],
+                    )
+                ).lock_()
+                if cached:
+                    torch.vmap(lambda td: td["n", "v"])(params)
+                module = nn.Module()
+                module.add_module(name, params)
+                if case == "fresh":
+                    value = torch.full((3,), 7.0)
+                else:
+                    value = params["n", "v"].detach()
+                sd = {
+                    f"{name}.{key}": value,
+                    f"{name}.n.v": torch.full((3,), 21.0),
+                    f"{name}.{other}": torch.full((3,), 9.0),
+                }
+                result = module.load_state_dict(sd, assign=assign)
+                assert result.missing_keys == result.unexpected_keys == []
+                results.append(params)
+        finally:
+            torch.__future__.set_swap_module_params_on_conversion(prev)
+        expected, params = results
+        loaded = 7 if case == "fresh" else 2
+        for k, v in ((key, loaded), (("n", "v"), 21), (other, 9)):
+            assert (expected[k] == v).all()
+            assert (params[k] == expected[k]).all()
+
+    @pytest.mark.parametrize("assign", [True, False])
+    @pytest.mark.parametrize("layout", ["inner_locked", "held"])
+    def test_load_state_dict_swap_nested_locked_raises(self, layout, assign):
+        # #3736, not fixed: with swap_module_params_on_conversion, the load
+        # after a vmapped call on a locked tensordict in or around a
+        # TensorDictParams whose content is not locked raises for the refused
+        # swap.
+        nested = TensorDict(v=torch.zeros(3), batch_size=[3])
+        if layout == "inner_locked":
+            inner = TensorDictParams(nested, lock=True)
+            params = TensorDictParams(
+                TensorDict(w=torch.zeros(3), n=inner, batch_size=[3])
+            )
+            reader = params
+        else:
+            params = TensorDictParams(
+                TensorDict(w=torch.zeros(3), n=nested, batch_size=[3])
+            )
+            reader = TensorDict(n=params["n"], batch_size=[3]).lock_()
+        assert not params._param_td.is_locked
+        module = self._parent(params)
+        torch.vmap(lambda td: td["n", "v"])(reader)
+        sd = {"params.w": torch.ones(3), "params.n.v": torch.ones(3)}
+        prev = torch.__future__.get_swap_module_params_on_conversion()
+        torch.__future__.set_swap_module_params_on_conversion(True)
+        try:
+            with pytest.raises(
+                RuntimeError, match="Error.s. in loading state_dict"
+            ) as err:
+                module.load_state_dict(sd, assign=assign)
+        finally:
+            torch.__future__.set_swap_module_params_on_conversion(prev)
+        message = str(err.value)
+        assert 'While swapping the parameter named "params.n.v"' in message
+        assert "Expected use_count of t1" in message
+
     @pytest.mark.parametrize("assign", [True, False])
     @pytest.mark.parametrize("lock", [False, True])
     @pytest.mark.parametrize("root", [False, True])
