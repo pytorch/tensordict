@@ -1084,9 +1084,7 @@ class _Serialization:
                 storage.share_memory_()
         else:
             # Represent the json metadata as a tensor
-            metadata_dict_json = torch.as_tensor(
-                bytearray(_consolidated_metadata_json(metadata_dict)), dtype=torch.uint8
-            )
+            metadata_dict_json = _consolidated_metadata_tensor(metadata_dict)
             len_metadata = torch.tensor(
                 [metadata_dict_json.numel()], dtype=torch.int64
             ).view(torch.uint8)
@@ -2793,6 +2791,18 @@ def _consolidated_metadata_json(metadata: dict) -> bytes:
     if isinstance(metadata_json, str):
         metadata_json = metadata_json.encode("utf-8")
     return metadata_json
+
+
+@torch.compiler.disable
+def _consolidated_metadata_tensor(metadata: dict) -> torch.Tensor:
+    """Returns the json metadata of a consolidated tensordict as a uint8 tensor.
+
+    Not traced by ``torch.compile``: Dynamo cannot pass a ``bytearray`` to
+    ``torch.as_tensor`` (#3717).
+    """
+    return torch.as_tensor(
+        bytearray(_consolidated_metadata_json(metadata)), dtype=torch.uint8
+    )
 
 
 def _tensorclass_names_in_metadata(metadata: dict) -> dict:

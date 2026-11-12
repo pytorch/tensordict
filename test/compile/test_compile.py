@@ -2253,6 +2253,32 @@ class TestTD:
         assert out.get_non_tensor("s") == "a string"
         assert (out["a"] == 1).all()
 
+    def test_consolidate_filename(self, mode, tmp_path):
+        # #3717: compiled consolidate(filename=f) raised InternalTorchDynamoError
+        # on torch 2.15, while the eager call returns.
+        def consolidate(td, filename):
+            return td.consolidate(filename=filename)
+
+        def make():
+            return TensorDict(
+                a=torch.arange(3.0),
+                nested=TensorDict(
+                    b=torch.ones(3, 2, dtype=torch.int64), batch_size=[3]
+                ),
+                batch_size=[3],
+            )
+
+        consolidate_c = torch.compile(consolidate, mode=mode)
+        expected = consolidate(make(), tmp_path / "eager.bin")
+        eager_bytes = (tmp_path / "eager.bin").read_bytes()
+        for i in range(2):
+            filename = tmp_path / f"compiled{i}.bin"
+            out = consolidate_c(make(), filename)
+            assert out.is_consolidated()
+            assert_close(out, expected)
+            assert filename.read_bytes() == eager_bytes
+            assert_close(TensorDict.from_consolidated(filename), expected)
+
     # Memmap is currently not supported
     # def test_memmap(self, mode, tmpdir):
     #     def locked_op(td):
@@ -2745,6 +2771,31 @@ class TestTC:
             assert out.points.dtype == torch.bfloat16
             assert out.cells.dtype == torch.long
             assert_close(out, to_bf16(data))
+
+    def test_tc_consolidate_filename(self, mode, tmp_path):
+        # #3717: compiled consolidate(filename=f) raised InternalTorchDynamoError
+        # on torch 2.15, while the eager call returns.
+        def consolidate(tc, filename):
+            return tc.consolidate(filename=filename)
+
+        def make():
+            return _CastFilterTC(
+                points=torch.arange(6.0).view(2, 3),
+                cells=torch.zeros(2, 3, dtype=torch.long),
+                batch_size=[2],
+            )
+
+        consolidate_c = torch.compile(consolidate, mode=mode)
+        expected = consolidate(make(), tmp_path / "eager.bin")
+        eager_bytes = (tmp_path / "eager.bin").read_bytes()
+        for i in range(2):
+            filename = tmp_path / f"compiled{i}.bin"
+            out = consolidate_c(make(), filename)
+            assert isinstance(out, _CastFilterTC)
+            assert out.is_consolidated()
+            assert_close(out, expected)
+            assert filename.read_bytes() == eager_bytes
+            assert_close(TensorDict.from_consolidated(filename), expected._tensordict)
 
     def test_tc_tensor_output(self, mode):
         def add_one(td):
