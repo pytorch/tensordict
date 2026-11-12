@@ -7036,18 +7036,7 @@ class TestTensorDictParams:
             ("unlocked", False, False),
             ("unlocked", True, True),
         ]
-        + [
-            pytest.param(
-                layout,
-                True,
-                True,
-                marks=pytest.mark.xfail(
-                    strict=True,
-                    reason="#3613: with swap_module_params_on_conversion, the load raises after a vmapped forward",
-                ),
-            )
-            for layout in ("as_module", "content")
-        ],
+        + [(layout, True, True) for layout in ("as_module", "content")],
     )
     def test_load_state_dict_vmap(self, layout, assign, swap):
         # #3572: a vmapped forward that ran before the load computes with the
@@ -7086,6 +7075,253 @@ class TestTensorDictParams:
         assert all((param == 1).all() for param in module.parameters())
         assert (forward(params, x) == 4).all()
         assert (params.detach() == 1).all()
+
+    @pytest.mark.parametrize("assign", [True, False])
+    @pytest.mark.parametrize("layout", ["as_module", "content", "locked_td", "holder"])
+    def test_load_state_dict_swap_locked(self, layout, assign):
+        # #3613: with swap_module_params_on_conversion, torch swaps each leaf
+        # with the loaded tensor. The swap refuses a leaf that the cached view
+        # under vmap of a locked tensordict refers to, and a cached detach()
+        # kept the tensors from before the load. The layers are nested
+        # tensordicts; "holder" is a locked tensordict that holds the
+        # TensorDictParams.
+        nets = [nn.Sequential(nn.Linear(3, 4), nn.Linear(4, 1)) for _ in range(2)]
+        if layout == "as_module":
+            params = TensorDict.from_modules(*nets, as_module=True)
+        else:
+            stacked = TensorDict(
+                {
+                    "0": {"weight": torch.zeros(2, 4, 3), "bias": torch.zeros(2, 4)},
+                    "1": {"weight": torch.zeros(2, 1, 4), "bias": torch.zeros(2, 1)},
+                },
+                batch_size=[2],
+            )
+            if layout == "locked_td":
+                stacked.lock_()
+            params = TensorDictParams(stacked, lock=layout == "content")
+        module = self._parent(params)
+        root = params
+        if layout == "holder":
+            other = TensorDict(z=torch.zeros(2, 1), batch_size=[2])
+            root = TensorDict(p=params, other=other, batch_size=[2]).lock_()
+            outside = other.detach()
+        assert params.is_locked is (layout in ("as_module", "holder"))
+        assert params._param_td.is_locked
+
+        def call(params, x):
+            with params.to_module(nets[0]):
+                return nets[0](x)
+
+        forward = torch.vmap(call, (0, None))
+        x = torch.ones(4, 3)
+        assert forward(params, x).shape == (2, 4, 1)
+        tds = [root, params, params["0"]]
+        for td in tds:
+            td.detach()
+        before = dict(module.named_parameters())
+        sd = {key: torch.ones_like(val) for key, val in module.state_dict().items()}
+        prev = torch.__future__.get_swap_module_params_on_conversion()
+        torch.__future__.set_swap_module_params_on_conversion(True)
+        try:
+            result = module.load_state_dict(sd, assign=assign)
+        finally:
+            torch.__future__.set_swap_module_params_on_conversion(prev)
+        assert result.missing_keys == result.unexpected_keys == []
+        live = dict(module.named_parameters())
+        assert list(live) == list(before) and len(live) == 4
+        for name, param in live.items():
+            # the swap keeps each parameter and replaces its content
+            assert param is before[name]
+            assert (param == 1).all()
+            assert (param.data_ptr() == sd[name].data_ptr()) is assign
+            assert params.get(tuple(name.split(".")[1:])) is param
+        assert (forward(params, x) == 17).all()
+        pointers = {param.data_ptr() for param in live.values()}
+        for td in tds:
+            detached = td.detach()
+            if td is root and layout == "holder":
+                detached = detached["p"]
+            assert {leaf.data_ptr() for leaf in detached.values(True, True)} <= pointers
+            assert (detached == 1).all()
+        if layout == "holder":
+            # a tensordict outside the TensorDictParams keeps its cached read
+            assert other.detach() is outside
+
+    def test_load_state_dict_swap_locked_raises(self):
+        # #3613: with swap_module_params_on_conversion and assign=True, an
+        # entry that torch cannot swap is the only one that the error names,
+        # and the entry before it is swapped: after a vmapped call on a locked
+        # TensorDictParams as on one that was never locked.
+        outcomes = []
+        for lock in (False, True):
+            params = TensorDictParams(
+                TensorDict(a=torch.zeros(2, 3), b=torch.zeros(2, 3), batch_size=[2])
+            )
+            module = self._parent(params)
+            if lock:
+                params.lock_()
+            torch.vmap(lambda td: td["a"].sum())(params)
+            before = dict(module.named_parameters())
+            sd = {
+                "params.a": torch.ones(2, 3),
+                "params.b": torch.ones(2, 3, dtype=torch.int64),
+            }
+            prev = torch.__future__.get_swap_module_params_on_conversion()
+            torch.__future__.set_swap_module_params_on_conversion(True)
+            try:
+                with pytest.raises(
+                    RuntimeError, match="Error.s. in loading state_dict"
+                ) as err:
+                    module.load_state_dict(sd, assign=True)
+            finally:
+                torch.__future__.set_swap_module_params_on_conversion(prev)
+            named = dict(module.named_parameters())
+            assert all(named[name] is param for name, param in before.items())
+            assert all(params.get(name[7:]) is param for name, param in named.items())
+            assert (params.detach() == params).all()
+            outcomes.append(
+                (
+                    str(err.value),
+                    params["a"].tolist(),
+                    params["b"].tolist(),
+                    params["a"].data_ptr() == sd["params.a"].data_ptr(),
+                )
+            )
+        assert outcomes[0] == outcomes[1]
+        message, a, b, assigned = outcomes[1]
+        assert '"params.b"' in message and '"params.a"' not in message
+        assert a == [[1.0] * 3] * 2 and b == [[0.0] * 3] * 2 and assigned
+
+    @pytest.mark.parametrize("assign", [True, False])
+    def test_load_state_dict_swap_locked_pre_hooks(self, assign):
+        # #3613: with swap_module_params_on_conversion, a load that fails
+        # because of a cached read of a locked TensorDictParams erases the
+        # caches and loads once more. The pre-hooks of the TensorDictParams
+        # run once per load, and stay registered.
+        params = TensorDictParams(
+            TensorDict(a=torch.zeros(2, 3), b=torch.zeros(2), batch_size=[2]),
+            lock=True,
+        )
+        module = self._parent(params)
+        calls = []
+        params.register_load_state_dict_pre_hook(lambda *args: calls.append(args[2]))
+        torch.vmap(lambda td: td["a"].sum() + td["b"].sum())(params)
+        sd = {key: torch.ones_like(val) for key, val in module.state_dict().items()}
+        prev = torch.__future__.get_swap_module_params_on_conversion()
+        torch.__future__.set_swap_module_params_on_conversion(True)
+        try:
+            result = module.load_state_dict(sd, assign=assign)
+            assert calls == ["params."]
+            assert result.missing_keys == result.unexpected_keys == []
+            assert (params == 1).all()
+            assert (params["a"].data_ptr() == sd["params.a"].data_ptr()) is assign
+            assert len(params._load_state_dict_pre_hooks) == 1
+            module.load_state_dict(sd, assign=assign)
+        finally:
+            torch.__future__.set_swap_module_params_on_conversion(prev)
+        assert calls == ["params.", "params."]
+
+    @pytest.mark.parametrize("vmap", [False, True])
+    @pytest.mark.parametrize("report", ["error", "missing", "unexpected"])
+    def test_load_state_dict_swap_locked_hook_reports(self, report, vmap):
+        # #3613: with swap_module_params_on_conversion, what a pre-hook of a
+        # locked TensorDictParams reports stays, after a vmapped call too:
+        # the load gives the result it gives with no vmapped call.
+        params = TensorDictParams(
+            TensorDict(a=torch.zeros(2, 3), b=torch.zeros(2), batch_size=[2]),
+            lock=True,
+        )
+        module = self._parent(params)
+        calls = []
+
+        def hook(owner, state_dict, prefix, *args):
+            *_, missing_keys, unexpected_keys, error_msgs = args
+            calls.append(prefix)
+            if report == "error":
+                error_msgs.append("the hook rejects this load")
+            elif report == "missing":
+                missing_keys.append(prefix + "c")
+            else:
+                unexpected_keys.append(prefix + "c")
+
+        params.register_load_state_dict_pre_hook(hook)
+        if vmap:
+            torch.vmap(lambda td: td["a"].sum() + td["b"].sum())(params)
+        sd = {key: torch.ones_like(val) for key, val in module.state_dict().items()}
+        prev = torch.__future__.get_swap_module_params_on_conversion()
+        torch.__future__.set_swap_module_params_on_conversion(True)
+        try:
+            with pytest.raises(
+                RuntimeError, match="Error.s. in loading state_dict"
+            ) as err:
+                module.load_state_dict(sd)
+            if report != "error":
+                result = module.load_state_dict(sd, strict=False)
+        finally:
+            torch.__future__.set_swap_module_params_on_conversion(prev)
+        message = str(err.value)
+        assert "While swapping" not in message
+        expected = {
+            "error": "the hook rejects this load",
+            "missing": 'Missing key(s) in state_dict: "params.c"',
+            "unexpected": 'Unexpected key(s) in state_dict: "params.c"',
+        }[report]
+        assert expected in message
+        assert (params == 1).all()
+        if report == "error":
+            assert calls == ["params."]
+            return
+        assert calls == ["params.", "params."]
+        assert result.missing_keys == (["params.c"] if report == "missing" else [])
+        assert result.unexpected_keys == (
+            ["params.c"] if report == "unexpected" else []
+        )
+
+    @pytest.mark.parametrize("vmap_params", [False, True])
+    def test_load_state_dict_swap_leaf_holder(self, vmap_params):
+        # #3613, not fixed: a locked tensordict outside the TensorDictParams
+        # holds one of its leaves and ran a vmapped call. With
+        # swap_module_params_on_conversion, torch refuses to swap that leaf:
+        # a valid assign=True load raises for it alone and leaves the other
+        # entries swapped. That is the state main leaves when only the holder
+        # ran a vmapped call (vmap_params=False); the fix of #3613 gives the
+        # same state when the TensorDictParams ran one too.
+        params = TensorDictParams(
+            TensorDict(
+                w=torch.zeros(2, 3),
+                n=TensorDict(v=torch.zeros(2, 3), batch_size=[2]),
+                batch_size=[2],
+            ),
+            lock=True,
+        )
+        module = self._parent(params)
+        holder = TensorDict(x=params["w"], batch_size=[2]).lock_()
+        torch.vmap(lambda td: td["x"].sum())(holder)
+        if vmap_params:
+            torch.vmap(lambda td: td["w"].sum() + td["n", "v"].sum())(params)
+        before = dict(module.named_parameters())
+        sd = {key: torch.ones_like(val) for key, val in module.state_dict().items()}
+        assert list(sd) == ["params.w", "params.n.v"]
+        prev = torch.__future__.get_swap_module_params_on_conversion()
+        torch.__future__.set_swap_module_params_on_conversion(True)
+        try:
+            with pytest.raises(
+                RuntimeError, match="Error.s. in loading state_dict"
+            ) as err:
+                module.load_state_dict(sd, assign=True)
+        finally:
+            torch.__future__.set_swap_module_params_on_conversion(prev)
+        message = str(err.value)
+        assert '"params.w"' in message and '"params.n.v"' not in message
+        named = dict(module.named_parameters())
+        assert list(named) == list(before)
+        assert all(named[name] is param for name, param in before.items())
+        assert params.get("w") is named["params.w"]
+        assert params.get(("n", "v")) is named["params.n.v"]
+        # the held leaf keeps its values, the other entry is swapped
+        assert (params["w"] == 0).all() and (holder["x"] == 0).all()
+        assert (params["n", "v"] == 1).all()
+        assert params["n", "v"].data_ptr() == sd["params.n.v"].data_ptr()
 
     @pytest.mark.parametrize("assign", [True, False])
     @pytest.mark.parametrize("lock", [False, True])

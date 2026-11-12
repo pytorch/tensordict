@@ -65,7 +65,7 @@ from tensordict.utils import (
 )
 from torch import multiprocessing as mp, nn, Tensor
 from torch.compiler import is_compiling, is_dynamo_compiling
-from torch.nn.parameter import Buffer
+from torch.nn.parameter import Buffer, Parameter
 from torch.utils._pytree import tree_map
 
 if TYPE_CHECKING:
@@ -365,6 +365,40 @@ def _node_at(root, path, nodes, owners):
             owners.add(node)
         nodes[path[: i + 1]] = node
     return node
+
+
+def _erase_locked_caches(root):
+    # Erases the cached reads of root, of the tensordicts that its lock
+    # reaches, and of the locked tensordicts that hold them.
+    tds = [root]
+    while tds:
+        td = tds.pop()
+        # The same checks as in TensorDictParams._load_from_state_dict.
+        plain = type(td) is TensorDict
+        if not plain and not isinstance(td, TensorDictBase):
+            td = td._tensordict
+        if td._cache is not None:
+            td._erase_cache()
+        if td.is_locked:
+            for ref in td._lock_parents_weakrefs:
+                holder = ref()
+                if holder is not None and holder._cache is not None:
+                    holder._erase_cache()
+        if plain:
+            # What _lock_sub_tensordicts() returns, without a call for each
+            # parameter and buffer (a Buffer is a plain Tensor).
+            for value in td._tensordict.values():
+                cls = type(value)
+                if (
+                    cls is not Parameter
+                    and cls is not Tensor
+                    and _is_tensor_collection(cls)
+                ):
+                    tds.append(value)
+        elif not isinstance(td, TensorDictParams):
+            tds.extend(td._lock_sub_tensordicts())
+        else:
+            tds.append(td._param_td)
 
 
 def _apply_on_data_and_non_tensor(func):
@@ -1723,6 +1757,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                             td = td._param_td
         n = len(unexpected_keys)
         n_missing = len(missing_keys)
+        n_errors = len(error_msgs)
         # The base now copies each entry into the (assigned) leaf, and reports
         # missing and unexpected keys.
         nn.Module._load_from_state_dict(
@@ -1735,6 +1770,44 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             unexpected_keys,
             error_msgs,
         )
+        if (
+            len(error_msgs) > n_errors
+            and torch.__future__.get_swap_module_params_on_conversion()
+            and self._param_td.is_locked
+        ):
+            # The base swaps the content of each leaf with the loaded tensor,
+            # which torch refuses while something else refers to the leaf, as
+            # the cached view under vmap of a locked tensordict does. Erase the
+            # caches that the lock reaches, load once more without the
+            # pre-hooks, which ran already, and drop the refusals that the
+            # second load does not repeat. All else stays as the first load left it.
+            head = f'While swapping the parameter named "{prefix}'
+            refused = [
+                i
+                for i in range(n_errors, len(error_msgs))
+                if error_msgs[i].startswith(head)
+                and (
+                    "Expected use_count of t1" in error_msgs[i]
+                    or "It is not possible to get the gradient edge" in error_msgs[i]
+                )
+            ]
+            if refused:
+                _erase_locked_caches(self)
+                again = []
+                hooks = self._load_state_dict_pre_hooks
+                saved = hooks.copy()
+                hooks.clear()
+                try:
+                    nn.Module._load_from_state_dict(
+                        self, state_dict, prefix, local_metadata, strict, [], [], again
+                    )
+                finally:
+                    hooks.update(saved)
+                # The key of a message is its text up to the first '", '.
+                again = {msg.split('", ', 1)[0] for msg in again}
+                for i in reversed(refused):
+                    if error_msgs[i].split('", ', 1)[0] not in again:
+                        del error_msgs[i]
         unexpected_keys[n:] = [
             key
             for key in unexpected_keys[n:]
