@@ -1760,16 +1760,32 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             for key in self._param_td.keys(True, True)
         }
 
+    @staticmethod
+    def _leaves_without_hooks(param_td, nested: list) -> dict:
+        # The leaves of param_td by dotted name, as items(True, True) gives
+        # them, read without the get_post_hooks of the nested TensorDictParams:
+        # each one is entered through its _param_td, and appended to nested.
+        leaves = {}
+        stack = [("", param_td)]
+        while stack:
+            prefix, td = stack.pop()
+            for key, val in td.items():
+                if isinstance(val, TensorDictParams):
+                    nested.append(val)
+                    val = val._param_td
+                if _default_is_leaf(type(val)):
+                    leaves[prefix + key] = val
+                else:
+                    stack.append((f"{prefix}{key}.", val))
+        return leaves
+
+    @staticmethod
     def _registers_leaves_only(
-        self, param_td, params: dict, buffers: dict, none_buffers: bool = False
+        leaves: dict, params: dict, buffers: dict, none_buffers: bool = False
     ) -> bool:
         # True when each name of params and buffers registers the leaf of
-        # param_td with that name or, with none_buffers, is a None buffer whose
+        # leaves with that name or, with none_buffers, is a None buffer whose
         # name no leaf has. _reset_params registers the leaves only (#3547).
-        leaves = {
-            ".".join(key) if isinstance(key, tuple) else key: val
-            for key, val in param_td.items(True, True)
-        }
         for name, val in (*params.items(), *buffers.items()):
             if name in leaves:
                 if val is not leaves[name]:
@@ -1877,14 +1893,19 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                 if skip_none is None:
                     # register_buffer(name, None): nn.Module._apply skips it
                     # too. Only if no other registration can be lost below.
+                    nested = []
                     skip_none = self._registers_leaves_only(
-                        param_td, params, bufs, none_buffers=True
+                        self._leaves_without_hooks(param_td, nested),
+                        params,
+                        bufs,
+                        none_buffers=True,
                     ) and all(
                         sub._registers_leaves_only(
-                            sub._param_td, sub._parameters, sub._buffers
+                            sub._leaves_without_hooks(sub._param_td, []),
+                            sub._parameters,
+                            sub._buffers,
                         )
-                        for sub in param_td.values(True)
-                        if isinstance(sub, TensorDictParams)
+                        for sub in nested
                     )
                 if skip_none:
                     continue

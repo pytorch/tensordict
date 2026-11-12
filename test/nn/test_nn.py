@@ -8148,6 +8148,37 @@ class TestTensorDictParams:
         ):
             self._parent(params).to(target)
 
+    @pytest.mark.parametrize("target", [torch.float64, "meta"])
+    @pytest.mark.parametrize("other", [None, "parameter"])
+    def test_apply_none_buffer_nested_get_post_hook(self, other, target):
+        # #3726: the check that a None buffer can be skipped reads the leaves
+        # without the get_post_hooks of a nested TensorDictParams. Next to a
+        # None parameter the conversion raises as before and never calls the
+        # hook; alone, the hook runs as often as without the None buffer.
+        def make(none_buffer):
+            params = self._apply_params()
+            if none_buffer:
+                params.register_buffer("unused", None)
+            if other == "parameter":
+                params.register_parameter("none_param", None)
+            calls = []
+            params["sub"].register_get_post_hook(lambda td, val: calls.append(1))
+            return params, calls
+
+        params, calls = make(True)
+        if other == "parameter":
+            with pytest.raises(
+                AttributeError, match="'NoneType' object has no attribute 'data'"
+            ):
+                self._parent(params).to(target)
+            assert calls == []
+            return
+        ref, ref_calls = make(False)
+        self._parent(params).to(target)
+        self._parent(ref).to(target)
+        assert len(calls) == len(ref_calls)
+        assert "unused" in params._buffers and params._buffers["unused"] is None
+
     @pytest.mark.parametrize("nested", [False, True])
     @pytest.mark.parametrize(
         "op",
