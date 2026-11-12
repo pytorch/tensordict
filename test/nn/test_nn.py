@@ -7844,31 +7844,37 @@ class TestTensorDictParams:
 
     @pytest.mark.parametrize("op", _CONVERSIONS)
     def test_apply_none_buffer_and_parameter(self, op):
-        # #3726: a None buffer next to a None parameter. The None buffer is
-        # kept, and the rest is what the module without it gives: the None
-        # parameter stays, unless the conversion replaces the leaves (#3547).
+        # #3726: a None buffer next to a None parameter. A conversion that
+        # replaces the leaves would lose the None parameter (#3547): every
+        # conversion raises as before.
         params = self._apply_params_with_none("parameter", False, op)
         params.register_buffer("unused_buffer", None)
-        ref = self._apply_params_with_none("parameter", False, op)
-        self._convert(self._parent(params), op)
-        self._convert(self._parent(ref), op)
-        assert list(params._buffers) == [*ref._buffers, "unused_buffer"]
-        assert params.unused_buffer is None
-        assert list(params._parameters) == list(ref._parameters)
-        assert ("unused" in params._parameters) is (op in self._CONVERSIONS[:8])
-        assert self._registered(params) == self._registered(ref)
-        self._check_registered(params)
-        self._check_registered(params["sub"])
+        with pytest.raises(
+            AttributeError, match="'NoneType' object has no attribute 'data'"
+        ):
+            self._convert(self._parent(params), op)
 
-    @_LOST_3547
-    @pytest.mark.parametrize("op", _CONVERSIONS[8:])
-    def test_apply_none_buffer_keeps_none_parameter(self, op):
-        # #3547: next to a None buffer too, the right result of a conversion
-        # that replaces the leaves keeps the None parameter.
-        params = self._apply_params_with_none("parameter", False, op)
-        params.register_buffer("unused_buffer", None)
-        self._convert(self._parent(params), op)
-        assert "unused" in params._parameters and params.unused is None
+    def test_apply_none_buffer_and_registered_tensor(self):
+        # #3726: a None buffer next to a tensor registered with
+        # register_buffer, which is not a leaf: raises as before (#3547).
+        params = self._apply_params_with_none("buffer", False, None)
+        params.register_buffer("extra", torch.ones(2))
+        with pytest.raises(
+            AttributeError, match="'NoneType' object has no attribute 'data'"
+        ):
+            self._parent(params).to(torch.float64)
+
+    @pytest.mark.parametrize("target", [torch.float64, "meta"])
+    def test_apply_none_buffer_top_and_nested(self, target):
+        # #3726: a None buffer on the top TensorDictParams and on a nested
+        # one. A conversion that replaces the leaves would lose the nested
+        # one (#3547): every conversion raises as before.
+        params = self._apply_params_with_none("buffer", True, None)
+        params.register_buffer("unused", None)
+        with pytest.raises(
+            AttributeError, match="'NoneType' object has no attribute 'data'"
+        ):
+            self._parent(params).to(target)
 
     @pytest.mark.parametrize("nested", [False, True])
     @pytest.mark.parametrize(

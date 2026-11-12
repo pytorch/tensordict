@@ -1733,6 +1733,24 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             for key in self._param_td.keys(True, True)
         }
 
+    def _registers_leaves_only(
+        self, param_td, params: dict, buffers: dict, none_buffers: bool = False
+    ) -> bool:
+        # True when each name of params and buffers registers the leaf of
+        # param_td with that name or, with none_buffers, is a None buffer whose
+        # name no leaf has. _reset_params registers the leaves only (#3547).
+        leaves = {
+            ".".join(key) if isinstance(key, tuple) else key: val
+            for key, val in param_td.items(True, True)
+        }
+        for name, val in (*params.items(), *buffers.items()):
+            if name in leaves:
+                if val is not leaves[name]:
+                    return False
+            elif not (none_buffers and val is None and name in buffers):
+                return False
+        return True
+
     def items(
         self,
         include_nested: bool = False,
@@ -1826,13 +1844,22 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         params = dict(self._parameters)
         out: TensorDictBase = super()._apply(fn, recurse=recurse)
         replaced = {}
-        leaf_names = None
+        skip_none = None
         for key, val in bufs.items():
             if val is None:
-                if leaf_names is None:
-                    leaf_names = self._leaf_keys()
-                if key not in leaf_names:
-                    # register_buffer(name, None): nn.Module._apply skips it too
+                if skip_none is None:
+                    # register_buffer(name, None): nn.Module._apply skips it
+                    # too. Only if no other registration can be lost below.
+                    skip_none = self._registers_leaves_only(
+                        param_td, params, bufs, none_buffers=True
+                    ) and all(
+                        sub._registers_leaves_only(
+                            sub._param_td, sub._parameters, sub._buffers
+                        )
+                        for sub in param_td.values(True)
+                        if isinstance(sub, TensorDictParams)
+                    )
+                if skip_none:
                     continue
             new = self._buffers[key]
             if new is not val and not torch._has_compatible_shallow_copy_type(val, new):
