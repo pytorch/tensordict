@@ -10511,6 +10511,41 @@ class TestShadow:
             assert chunk["action"].tokens is None
             assert chunk["action"].text == "pick"
 
+    @pytest.mark.parametrize("mapped", [False, True])
+    @pytest.mark.parametrize("holder", [TensorDict, _ShadowIsMemmapAny])
+    def test_shadow_field_values_nested_save_archive(self, holder, mapped, tmp_path):
+        # #3694: the archive writer lists the leaves with values, which called
+        # the shadow field named values of a nested tensorclass
+        sub = _ShadowValues(
+            indices=torch.arange(3), values=torch.arange(3.0), batch_size=[3]
+        )
+        if holder is TensorDict:
+            c = TensorDict(x=torch.arange(3), sub=sub, batch_size=[3])
+        else:
+            c = _ShadowIsMemmapAny(
+                x=torch.arange(3), is_memmap=torch.ones(3), sub=sub, batch_size=[3]
+            )
+        if mapped:
+            c = c.memmap_(tmp_path / "source")
+        before = sorted(tmp_path.rglob("*"))
+        archives = []
+        for method in ("save", "memmap", "dumps"):
+            archives.append(tmp_path / f"{method}.tdz")
+            saved = getattr(c, method)(archives[-1])
+            loaded = TensorDict.load(archives[-1])
+            for result in (saved, loaded):
+                assert type(result) is holder
+                assert result.batch_size == torch.Size([3])
+                assert (result.get("x") == torch.arange(3)).all()
+                if holder is _ShadowIsMemmapAny:
+                    assert (result.is_memmap == 1).all()
+                assert type(result.get("sub")) is _ShadowValues
+                assert result.get("sub").batch_size == torch.Size([3])
+                assert (result.get("sub").indices == torch.arange(3)).all()
+                assert (result.get("sub").values == torch.arange(3.0)).all()
+        # the archives are all that the saves leave
+        assert sorted(tmp_path.rglob("*")) == sorted([*before, *archives])
+
     def test_shadow_field_in_tensordict_calls_callable(self):
         # #3694: where the lookup on the object gives something to call, the
         # tensordict calls it, as before the fix
