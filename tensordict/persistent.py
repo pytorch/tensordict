@@ -331,6 +331,13 @@ def _reopen(open_with, mode):
     return open_with(mode)
 
 
+def _cached_nested(nested):
+    """Yields the tensordicts of the cache ``nested`` and of the caches below it."""
+    for td in nested.values():
+        yield td
+        yield from _cached_nested(td._nested_tensordicts)
+
+
 class _H5Backend(_PersistentBackend):
     """h5py storage dialect."""
 
@@ -2833,7 +2840,42 @@ class PersistentTensorDict(
     # Override: reopens the file, and reads the pickles of TensorDict 0.14.
     def __setstate__(self, state):
         backend = state["_backend"]
-        state["file"] = backend.setstate(state)
+        try:
+            state["file"] = backend.setstate(state)
+        except OSError:
+            if not (
+                isinstance(backend, _H5Backend)
+                and state["mode"] in ("a", "r+")
+                and state["_nested_tensordicts"]
+            ):
+                raise
+            # The cached nested tensordicts were loaded first, and each one
+            # opened the file read-only: HDF5 then refuses to open it for
+            # writing (#3678). As before pickling, they share the root's file,
+            # each with the group that it holds: a group can have been renamed
+            # since it was cached.
+            cached = [
+                (td.file.name, td)
+                for td in _cached_nested(state["_nested_tensordicts"])
+            ]
+            if any(td.file.file.filename != state["filename"] for _, td in cached):
+                # one behind an external link holds another file: as before
+                raise
+            for _, td in cached:
+                td.file.file.close()
+            try:
+                file = backend.setstate(state)
+            except Exception:
+                file = None
+            if file is None or backend.is_array(file):
+                # they were not the cause, or the root's group is now a
+                # dataset: the error of the first open, as before
+                if file is not None:
+                    file.file.close()
+                raise
+            state["file"] = file
+            for name, td in cached:
+                td.file = file.file[name]
         state.pop("group_name", None)
         # Pickles made with TensorDict 0.14 and earlier store the dataset
         # options under "kwargs".
