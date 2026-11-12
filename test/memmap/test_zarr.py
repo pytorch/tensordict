@@ -1662,6 +1662,39 @@ class TestZarrWriteOps:
             ztd._get_array("missing")
         assert reads == []
 
+    def test_set_nested_reads_no_data(self, nested_td, monkeypatch):
+        # #3731: tc.set(("n", "y"), value) on a tensorclass over the store
+        # read every array of n twice
+        tc = _NestedData.from_tensordict(nested_td)
+        reads = []
+        getitem = zarr.Array.__getitem__
+
+        def counting_getitem(self, *args, **kwargs):
+            reads.append(self.name)
+            return getitem(self, *args, **kwargs)
+
+        monkeypatch.setattr(zarr.Array, "__getitem__", counting_getitem)
+        assert tc.set(("n", "new"), torch.ones(3, 2)) is tc
+        assert nested_td.set("n", nested_td["n"]) is nested_td
+        assert reads == []
+        monkeypatch.undo()
+        source = _nested_source()
+        torch.testing.assert_close(nested_td["n", "new"], torch.ones(3, 2))
+        torch.testing.assert_close(nested_td["n", "y"], source["n", "y"])
+        torch.testing.assert_close(nested_td["n", "m", "y"], source["n", "m", "y"])
+
+    def test_set_requires_grad_raises(self, ztd):
+        # #3731: a value whose leaves require gradients is still refused
+        for value in (
+            torch.ones(3, 4, requires_grad=True),
+            TensorDict(x=torch.ones(3, 4, requires_grad=True), batch_size=[3, 4]),
+        ):
+            with pytest.raises(RuntimeError, match="requires_grad=True"):
+                ztd.set("new", value)
+        assert "new" not in ztd.keys()
+        assert ztd.requires_grad_().requires_grad is False
+        assert not ztd["a"].requires_grad
+
     def test_fill_zero_masked_fill_no_read(self, ztd, tmp_path, monkeypatch):
         # fill_, zero_, masked_fill_ and detach_ write to the store without
         # reading it

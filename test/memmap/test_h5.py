@@ -3586,6 +3586,49 @@ class TestH5Indexing:
             h5td._get_array("missing")
         assert reads == []
 
+    def test_set_nested_reads_no_data(self, tmp_path, monkeypatch):
+        # #3731: tc.set(("n", "y"), value) on a tensorclass over the file
+        # read every dataset of n twice, and warned about its strings
+        source = _nested_source()
+        source.set(("n", "s"), NonTensorData("text", batch_size=[3]))
+        h5td = PersistentTensorDict.from_dict(source, filename=tmp_path / "f.h5")
+        tc = _NestedData.from_tensordict(h5td)
+        reads = []
+        getitem = h5py.Dataset.__getitem__
+
+        def counting_getitem(self, *args, **kwargs):
+            reads.append(self.name)
+            return getitem(self, *args, **kwargs)
+
+        monkeypatch.setattr(h5py.Dataset, "__getitem__", counting_getitem)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            assert tc.set(("n", "new"), torch.ones(3, 2)) is tc
+            assert h5td.set("n", h5td["n"]) is h5td
+        assert reads == []
+        assert not [w for w in caught if issubclass(w.category, FutureWarning)]
+        monkeypatch.undo()
+        torch.testing.assert_close(h5td["n", "new"], torch.ones(3, 2))
+        torch.testing.assert_close(h5td["n", "y"], source["n", "y"])
+        torch.testing.assert_close(h5td["n", "m", "y"], source["n", "m", "y"])
+        assert h5td["n", "s"] == b"text"
+        h5td.close()
+
+    def test_set_requires_grad_raises(self, data):
+        # #3731: a value whose leaves require gradients is still refused
+        _, h5td = data
+        for value in (
+            torch.ones(10, requires_grad=True),
+            TensorDict(x=torch.ones(10, requires_grad=True), batch_size=[10]),
+        ):
+            with pytest.raises(RuntimeError, match="requires_grad=True"):
+                h5td.set("new", value)
+            with pytest.raises(RuntimeError, match="requires_grad=True"):
+                h5td.set(("nested", "new"), value)
+        assert "new" not in h5td.keys()
+        assert h5td["nested"].requires_grad_().requires_grad is False
+        assert not h5td["nested", "c"].requires_grad
+
     def test_entry_class(self, data):
         _, h5td = data
         assert h5td.entry_class("a") is torch.Tensor
