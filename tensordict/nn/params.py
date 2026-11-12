@@ -1760,6 +1760,40 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             for key in self._param_td.keys(True, True)
         }
 
+    @staticmethod
+    def _leaves_without_hooks(param_td, nested: list) -> dict:
+        # The leaves of param_td by dotted name, as items(True, True) gives
+        # them, read without the get_post_hooks of the nested TensorDictParams:
+        # each one is entered through its _param_td, and appended to nested.
+        leaves = {}
+        stack = [("", param_td)]
+        while stack:
+            prefix, td = stack.pop()
+            for key, val in td.items():
+                if isinstance(val, TensorDictParams):
+                    nested.append(val)
+                    val = val._param_td
+                if _default_is_leaf(type(val)):
+                    leaves[prefix + key] = val
+                else:
+                    stack.append((f"{prefix}{key}.", val))
+        return leaves
+
+    @staticmethod
+    def _registers_leaves_only(
+        leaves: dict, params: dict, buffers: dict, none_buffers: bool = False
+    ) -> bool:
+        # True when each name of params and buffers registers the leaf of
+        # leaves with that name or, with none_buffers, is a None buffer whose
+        # name no leaf has. _reset_params registers the leaves only (#3547).
+        for name, val in (*params.items(), *buffers.items()):
+            if name in leaves:
+                if val is not leaves[name]:
+                    return False
+            elif not (none_buffers and val is None and name in buffers):
+                return False
+        return True
+
     def items(
         self,
         include_nested: bool = False,
@@ -1853,7 +1887,28 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         params = dict(self._parameters)
         out: TensorDictBase = super()._apply(fn, recurse=recurse)
         replaced = {}
+        skip_none = None
         for key, val in bufs.items():
+            if val is None:
+                if skip_none is None:
+                    # register_buffer(name, None): nn.Module._apply skips it
+                    # too. Only if no other registration can be lost below.
+                    nested = []
+                    skip_none = self._registers_leaves_only(
+                        self._leaves_without_hooks(param_td, nested),
+                        params,
+                        bufs,
+                        none_buffers=True,
+                    ) and all(
+                        sub._registers_leaves_only(
+                            sub._leaves_without_hooks(sub._param_td, []),
+                            sub._parameters,
+                            sub._buffers,
+                        )
+                        for sub in nested
+                    )
+                if skip_none:
+                    continue
             new = self._buffers[key]
             if new is not val and not torch._has_compatible_shallow_copy_type(val, new):
                 # .data cannot be set across these tensor types (meta and
@@ -1896,8 +1951,11 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                     ignore_lock=True,
                     non_blocking=False,
                 )
+            # _reset_params registers the leaves only: keep the None buffers of self
+            none_buffers = {k: v for k, v in self._buffers.items() if v is None}
             for owner in owners:
                 owner._reset_params()
+            self._buffers.update(none_buffers)
         # Check device and shape
         cbs = out._check_batch_size(raise_exception=False)
         if not cbs:
