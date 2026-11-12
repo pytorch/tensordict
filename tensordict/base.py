@@ -1347,15 +1347,28 @@ def _set_tensor_dict(
                 del _parameters[name]
                 _parameters[name] = tensor
                 return out
-        elif (
-            type(tensor) is Tensor
-            and not getattr(tensor, "_is_param", False)
-            and name not in _parameters
-            and name in _buffers
-        ):
-            out = _buffers.pop(name)
-            _buffers[name] = tensor
-            return out
+        elif type(tensor) is Tensor and not getattr(tensor, "_is_param", False):
+            if name not in _parameters:
+                if name in _buffers:
+                    out = _buffers.pop(name)
+                    _buffers[name] = tensor
+                    return out
+            elif preserve_module_state:
+                out = _parameters[name]
+                if out is not None:
+                    # A plain tensor into a parameter slot: what the general
+                    # path below does for it, without its type checks.
+                    if not (tensor.requires_grad or is_batchedtensor(tensor)):
+                        tensor = nn.Parameter(tensor, out.requires_grad)
+                    del _parameters[name]
+                    _parameters[name] = tensor
+                    return out
+            else:
+                # Without preserve_module_state, the tensor becomes a plain
+                # attribute, as in the general path below.
+                out = _parameters.pop(name)
+                __dict__[name] = tensor
+                return out
     was_buffer = False
     keep_parameter_slot = False
     # Build the new value before removing the old one, so that the module

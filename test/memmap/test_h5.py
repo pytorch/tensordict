@@ -26,6 +26,7 @@ from tensordict import (
 )
 from tensordict._td import _SubTensorDict
 from tensordict.base import _is_leaf_nontensor, is_tensor_collection
+from tensordict.nn import TensorDictParams
 from tensordict.utils import is_non_tensor
 from torch import multiprocessing as mp
 from torch.utils._pytree import tree_map
@@ -57,6 +58,24 @@ class _MetaList(list):
     __hash__ = None
 
 
+def _nested_source():
+    # n.y and n.m.y differ, so a write that reaches the wrong one shows
+    return TensorDict(
+        a=torch.zeros(3, 2),
+        n=TensorDict(
+            y=torch.arange(6.0).view(3, 2),
+            m=TensorDict(y=torch.zeros(3, 2), batch_size=[3]),
+            batch_size=[3],
+        ),
+        batch_size=[3],
+    )
+
+
+class _NestedData(TensorClass):
+    a: torch.Tensor
+    n: TensorDict
+
+
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 class TestH5Serialization:
     @pytest.mark.parametrize("key", [("n", "y"), ("n", "m", "y")])
@@ -82,6 +101,61 @@ class TestH5Serialization:
             assert "z" not in td["n"].keys()
         finally:
             td.close()
+
+    @pytest.fixture
+    def nested_td(self, tmp_path):
+        td = PersistentTensorDict.from_dict(
+            _nested_source(), filename=tmp_path / "nested.h5", backend="h5"
+        )
+        try:
+            yield td
+        finally:
+            td.close()
+
+    @pytest.mark.parametrize("method", ["set", "set_"])
+    def test_nested_set_tensorclass(self, nested_td, method):
+        # before #3642, set wrote the value over n.y and set_ raised
+        tc = _NestedData.from_tensordict(nested_td)
+        result = getattr(tc, method)(("n", "m", "y"), torch.ones(3, 2))
+        assert result is tc
+        torch.testing.assert_close(nested_td["n", "m", "y"], torch.ones(3, 2))
+        torch.testing.assert_close(nested_td["n", "y"], _nested_source()["n", "y"])
+
+    def test_nested_set_params(self, nested_td):
+        params = TensorDictParams(nested_td, no_convert=True)
+        result = params.set(("n", "m", "y"), torch.ones(3, 2))
+        assert result is params
+        torch.testing.assert_close(nested_td["n", "m", "y"], torch.ones(3, 2))
+        torch.testing.assert_close(nested_td["n", "y"], _nested_source()["n", "y"])
+
+    @pytest.mark.parametrize(
+        "method,op", [("stack_tensors", torch.stack), ("cat_tensors", torch.cat)]
+    )
+    def test_nested_out_key_returns_root(self, nested_td, method, op):
+        source = _nested_source()
+        result = getattr(nested_td, method)("a", ("n", "y"), out_key=("n", "c"), dim=-1)
+        assert result is nested_td
+        torch.testing.assert_close(
+            nested_td["n", "c"], op([source["a"], source["n", "y"]], dim=-1)
+        )
+        torch.testing.assert_close(nested_td["n", "m", "y"], torch.zeros(3, 2))
+
+    def test_nested_set_locked_chain(self, nested_td):
+        # before #3642, the second set_ ran on td["n"] and raised a KeyError
+        nested_td.lock_()
+        result = nested_td.set_(("n", "y"), torch.ones(3, 2)).set_(
+            "a", torch.full((3, 2), 2.0)
+        )
+        assert result is nested_td
+        torch.testing.assert_close(nested_td["n", "y"], torch.ones(3, 2))
+        torch.testing.assert_close(nested_td["a"], torch.full((3, 2), 2.0))
+        torch.testing.assert_close(nested_td["n", "m", "y"], torch.zeros(3, 2))
+
+    def test_nested_set_inplace_returns_root(self, nested_td):
+        result = nested_td.set(("n", "y"), torch.ones(3, 2), inplace=True)
+        assert result is nested_td
+        torch.testing.assert_close(nested_td["n", "y"], torch.ones(3, 2))
+        torch.testing.assert_close(nested_td["n", "m", "y"], torch.zeros(3, 2))
 
     @pytest.mark.parametrize("allow_pickle", [None, True, False])
     def test_zarr_pickle_policy_does_not_change_h5(self, tmp_path, allow_pickle):
