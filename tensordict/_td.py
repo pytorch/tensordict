@@ -27,7 +27,7 @@ from warnings import warn
 
 import numpy as np
 import torch
-from tensordict._archive import _memmap_tensor_from_path
+from tensordict._archive import _memmap_tensor_from_path, _td_method
 from tensordict._base.unsupported import _NoShapeOps
 from tensordict._indexing import (
     _entry_index,
@@ -1078,6 +1078,9 @@ class TensorDict(TensorDictBase):
                 else _jagged_split(v, [end - start for start, end in segments])
                 if dim == 0 and getattr(v, "layout", None) is torch.jagged
                 else v.chunk(chunks, dim)
+                if isinstance(v, Tensor) or callable(v.chunk)
+                # a field of a shadow tensorclass hides the method (#3694)
+                else _td_method(v, "chunk")(chunks, dim)
             )
             for k, v in self.items()
         }
@@ -3306,11 +3309,24 @@ class TensorDict(TensorDictBase):
                         and not _is_tensor_collection(type(val))
                     ):
                         continue
-                    for _key, _val in val.items(
-                        include_nested=include_nested,
-                        leaves_only=leaves_only,
-                        is_leaf=is_leaf,
-                    ):
+                    if type(val) is TensorDict:
+                        sub_items = val.items(
+                            include_nested=include_nested,
+                            leaves_only=leaves_only,
+                            is_leaf=is_leaf,
+                        )
+                    else:
+                        val_items = val.items
+                        if not callable(val_items):
+                            # a field of a shadow tensorclass hides the method
+                            # (#3694)
+                            val_items = _td_method(val, "items")
+                        sub_items = val_items(
+                            include_nested=include_nested,
+                            leaves_only=leaves_only,
+                            is_leaf=is_leaf,
+                        )
+                    for _key, _val in sub_items:
                         if isinstance(_key, str):
                             _key = (key, _key)
                         else:

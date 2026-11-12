@@ -10358,21 +10358,10 @@ class TestShadow:
             assert (result.get("is_memmap").answer == answer).all()
 
     @pytest.mark.parametrize("mapped", [False, True])
-    @pytest.mark.parametrize("case", ["nested_values", "typed", "plain_subclass"])
+    @pytest.mark.parametrize("case", ["typed", "plain_subclass"])
     def test_shadow_field_is_memmap_not_saved(self, case, mapped, tmp_path):
         # #3693: these raise as before the fix, with nothing written
-        if case == "nested_values":
-            # the archive writer calls the shadow field named values of a
-            # nested tensorclass (#3694)
-            c = _ShadowIsMemmapAny(
-                x=torch.arange(3),
-                is_memmap=torch.ones(3),
-                sub=_ShadowValues(
-                    indices=torch.arange(3), values=torch.ones(3), batch_size=[3]
-                ),
-                batch_size=[3],
-            )
-        elif case == "typed":
+        if case == "typed":
             # a TypedTensorDict has no tensordict to ask (#3696)
             c = _TypedShadowIsMemmap(
                 x=torch.arange(3), is_memmap=torch.ones(3), batch_size=[3]
@@ -10536,6 +10525,141 @@ class TestShadow:
             function(c, tmp_path / "data.tdz", return_early=True)
         assert not (tmp_path / "data.tdz").exists()
         assert not _MEMMAP_CALLS
+
+    @pytest.mark.parametrize("decorated", [False, True])
+    @pytest.mark.parametrize("name", ["values", "items", "chunk", "to_dict"])
+    def test_shadow_field_in_tensordict(self, name, decorated):
+        # #3694: a tensordict called the field named values, items, chunk or
+        # to_dict of a shadow tensorclass that it holds
+        annotations = {"x": torch.Tensor, name: torch.Tensor}
+        if decorated:
+            cls = tensorclass(shadow=True)(
+                type("MyClass", (), {"__annotations__": annotations})
+            )
+        else:
+            cls = type(
+                "MyClass", (TensorClass["shadow"],), {"__annotations__": annotations}
+            )
+        data = torch.arange(4.0)
+        inner = cls(**{"x": torch.zeros(4, 2), name: data}, batch_size=[4])
+        td = TensorDict(a=torch.ones(4), inner=inner, batch_size=[4])
+        keys = ["a", ("inner", "x"), ("inner", name)]
+
+        leaves = list(td.values(True, True))
+        assert [leaf.shape for leaf in leaves] == [(4,), (4, 2), (4,)]
+        assert (leaves[2] == data).all()
+        assert [key for key, _ in td.items(True, True)] == keys
+        assert [key for key, _ in td.items(True)] == ["a", "inner", *keys[1:]]
+        assert [key for key, _ in td.items(True, True, sort=True)] == [
+            "a",
+            ("inner", name),
+            ("inner", "x"),
+        ]
+        # arithmetic and flatten_keys list the leaves with items
+        assert (getattr((td + 1)["inner"], name) == data + 1).all()
+        assert set(td.flatten_keys(".").keys()) == {"a", "inner.x", f"inner.{name}"}
+
+        as_dict = td.to_dict()
+        assert list(as_dict["inner"]) == ["x", name]
+        assert (as_dict["inner"][name] == data).all()
+
+        for chunks in (td.chunk(2), torch.chunk(td, 2)):
+            assert len(chunks) == 2
+            for i, chunk in enumerate(chunks):
+                assert type(chunk["inner"]) is cls
+                assert chunk.batch_size == chunk["inner"].batch_size == (2,)
+                assert (getattr(chunk["inner"], name) == data[2 * i : 2 * i + 2]).all()
+
+    def test_shadow_field_chunk_in_tensordict(self):
+        # #3694: the fields of TorchRL's VLAAction, which a policy writes into
+        # its output tensordict
+        class Action(TensorClass["nocast", "shadow"]):
+            chunk: torch.Tensor | None = None
+            tokens: torch.Tensor | None = None
+            text: str | None = None
+
+        data = torch.arange(24.0).reshape(4, 3, 2)
+        action = Action(chunk=data, text="pick", batch_size=[4])
+        td = TensorDict(obs=torch.arange(4), action=action, batch_size=[4])
+        chunks = td.chunk(2)
+        assert len(chunks) == 2
+        for i, chunk in enumerate(chunks):
+            assert type(chunk["action"]) is Action
+            assert chunk.batch_size == chunk["action"].batch_size == (2,)
+            assert (chunk["obs"] == torch.arange(4)[2 * i : 2 * i + 2]).all()
+            assert (chunk["action"].chunk == data[2 * i : 2 * i + 2]).all()
+            assert chunk["action"].tokens is None
+            assert chunk["action"].text == "pick"
+
+    @pytest.mark.parametrize("mapped", [False, True])
+    @pytest.mark.parametrize("holder", [TensorDict, _ShadowIsMemmapAny])
+    def test_shadow_field_values_nested_save_archive(self, holder, mapped, tmp_path):
+        # #3694: the archive writer lists the leaves with values, which called
+        # the shadow field named values of a nested tensorclass
+        sub = _ShadowValues(
+            indices=torch.arange(3), values=torch.arange(3.0), batch_size=[3]
+        )
+        if holder is TensorDict:
+            c = TensorDict(x=torch.arange(3), sub=sub, batch_size=[3])
+        else:
+            c = _ShadowIsMemmapAny(
+                x=torch.arange(3), is_memmap=torch.ones(3), sub=sub, batch_size=[3]
+            )
+        if mapped:
+            c = c.memmap_(tmp_path / "source")
+        before = sorted(tmp_path.rglob("*"))
+        archives = []
+        for method in ("save", "memmap", "dumps"):
+            archives.append(tmp_path / f"{method}.tdz")
+            saved = getattr(c, method)(archives[-1])
+            loaded = TensorDict.load(archives[-1])
+            for result in (saved, loaded):
+                assert type(result) is holder
+                assert result.batch_size == torch.Size([3])
+                assert (result.get("x") == torch.arange(3)).all()
+                if holder is _ShadowIsMemmapAny:
+                    assert (result.is_memmap == 1).all()
+                assert type(result.get("sub")) is _ShadowValues
+                assert result.get("sub").batch_size == torch.Size([3])
+                assert (result.get("sub").indices == torch.arange(3)).all()
+                assert (result.get("sub").values == torch.arange(3.0)).all()
+        # the archives are all that the saves leave
+        assert sorted(tmp_path.rglob("*")) == sorted([*before, *archives])
+
+    def test_shadow_field_in_tensordict_calls_callable(self):
+        # #3694: where the lookup on the object gives something to call, the
+        # tensordict calls it, as before the fix
+        calls = []
+
+        @tensorclass(shadow=True)
+        class Parent:
+            x: torch.Tensor
+            values: torch.Tensor
+
+        # a plain subclass with a method over a field of its parent
+        class Child(Parent):
+            def values(self, *args, **kwargs):
+                calls.append("method")
+                return self._tensordict.values(*args, **kwargs)
+
+        child = Child(x=torch.zeros(3), values=torch.ones(3), batch_size=[3])
+        td = TensorDict(a=torch.zeros(3), inner=child, batch_size=[3])
+        assert len(list(td.values(True, True))) == 3
+        assert calls == ["method"]
+
+        # a field that holds a callable
+        class Holder(TensorClass["shadow"]):
+            x: torch.Tensor
+            values: Any
+
+        def values(*args, **kwargs):
+            calls.append("field")
+            return [torch.ones(())]
+
+        holder = Holder(x=torch.zeros(3), values=values, batch_size=[3])
+        td = TensorDict(a=torch.zeros(3), inner=holder, batch_size=[3])
+        assert [leaf.shape for leaf in td.values(True, True)] == [(3,), ()]
+        assert calls == ["method", "field"]
 
     # A TensorClass subclass inherits TensorClass methods and properties, which
     # dataclass() used to take as the defaults of fields with the same name.
