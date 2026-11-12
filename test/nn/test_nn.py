@@ -43,6 +43,7 @@ from tensordict import (
     tensorclass,
     TensorDict,
     TensorDictBase,
+    TypedTensorDict,
     unravel_key,
     unravel_key_list,
 )
@@ -5865,6 +5866,11 @@ class TestFunctionalVmap:
             functional_vmap(critics[0], params=params, kwargs=inputs, **kwargs)
 
 
+class _SwapTyped(TypedTensorDict):
+    w: torch.Tensor
+    n: TensorDict
+
+
 class TestTensorDictParams:
     def test_masked_select(self):
         params = TensorDictParams(
@@ -7146,6 +7152,81 @@ class TestTensorDictParams:
         if layout == "holder":
             # a tensordict outside the TensorDictParams keeps its cached read
             assert other.detach() is outside
+
+    @pytest.mark.parametrize("assign", [True, False])
+    @pytest.mark.parametrize("layout", ["inner_locked", "held", "typed"])
+    def test_load_state_dict_swap_nested_locked(self, layout, assign):
+        # #3736: with swap_module_params_on_conversion, the load raised after
+        # a vmapped call when the content of the TensorDictParams was not
+        # locked and a tensordict in or around it was: the cached view under
+        # vmap of that one refers to the leaves.
+        nested = TensorDict(v=torch.zeros(3), batch_size=[3])
+        if layout == "inner_locked":
+            inner = TensorDictParams(nested, lock=True)
+            params = TensorDictParams(
+                TensorDict(w=torch.zeros(3), n=inner, batch_size=[3])
+            )
+            reader = params
+        elif layout == "held":
+            params = TensorDictParams(
+                TensorDict(w=torch.zeros(3), n=nested, batch_size=[3])
+            )
+            reader = TensorDict(n=params["n"], batch_size=[3]).lock_()
+        else:
+            # lock_() locks "n" and leaves the TypedTensorDict unlocked
+            params = TensorDictParams(
+                _SwapTyped(w=torch.zeros(3), n=nested, batch_size=[3])
+            ).lock_()
+            reader = params
+        assert not params._param_td.is_locked
+        module = self._parent(params)
+        torch.vmap(lambda td: td["n", "v"])(reader)
+        sd = {"params.w": torch.ones(3), "params.n.v": torch.ones(3)}
+        prev = torch.__future__.get_swap_module_params_on_conversion()
+        torch.__future__.set_swap_module_params_on_conversion(True)
+        try:
+            result = module.load_state_dict(sd, assign=assign)
+        finally:
+            torch.__future__.set_swap_module_params_on_conversion(prev)
+        assert result.missing_keys == result.unexpected_keys == []
+        assert (params["w"] == 1).all() and (params["n", "v"] == 1).all()
+        for key in (("w",), ("n", "v")):
+            loaded = sd["params." + ".".join(key)]
+            assert (params[key].data_ptr() == loaded.data_ptr()) is assign
+        assert (reader.detach()["n", "v"] == 1).all()
+        assert (torch.vmap(lambda td: td["n", "v"])(reader) == 1).all()
+
+    @pytest.mark.parametrize("assign", [True, False])
+    def test_load_state_dict_swap_unlocked_view_raises(self, assign):
+        # #3736: with swap_module_params_on_conversion, a view of a leaf that
+        # the caller keeps still makes torch refuse to swap that leaf, in a
+        # TensorDictParams that was never locked: the load raises and names
+        # that entry alone.
+        params = TensorDictParams(
+            TensorDict(
+                w=torch.zeros(3),
+                n=TensorDict(v=torch.zeros(3), batch_size=[3]),
+                batch_size=[3],
+            )
+        )
+        module = self._parent(params)
+        view = params["n", "v"].view(3)
+        sd = {"params.w": torch.ones(3), "params.n.v": torch.ones(3)}
+        prev = torch.__future__.get_swap_module_params_on_conversion()
+        torch.__future__.set_swap_module_params_on_conversion(True)
+        try:
+            with pytest.raises(
+                RuntimeError, match="Error.s. in loading state_dict"
+            ) as err:
+                module.load_state_dict(sd, assign=assign)
+        finally:
+            torch.__future__.set_swap_module_params_on_conversion(prev)
+        message = str(err.value)
+        assert '"params.n.v"' in message and '"params.w"' not in message
+        assert "Expected use_count of t1" in message
+        assert (params["w"] == 1).all()
+        assert (params["n", "v"] == (0 if assign else 1)).all()
+        assert view.data_ptr() == params["n", "v"].data_ptr()
 
     def test_load_state_dict_swap_locked_raises(self):
         # #3613: with swap_module_params_on_conversion and assign=True, an

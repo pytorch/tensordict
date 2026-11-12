@@ -1773,14 +1773,14 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         if (
             len(error_msgs) > n_errors
             and torch.__future__.get_swap_module_params_on_conversion()
-            and self._param_td.is_locked
         ):
             # The base swaps the content of each leaf with the loaded tensor,
             # which torch refuses while something else refers to the leaf, as
-            # the cached view under vmap of a locked tensordict does. Erase the
-            # caches that the lock reaches, load once more without the
-            # pre-hooks, which ran already, and drop the refusals that the
-            # second load does not repeat. All else stays as the first load left it.
+            # the cached view under vmap of a locked tensordict in or around
+            # the content does. Erase the caches that the lock reaches, load
+            # once more without the pre-hooks, which ran already, and drop the
+            # refusals that the second load does not repeat. All else stays as
+            # the first load left it.
             head = f'While swapping the parameter named "{prefix}'
             refused = [
                 i
