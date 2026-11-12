@@ -696,7 +696,10 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         # the leaves first, so these names come after the recorded counts.
         # nn.Module refuses a dotted name: one that is in a registry was put
         # there for a leaf, or by a direct write.
-        counts = self.__dict__.get("_leaf_counts")
+        counts = self.__dict__.get("_leaf_counts", False)
+        if counts is False:
+            # No record at all: unpickled from a release that kept none.
+            counts = self.__dict__["_leaf_counts"] = self._count_leaves()
         if counts is None:
             return None
         n_params, n_buffers = counts
@@ -711,6 +714,28 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             for name in islice(names, n, None)
             if "." not in name and name not in non_persistent
         } or None
+
+    def _count_leaves(self) -> tuple[int, int] | None:
+        # The counts that _reset_params would record now, if each registry
+        # still starts with the names of the leaves, in the order that it
+        # gives them. Otherwise a leaf is not registered, or a name among
+        # those of the leaves has lost its leaf: there are no counts to tell
+        # the names registered later by.
+        param_keys = []
+        buffer_keys = []
+        for key, value in self._param_td.items(True, True):
+            if isinstance(key, tuple):
+                key = ".".join(key)
+            if isinstance(value, nn.Parameter):
+                param_keys.append(key)
+            else:
+                buffer_keys.append(key)
+        if (
+            list(islice(self._parameters, len(param_keys))) == param_keys
+            and list(islice(self._buffers, len(buffer_keys))) == buffer_keys
+        ):
+            return len(param_keys), len(buffer_keys)
+        return None
 
     def _reset_params(self, params: dict | None = None, buffers: dict | None = None):
         parameters = self._param_td
@@ -1540,15 +1565,17 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         # unless a leaf has their name. They load as any other entry when the
         # state dict has no value under the prefix (as in 0.15.4), and when
         # there is no leaf: the state dict then has no key to tell it by.
-        registered = self._added_names()
-        if registered and not (
-            any(True for _ in self._param_td.keys(True, True))
-            and any(
+        # entries: the ones that assign=True keeps. It drops them when there
+        # is no leaf.
+        registered = entries = self._added_names()
+        if registered:
+            if not any(True for _ in self._param_td.keys(True, True)):
+                registered = entries = None
+            elif not any(
                 val is not None and key.startswith(prefix)
                 for key, val in state_dict.items()
-            )
-        ):
-            registered = None
+            ):
+                registered = None
         # The keys of non-persistent buffers that are not leaves, where the
         # leaf lookup below would raise: the base reports them as unexpected.
         unexpected = set()
@@ -1643,7 +1670,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                         # the None entries, the non-persistent buffers that are not
                         # leaves, and the registered names that are not leaves.
                         kept = owner._non_persistent_buffers_set
-                        added = registered if owner is self else owner._added_names()
+                        added = entries if owner is self else owner._added_names()
                         if added:
                             kept = kept | added
                         if kept:
