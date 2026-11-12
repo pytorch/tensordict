@@ -1499,6 +1499,8 @@ class TestGeneric:
             {"filename": True},
             {"filename": True, "num_threads": 2},
             {"filename": True, "use_buffer": True},
+            {"device": "meta", "num_threads": 2},
+            {"device": "meta", "num_threads": 2, "return_early": True},
         ],
         ids=[
             "default",
@@ -1509,6 +1511,8 @@ class TestGeneric:
             "filename",
             "filename_threads",
             "filename_buffer",
+            "meta_threads",
+            "meta_return_early",
         ],
     )
     @pytest.mark.parametrize(
@@ -1521,7 +1525,9 @@ class TestGeneric:
         # bytes of such a tensor are copied. It raises instead, before it
         # copies a leaf or touches the file. With a plain leaf copied first
         # (after_plain), some of the calls raised a NotImplementedError of
-        # torch's instead.
+        # torch's instead. With device="meta" and worker threads, some returned
+        # a leaf of dtype quint8 that is not quantized, which torch cannot
+        # clone or copy to another device.
         q = self._quantized_tensor()
         if holder == "top":
             td, key = TensorDict(x=q), "'x'"
