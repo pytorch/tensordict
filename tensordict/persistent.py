@@ -2624,8 +2624,13 @@ class PersistentTensorDict(
                     "writes a stack of different non-tensor values as a whole. "
                     "Set the entry with inplace=False instead."
                 )
-            elif stack:
-                # a stack is written as a whole: replace the array
+            elif stack or (
+                idx is None
+                and isinstance(value, _ZarrNonTensorPayload)
+                and self._backend._non_tensor_marker(array) is not None
+            ):
+                # a stack, or a zarr payload over a payload, is written as a
+                # whole: replace the array
                 self._backend.delete(self.file, key)
                 self._backend.try_create_dataset(
                     self.file, key, value, self._dataset_kwargs
