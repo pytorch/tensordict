@@ -167,12 +167,13 @@ class TestH5Serialization:
     )
     @pytest.mark.parametrize(
         "index",
-        [0, slice(0, 2), [0, 2], torch.tensor([True, False, True])],
-        ids=["int", "slice", "list", "mask"],
+        [0, slice(0, 2), [0, 2]],
+        ids=["int", "slice", "list"],
     )
     def test_nested_set_at_tensordict(self, tmp_path, key, value_type, index):
         # #3732: set_at_ with a nested key and a tensordict or a tensorclass
-        # as the value raised a TypeError
+        # as the value raised a TypeError. No mask index: with h5py 3.11 a
+        # mask write into a 2-D leaf raises, through a one-part key too
         twin = TensorDict(
             o=TensorDict(p=_nested_source(), batch_size=[3]), batch_size=[3]
         )
