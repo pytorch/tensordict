@@ -2505,7 +2505,13 @@ class PersistentTensorDict(
         )
 
     def _to_numpy(self, value, key: NestedKey):
-        if hasattr(value, "requires_grad") and value.requires_grad:
+        # The leaves of a file never require gradients, and asking would
+        # read every one of them (#3731).
+        if (
+            not isinstance(value, PersistentTensorDict)
+            and hasattr(value, "requires_grad")
+            and value.requires_grad
+        ):
             raise RuntimeError("Cannot set a tensor that has requires_grad=True.")
         if isinstance(value, torch.Tensor):
             if _is_unbatched(value):
