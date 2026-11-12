@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Sequence, TYPE_CHECKING
 
 import torch
-from tensordict._archive import _tensor_chunks
+from tensordict._archive import _td_method, _tensor_chunks
 from tensordict._nestedkey import NestedKey
 from tensordict._td_memmap import _class_id, _memmap_filename
 from tensordict._tensorcollection import TensorCollection
@@ -1036,7 +1036,7 @@ def save(
         True MemoryMappedTensor
 
     """
-    return data.memmap(
+    return _td_method(data, "memmap")(
         prefix=prefix,
         copy_existing=copy_existing,
         num_threads=num_threads,
@@ -1127,7 +1127,7 @@ def memmap(
         True
 
     """
-    return data.memmap(
+    return _td_method(data, "memmap")(
         prefix=prefix,
         copy_existing=copy_existing,
         num_threads=num_threads,
