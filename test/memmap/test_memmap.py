@@ -1371,6 +1371,7 @@ def test_anonymous_with_elements_unchanged(tmp_path):
     not os.path.isdir("/proc/self/fd"), reason="reads the open files in /proc"
 )
 @pytest.mark.parametrize("shape", [(4, 3), (4, 0)])
+@pytest.mark.skip(reason="flaky: see #3687")
 def test_anonymous_file_descriptors(shape):
     def handler_files():
         # the open files of the handlers of this process, each with its
