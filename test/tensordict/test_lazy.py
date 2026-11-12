@@ -3514,6 +3514,157 @@ class TestLazyStackedTensorDict:
         assert assert_allclose_td(td_c_device.cpu(), td)
         assert td_c_device["njt_lengths"]._lengths is not None
 
+    @staticmethod
+    def _consolidate_unlock_members(tensorclass=False, batch=()):
+        cls = _Pair if tensorclass else TensorDict
+        return [
+            cls(
+                x=torch.full((*batch, 3), float(i)),
+                y=torch.full((*batch, 3), float(i + 5)),
+                batch_size=batch,
+            )
+            for i in range(2)
+        ]
+
+    @pytest.mark.parametrize("tensorclass", [False, True])
+    @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize("write", ["stack", "member", "with", "relock"])
+    def test_consolidate_unlock_replace(self, tensorclass, stack_dim, write):
+        # #3738: unlock_() kept the consolidated record of a lazy stack. A
+        # pickle then stored the values from before a later write, and
+        # to(device) read the new leaves at their offsets in the old storage.
+        members = self._consolidate_unlock_members(tensorclass, batch=(4,))
+        out = lazy_stack(members, dim=stack_dim).consolidate()
+        assert out.is_consolidated()
+        assert out.is_locked
+        new = torch.full(out.get("x").shape, 7.0)
+        y = out.get("y").clone()
+        if write == "with":
+            with out.unlock_():
+                out.set("x", new)
+            assert out.is_locked
+        elif write == "member":
+            out.unlock_()
+            for member, value in zip(out.tensordicts, new.unbind(stack_dim)):
+                member.set("x", value)
+        else:
+            out.unlock_()
+            out.set("x", new)
+            if write == "relock":
+                out.lock_()
+        for result in (
+            pickle.loads(pickle.dumps(out)),
+            out.to("cpu"),
+            out.consolidate(),
+            pickle.loads(pickle.dumps(out.consolidate())),
+        ):
+            assert type(result) is type(out)
+            assert result.batch_size == out.batch_size
+            assert (result.get("x") == new).all()
+            assert (result.get("y") == y).all()
+        buffer = io.BytesIO()
+        torch.save(out, buffer)
+        buffer.seek(0)
+        loaded = torch.load(buffer, weights_only=False)
+        assert (loaded.get("x") == new).all()
+        assert (loaded.get("y") == y).all()
+        # A new consolidate() builds a new storage, and the stack is as before
+        again = out.consolidate()
+        assert again is not out
+        assert again.is_consolidated()
+        assert again.is_locked
+        assert not out.is_consolidated()
+        if not out.is_locked:
+            assert (out.to("cpu", inplace=True).get("x") == new).all()
+        assert (out.get("x") == new).all()
+        assert (out.get("y") == y).all()
+
+    @pytest.mark.parametrize("write", ["add", "delete"])
+    def test_consolidate_unlock_add_delete(self, write):
+        # #3738: an entry added after unlock_() was missing from the pickle,
+        # and a deleted one was still in it.
+        out = lazy_stack(self._consolidate_unlock_members()).consolidate()
+        out.unlock_()
+        if write == "add":
+            out["z"] = torch.full((2, 3), 7.0)
+        else:
+            del out["x"]
+        expected = out.to_tensordict()
+        assert set(expected.keys()) == ({"x", "y", "z"} if write == "add" else {"y"})
+        for result in (
+            pickle.loads(pickle.dumps(out)),
+            out.to("cpu"),
+            out.consolidate(),
+        ):
+            assert isinstance(result, LazyStackedTensorDict)
+            assert set(result.keys()) == set(expected.keys())
+            assert (result.to_tensordict() == expected).all()
+
+    def test_consolidate_unlock_nested_lazy(self):
+        # #3738, for a lazy stack of lazy stacks
+        members = self._consolidate_unlock_members()
+        out = lazy_stack(
+            [lazy_stack(members), lazy_stack([member + 2 for member in members])]
+        ).consolidate()
+        out.unlock_()
+        new = torch.full((2, 2, 3), 7.0)
+        out["x"] = new
+        y = torch.tensor([5.0, 6.0, 7.0, 8.0]).reshape(2, 2, 1).expand(2, 2, 3)
+        for result in (pickle.loads(pickle.dumps(out)), out.to("cpu")):
+            assert isinstance(result, LazyStackedTensorDict)
+            assert (result["x"] == new).all()
+            assert (result["y"] == y).all()
+        assert not out.is_consolidated()
+
+    @pytest.mark.parametrize("tensorclass", [False, True])
+    def test_consolidate_unlock_matches_dense(self, tensorclass):
+        # unlock_() ends the consolidated state of a lazy stack, as it does
+        # for the dense tensordict with the same content (#3738).
+        members = self._consolidate_unlock_members(tensorclass)
+        lazy = lazy_stack(members).consolidate().unlock_()
+        dense = torch.stack(members).consolidate().unlock_()
+        for td in (lazy, dense):
+            assert not td.is_consolidated()
+            assert not td.is_locked
+            for result in (pickle.loads(pickle.dumps(td)), td.to("cpu")):
+                assert type(result) is type(td)
+                assert not result.is_consolidated()
+                assert not result.is_locked
+                assert (result == dense).all()
+            again = td.consolidate()
+            assert again is not td
+            assert again.is_consolidated()
+            assert again.is_locked
+            assert (again == dense).all()
+            # Locked again, it is a locked tensordict that is not consolidated
+            td.lock_()
+            assert not td.is_consolidated()
+            with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                td.to("cpu", inplace=True)
+            with pytest.raises(RuntimeError, match="Cannot modify locked"):
+                td.consolidate(inplace=True)
+            assert (td == again).all()
+
+    def test_consolidate_lazy_stack_keeps_record(self):
+        # What #3738 leaves alone: a consolidated lazy stack that stays locked
+        # keeps its storage through writes in place, and its unpickled copy,
+        # which is not locked, takes a write without unlock_().
+        out = lazy_stack(self._consolidate_unlock_members()).consolidate()
+        storage = out._consolidated["storage"]
+        out.set_("x", torch.full((2, 3), 7.0))
+        assert out.is_consolidated()
+        assert out.is_locked
+        assert out._consolidated["storage"] is storage
+        assert out.consolidate() is out
+        loaded = pickle.loads(pickle.dumps(out))
+        assert loaded.is_consolidated()
+        assert not loaded.is_locked
+        assert (loaded["x"] == 7).all()
+        loaded["x"] = torch.full((2, 3), 8.0)
+        assert not loaded.is_consolidated()
+        assert (pickle.loads(pickle.dumps(loaded))["x"] == 8).all()
+        assert (loaded.to("cpu")["x"] == 8).all()
+
     def test_batch_size_equal_list(self):
         lazy = lazy_stack(
             [TensorDict(a=torch.zeros(3), batch_size=[3]) for _ in range(2)]
