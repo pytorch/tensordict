@@ -1557,7 +1557,15 @@ class TestGeneric:
         assert q.int_repr().tolist() == [0, 10, 20, 30]
 
     @pytest.mark.parametrize(
-        "case", ["device", "device_filename", "unbatched", "buffer_early", "metadata"]
+        "case",
+        [
+            "device",
+            "num_threads",
+            "device_filename",
+            "unbatched",
+            "buffer_early",
+            "metadata",
+        ],
     )
     def test_consolidate_quantized_other_error(self, case, tmp_path):
         # #3716: a call that raises for another reason before the file is
@@ -1568,8 +1576,11 @@ class TestGeneric:
         TensorDict(a=torch.arange(3.0)).consolidate(filename=path)
         saved = path.read_bytes()
         if case == "device":
-            kwargs, error = {"device": "nonsense"}, RuntimeError
-            message = "Expected one of cpu, cuda"
+            # the text is torch's: only the type is pinned
+            kwargs, error, message = {"device": "nonsense"}, RuntimeError, ""
+        elif case == "num_threads":
+            # the text is Python's: only the type is pinned
+            kwargs, error, message = {"num_threads": "2"}, TypeError, ""
         elif case == "device_filename":
             kwargs, error = {"filename": path, "device": "meta"}, RuntimeError
             message = "device and filename are mutually exclusive arguments."

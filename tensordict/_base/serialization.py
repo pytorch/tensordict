@@ -633,7 +633,7 @@ class _Serialization:
         }
 
     def _reduce_vals_and_metadata(self, *, dtype=NO_DEFAULT, requires_metadata):
-        """Returns a nested dictionary of metadata, a flat Dict[NestedKey, Tensor] containing tensor data and a list of tensor sizes."""
+        """Returns a nested dictionary of metadata, a flat Dict[NestedKey, Tensor] containing tensor data, a list of tensor sizes, whether the leaves need padding, and the keys of the quantized leaves."""
         from tensordict.base import TensorDictBase
 
         if dtype is NO_DEFAULT:
@@ -1145,6 +1145,7 @@ class _Serialization:
                     "return_early=True is not supported with non_blocking=True in `consolidate`: "
                     "the storage cannot be synchronized once the copies are done."
                 )
+        use_threads = num_threads > 1 and (return_early or len(flat_dict) > 1)
         if quantized:
             # torch ends the process when the bytes of a quantized tensor are
             # copied
@@ -1153,7 +1154,6 @@ class _Serialization:
                 f"{unravel_key(quantized[0])!r} is one. Store its int_repr() "
                 f"or dequantize() instead."
             )
-        use_threads = num_threads > 1 and (return_early or len(flat_dict) > 1)
         if use_threads and filename is not None and not return_early:
             # Concurrent writes into a freshly created memory-mapped file are
             # dominated by page-fault and writeback contention and measure
