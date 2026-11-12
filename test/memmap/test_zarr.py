@@ -1475,7 +1475,7 @@ class TestZarrWriteOps:
         assert (nested_td.to_tensordict() == twin).all()
         assert not (twin == 9).any()
 
-    @pytest.mark.xfail(strict=True, reason="#NNNN")
+    @pytest.mark.xfail(strict=True, reason="#3741")
     def test_nested_set_at_missing_key_creates_no_group(self, nested_td):
         # as td["n"].set_at_("zz", value, 0) does, the call creates the group
         # n/zz before its KeyError; a TensorDict raises and writes nothing
