@@ -65,7 +65,7 @@ from tensordict.utils import (
 )
 from torch import multiprocessing as mp, nn, Tensor
 from torch.compiler import is_compiling, is_dynamo_compiling
-from torch.nn.parameter import Buffer
+from torch.nn.parameter import Buffer, Parameter
 from torch.utils._pytree import tree_map
 
 if TYPE_CHECKING:
@@ -365,6 +365,40 @@ def _node_at(root, path, nodes, owners):
             owners.add(node)
         nodes[path[: i + 1]] = node
     return node
+
+
+def _erase_locked_caches(root):
+    # Erases the cached reads of root, of the tensordicts that its lock
+    # reaches, and of the locked tensordicts that hold them.
+    tds = [root]
+    while tds:
+        td = tds.pop()
+        # The same checks as in TensorDictParams._load_from_state_dict.
+        plain = type(td) is TensorDict
+        if not plain and not isinstance(td, TensorDictBase):
+            td = td._tensordict
+        if td._cache is not None:
+            td._erase_cache()
+        if td.is_locked:
+            for ref in td._lock_parents_weakrefs:
+                holder = ref()
+                if holder is not None and holder._cache is not None:
+                    holder._erase_cache()
+        if plain:
+            # What _lock_sub_tensordicts() returns, without a call for each
+            # parameter and buffer (a Buffer is a plain Tensor).
+            for value in td._tensordict.values():
+                cls = type(value)
+                if (
+                    cls is not Parameter
+                    and cls is not Tensor
+                    and _is_tensor_collection(cls)
+                ):
+                    tds.append(value)
+        elif not isinstance(td, TensorDictParams):
+            tds.extend(td._lock_sub_tensordicts())
+        else:
+            tds.append(td._param_td)
 
 
 def _apply_on_data_and_non_tensor(func):
@@ -696,7 +730,10 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         # the leaves first, so these names come after the recorded counts.
         # nn.Module refuses a dotted name: one that is in a registry was put
         # there for a leaf, or by a direct write.
-        counts = self.__dict__.get("_leaf_counts")
+        counts = self.__dict__.get("_leaf_counts", False)
+        if counts is False:
+            # No record at all: unpickled from a release that kept none.
+            counts = self.__dict__["_leaf_counts"] = self._count_leaves()
         if counts is None:
             return None
         n_params, n_buffers = counts
@@ -711,6 +748,28 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             for name in islice(names, n, None)
             if "." not in name and name not in non_persistent
         } or None
+
+    def _count_leaves(self) -> tuple[int, int] | None:
+        # The counts that _reset_params would record now, if each registry
+        # still starts with the names of the leaves, in the order that it
+        # gives them. Otherwise a leaf is not registered, or a name among
+        # those of the leaves has lost its leaf: there are no counts to tell
+        # the names registered later by.
+        param_keys = []
+        buffer_keys = []
+        for key, value in self._param_td.items(True, True):
+            if isinstance(key, tuple):
+                key = ".".join(key)
+            if isinstance(value, nn.Parameter):
+                param_keys.append(key)
+            else:
+                buffer_keys.append(key)
+        if (
+            list(islice(self._parameters, len(param_keys))) == param_keys
+            and list(islice(self._buffers, len(buffer_keys))) == buffer_keys
+        ):
+            return len(param_keys), len(buffer_keys)
+        return None
 
     def _reset_params(self, params: dict | None = None, buffers: dict | None = None):
         parameters = self._param_td
@@ -1540,15 +1599,17 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         # unless a leaf has their name. They load as any other entry when the
         # state dict has no value under the prefix (as in 0.15.4), and when
         # there is no leaf: the state dict then has no key to tell it by.
-        registered = self._added_names()
-        if registered and not (
-            any(True for _ in self._param_td.keys(True, True))
-            and any(
+        # entries: the ones that assign=True keeps. It drops them when there
+        # is no leaf.
+        registered = entries = self._added_names()
+        if registered:
+            if not any(True for _ in self._param_td.keys(True, True)):
+                registered = entries = None
+            elif not any(
                 val is not None and key.startswith(prefix)
                 for key, val in state_dict.items()
-            )
-        ):
-            registered = None
+            ):
+                registered = None
         # The keys of non-persistent buffers that are not leaves, where the
         # leaf lookup below would raise: the base reports them as unexpected.
         unexpected = set()
@@ -1643,7 +1704,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                         # the None entries, the non-persistent buffers that are not
                         # leaves, and the registered names that are not leaves.
                         kept = owner._non_persistent_buffers_set
-                        added = registered if owner is self else owner._added_names()
+                        added = entries if owner is self else owner._added_names()
                         if added:
                             kept = kept | added
                         if kept:
@@ -1696,6 +1757,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                             td = td._param_td
         n = len(unexpected_keys)
         n_missing = len(missing_keys)
+        n_errors = len(error_msgs)
         # The base now copies each entry into the (assigned) leaf, and reports
         # missing and unexpected keys.
         nn.Module._load_from_state_dict(
@@ -1708,6 +1770,44 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             unexpected_keys,
             error_msgs,
         )
+        if (
+            len(error_msgs) > n_errors
+            and torch.__future__.get_swap_module_params_on_conversion()
+            and self._param_td.is_locked
+        ):
+            # The base swaps the content of each leaf with the loaded tensor,
+            # which torch refuses while something else refers to the leaf, as
+            # the cached view under vmap of a locked tensordict does. Erase the
+            # caches that the lock reaches, load once more without the
+            # pre-hooks, which ran already, and drop the refusals that the
+            # second load does not repeat. All else stays as the first load left it.
+            head = f'While swapping the parameter named "{prefix}'
+            refused = [
+                i
+                for i in range(n_errors, len(error_msgs))
+                if error_msgs[i].startswith(head)
+                and (
+                    "Expected use_count of t1" in error_msgs[i]
+                    or "It is not possible to get the gradient edge" in error_msgs[i]
+                )
+            ]
+            if refused:
+                _erase_locked_caches(self)
+                again = []
+                hooks = self._load_state_dict_pre_hooks
+                saved = hooks.copy()
+                hooks.clear()
+                try:
+                    nn.Module._load_from_state_dict(
+                        self, state_dict, prefix, local_metadata, strict, [], [], again
+                    )
+                finally:
+                    hooks.update(saved)
+                # The key of a message is its text up to the first '", '.
+                again = {msg.split('", ', 1)[0] for msg in again}
+                for i in reversed(refused):
+                    if error_msgs[i].split('", ', 1)[0] not in again:
+                        del error_msgs[i]
         unexpected_keys[n:] = [
             key
             for key in unexpected_keys[n:]
@@ -1732,6 +1832,40 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             ".".join(key) if isinstance(key, tuple) else key: key
             for key in self._param_td.keys(True, True)
         }
+
+    @staticmethod
+    def _leaves_without_hooks(param_td, nested: list) -> dict:
+        # The leaves of param_td by dotted name, as items(True, True) gives
+        # them, read without the get_post_hooks of the nested TensorDictParams:
+        # each one is entered through its _param_td, and appended to nested.
+        leaves = {}
+        stack = [("", param_td)]
+        while stack:
+            prefix, td = stack.pop()
+            for key, val in td.items():
+                if isinstance(val, TensorDictParams):
+                    nested.append(val)
+                    val = val._param_td
+                if _default_is_leaf(type(val)):
+                    leaves[prefix + key] = val
+                else:
+                    stack.append((f"{prefix}{key}.", val))
+        return leaves
+
+    @staticmethod
+    def _registers_leaves_only(
+        leaves: dict, params: dict, buffers: dict, none_buffers: bool = False
+    ) -> bool:
+        # True when each name of params and buffers registers the leaf of
+        # leaves with that name or, with none_buffers, is a None buffer whose
+        # name no leaf has. _reset_params registers the leaves only (#3547).
+        for name, val in (*params.items(), *buffers.items()):
+            if name in leaves:
+                if val is not leaves[name]:
+                    return False
+            elif not (none_buffers and val is None and name in buffers):
+                return False
+        return True
 
     def items(
         self,
@@ -1826,7 +1960,28 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         params = dict(self._parameters)
         out: TensorDictBase = super()._apply(fn, recurse=recurse)
         replaced = {}
+        skip_none = None
         for key, val in bufs.items():
+            if val is None:
+                if skip_none is None:
+                    # register_buffer(name, None): nn.Module._apply skips it
+                    # too. Only if no other registration can be lost below.
+                    nested = []
+                    skip_none = self._registers_leaves_only(
+                        self._leaves_without_hooks(param_td, nested),
+                        params,
+                        bufs,
+                        none_buffers=True,
+                    ) and all(
+                        sub._registers_leaves_only(
+                            sub._leaves_without_hooks(sub._param_td, []),
+                            sub._parameters,
+                            sub._buffers,
+                        )
+                        for sub in nested
+                    )
+                if skip_none:
+                    continue
             new = self._buffers[key]
             if new is not val and not torch._has_compatible_shallow_copy_type(val, new):
                 # .data cannot be set across these tensor types (meta and
@@ -1869,8 +2024,11 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                     ignore_lock=True,
                     non_blocking=False,
                 )
+            # _reset_params registers the leaves only: keep the None buffers of self
+            none_buffers = {k: v for k, v in self._buffers.items() if v is None}
             for owner in owners:
                 owner._reset_params()
+            self._buffers.update(none_buffers)
         # Check device and shape
         cbs = out._check_batch_size(raise_exception=False)
         if not cbs:
