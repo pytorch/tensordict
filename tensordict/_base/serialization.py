@@ -1146,9 +1146,9 @@ class _Serialization:
                     "the storage cannot be synchronized once the copies are done."
                 )
         use_threads = num_threads > 1 and (return_early or len(flat_dict) > 1)
-        if quantized:
+        if quantized and storage.device.type != "meta":
             # torch ends the process when the bytes of a quantized tensor are
-            # copied
+            # copied (no bytes are copied into a meta storage)
             raise NotImplementedError(
                 f"Quantized tensors cannot be consolidated yet, but "
                 f"{unravel_key(quantized[0])!r} is one. Store its int_repr() "

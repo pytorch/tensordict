@@ -1488,6 +1488,22 @@ class TestGeneric:
             )
             return torch.quantize_per_tensor(torch.arange(4.0), 0.1, 0, torch.quint8)
 
+    @staticmethod
+    def _quantized_holder(holder, q):
+        # a tensordict that holds q, and the key of q in the error message
+        if holder == "top":
+            return TensorDict(x=q), "'x'"
+        if holder == "after_plain":
+            return TensorDict(a=torch.zeros(3), x=q), "'x'"
+        if holder == "nested":
+            return TensorDict(n={"x": q}), "('n', 'x')"
+        if holder == "lazy_stack":
+            return lazy_stack([TensorDict(x=q), TensorDict(x=q)]), "('0', 'x')"
+        if holder == "tensorclass":
+            return TensorDict(tc=_LazyStackPoint(x=q)), "('tc', 'x')"
+        njt = torch.nested.nested_tensor([q, q], layout=torch.jagged)
+        return TensorDict(x=njt), "'x'"
+
     @pytest.mark.parametrize(
         "kwargs",
         [
@@ -1499,8 +1515,6 @@ class TestGeneric:
             {"filename": True},
             {"filename": True, "num_threads": 2},
             {"filename": True, "use_buffer": True},
-            {"device": "meta", "num_threads": 2},
-            {"device": "meta", "num_threads": 2, "return_early": True},
         ],
         ids=[
             "default",
@@ -1511,8 +1525,6 @@ class TestGeneric:
             "filename",
             "filename_threads",
             "filename_buffer",
-            "meta_threads",
-            "meta_return_early",
         ],
     )
     @pytest.mark.parametrize(
@@ -1525,23 +1537,9 @@ class TestGeneric:
         # bytes of such a tensor are copied. It raises instead, before it
         # copies a leaf or touches the file. With a plain leaf copied first
         # (after_plain), some of the calls raised a NotImplementedError of
-        # torch's instead. With device="meta" and worker threads, some returned
-        # a leaf of dtype quint8 that is not quantized, which torch cannot
-        # clone or copy to another device.
+        # torch's instead.
         q = self._quantized_tensor()
-        if holder == "top":
-            td, key = TensorDict(x=q), "'x'"
-        elif holder == "after_plain":
-            td, key = TensorDict(a=torch.zeros(3), x=q), "'x'"
-        elif holder == "nested":
-            td, key = TensorDict(n={"x": q}), "('n', 'x')"
-        elif holder == "lazy_stack":
-            td, key = lazy_stack([TensorDict(x=q), TensorDict(x=q)]), "('0', 'x')"
-        elif holder == "tensorclass":
-            td, key = TensorDict(tc=_LazyStackPoint(x=q)), "('tc', 'x')"
-        else:
-            njt = torch.nested.nested_tensor([q, q], layout=torch.jagged)
-            td, key = TensorDict(x=njt), "'x'"
+        td, key = self._quantized_holder(holder, q)
         kwargs = dict(kwargs)
         path = tmp_path / "td.bin"
         TensorDict(a=torch.arange(3.0)).consolidate(filename=path)
@@ -1561,6 +1559,39 @@ class TestGeneric:
             assert td["x"] is q
         assert q.is_quantized
         assert q.int_repr().tolist() == [0, 10, 20, 30]
+
+    @pytest.mark.parametrize("return_early", [False, True])
+    @pytest.mark.parametrize(
+        "holder",
+        ["top", "after_plain", "nested", "lazy_stack", "tensorclass", "nested_tensor"],
+    )
+    def test_consolidate_quantized_meta(self, holder, return_early):
+        # #3716: no bytes are copied into a meta storage, so with
+        # device="meta" a quantized leaf keeps the result it had: with worker
+        # threads, a meta leaf of dtype quint8; without them (one leaf and
+        # return_early=False), torch's NotImplementedError
+        q = self._quantized_tensor()
+        td, _ = self._quantized_holder(holder, q)
+        kwargs = {"device": "meta", "num_threads": 2, "return_early": return_early}
+        if holder in ("top", "nested", "tensorclass") and not return_early:
+            with pytest.raises(NotImplementedError) as excinfo:
+                td.consolidate(**kwargs)
+            assert "Quantized tensors cannot be consolidated" not in str(excinfo.value)
+            return
+        result = td.consolidate(**kwargs)
+        if return_early:
+            result = result.result()
+        assert result.is_consolidated()
+        if holder == "lazy_stack":
+            result = result.tensordicts[0]
+        key = {"nested": ("n", "x"), "tensorclass": ("tc", "x")}.get(holder, "x")
+        leaf = result.get(key)
+        assert leaf.dtype == torch.quint8
+        assert leaf.device.type == "meta"
+        if holder == "nested_tensor":
+            assert leaf.is_nested
+        else:
+            assert leaf.shape == q.shape
 
     @pytest.mark.parametrize(
         "case",
