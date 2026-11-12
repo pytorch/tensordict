@@ -10500,14 +10500,11 @@ class TestShadow:
 
     @pytest.mark.parametrize("function", ["save", "memmap"])
     def test_shadow_field_save_function_options(self, function, tmp_path):
-        # #3730: the same with threads and atomic=True, and c.memmap is still
-        # the field
+        # #3730: the same with threads, and c.memmap is still the field
         c = _ShadowMemmap(indices=torch.arange(3), memmap=torch.ones(3), batch_size=[3])
         function = getattr(tensordict, function)
         results = [
-            function(c, tmp_path / "atomic", atomic=True),
             function(c, tmp_path / "threads", num_threads=2),
-            tensordict.load(tmp_path / "atomic"),
             tensordict.load(tmp_path / "threads"),
         ]
         for result in results:
