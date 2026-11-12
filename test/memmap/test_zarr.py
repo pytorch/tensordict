@@ -1058,6 +1058,75 @@ class TestZarrNonTensor:
         assert ztd.get("text").tolist() == ["x", "yy", "z"]
         ztd.close()
 
+    @pytest.mark.parametrize("method", ["apply_", "apply", "named_apply"])
+    def test_apply_inplace_keeps_nontensor(self, tmp_path, method):
+        # #3733: an in-place apply wrote some tensors, then raised a TypeError
+        # at the non-tensor entry
+        td = TensorDict(a=torch.zeros(2), b=torch.zeros(2), batch_size=[2])
+        td["s"] = NonTensorData("text", batch_size=[2])
+        ztd = td.to_zarr(tmp_path / "s.zarr")
+        if method == "apply_":
+            result = ztd.apply_(lambda x: x + 1)
+        elif method == "apply":
+            result = ztd.apply(lambda x: x + 1, inplace=True)
+        else:
+            result = ztd.named_apply(lambda name, x: x + 1, inplace=True)
+        assert result is ztd
+        assert ztd["a"].tolist() == [1.0, 1.0]
+        assert ztd["b"].tolist() == [1.0, 1.0]
+        assert ztd["s"] == "text"
+        ztd.close()
+
+    @pytest.mark.parametrize("method", ["set_", "set", "update"])
+    @pytest.mark.parametrize("value", ["new", 1234, {9}])
+    @pytest.mark.parametrize("key", ["s", ("n", "s")])
+    def test_set_nontensor_inplace(self, tmp_path, method, value, key):
+        # #3733: an in-place write of a non-tensor value raised a TypeError
+        td = TensorDict(a=torch.zeros(2), batch_size=[2])
+        td[key] = NonTensorData("old", batch_size=[2])
+        path = tmp_path / "s.zarr"
+        ztd = td.to_zarr(path)
+        written = value if isinstance(value, str) else NonTensorData(value, [2])
+        if method == "set_":
+            result = ztd.set_(key, written)
+        elif method == "set":
+            result = ztd.set(key, written, inplace=True)
+        else:
+            result = ztd.update({key: written}, inplace=True)
+        assert result is ztd
+        assert ztd[key] == value
+        assert ztd.get(key).batch_size == (2,)
+        ztd.close()
+        ztd = PersistentTensorDict.from_zarr(path, allow_pickle=True)
+        assert ztd.entry_class(key) is NonTensorData
+        assert ztd[key] == value
+        assert ztd["a"].tolist() == [0.0, 0.0]
+        ztd.close()
+
+    def test_set_nontensor_inplace_still_raises(self, tmp_path):
+        # #3733: an indexed write, and a write over a tensor or into a
+        # read-only store, still raise and leave the entries as they are. The
+        # read-only store raises the error of an in-place tensor write there
+        td = TensorDict(a=torch.zeros(2), batch_size=[2])
+        td["s"] = NonTensorData("old", batch_size=[2])
+        path = tmp_path / "s.zarr"
+        ztd = td.to_zarr(path)
+        with pytest.warns(UserWarning, match="Indexing a zarr.Array"):
+            with pytest.raises(TypeError, match="_ZarrNonTensorPayload"):
+                ztd.set_at_("s", "new", 0)
+        with pytest.warns(UserWarning, match="Indexing a zarr.Array"):
+            with pytest.raises(TypeError, match="_ZarrNonTensorPayload"):
+                ztd.set_("a", "new")
+        ztd.close()
+        ztd = PersistentTensorDict.from_zarr(path, mode="r")
+        with pytest.raises(ValueError, match="read-only"):
+            ztd.set_("s", "new")
+        ztd.close()
+        ztd = PersistentTensorDict.from_zarr(path)
+        assert ztd["s"] == "old"
+        assert ztd["a"].tolist() == [0.0, 0.0]
+        ztd.close()
+
     def test_foreign_column_as_stack(self, tmp_path):
         # a string column that another tool wrote, one string per row, reads
         # as a NonTensorStack of its rows with non_tensor_as_stack=True (#2545)
