@@ -980,6 +980,22 @@ class _Serialization:
             True
 
         """
+        if filename is not None and torch.compiler.is_dynamo_compiling():
+            # Compiled, writing a file goes wrong in several ways (#3717,
+            # #3768): run the whole call eagerly.
+            return _consolidate_eager(
+                self,
+                filename,
+                num_threads=num_threads,
+                device=device,
+                non_blocking=non_blocking,
+                inplace=inplace,
+                return_early=return_early,
+                use_buffer=use_buffer,
+                share_memory=share_memory,
+                pin_memory=pin_memory,
+                metadata=metadata,
+            )
         if self.is_consolidated() and not (
             # A storage that is not pinned is copied into a pinned one, as for
             # a tensordict that is not consolidated. Without an accelerator
@@ -1084,7 +1100,9 @@ class _Serialization:
                 storage.share_memory_()
         else:
             # Represent the json metadata as a tensor
-            metadata_dict_json = _consolidated_metadata_tensor(metadata_dict)
+            metadata_dict_json = torch.as_tensor(
+                bytearray(_consolidated_metadata_json(metadata_dict)), dtype=torch.uint8
+            )
             len_metadata = torch.tensor(
                 [metadata_dict_json.numel()], dtype=torch.int64
             ).view(torch.uint8)
@@ -2794,15 +2812,9 @@ def _consolidated_metadata_json(metadata: dict) -> bytes:
 
 
 @torch.compiler.disable
-def _consolidated_metadata_tensor(metadata: dict) -> torch.Tensor:
-    """Returns the json metadata of a consolidated tensordict as a uint8 tensor.
-
-    Not traced by ``torch.compile``: Dynamo cannot pass a ``bytearray`` to
-    ``torch.as_tensor`` (#3717).
-    """
-    return torch.as_tensor(
-        bytearray(_consolidated_metadata_json(metadata)), dtype=torch.uint8
-    )
+def _consolidate_eager(td, filename, **kwargs):
+    """Calls ``td.consolidate(filename, **kwargs)`` outside of ``torch.compile``."""
+    return td.consolidate(filename, **kwargs)
 
 
 def _tensorclass_names_in_metadata(metadata: dict) -> dict:

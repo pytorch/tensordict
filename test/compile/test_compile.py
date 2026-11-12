@@ -2279,6 +2279,24 @@ class TestTD:
             assert filename.read_bytes() == eager_bytes
             assert_close(TensorDict.from_consolidated(filename), expected)
 
+    def test_consolidate_filename_new_sizes(self, mode, tmp_path):
+        # #3768: a compiled consolidate(filename=f) that saw a new leaf size
+        # returned wrong leaves or raised a RuntimeError.
+        def consolidate(td, filename):
+            return td.consolidate(filename=filename)
+
+        consolidate_c = torch.compile(consolidate, mode=mode)
+        for n in (3, 5, 8, 16, 24):
+            td = TensorDict(
+                a=torch.arange(n), b=torch.arange(100, 100 + n), batch_size=[n]
+            )
+            expected = consolidate(td, tmp_path / f"eager{n}.bin")
+            filename = tmp_path / f"compiled{n}.bin"
+            out = consolidate_c(td, filename)
+            assert out.is_consolidated()
+            assert_close(out, expected)
+            assert filename.read_bytes() == (tmp_path / f"eager{n}.bin").read_bytes()
+
     # Memmap is currently not supported
     # def test_memmap(self, mode, tmpdir):
     #     def locked_op(td):
@@ -2796,6 +2814,27 @@ class TestTC:
             assert_close(out, expected)
             assert filename.read_bytes() == eager_bytes
             assert_close(TensorDict.from_consolidated(filename), expected._tensordict)
+
+    def test_tc_consolidate_filename_new_sizes(self, mode, tmp_path):
+        # #3768: a compiled consolidate(filename=f) that saw a new leaf size
+        # returned wrong leaves or raised a RuntimeError.
+        def consolidate(tc, filename):
+            return tc.consolidate(filename=filename)
+
+        consolidate_c = torch.compile(consolidate, mode=mode)
+        for n in (3, 5, 8, 16, 24):
+            tc = _CastFilterTC(
+                points=torch.arange(3 * n).view(n, 3),
+                cells=torch.arange(100, 100 + 3 * n).view(n, 3),
+                batch_size=[n],
+            )
+            expected = consolidate(tc, tmp_path / f"eager{n}.bin")
+            filename = tmp_path / f"compiled{n}.bin"
+            out = consolidate_c(tc, filename)
+            assert isinstance(out, _CastFilterTC)
+            assert out.is_consolidated()
+            assert_close(out, expected)
+            assert filename.read_bytes() == (tmp_path / f"eager{n}.bin").read_bytes()
 
     def test_tc_tensor_output(self, mode):
         def add_one(td):
