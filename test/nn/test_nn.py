@@ -10498,6 +10498,219 @@ class TestToModule:
         assert not isinstance(module.weight, nn.Parameter)
         assert not isinstance(module.bias, nn.Parameter)
 
+    @pytest.mark.parametrize("preserve_module_state", [True, False])
+    def test_to_module_plain_tensor_into_parameter_slot(
+        self, as_module, preserve_module_state
+    ):
+        # #3633: what a plain tensor or a Buffer becomes in a parameter slot,
+        # and what the call returns
+        module = nn.Linear(3, 4)
+        module.bias.requires_grad_(False)
+        weight, bias = module.weight, module.bias
+        params = TensorDict(weight=torch.ones(4, 3), bias=torch.ones(4))
+        if as_module:
+            params = TensorDictParams(params, no_convert=True)
+        swap = params.to_module(
+            module, return_swap=True, preserve_module_state=preserve_module_state
+        )
+        assert swap.get("weight") is weight
+        assert swap.get("bias") is bias
+        if preserve_module_state:
+            assert list(module._parameters) == ["weight", "bias"]
+            assert type(module.weight) is nn.Parameter
+            assert type(module.bias) is nn.Parameter
+            assert module.weight.requires_grad is True
+            assert module.bias.requires_grad is False
+            assert set(module.state_dict()) == {"weight", "bias"}
+        else:
+            assert list(module._parameters) == []
+            assert not isinstance(module.weight, nn.Parameter)
+            assert not isinstance(module.bias, nn.Parameter)
+            if not as_module:
+                assert module.weight is params.get("weight")
+                assert module.bias is params.get("bias")
+            assert set(module.state_dict()) == set()
+        # the module computes with the storage of the tensordict
+        assert module.weight.data_ptr() == params.get("weight").data_ptr()
+        assert module.bias.data_ptr() == params.get("bias").data_ptr()
+        assert not isinstance(params.get("weight"), nn.Parameter)
+        swap.to_module(module, preserve_module_state=preserve_module_state)
+        assert module.weight is weight
+        assert module.bias is bias
+        assert list(module._parameters) == ["weight", "bias"]
+
+    def test_to_module_plain_tensor_keeps_gradient_sources(self, as_module):
+        # #3633: a plain tensor that requires grad and a vmap slice are
+        # registered as they are in a parameter slot: a new nn.Parameter would
+        # be a new leaf, which gradients and vmap do not reach
+        module = nn.Linear(3, 4)
+        weight, bias = module.weight, module.bias
+        source = torch.ones(4, 3, requires_grad=True)
+        with TensorDict(weight=source, bias=torch.ones(4)).to_module(module):
+            assert module._parameters["weight"] is source
+            assert type(module._parameters["bias"]) is nn.Parameter
+            assert list(module._parameters) == ["weight", "bias"]
+            module(torch.ones(3)).sum().backward()
+        torch.testing.assert_close(source.grad, torch.ones(4, 3))
+        assert weight.grad is None
+        assert module.weight is weight and module.bias is bias
+
+        stacked = TensorDict.from_modules(
+            nn.Linear(3, 4), nn.Linear(3, 4), as_module=as_module
+        ).data
+
+        def call(p, x):
+            with p.to_module(module):
+                assert list(module._parameters) == ["weight", "bias"]
+                for value in module._parameters.values():
+                    assert torch._C._functorch.is_batchedtensor(value)
+                    assert not isinstance(value, nn.Parameter)
+                return module(x)
+
+        x = torch.randn(3)
+        result = torch.vmap(call, (0, None))(stacked, x)
+        expected = torch.stack(
+            [
+                torch.nn.functional.linear(x, p.get("weight"), p.get("bias"))
+                for p in stacked.unbind(0)
+            ]
+        )
+        torch.testing.assert_close(result, expected)
+        assert module.weight is weight and module.bias is bias
+
+    @pytest.mark.parametrize("preserve_module_state", [True, False])
+    def test_to_module_plain_tensor_matches_general_path(
+        self, as_module, preserve_module_state
+    ):
+        # #3633: to_module has shortcuts for a Parameter, a plain tensor and a
+        # Buffer. A global registration hook turns them off, and a hook that
+        # returns None changes nothing else: for every kind of slot and of
+        # leaf, both ways leave the module and the tensordict in the same state
+        class Subclass(torch.Tensor):
+            pass
+
+        def tagged():
+            value = torch.ones(3)
+            value._is_param = True
+            return value
+
+        leaves = {
+            "tensor": lambda: torch.ones(3),
+            "view": lambda: torch.ones(6)[::2],
+            "int_tensor": lambda: torch.ones(3, dtype=torch.int64),
+            "grad_leaf": lambda: torch.ones(3, requires_grad=True),
+            "computed": lambda: torch.ones(3, requires_grad=True) * 2,
+            "buffer": lambda: Buffer(torch.ones(3)),
+            "parameter": lambda: nn.Parameter(torch.ones(3)),
+            "frozen_parameter": lambda: nn.Parameter(
+                torch.ones(3), requires_grad=False
+            ),
+            "tagged": tagged,
+            "subclass": lambda: torch.ones(3).as_subclass(Subclass),
+            "memmap": lambda: tensordict.MemoryMappedTensor.from_tensor(torch.ones(3)),
+        }
+
+        def make_module(slot):
+            module = nn.Module()
+            if slot == "parameter":
+                module.w = nn.Parameter(torch.zeros(3))
+            elif slot == "frozen_parameter":
+                module.w = nn.Parameter(torch.zeros(3), requires_grad=False)
+            elif slot == "none_parameter":
+                module.register_parameter("w", None)
+            elif slot == "grad_tensor_in_parameter_slot":
+                module.w = nn.Parameter(torch.zeros(3))
+                TensorDict(w=torch.zeros(3, requires_grad=True)).to_module(module)
+            elif slot == "buffer":
+                module.register_buffer("w", torch.zeros(3))
+            elif slot == "attribute":
+                module.w = torch.zeros(3)
+            # registered after w: a swap of w moves it behind
+            module.other = nn.Parameter(torch.zeros(1))
+            module.register_buffer("other_buffer", torch.zeros(1))
+            return module
+
+        slots = [
+            "parameter",
+            "frozen_parameter",
+            "none_parameter",
+            "grad_tensor_in_parameter_slot",
+            "buffer",
+            "attribute",
+        ]
+
+        def state(module, params, value, original):
+            result = []
+            for store in (module._parameters, module._buffers, module.__dict__):
+                if "w" not in store:
+                    result.append(None)
+                    continue
+                current = store["w"]
+                result.append(
+                    (
+                        [key for key in store if key in ("w", "other", "other_buffer")],
+                        type(current),
+                        current is value,
+                        current is original,
+                        current is not None
+                        and (
+                            current.requires_grad,
+                            current.is_leaf,
+                            current.data_ptr() == value.data_ptr(),
+                        ),
+                    )
+                )
+            held = params.get("w")
+            result.append((type(held), held is value, held.requires_grad))
+            result.append(list(module.state_dict()))
+            result.append([name for name, _ in module.named_parameters()])
+            result.append(len(module._forward_pre_hooks))
+            return result
+
+        def run(slot, leaf, general):
+            module = make_module(slot)
+            original = module.w
+            params = TensorDict(w=leaves[leaf]())
+            if as_module:
+                params = TensorDictParams(params, no_convert=True)
+            value = params.get("w")
+            handle = (
+                torch.nn.modules.module.register_module_parameter_registration_hook(
+                    lambda module, name, value: None
+                )
+                if general
+                else contextlib.nullcontext()
+            )
+            result = []
+            with handle:
+                try:
+                    with params.to_module(
+                        module, preserve_module_state=preserve_module_state
+                    ):
+                        result.append(state(module, params, value, original))
+                    result.append(state(module, params, value, original))
+                    swap = params.to_module(
+                        module,
+                        return_swap=True,
+                        preserve_module_state=preserve_module_state,
+                    )
+                    result.append(state(module, params, value, original))
+                    result.append(swap.get("w", None) is original)
+                except Exception as err:
+                    result.append((type(err), str(err)))
+                    result.append(module._parameters.get("w") is original)
+            return result
+
+        completed = 0
+        for slot in slots:
+            for leaf in leaves:
+                fast = run(slot, leaf, general=False)
+                general = run(slot, leaf, general=True)
+                assert fast == general, (slot, leaf)
+                completed += len(fast) == 4
+        # most of the zoo runs to the end: the comparison is not of errors only
+        assert completed >= 50, completed
+
     @pytest.mark.parametrize("return_swap", [False, True])
     def test_to_module_inplace_preserves_state(self, as_module, return_swap):
         module = nn.Linear(4, 2)
