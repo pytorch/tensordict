@@ -10358,10 +10358,21 @@ class TestShadow:
             assert (result.get("is_memmap").answer == answer).all()
 
     @pytest.mark.parametrize("mapped", [False, True])
-    @pytest.mark.parametrize("case", ["typed", "plain_subclass"])
+    @pytest.mark.parametrize("case", ["nested_values", "typed", "plain_subclass"])
     def test_shadow_field_is_memmap_not_saved(self, case, mapped, tmp_path):
         # #3693: these raise as before the fix, with nothing written
-        if case == "typed":
+        if case == "nested_values":
+            # the archive writer calls the shadow field named values of a
+            # nested tensorclass (#3694)
+            c = _ShadowIsMemmapAny(
+                x=torch.arange(3),
+                is_memmap=torch.ones(3),
+                sub=_ShadowValues(
+                    indices=torch.arange(3), values=torch.ones(3), batch_size=[3]
+                ),
+                batch_size=[3],
+            )
+        elif case == "typed":
             # a TypedTensorDict has no tensordict to ask (#3696)
             c = _TypedShadowIsMemmap(
                 x=torch.arange(3), is_memmap=torch.ones(3), batch_size=[3]
