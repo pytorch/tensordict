@@ -1995,6 +1995,10 @@ class _Conversion:
                     continue
                 if tolist_first:
                     value = value.tolist(convert_tensors=convert_tensors)
+                elif type(value) is _td_base._TENSORDICT_TYPE:
+                    value = value.to_dict(
+                        retain_none=retain_none, convert_tensors=convert_tensors
+                    )
                 else:
                     to_dict = value.to_dict
                     if not callable(to_dict):

@@ -8505,11 +8505,23 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                             # in, so that a flat key takes the fast path instead
                             # of being rebuilt part by part on every level.
                             k_is_str = isinstance(k, str)
-                            items = val.items
-                            if not callable(items):
-                                # a field of a shadow tensorclass hides the
-                                # method (#3694)
-                                items = _td_method(val, "items")
+                            if cls is _TENSORDICT_TYPE:
+                                sub_items = val.items(
+                                    include_nested=include_nested,
+                                    leaves_only=leaves_only,
+                                    is_leaf=is_leaf,
+                                )
+                            else:
+                                items = val.items
+                                if not callable(items):
+                                    # a field of a shadow tensorclass hides
+                                    # the method (#3694)
+                                    items = _td_method(val, "items")
+                                sub_items = items(
+                                    include_nested=include_nested,
+                                    leaves_only=leaves_only,
+                                    is_leaf=is_leaf,
+                                )
                             yield from (
                                 (
                                     (
@@ -8523,11 +8535,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                                     ),
                                     _val,
                                 )
-                                for _key, _val in items(
-                                    include_nested=include_nested,
-                                    leaves_only=leaves_only,
-                                    is_leaf=is_leaf,
-                                )
+                                for _key, _val in sub_items
                             )
             elif leaves_only:
                 for k in self.keys():
@@ -8667,16 +8675,23 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     if include_nested and _is_tensor_collection(cls):
                         # Don't recurse into pass-through values (e.g., UnbatchedTensor)
                         if not _pass_through(val):
-                            values = val.values
-                            if not callable(values):
-                                # a field of a shadow tensorclass hides the
-                                # method (#3694)
-                                values = _td_method(val, "values")
-                            yield from values(
-                                include_nested=include_nested,
-                                leaves_only=leaves_only,
-                                is_leaf=is_leaf,
-                            )
+                            if cls is _TENSORDICT_TYPE:
+                                yield from val.values(
+                                    include_nested=include_nested,
+                                    leaves_only=leaves_only,
+                                    is_leaf=is_leaf,
+                                )
+                            else:
+                                values = val.values
+                                if not callable(values):
+                                    # a field of a shadow tensorclass hides
+                                    # the method (#3694)
+                                    values = _td_method(val, "values")
+                                yield from values(
+                                    include_nested=include_nested,
+                                    leaves_only=leaves_only,
+                                    is_leaf=is_leaf,
+                                )
             elif leaves_only:
                 for k in self.keys(sort=sort):
                     val = self._get_str(k, NO_DEFAULT)

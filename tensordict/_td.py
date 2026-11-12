@@ -3309,16 +3309,24 @@ class TensorDict(TensorDictBase):
                         and not _is_tensor_collection(type(val))
                     ):
                         continue
-                    val_items = val.items
-                    if not callable(val_items):
-                        # a field of a shadow tensorclass hides the method
-                        # (#3694)
-                        val_items = _td_method(val, "items")
-                    for _key, _val in val_items(
-                        include_nested=include_nested,
-                        leaves_only=leaves_only,
-                        is_leaf=is_leaf,
-                    ):
+                    if type(val) is TensorDict:
+                        sub_items = val.items(
+                            include_nested=include_nested,
+                            leaves_only=leaves_only,
+                            is_leaf=is_leaf,
+                        )
+                    else:
+                        val_items = val.items
+                        if not callable(val_items):
+                            # a field of a shadow tensorclass hides the method
+                            # (#3694)
+                            val_items = _td_method(val, "items")
+                        sub_items = val_items(
+                            include_nested=include_nested,
+                            leaves_only=leaves_only,
+                            is_leaf=is_leaf,
+                        )
+                    for _key, _val in sub_items:
                         if isinstance(_key, str):
                             _key = (key, _key)
                         else:
