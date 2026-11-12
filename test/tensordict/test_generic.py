@@ -2001,6 +2001,46 @@ class TestGeneric:
         assert td["p"] is params
         assert params.device is None
 
+    def test_to_inplace_ragged_lazy_stack_typed_root(self):
+        # #3701: a TypedTensorDict keeps its entries in a TensorDict, so the
+        # in-place move of one that holds a lazy stack of different shapes
+        # raised "Failed to stack tensors" too
+        class Typed(TypedTensorDict):
+            a: torch.Tensor
+            s: TensorDictBase
+
+        members = [TensorDict(x=torch.zeros(3)), TensorDict(x=torch.ones(4))]
+        td = Typed(a=torch.zeros(2), s=lazy_stack(members), batch_size=[2])
+        device = torch.device("meta")
+        assert td.to(device, inplace=True) is td
+        assert type(td) is Typed
+        assert td.device == device
+        assert td["a"].device == device
+        stack = td["s"]
+        assert type(stack) is LazyStackedTensorDict
+        assert stack.device == device
+        for member, length in zip(stack.tensordicts, (3, 4), strict=True):
+            assert member.device == device
+            assert member["x"].device == device
+            assert member["x"].shape == (length,)
+
+    @pytest.mark.parametrize("lengths", [(3, 4), (3, 3)])
+    def test_to_inplace_locked_lazy_stack_raises_lock_error(self, lengths):
+        # #3701: a locked lazy stack inside an unlocked tensordict cannot be
+        # moved in place. With members of different shapes the call raised
+        # "Failed to stack tensors"; it raises the error of the lock, as it
+        # does for members of one shape, and leaves the locked stack alone.
+        stack = lazy_stack([TensorDict(x=torch.full((n,), 1.0)) for n in lengths])
+        td = TensorDict(a=torch.zeros(2), s=stack.lock_(), batch_size=[2])
+        with pytest.raises(RuntimeError, match="Cannot modify locked TensorDict"):
+            td.to("meta", inplace=True)
+        assert td["s"] is stack
+        assert stack.is_locked
+        for member, length in zip(stack.tensordicts, lengths, strict=True):
+            assert member["x"].device == torch.device("cpu")
+            assert member["x"].shape == (length,)
+            assert (member["x"] == 1).all()
+
     def test_consolidate_to_inplace_locked_raises(self):
         # A tensordict that the user locked keeps raising
         td = TensorDict(a=torch.zeros(3), batch_size=[3]).lock_()

@@ -1836,14 +1836,20 @@ def _is_leaf_written(cls: Type) -> bool:
     return issubclass(cls, torch.Tensor)
 
 
-def _nested_nodes(td: TensorDictBase) -> Iterator[TensorCollection]:
-    """Yields the nested tensor collections of ``td`` that are not inside a lazy stack.
+def _nested_nodes(td: TensorDictBase) -> Iterator[CompatibleType]:
+    """Yields the nested tensor collections of ``td`` without reading the entries of a lazy stack.
 
     ``td.values(True, True, is_leaf=_is_tensor_collection)`` yields the same
     nodes and, below a lazy stack, the stacked entries of its members. It has
     to read those, which raises for members of different shapes (#3701). They
     are built on the fly, so a walk that sets an attribute of each node has
     no use for them.
+
+    This holds for an exact :class:`~tensordict.TensorDict`, whose nodes are
+    read from its dictionary. A lazy node (a lazy stack, a sub-tensordict or
+    a legacy lazy view) is yielded and not entered. Any other class keeps the
+    ``values`` walk above, which is typed as ``values`` is and goes below
+    lazy stacks.
     """
     if type(td) is not _TENSORDICT_TYPE:
         yield from td.values(True, True, is_leaf=_is_tensor_collection)
