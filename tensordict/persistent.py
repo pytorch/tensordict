@@ -2506,9 +2506,10 @@ class PersistentTensorDict(
 
     def _to_numpy(self, value, key: NestedKey):
         # The leaves of a file never require gradients, and asking would
-        # read every one of them (#3731).
+        # read every one of them (#3731). A subclass may read them otherwise,
+        # so it is still asked.
         if (
-            not isinstance(value, PersistentTensorDict)
+            type(value) is not PersistentTensorDict
             and hasattr(value, "requires_grad")
             and value.requires_grad
         ):
