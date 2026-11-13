@@ -3383,7 +3383,11 @@ def _memmap_(
         if executor is None:
             save_metadata()
         else:
-            futures.append(executor.submit(save_metadata))
+            # The worker reads its own copy: a NonTensorData result keeps
+            # _non_tensordict, and its _memmap_ writes to it after this call.
+            futures.append(
+                executor.submit(save_metadata, _non_tensordict=dict(_non_tensordict))
+            )
 
         prefix = prefix / "_tensordict"
     new_futures = []

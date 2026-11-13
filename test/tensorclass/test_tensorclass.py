@@ -23,6 +23,7 @@ import shutil
 import subprocess
 import sys
 import textwrap
+import time
 import warnings
 import weakref
 import zipfile
@@ -8799,6 +8800,70 @@ class TestMemmap:
         MyClass(value="json", batch_size=[]).memmap(tmp_path)
         assert not pickle_path.exists()
         assert MyClass.load_memmap(tmp_path, allow_pickle=False).value == "json"
+
+    @staticmethod
+    def _start_workers_late(monkeypatch):
+        # Every task of the 2-thread pool starts 20 ms late, after the caller's
+        # NonTensorData._memmap_ has returned.
+        executor = tensordict.utils._get_shared_executor(2)
+        submit = executor.submit
+
+        def late_submit(fn, *args, **kwargs):
+            def late(*a, **k):
+                time.sleep(0.02)
+                return fn(*a, **k)
+
+            return submit(late, *args, **kwargs)
+
+        monkeypatch.setattr(executor, "submit", late_submit)
+
+    @pytest.mark.parametrize("kind", ["str", "MetaData", "nested", "tc", "lazy"])
+    @pytest.mark.parametrize("call", ["memmap", "memmap_like", "save"])
+    def test_memmap_threads_no_pickle(self, kind, call, tmp_path, monkeypatch):
+        # #3718: with num_threads=2, the worker that writes the metadata of a
+        # non-tensor entry read the memmap metadata (with a Path) that the
+        # caller set on the result, and wrote it to other.pickle.
+        @tensorclass
+        class MyClass:
+            x: torch.Tensor
+            label: str
+
+        obj = {
+            "str": lambda: TensorDict(x=torch.arange(3), label="lbl"),
+            "MetaData": lambda: TensorDict(x=torch.arange(3), label=MetaData("lbl")),
+            "nested": lambda: TensorDict(x=torch.arange(3), sub={"label": "lbl"}),
+            "tc": lambda: MyClass(x=torch.arange(3), label="lbl"),
+            "lazy": lambda: lazy_stack(
+                [TensorDict(label="a"), TensorDict(label="b", extra="e")]
+            ),
+        }[kind]()
+        self._start_workers_late(monkeypatch)
+        getattr(obj, call)(tmp_path, num_threads=2)
+        assert not list(tmp_path.rglob("other.pickle"))
+        cls = MyClass if kind == "tc" else TensorDict
+        loaded = cls.load_memmap(tmp_path, allow_pickle=False)
+        if kind == "nested":
+            assert loaded["sub", "label"] == "lbl"
+        elif kind == "lazy":
+            assert loaded[0]["label"] == "a"
+            assert loaded[1]["extra"] == "e"
+        elif kind == "tc":
+            assert loaded.label == "lbl"
+        else:
+            assert loaded["label"] == "lbl"
+
+    def test_memmap_threads_pickle_value(self, tmp_path, monkeypatch):
+        # #3718: a value that needs pickle still goes to other.pickle with
+        # num_threads=2, alone as with num_threads=0, and the result keeps
+        # its memmap metadata.
+        self._start_workers_late(monkeypatch)
+        out = TensorDict(value=1 + 2j).memmap(tmp_path, num_threads=2)
+        with open(tmp_path / "value" / "other.pickle", "rb") as file:
+            assert pickle.load(file) == {"data": 1 + 2j}
+        leaf = out._get_str("value", None)
+        assert leaf._metadata["memmap_prefix"] == tmp_path / "value"
+        loaded = TensorDict.load_memmap(tmp_path, allow_pickle=True)
+        assert loaded["value"] == 1 + 2j
 
     def test_memmap_(self):
         @tensorclass
