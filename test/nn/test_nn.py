@@ -8540,13 +8540,6 @@ class TestTensorDictParams:
         "to_empty",
         "overwrite",
     ]
-    # #3547: a conversion that replaces the leaves registers them again, and
-    # the registrations that are not leaves are lost. The fix of #3726 keeps
-    # the None buffers of the converted TensorDictParams only.
-    _LOST_3547 = pytest.mark.xfail(
-        strict=True,
-        reason="#3547: a conversion that replaces the leaves drops the registrations that are not leaves",
-    )
 
     @pytest.mark.parametrize("locked", [False, True])
     @pytest.mark.parametrize("none", ["buffer", "non_persistent"])
@@ -8555,9 +8548,9 @@ class TestTensorDictParams:
         [
             *((op, False) for op in _CONVERSIONS),
             *((op, True) for op in _CONVERSIONS[:8]),
-            pytest.param("meta", True, marks=_LOST_3547),
-            pytest.param("to_empty", True, marks=_LOST_3547),
-            pytest.param("overwrite", True, marks=_LOST_3547),
+            ("meta", True),
+            ("to_empty", True),
+            ("overwrite", True),
         ],
     )
     def test_apply_none_buffer(self, op, nested, none, locked):
@@ -8717,9 +8710,9 @@ class TestTensorDictParams:
         "op",
         [
             *_CONVERSIONS[:8],
-            pytest.param("meta", marks=_LOST_3547),
-            pytest.param("to_empty", marks=_LOST_3547),
-            pytest.param("overwrite", marks=_LOST_3547),
+            "meta",
+            "to_empty",
+            "overwrite",
         ],
     )
     def test_apply_none_parameter(self, op, nested):
