@@ -1995,6 +1995,15 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
 
     def _apply(self, fn, recurse=True):
         self._param_td._erase_cache()
+        # A locked tensordict caches reads such as detach() and dtype: erase
+        # them here and in the locked tensordicts that hold self (#3591).
+        if self._cache is not None:
+            self._erase_cache()
+        if self.is_locked:
+            for ref in self._lock_parents_weakrefs:
+                holder = ref()
+                if holder is not None and holder._cache is not None:
+                    holder._erase_cache()
         param_td = self._param_td
         self._param_td = param_td.copy()
         # Keep a list of buffers to update .data only
