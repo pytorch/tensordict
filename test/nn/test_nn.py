@@ -8154,10 +8154,11 @@ class TestTensorDictParams:
     @pytest.mark.parametrize(
         "steps,kept",
         [
-            # A write through the root drops the entry (#3547): unchanged.
-            (["extra", "write"], []),
+            # A write through the root keeps the entry, as in a plain
+            # nn.Module (#3547).
+            (["extra", "write"], ["extra"]),
             (["extra", "del extra"], []),
-            (["extra", "write", "other"], ["other"]),
+            (["extra", "write", "other"], ["extra", "other"]),
             (["extra", "other", "del extra"], ["other"]),
             (["extra", "del extra", "other", "extra"], ["other", "extra"]),
             (["extra", "double"], ["extra"]),
