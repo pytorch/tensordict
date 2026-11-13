@@ -8738,6 +8738,121 @@ class TestTensorDictParams:
         assert list(holder._parameters) == [*ref_holder._parameters, "unused"]
         assert holder.unused is None
 
+    @staticmethod
+    def _register_extra(module, kind):
+        # #3547: a registration that is not a leaf, named "extra".
+        if kind == "buffer":
+            module.register_buffer("extra", torch.full((2,), 5.0))
+        elif kind == "non_persistent":
+            module.register_buffer("extra", torch.full((2,), 5.0), persistent=False)
+        elif kind == "none_buffer":
+            module.register_buffer("extra", None)
+        elif kind == "none_parameter":
+            module.register_parameter("extra", None)
+        elif kind == "parameter":
+            module.register_parameter("extra", nn.Parameter(torch.full((2,), 5.0)))
+        else:
+            module.extra = nn.Parameter(torch.full((2,), 5.0))
+
+    _EXTRA_KINDS = [
+        "buffer",
+        "non_persistent",
+        "none_buffer",
+        "none_parameter",
+        "parameter",
+        "attribute",
+    ]
+
+    @pytest.mark.parametrize("kind", _EXTRA_KINDS)
+    @pytest.mark.parametrize(
+        "write", ["setitem", "setitem_new", "nested", "set_inplace", "update"]
+    )
+    def test_write_keeps_registration(self, write, kind):
+        # #3547: a write to a TensorDictParams dropped what register_buffer,
+        # register_parameter and attribute assignment added. As in a plain
+        # nn.Module, it stays registered, after the leaves.
+        params = TensorDictParams(
+            TensorDict(a=torch.zeros(3), n={"b": torch.zeros(2)}), no_convert=True
+        )
+        self._register_extra(params, kind)
+        extra = params.extra
+        if write == "setitem":
+            params["a"] = torch.ones(3)
+        elif write == "setitem_new":
+            params["c"] = torch.ones(1)
+        elif write == "nested":
+            params["n", "c"] = torch.ones(1)
+        elif write == "set_inplace":
+            params.set("a", torch.ones(3), inplace=True)
+        else:
+            params.update({"a": torch.ones(3), "c": torch.ones(1)})
+        leaves = [
+            ".".join(key) if isinstance(key, tuple) else key
+            for key in params.keys(True, True)
+        ]
+        if kind in ("buffer", "non_persistent", "none_buffer"):
+            assert list(params._buffers) == [*leaves, "extra"]
+            assert list(params._parameters) == []
+        else:
+            assert list(params._buffers) == leaves
+            assert list(params._parameters) == ["extra"]
+        assert params.extra is extra
+        assert params._non_persistent_buffers_set == (
+            {"extra"} if kind == "non_persistent" else set()
+        )
+        for key in leaves:
+            assert params._buffers[key] is params.get(tuple(key.split(".")))
+        assert list(params.state_dict()) == leaves
+
+    @pytest.mark.parametrize("nested", [False, True])
+    @pytest.mark.parametrize(
+        "kind", ["buffer", "non_persistent", "none_parameter", "parameter"]
+    )
+    @pytest.mark.parametrize("op", ["meta", "to_empty", "overwrite"])
+    def test_apply_replaced_leaves_keeps_registration(self, op, kind, nested):
+        # #3547: a conversion that replaces the leaves registers them again,
+        # and dropped what was registered next to them. As in a plain
+        # nn.Module, it stays registered and holds the converted tensor. The
+        # registrations of a nested TensorDictParams are not converted, as
+        # after a conversion that keeps the leaves.
+        with torch.device("meta") if op == "to_empty" else contextlib.nullcontext():
+            params = self._apply_params()
+            plain = nn.Module()
+            plain.w = nn.Parameter(torch.randn(3))
+            holder = params["sub"] if nested else params
+            self._register_extra(holder, kind)
+            self._register_extra(plain, kind)
+            ref = self._apply_params()
+        before = holder.extra
+        module = self._parent(params)
+        self._convert(module, op)
+        self._convert(plain, op)
+        self._convert(self._parent(ref), op)
+        holder = params["sub"] if nested else params
+        extra = holder.extra
+        if kind == "none_parameter":
+            assert extra is None and plain.extra is None
+        elif nested:
+            assert extra is before
+        else:
+            assert type(extra) is type(plain.extra)
+            assert extra.dtype == plain.extra.dtype
+            assert extra.device == plain.extra.device
+        ref_holder = ref["sub"] if nested else ref
+        if kind in ("buffer", "non_persistent"):
+            assert list(holder._buffers) == [*ref_holder._buffers, "extra"]
+            assert list(holder._parameters) == list(ref_holder._parameters)
+            assert holder._buffers["extra"] is extra
+        else:
+            assert list(holder._parameters) == [*ref_holder._parameters, "extra"]
+            assert list(holder._buffers) == list(ref_holder._buffers)
+            assert holder._parameters["extra"] is extra
+        # the leaves are converted as without the registration
+        for td, ref_td in ((params, ref), (params["sub"], ref["sub"])):
+            assert [e for e in self._registered(td) if e[0] != "extra"] == (
+                self._registered(ref_td)
+            )
+
     def test_inplace_ops(self):
         td = TensorDict(
             {

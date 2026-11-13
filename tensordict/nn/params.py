@@ -771,11 +771,39 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             return len(param_keys), len(buffer_keys)
         return None
 
-    def _reset_params(self, params: dict | None = None, buffers: dict | None = None):
+    def _reset_params(
+        self,
+        params: dict | None = None,
+        buffers: dict | None = None,
+        keep_added: bool = True,
+    ):
         parameters = self._param_td
+        # Each registry is read once: an attribute of an nn.Module costs more
+        # than a local.
+        registered_params = self._parameters
+        registered_buffers = self._buffers
+        state = self.__dict__
+        # What register_parameter, register_buffer and attribute assignment
+        # added after the leaves (see _added_names): registered again below,
+        # as a plain nn.Module keeps them (#3547).
+        added = None
+        if params is None and keep_added:
+            # None for a copied registry, missing for one unpickled from a
+            # release that kept no counts: the added names are not known.
+            counts = state.get("_leaf_counts")
+            if counts is not None:
+                n_params, n_buffers = counts
+                if (
+                    len(registered_params) > n_params
+                    or len(registered_buffers) > n_buffers
+                ):
+                    added = (
+                        list(islice(registered_params.items(), n_params, None)),
+                        list(islice(registered_buffers.items(), n_buffers, None)),
+                    )
 
-        self._parameters.clear()
-        self._buffers.clear()
+        registered_params.clear()
+        registered_buffers.clear()
 
         if (params is not None) ^ (buffers is not None):
             raise RuntimeError("both params and buffers must either be None or not.")
@@ -795,17 +823,28 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                     buffer_keys.append(key)
                     buffers.append(value)
 
-            self._parameters.update(dict(_zip_strict(param_keys, params)))
-            self._buffers.update(dict(_zip_strict(buffer_keys, buffers)))
+            registered_params.update(dict(_zip_strict(param_keys, params)))
+            registered_buffers.update(dict(_zip_strict(buffer_keys, buffers)))
             # What is registered from here on comes after the leaves: see
             # _added_names. A plain dict write: setting an attribute of an
             # nn.Module costs more.
-            self.__dict__["_leaf_counts"] = (len(self._parameters), len(self._buffers))
+            state["_leaf_counts"] = (len(registered_params), len(registered_buffers))
+            if added is not None:
+                # A leaf keeps its name.
+                for registry, entries in zip(
+                    (registered_params, registered_buffers), added
+                ):
+                    for name, value in entries:
+                        if (
+                            name not in registered_params
+                            and name not in registered_buffers
+                        ):
+                            registry[name] = value
         else:
-            self._parameters.update(params)
-            self._buffers.update(buffers)
+            registered_params.update(params)
+            registered_buffers.update(buffers)
             # A copied registry: the caller copies the counts of its source.
-            self.__dict__["_leaf_counts"] = None
+            state["_leaf_counts"] = None
 
     @classmethod
     def __torch_function__(
@@ -1726,7 +1765,7 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                             for k, v in owner._buffers.items()
                             if v is None or k in kept
                         }
-                        owner._reset_params()
+                        owner._reset_params(keep_added=False)
                         owner._parameters.update(params)
                         owner._buffers.update(buffers)
                     # A locked tensordict caches some of its reads, such as detach(),
