@@ -8477,6 +8477,54 @@ class TestTensorDictParams:
         self._check_registered(params)
         self._check_registered(params["sub"])
 
+    @pytest.mark.parametrize("lock", [None, "lock_", "parent", "both"])
+    @pytest.mark.parametrize(
+        "op",
+        [
+            "double",
+            "to_dtype",
+            "half",
+            "float",
+            "swap",
+            "overwrite",
+            "meta",
+            "to_empty",
+        ],
+    )
+    def test_apply_locked_reads(self, op, lock):
+        # #3591: a locked tensordict caches reads such as detach() and dtype.
+        # After a conversion, the reads of the TensorDictParams and of a locked
+        # tensordict that holds it give the converted leaves. Unlocked
+        # (lock=None), they already did.
+        with torch.device("meta" if op == "to_empty" else "cpu"):
+            params = TensorDictParams(
+                TensorDict(
+                    w=torch.zeros(3),
+                    n={"b": torch.zeros(2)},
+                    sub=TensorDictParams(TensorDict(v=torch.zeros(2))),
+                )
+            )
+        if lock in ("lock_", "both"):
+            params.lock_()
+        parent = TensorDict(p=params)
+        if lock in ("parent", "both"):
+            parent.lock_()
+        params.detach()
+        params.dtype
+        parent.detach()
+        self._convert(self._parent(params), op)
+        assert params.is_locked is (lock is not None)
+        leaf = params["w"]
+        assert params.dtype == leaf.dtype
+        for td, prefix in ((params, ()), (parent, ("p",))):
+            detached = td.detach()
+            for key in (("w",), ("n", "b"), ("sub", "v")):
+                leaf = params[key]
+                got = detached[prefix + key]
+                assert got.dtype == leaf.dtype and got.device == leaf.device, key
+                if not leaf.is_meta:
+                    assert got.data_ptr() == leaf.data_ptr(), key
+
     def _apply_params_with_none(self, none, nested, op):
         # _apply_params with a None buffer ("buffer"), a non-persistent None
         # buffer ("non_persistent"), a None parameter ("parameter") or neither
