@@ -8178,6 +8178,42 @@ class TestLazyStackedTensorDict:
         assert (torch.cat(pieces, other) == td).all()
 
     @pytest.mark.parametrize("stack_dim", [0, 1])
+    @pytest.mark.parametrize(
+        "split",
+        [
+            lambda x, dim: x.split([0, 3], dim),
+            lambda x, dim: x.split([1, 0, 2], dim),
+            lambda x, dim: x.tensor_split([3], dim),
+            lambda x, dim: x.tensor_split(5, dim),
+        ],
+        ids=["split-first", "split-middle", "tensor_split-last", "tensor_split-5"],
+    )
+    def test_split_stack_dim_empty_piece_keeps_keys(self, stack_dim, split):
+        # A piece of size 0 along the stack dim had no keys
+        td = self._shape_stack(stack_dim, n=3)
+        dense = td.to_tensordict()
+        pieces = split(td, stack_dim)
+        expected = split(dense, stack_dim)
+        assert len(pieces) == len(expected)
+        for piece, exp in zip(pieces, expected):
+            assert piece.batch_size == exp.batch_size
+            assert set(piece.keys(True, True)) == set(exp.keys(True, True))
+            assert (piece == exp).all()
+        assert (torch.cat(pieces, stack_dim) == td).all()
+
+    def test_split_stack_dim_empty_piece_slice_raises(self):
+        # #3691: lazy[:0] raises for members that hold an empty list of
+        # strings; split keeps returning a stack of no members for them
+        members = [
+            TensorDict(a=torch.zeros(3), m=["p", "q", "r"], batch_size=[3])
+            for _ in range(2)
+        ]
+        td = lazy_stack(members)[:, :0]
+        piece, rest = td.split([0, 2], 0)
+        assert piece.batch_size == torch.Size([0, 0])
+        assert rest.batch_size == torch.Size([2, 0])
+
+    @pytest.mark.parametrize("stack_dim", [0, 1])
     def test_split_stack_dim_bad_sizes_warn(self, stack_dim):
         # #2361: sizes that do not add up to the stack size warn until 0.17
         td = self._shape_stack(stack_dim, n=3)

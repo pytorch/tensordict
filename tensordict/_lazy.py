@@ -6529,13 +6529,24 @@ class LazyStackedTensorDict(TensorDictBase):
                 negative = False
                 for s in split_sizes:
                     if s == 0:
-                        batch_size = list(self._batch_size)
-                        batch_size.pop(self.stack_dim)
-                        yield LazyStackedTensorDict(
-                            batch_size=batch_size,
-                            device=self.device,
-                            stack_dim=self.stack_dim,
-                        )
+                        # A stack of no members has no keys: return what the
+                        # slice of the stack to no members returns, which
+                        # keeps the keys and the other batch dims (#1869).
+                        index = (slice(None),) * self.stack_dim + (slice(start, start),)
+                        try:
+                            piece = self[index]
+                        except RuntimeError:
+                            # The slice still raises for some stacks, such as
+                            # one whose members hold an empty list of strings
+                            # (#3691): keep a stack of no members for them.
+                            batch_size = list(self._batch_size)
+                            batch_size.pop(self.stack_dim)
+                            piece = LazyStackedTensorDict(
+                                batch_size=batch_size,
+                                device=self.device,
+                                stack_dim=self.stack_dim,
+                            )
+                        yield piece
                         continue
                     if s < 0:
                         negative = True
