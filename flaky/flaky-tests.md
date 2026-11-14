@@ -1,12 +1,12 @@
-# Flaky Test Report - 2026-11-13
+# Flaky Test Report - 2026-11-14
 
 ## Summary
 
 - **Confirmed flaky test families**: 0
 - **Affected parameterized cases**: 0
 - **Newly confirmed**: 0
-- **Resolved since previous report**: 1
-- **Total tests analyzed**: 79618
+- **Resolved since previous report**: 0
+- **Total tests analyzed**: 79650
 - **CI runs analyzed**: 30
 
 ---
@@ -14,10 +14,6 @@
 ## No Flaky Tests Detected!
 
 No test has recent fail/pass evidence on the same commit and CI environment.
-
-## Resolved Since Previous Report
-
-- `test.memmap.test_memmap::test_anonymous_file_descriptors`
 
 ---
 
@@ -28,4 +24,4 @@ No test has recent fail/pass evidence on the same commit and CI environment.
 
 ---
 
-*Generated at 2026-11-13T06:24:14.848921+00:00*
+*Generated at 2026-11-14T06:22:16.972937+00:00*
