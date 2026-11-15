@@ -8,7 +8,7 @@
 
 PyTorch code that handles groups of tensors, such as a training batch, a
 particle system, or a batch of graphs, usually repeats every operation for
-every tensor, and nested dicts need recursion. A TensorDict holds the group as
+every tensor, and nested dicts need recursion. A **TensorDict** holds the group as
 one object:
 
 ```python
@@ -27,10 +27,10 @@ batch["score"] = torch.ones(31)               # RuntimeError: batch dimension mi
 ```
 
 The tensors share their leading dimensions, the batch size, so indexing,
-reshaping, stacking, `.to(device)`, saving, and `torch.compile` apply to all of
-them at once.
+reshaping, stacking, `.to(device)`, and saving apply to all of
+them at once. [`torch.compile`-compatible](https://docs.pytorch.org/tensordict/stable/compile.html).
 
-TensorClass does the same for a class with typed fields and methods, like a
+**TensorClass** does the same for a class with typed fields and methods, like a
 dataclass. A method written once runs on one item or on a batch of any shape,
 and compiles:
 
