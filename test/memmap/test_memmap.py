@@ -10,6 +10,7 @@ import pickle
 import stat
 import sys
 import time
+import warnings
 from contextlib import nullcontext
 from multiprocessing.reduction import ForkingPickler
 from pathlib import Path
@@ -952,6 +953,61 @@ def test_handler():
 
     mt2 = MemoryMappedTensor.from_tensor(mt)
     assert mt2._handler is mt._handler
+
+
+def test_from_tensor_quantized_raises(tmp_path):
+    # #3759: torch.frombuffer ends the process with a segmentation fault when
+    # it maps the bytes of a quantized tensor, and torch.from_file raises for
+    # the QuantizedCPU backend: from_tensor raises before it maps anything,
+    # for both locations and a tensor with no elements too.
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            "torch.quantize_per_tensor, torch.quantize_per_channel",
+            UserWarning,
+        )
+        q = torch.quantize_per_tensor(torch.arange(4.0), 0.1, 0, torch.quint8)
+        q_empty = q[:0]
+    td = TensorDict(x=q)
+    with pytest.raises(
+        NotImplementedError, match="does not support a quantized tensor"
+    ):
+        MemoryMappedTensor.from_tensor(q)
+    with pytest.raises(
+        NotImplementedError, match="does not support a quantized tensor"
+    ):
+        MemoryMappedTensor.from_tensor(q, filename=tmp_path / "q.memmap")
+    with pytest.raises(
+        NotImplementedError, match="does not support a quantized tensor"
+    ):
+        td.memmap()
+    with pytest.raises(
+        NotImplementedError, match="does not support a quantized tensor"
+    ):
+        td.memmap(tmp_path)
+    # a quantized tensor with no elements keeps the error of the empty
+    # mapping (#3566)
+    with pytest.raises(ValueError, match="cannot mmap an empty file"):
+        MemoryMappedTensor.from_tensor(q_empty)
+    assert q.is_quantized
+    assert q.dequantize().tolist() == [0.0, 1.0, 2.0, 3.0]
+
+
+def test_from_tensor_quantized_int_repr(tmp_path):
+    # #3759: the integer data maps as any other tensor, which loses the
+    # scale and the zero point.
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            "torch.quantize_per_tensor, torch.quantize_per_channel",
+            UserWarning,
+        )
+        q = torch.quantize_per_tensor(torch.arange(4.0), 0.1, 0, torch.quint8)
+    mapped = MemoryMappedTensor.from_tensor(
+        q.int_repr(), filename=tmp_path / "q.memmap"
+    )
+    assert mapped.dtype is torch.uint8
+    assert mapped.tolist() == [0, 10, 20, 30]
 
 
 def test_index_and_parent_shape_are_deprecated():
