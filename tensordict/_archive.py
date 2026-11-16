@@ -37,6 +37,7 @@ import numpy as np
 import torch
 from tensordict.memmap import _raise_if_jagged, MemoryMappedTensor
 from tensordict.utils import (
+    _is_tensorclass,
     _is_unbatched,
     _SKIP_TENSORCLASS_POST_INIT,
     _warn_unbatched_saved_as_plain,
@@ -982,6 +983,28 @@ def _write_archive_from_td(
         shutil.rmtree(staging, ignore_errors=True)
 
 
+def _holds_shadow_tensorclass(value) -> bool:
+    """Whether ``value`` is or holds a shadow tensorclass.
+
+    The walk goes through the inner tensordicts, so that it calls no method
+    that a shadow field could hide. A tensor collection of another type
+    counts as one.
+    """
+    # circular import: base imports this module
+    from tensordict._lazy import LazyStackedTensorDict
+    from tensordict._td import TensorDict
+    from tensordict.base import TensorDictBase
+
+    cls = type(value)
+    if _is_tensorclass(cls):
+        return cls._shadow or _holds_shadow_tensorclass(value._tensordict)
+    if cls is TensorDict:
+        return any(map(_holds_shadow_tensorclass, value._tensordict.values()))
+    if isinstance(value, LazyStackedTensorDict):
+        return any(map(_holds_shadow_tensorclass, value.tensordicts))
+    return isinstance(value, TensorDictBase)
+
+
 def _save_as_archive(
     td,
     archive_path: str | Path,
@@ -996,8 +1019,9 @@ def _save_as_archive(
     """Writes ``td`` to a single-file memmap archive.
 
     If ``td`` is already memory-mapped on disk, its directory is packed
-    directly. Otherwise the tensordict is written through a metadata-only
-    staging directory next to ``archive_path`` (see
+    directly, unless it is a tensorclass that holds no shadow tensorclass,
+    whose directory lacks the class. Otherwise the tensordict is written
+    through a metadata-only staging directory next to ``archive_path`` (see
     :func:`_write_archive_from_td`): tensor bytes are streamed from memory
     into the zip in a single pass.
     """
@@ -1016,10 +1040,18 @@ def _save_as_archive(
         and isinstance(saved_prefix, Path)
         and (saved_prefix / "meta.json").exists()
     ):
-        if not hidden:
+        # The prefix of a memory-mapped tensorclass is the ``_tensordict``
+        # subdirectory of its save: packing it leaves out the ``meta.json``
+        # that records the class, one level up, so the object is written
+        # instead. A tree with a shadow tensorclass is still packed: its fields
+        # can hide the methods that the writer calls. The exception is a shadow
+        # tensorclass whose field hides ``is_memmap``, which is written (#3693).
+        if not hidden and (
+            not _is_tensorclass(type(td)) or _holds_shadow_tensorclass(td)
+        ):
             return pack_memmap(saved_prefix, archive_path, compression=compression)
-        # Written, which keeps the class: the pack leaves it out (#3585). Like
-        # the pack, copy the files of the leaves whatever ``copy_existing`` says.
+        # Like the pack, copy the files of the leaves whatever
+        # ``copy_existing`` says.
         copy_existing = True
     return _write_archive_from_td(
         td,
