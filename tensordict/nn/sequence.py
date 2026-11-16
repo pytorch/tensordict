@@ -307,6 +307,7 @@ class TensorDictSequential(TensorDictModule):
     def reset_out_keys(self):
         """Undoes :meth:`select_out_keys`: the sequence writes all its ``out_keys`` again, and returns ``self``."""
         self.out_keys = list(self._complete_out_keys)
+        self._select_before_return = False
         return self
 
     @staticmethod
