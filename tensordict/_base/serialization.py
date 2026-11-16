@@ -980,6 +980,22 @@ class _Serialization:
             True
 
         """
+        if filename is not None and torch.compiler.is_dynamo_compiling():
+            # Compiled, writing a file goes wrong in several ways (#3717,
+            # #3768): run the whole call eagerly.
+            return _consolidate_eager(
+                self,
+                filename,
+                num_threads=num_threads,
+                device=device,
+                non_blocking=non_blocking,
+                inplace=inplace,
+                return_early=return_early,
+                use_buffer=use_buffer,
+                share_memory=share_memory,
+                pin_memory=pin_memory,
+                metadata=metadata,
+            )
         if self.is_consolidated() and not (
             # A storage that is not pinned is copied into a pinned one, as for
             # a tensordict that is not consolidated. Without an accelerator
@@ -2793,6 +2809,16 @@ def _consolidated_metadata_json(metadata: dict) -> bytes:
     if isinstance(metadata_json, str):
         metadata_json = metadata_json.encode("utf-8")
     return metadata_json
+
+
+@torch.compiler.disable
+def _consolidate_eager(td, filename, **kwargs):
+    """Runs ``consolidate(filename, **kwargs)`` on ``td`` outside of ``torch.compile``.
+
+    It calls ``_Serialization.consolidate`` rather than ``td.consolidate``, so a
+    subclass whose ``consolidate`` calls ``super()`` does not run twice.
+    """
+    return _Serialization.consolidate(td, filename, **kwargs)
 
 
 def _tensorclass_names_in_metadata(metadata: dict) -> dict:
