@@ -448,6 +448,16 @@ class MemoryMappedTensor(torch.Tensor):
             shape_numel = shape.numel()
         else:
             shape_numel = torch.Size(shape).numel()
+        if input.is_quantized and shape_numel:
+            # torch cannot map a quantized dtype: torch.frombuffer ends the
+            # process on a view of the result, and torch.from_file raises for
+            # the QuantizedCPU backend (#3759). A quantized tensor with no
+            # elements keeps the error of the empty mapping.
+            raise NotImplementedError(
+                "MemoryMappedTensor.from_tensor does not support a quantized "
+                f"tensor (got {input.dtype}). Map its integer data instead, "
+                "with input.int_repr(), and re-quantize from the mapped data."
+            )
         if filename is None:
             if isinstance(shape, torch.Tensor):
                 handler = _FileHandler(input.dtype.itemsize * shape_numel)
