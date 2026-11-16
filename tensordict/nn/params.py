@@ -1660,6 +1660,20 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                     if name not in keys and name in self._non_persistent_buffers_set:
                         unexpected.add(prefix + name)
                         continue
+                    if name not in keys:
+                        # A buffer or parameter added with register_buffer or
+                        # register_parameter, not a leaf of _param_td. As in
+                        # nn.Module, assign=True replaces it directly (#3774).
+                        if name in self._parameters:
+                            if not isinstance(val, nn.Parameter):
+                                val = nn.Parameter(
+                                    val, requires_grad=dest.requires_grad
+                                )
+                            self._parameters[name] = val
+                        else:
+                            self._buffers[name] = val
+                        register = True
+                        continue
                     key = _unravel_key_to_tuple(keys[name])
                     path = key[:-1]
                     parent = nodes.get(path)

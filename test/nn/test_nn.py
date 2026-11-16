@@ -6868,10 +6868,41 @@ class TestTensorDictParams:
         assert (params.get(tuple(last.split("."))) == 2).all()
         assert params.is_locked is locked
 
+    def test_load_state_dict_assign_registered_buffer(self):
+        # #3774: a value for a buffer added with register_buffer is assigned
+        # like any other buffer when assign=True.
+        params = TensorDictParams(TensorDict(a=torch.zeros(3)))
+        params.register_buffer("x", torch.zeros(2))
+        module = self._parent(params)
+        state_dict = {
+            "params.a": torch.full((3,), 2.0),
+            "params.x": torch.full((2,), 9.0),
+        }
+
+        module.load_state_dict(state_dict, assign=True)
+
+        assert (params["a"] == 2).all()
+        assert (params.x == 9).all()
+
+    def test_load_state_dict_assign_registered_parameter(self):
+        # #3774: a value for a parameter added with register_parameter stays
+        # a parameter, as in nn.Module.
+        params = TensorDictParams(TensorDict(a=torch.zeros(3)))
+        params.register_parameter("extra", nn.Parameter(torch.zeros(2)))
+        module = self._parent(params)
+
+        module.load_state_dict(
+            {"params.a": torch.zeros(3), "params.extra": torch.full((2,), 9.0)},
+            assign=True,
+        )
+
+        assert isinstance(params.extra, nn.Parameter)
+        assert (params.extra == 9).all()
+
     @pytest.mark.parametrize("locked", [False, True])
-    def test_load_state_dict_assign_raises_registered_buffer(self, locked):
-        # #3683: a value for a buffer added with register_buffer raises after
-        # the leaves were assigned. They are registered, and the buffer stays.
+    def test_load_state_dict_assign_registered_buffer_partial(self, locked):
+        # #3683/#3774: a value for a buffer added with register_buffer is
+        # assigned, and the leaves registered before it keep their new values.
         params = TensorDictParams(TensorDict(a=torch.zeros(2), b=torch.zeros(2)))
         params.register_buffer("stats", torch.zeros(2))
         module = self._parent(params)
@@ -6883,28 +6914,25 @@ class TestTensorDictParams:
             "params.b": torch.ones(2),
             "params.stats": torch.ones(2),
         }
-        with pytest.raises((KeyError, RuntimeError)):
-            module.load_state_dict(state_dict, assign=True)
+        module.load_state_dict(state_dict, assign=True)
         named = dict(module.named_parameters())
         assert list(named) == ["params.a", "params.b"]
         for key in ("a", "b"):
             assert params.get(key) is named["params." + key]
-            assert (params.detach().get(key) == params.get(key)).all()
+            assert (params.get(key) == 1).all()
         assert [name for name, _ in module.named_buffers()] == ["params.stats"]
-        assert (params.stats == 0).all()
+        assert (params.stats == 1).all()
         good = {"params.a": torch.full((2,), 2.0), "params.b": torch.full((2,), 2.0)}
         module.load_state_dict(good)
         assert (params["a"] == 2).all() and (params["b"] == 2).all()
         assert (params.detach()["a"] == 2).all()
 
-    @pytest.mark.parametrize("leaves", [True, False])
     @pytest.mark.parametrize("locked", [False, True])
-    def test_load_state_dict_assign_raises_first_entry(self, locked, leaves):
+    def test_load_state_dict_assign_raises_first_entry(self, locked):
         # #3683: when the first entry raises, nothing was assigned, and the
         # module is as it was: the same tensors under the same names, with the
         # entries that register_buffer and register_parameter added.
-        content = {"a": torch.zeros(2), "b": torch.zeros(2)} if leaves else {}
-        params = TensorDictParams(TensorDict(content))
+        params = TensorDictParams(TensorDict(a=torch.zeros(2), b=torch.zeros(2)))
         params.register_buffer("stats", torch.zeros(2))
         params.register_buffer("scratch", torch.zeros(2), persistent=False)
         params.register_buffer("unused", None)
@@ -6915,14 +6943,11 @@ class TestTensorDictParams:
         detached = params.detach()
         parameters = list(params._parameters.items())
         buffers = list(params._buffers.items())
-        if leaves:
-            # an integer tensor cannot become a parameter that requires grad
-            state_dict = {
-                "params.a": torch.ones(2, dtype=torch.int64),
-                "params.b": torch.ones(2),
-            }
-        else:
-            state_dict = {"params.stats": torch.ones(2)}
+        # an integer tensor cannot become a parameter that requires grad
+        state_dict = {
+            "params.a": torch.ones(2, dtype=torch.int64),
+            "params.b": torch.ones(2),
+        }
         with pytest.raises((KeyError, RuntimeError)):
             module.load_state_dict(state_dict, assign=True)
         for before, after in (
@@ -6932,10 +6957,35 @@ class TestTensorDictParams:
             assert [name for name, _ in before] == [name for name, _ in after]
             assert all(old is new for (_, old), (_, new) in zip(before, after))
         assert params._non_persistent_buffers_set == {"scratch"}
-        assert all(params.get(key) is params._parameters[key] for key in content)
+        assert all(params.get(key) is params._parameters[key] for key in ("a", "b"))
         assert (params.stats == 0).all()
         if locked:
             assert params.detach() is detached
+
+    @pytest.mark.parametrize("locked", [False, True])
+    def test_load_state_dict_assign_only_registered_buffer(self, locked):
+        # #3774: a state dict with only a registered buffer assigns it and
+        # keeps the other registrations.
+        params = TensorDictParams(TensorDict(a=torch.zeros(2)))
+        params.register_buffer("stats", torch.zeros(2))
+        params.register_buffer("scratch", torch.zeros(2), persistent=False)
+        params.register_buffer("unused", None)
+        params.register_parameter("unused_p", None)
+        module = self._parent(params)
+        if locked:
+            params.lock_()
+        parameters = set(params._parameters)
+        buffers = set(params._buffers)
+
+        module.load_state_dict(
+            {"params.a": torch.ones(2), "params.stats": torch.full((2,), 9.0)},
+            assign=True,
+        )
+
+        assert (params.stats == 9).all()
+        assert set(params._parameters) == parameters
+        assert set(params._buffers) == buffers
+        assert params._non_persistent_buffers_set == {"scratch"}
 
     @pytest.mark.parametrize("locked", [False, True])
     def test_load_state_dict_assign_raises_swap(self, locked):
