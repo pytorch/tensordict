@@ -1048,6 +1048,100 @@ class TestLock:
         assert not child.is_locked
         assert not child["nested"].is_locked
 
+    @pytest.mark.parametrize("key", ["b", ("n", "b"), ("m", "b")])
+    @pytest.mark.parametrize(
+        "make",
+        [
+            lambda td, key: td.make_memmap(key, shape=(3,), dtype=torch.float32),
+            lambda td, key: td.make_memmap_from_tensor(key, torch.ones(3)),
+        ],
+        ids=["make_memmap", "from_tensor"],
+    )
+    def test_lock_cache_make_memmap(self, key, make, tmp_path):
+        # #3589: make_memmap adds an entry to a memory-mapped tensordict, which
+        # is locked. The leaf lists that update_ and td + 1 read, and the
+        # cached detach() and flatten_keys(), must hold the new entry.
+        td = TensorDict(
+            a=torch.zeros(3),
+            n=TensorDict(x=torch.zeros(3), batch_size=[3]),
+            batch_size=[3],
+        ).memmap_(tmp_path)
+        td.update_(td.clone().apply(lambda x: x + 1))
+        td + 1, td.detach(), td.flatten_keys(), td.sorted_keys, td.clone()
+        make(td, key)
+        flat_key = key if isinstance(key, str) else ".".join(key)
+        assert key in td.clone().keys(True)
+        assert key in (td + 1).keys(True)
+        assert key in td.detach().keys(True)
+        assert flat_key in td.flatten_keys().keys()
+        assert key[0] in td.sorted_keys
+        src = td.clone().apply(lambda x: torch.full_like(x, 2.0))
+        td.update_(src)
+        assert (td[key] == 2).all()
+        assert (TensorDict.load_memmap(tmp_path)[key] == 2).all()
+        td.copy_(src + 1)
+        assert (TensorDict.load_memmap(tmp_path)[key] == 3).all()
+        td.add_(src)
+        assert (TensorDict.load_memmap(tmp_path)[key] == 5).all()
+
+    def test_lock_cache_erased_after_memmap_inplace(self, tmp_path):
+        # #3589: memmap_() on a locked tensordict replaces the leaves and keeps
+        # the lock cache, so update_ writes the replaced leaves, and td[key]
+        # and the file miss the write. make_memmap erases the cache: the
+        # cached reads then return the leaves that td[key] and the file hold,
+        # not the replaced ones, and a later update_ writes them.
+        td = TensorDict(a=torch.zeros(3), batch_size=[3]).lock_()
+        td + 0, td.clone(), td.flatten_keys(), td.detach()
+        td.memmap_(tmp_path)
+        td.update_(TensorDict(a=torch.full((3,), 5.0), batch_size=[3]))
+        td.make_memmap("b", shape=(3,), dtype=torch.float32)
+        for expected in (td["a"].clone(), torch.full((3,), 7.0)):
+            assert (TensorDict.load_memmap(tmp_path)["a"] == expected).all()
+            assert (td["a"] == expected).all()
+            assert ((td + 0)["a"] == expected).all()
+            assert (td.clone()["a"] == expected).all()
+            assert (td.flatten_keys()["a"] == expected).all()
+            assert (td.detach()["a"] == expected).all()
+            td.update_(TensorDict(a=torch.full((3,), 7.0), batch_size=[3]))
+
+    @staticmethod
+    def _tensorclass():
+        @tensorclass
+        class Tensors:
+            x: torch.Tensor
+            d: TensorDict
+
+        return Tensors
+
+    def test_lock_cache_make_memmap_tensorclass(self, tmp_path):
+        # #3589: as test_lock_cache_make_memmap, for a key that passes through
+        # a tensorclass entry: no warning, and the reads hold the new entry
+        Tensors = self._tensorclass()
+        td = TensorDict(
+            a=torch.zeros(3),
+            c=Tensors(
+                x=torch.zeros(3),
+                d=TensorDict(z=torch.zeros(3), batch_size=[3]),
+                batch_size=[3],
+            ),
+            batch_size=[3],
+        ).memmap_(tmp_path)
+        td.update_(td.clone().apply(lambda x: x + 1))
+        td + 1, td.detach(), td.flatten_keys(), td.clone(), td["c"].detach()
+        key = ("c", "d", "y")
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            td.make_memmap(key, shape=(3,), dtype=torch.float32)
+        assert key in td.keys(True)
+        assert key in td.clone().keys(True)
+        assert key in (td + 1).keys(True)
+        assert key in td.detach().keys(True)
+        assert "y" in td["c"].detach().d.keys()
+        assert "c.d.y" in td.flatten_keys().keys()
+        td.update_(td.clone().apply(lambda x: torch.full_like(x, 2.0)))
+        assert (td[key] == 2).all()
+        assert (TensorDict.load_memmap(tmp_path)[key] == 2).all()
+
     def test_stack_cache_lock(self):
         td0 = TensorDict({("a", "b", "c", "d"): 1.0}, [])
         td1 = td0.clone()

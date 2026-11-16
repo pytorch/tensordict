@@ -44,6 +44,7 @@ from tensordict.base import (
     _flatten_nested_dicts,
     _foreach_copy_,
     _foreach_copy_compiled,
+    _get_eval_frame_callback,
     _has_lazy_stack,
     _holds_its_tensors,
     _in_dense_is_empty,
@@ -2661,6 +2662,18 @@ class TensorDict(TensorDictBase):
         """Creates a sub-tensordict given a tuple key."""
         result = self
         for key_str in key:
+            # memmap_() registers no lock parent: erase the lock cache of each
+            # tensordict above the new entry (#3589). A tensorclass keeps its
+            # lock cache on the tensordict that it wraps. Eager only, also not
+            # in a frame that Dynamo runs eagerly, so that the frames Dynamo
+            # processes do not change
+            if (
+                not is_compiling()
+                and _get_eval_frame_callback is not None
+                and _get_eval_frame_callback() is None
+            ):
+                node = result._tensordict if is_tensorclass(result) else result
+                node._erase_cache_and_parents()
             result_tmp = result._get_str(key_str, default=None)
             if result_tmp is None:
                 result_tmp = result.empty()
@@ -3457,6 +3470,14 @@ def _set_memmap_entry(
         _save_metadata(td, prefix=td._memmap_prefix, metadata=metadata)
 
     td._set_str(key, memmap_tensor, validated=False, inplace=False, ignore_lock=True)
+    if (
+        not is_compiling()
+        and _get_eval_frame_callback is not None
+        and _get_eval_frame_callback() is None
+    ):
+        # The lock cache of td holds the previous leaves (#3589). Eager only,
+        # as in _make_memmap_subtd
+        (td._tensordict if is_tensorclass(td) else td)._erase_cache_and_parents()
 
     return memmap_tensor
 
