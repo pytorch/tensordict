@@ -40,6 +40,7 @@ from tensordict import (
     PersistentTensorDict,
     refresh_archive_checksums,
     TensorClass,
+    tensorclass,
     TensorDict,
     TypedTensorDict,
     unpack_memmap,
@@ -6630,6 +6631,227 @@ def test_pointwise_unary_vmap(op):
     assert_allclose_td(
         torch.vmap(lambda t: getattr(t.clone(), op + "_")())(td), expected
     )
+
+
+class _NumpyLeftTensorClass(TensorClass):
+    a: torch.Tensor
+
+
+@tensorclass
+class _NumpyLeftDecorated:
+    a: torch.Tensor
+
+
+class _NumpyLeftTyped(TypedTensorDict):
+    a: torch.Tensor
+
+
+class _ArrayTensorDict(TensorDict):
+    # A user subclass that NumPy can convert to an array
+    def __array__(self, dtype=None, copy=None):
+        return self["a"].numpy()
+
+
+class _ArrayTensorClass(TensorClass):
+    a: torch.Tensor
+
+    def __array__(self, dtype=None, copy=None):
+        return self.a.numpy()
+
+
+_NUMPY_LEFT_COLLECTIONS = {
+    "tensordict": lambda a: TensorDict(a=a, batch_size=a.shape[:1]),
+    "lazy_stack": lambda a: lazy_stack([TensorDict(a=row) for row in a.unbind(0)]),
+    "params": lambda a: TensorDictParams(TensorDict(a=a, batch_size=a.shape[:1])),
+    "tensorclass": lambda a: _NumpyLeftTensorClass(a=a, batch_size=a.shape[:1]),
+    "decorated": lambda a: _NumpyLeftDecorated(a=a, batch_size=a.shape[:1]),
+    "typed": lambda a: _NumpyLeftTyped(a=a, batch_size=a.shape[:1]),
+}
+# (the expression with a NumPy scalar, the same with a Python number)
+_NUMPY_LEFT_EXPRESSIONS = {
+    "mul": (lambda x: np.float64(2) * x, lambda x: 2.0 * x),
+    "sub": (lambda x: np.float32(1) - x, lambda x: 1.0 - x),
+    "add": (lambda x: np.int64(2) + x, lambda x: 2 + x),
+    "truediv": (lambda x: np.float64(1) / x, lambda x: 1.0 / x),
+    "sqrt": (lambda x: np.sqrt(2) * x, lambda x: float(np.sqrt(2)) * x),
+    "eq": (lambda x: np.float64(1) == x, lambda x: 1.0 == x),
+    "lt": (lambda x: np.float64(1) < x, lambda x: 1.0 < x),
+}
+
+
+def _assert_same_collection(out, expected):
+    assert type(out) is type(expected)
+    assert out.batch_size == expected.batch_size
+    assert set(out.keys()) == set(expected.keys()) == {"a"}
+    assert out.get("a").dtype == expected.get("a").dtype
+    assert (out.get("a") == expected.get("a")).all()
+
+
+@pytest.mark.parametrize("expression", sorted(_NUMPY_LEFT_EXPRESSIONS))
+@pytest.mark.parametrize("collection", sorted(_NUMPY_LEFT_COLLECTIONS))
+def test_numpy_scalar_on_the_left(collection, expression):
+    # #3583: a NumPy scalar on the left of an operator raised TypeError,
+    # because NumPy tried to convert the tensordict to an array
+    x = _NUMPY_LEFT_COLLECTIONS[collection](torch.tensor([1.0, 2.0, 3.0]))
+    with_numpy, with_number = _NUMPY_LEFT_EXPRESSIONS[expression]
+    _assert_same_collection(with_numpy(x), with_number(x))
+
+
+def test_numpy_scalar_on_the_left_empty_batch():
+    # #3583: NumPy read a tensordict without elements as an empty sequence,
+    # and returned an empty array
+    td = TensorDict(a=torch.zeros(0, 2), batch_size=[0])
+    _assert_same_collection(np.float64(2) * td, 2.0 * td)
+    td = TensorDict(a=torch.zeros(3, 0), batch_size=[3, 0])
+    _assert_same_collection(np.float64(2) * td, 2.0 * td)
+
+
+def test_numpy_scalar_on_the_left_persistent(tmp_path):
+    # #3583: the same for a PersistentTensorDict
+    pytest.importorskip("h5py")
+    td = TensorDict(a=torch.tensor([1.0, 2.0, 3.0]), batch_size=[3])
+    x = PersistentTensorDict.from_dict(td, filename=tmp_path / "td.h5")
+    for with_numpy, with_number in _NUMPY_LEFT_EXPRESSIONS.values():
+        _assert_same_collection(with_numpy(x), with_number(x))
+
+
+@pytest.mark.parametrize("collection", sorted(_NUMPY_LEFT_COLLECTIONS))
+def test_array_priority(collection):
+    # #3583: every tensor collection has the __array_priority__ of torch.Tensor
+    x = _NUMPY_LEFT_COLLECTIONS[collection](torch.tensor([1.0, 2.0, 3.0]))
+    assert x.__array_priority__ == torch.Tensor.__array_priority__
+    if not is_tensorclass(x):
+        # a tensorclass instance reads it from its TensorDict
+        assert type(x).__array_priority__ == torch.Tensor.__array_priority__
+
+
+def test_array_priority_non_tensor():
+    # #3583: the non-tensor classes have it too
+    for x in (NonTensorData(1.0), NonTensorStack(NonTensorData(1.0))):
+        assert x.__array_priority__ == torch.Tensor.__array_priority__
+        assert type(np.float64(2) * x) is type(2.0 * x)
+
+
+@pytest.mark.parametrize("collection", sorted(_NUMPY_LEFT_COLLECTIONS))
+def test_numpy_scalar_on_the_right_unchanged(collection):
+    # #3583: what the fix must not change
+    x = _NUMPY_LEFT_COLLECTIONS[collection](torch.tensor([1.0, 2.0, 3.0]))
+    _assert_same_collection(x * np.float64(2), x * 2.0)
+
+
+@pytest.mark.parametrize("cls", [_ArrayTensorDict, _ArrayTensorClass])
+def test_numpy_functions_unchanged(cls):
+    # #3583: NumPy's functions do not read __array_priority__ to convert their
+    # arguments: they convert a class that defines __array__ as before
+    a = torch.tensor([1.0, 2.0, 3.0])
+    x = cls(a=a, batch_size=[3])
+    for function in (
+        np.asarray,
+        np.sin,
+        lambda x: np.add(x, 1),
+        lambda x: np.add(np.ones(3), x),
+        lambda x: np.multiply(2.0, x),
+    ):
+        out = function(x)
+        expected = function(a.numpy())
+        assert type(out) is np.ndarray
+        assert out.dtype == expected.dtype
+        assert (out == expected).all()
+
+
+@pytest.mark.parametrize("cls", [_ArrayTensorDict, _ArrayTensorClass])
+def test_array_priority_of_subclass(cls):
+    # #3583: a subclass that sets its own __array_priority__ keeps it. With
+    # NumPy's value for an object without the attribute, NumPy converts a
+    # class that defines __array__ instead of calling the reflected operator
+    class Converted(cls):
+        __array_priority__ = -1000000.0
+
+    a = torch.tensor([1.0, 2.0, 3.0])
+    x = Converted(a=a, batch_size=[3])
+    assert x.__array_priority__ == -1000000.0
+    for operand in (np.float64(2), np.ones(3)):
+        out = operand * x
+        expected = operand * a.numpy()
+        assert type(out) is np.ndarray
+        assert out.dtype == expected.dtype
+        assert (out == expected).all()
+
+
+def test_array_priority_as_tensorclass_field():
+    # #3583: an annotated __array_priority__ in the body of a tensorclass is a
+    # field. The workaround for #3583 written this way keeps working
+    class WithField(TensorClass):
+        a: torch.Tensor
+        __array_priority__: float = 1000.0
+
+    @tensorclass
+    class DecoratedWithField:
+        a: torch.Tensor
+        __array_priority__: float
+
+    a = torch.tensor([1.0, 2.0, 3.0])
+    for x in (
+        WithField(a=a, batch_size=[3]),
+        DecoratedWithField(a=a, __array_priority__=1000.0, batch_size=[3]),
+    ):
+        assert "__array_priority__" in x.keys()
+        assert x.__array_priority__ == 1000.0
+        for with_numpy, with_number in _NUMPY_LEFT_EXPRESSIONS.values():
+            out = with_numpy(x)
+            expected = with_number(x)
+            assert type(out) is type(x)
+            assert out.a.dtype == expected.a.dtype
+            assert (out.a == expected.a).all()
+
+    # without a default, the value that a base class sets is the default of
+    # the field, and a tensorclass parent that sets none gives it no default
+    class Base:
+        __array_priority__ = 20.0
+
+    @tensorclass
+    class OverBase(Base):
+        a: torch.Tensor
+        __array_priority__: float
+
+    assert OverBase(a=a, batch_size=[3]).__array_priority__ == 20.0
+
+    class Child(_NumpyLeftTensorClass):
+        __array_priority__: float
+
+    with pytest.raises(TypeError, match="__array_priority__"):
+        Child(a=a, batch_size=[3])
+    assert Child(a=a, __array_priority__=5.0, batch_size=[3]).__array_priority__ == 5.0
+
+    # a mixin after the tensorclass parent gives the default, or the value
+    class Mixin:
+        __array_priority__ = 20.0
+
+    class MixinAfter(_NumpyLeftTensorClass, Mixin):
+        __array_priority__: float
+
+    x = MixinAfter(a=a, batch_size=[3])
+    assert x.__array_priority__ == 20.0
+    assert "__array_priority__" in x.keys()
+
+    class MixinAfterNoField(_NumpyLeftTensorClass, Mixin):
+        pass
+
+    assert MixinAfterNoField(a=a, batch_size=[3]).__array_priority__ == 20.0
+
+
+def test_array_priority_of_instance():
+    # #3583: an instance can set its own __array_priority__
+    a = torch.tensor([1.0, 2.0, 3.0])
+    x = _ArrayTensorDict(a=a, batch_size=[3])
+    x.__array_priority__ = -1000000.0
+    out = np.float64(2) * x
+    assert type(out) is np.ndarray
+    assert (out == 2 * a.numpy()).all()
+    # the workaround for #3583 keeps working
+    td = TensorDict(a=a, batch_size=[3])
+    td.__array_priority__ = 1000
+    _assert_same_collection(np.float64(2) * td, 2.0 * td)
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="no cuda device")
