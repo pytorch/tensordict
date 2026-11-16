@@ -1471,7 +1471,9 @@ class _Serialization:
     def is_consolidated(self):
         """Whether the leaves of the tensordict are views into one storage made by :meth:`~.consolidate`.
 
-        Becomes ``False`` when the storage no longer matches the content: after
+        Becomes ``False`` after :meth:`~.unlock_`, for a lazy stack as for a
+        :class:`~tensordict.TensorDict`, since its entries can then be
+        replaced, and when the storage no longer matches the content: after
         :meth:`~.memmap_` moves the leaves out of it, after an in-place write
         into a non-tensor entry, or after an entry is replaced, added or
         deleted in an unpickled copy (which is not locked). In-place writes

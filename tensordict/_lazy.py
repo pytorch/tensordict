@@ -6153,6 +6153,10 @@ class LazyStackedTensorDict(TensorDictBase):
         # we can't set _is_locked to False because after it's unlocked, anything
         # can happen to a child tensordict.
         self._is_locked = None
+        # Remove consolidated metadata when unlocking to prevent silent errors,
+        # as TensorDictBase._propagate_unlock does
+        if hasattr(self, "_consolidated"):
+            delattr(self, "_consolidated")
         sub_tds = defaultdict()
         for child in self.tensordicts:
             # we want to make sure that if the same child is present twice in the
