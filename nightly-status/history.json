@@ -1,24 +1,71 @@
 {
-  "last_updated": "2026-11-16T18:13:48.976772+00:00",
+  "last_updated": "2026-11-17T06:53:00.066682+00:00",
   "stats": {
     "last_7_days": {
       "days": 7,
       "runs_with_data": 7,
       "total_workflow_runs": 35,
-      "total_success": 32,
-      "total_failure": 3,
-      "success_rate": 91.4
+      "total_success": 35,
+      "total_failure": 0,
+      "success_rate": 100.0
     },
     "last_30_days": {
       "days": 30,
       "runs_with_data": 30,
-      "total_workflow_runs": 151,
-      "total_success": 143,
+      "total_workflow_runs": 150,
+      "total_success": 142,
       "total_failure": 8,
       "success_rate": 94.7
     }
   },
   "history": [
+    {
+      "date": "2026-11-17",
+      "orchestrator_ran": true,
+      "orchestrator_status": "success",
+      "orchestrator_url": "https://github.com/pytorch/tensordict/actions/runs/44030008739",
+      "orchestrator_run_id": 44030008739,
+      "workflows": {
+        "test-linux.yml": {
+          "status": "success",
+          "conclusion": "success",
+          "url": "https://github.com/pytorch/tensordict/actions/runs/44030008739/job/133859440363",
+          "display_name": "Linux Tests"
+        },
+        "test-macos.yml": {
+          "status": "success",
+          "conclusion": "success",
+          "url": "https://github.com/pytorch/tensordict/actions/runs/44030008739/job/133859441417",
+          "display_name": "MacOS Tests"
+        },
+        "test-rl-gpu.yml": {
+          "status": "success",
+          "conclusion": "success",
+          "url": "https://github.com/pytorch/tensordict/actions/runs/44030008739/job/133859440565",
+          "display_name": "RL GPU Tests"
+        },
+        "docs.yml": {
+          "status": "success",
+          "conclusion": "success",
+          "url": "https://github.com/pytorch/tensordict/actions/runs/44030008739/job/133859440765",
+          "display_name": "Documentation"
+        },
+        "benchmarks.yml": {
+          "status": "success",
+          "conclusion": "success",
+          "url": "https://github.com/pytorch/tensordict/actions/runs/44030008739/job/133859440806",
+          "display_name": "Benchmarks"
+        }
+      },
+      "summary": {
+        "total": 5,
+        "success": 5,
+        "failure": 0,
+        "skipped": 0,
+        "other": 0,
+        "success_rate": 100.0
+      }
+    },
     {
       "date": "2026-11-16",
       "orchestrator_ran": true,
@@ -4550,59 +4597,6 @@
           "status": "success",
           "conclusion": "success",
           "url": "https://github.com/pytorch/tensordict/actions/runs/32338653459/job/96333114780",
-          "display_name": "Benchmarks"
-        }
-      },
-      "summary": {
-        "total": 6,
-        "success": 5,
-        "failure": 1,
-        "skipped": 0,
-        "other": 0,
-        "success_rate": 83.3
-      }
-    },
-    {
-      "date": "2026-08-19",
-      "orchestrator_ran": true,
-      "orchestrator_status": "failure",
-      "orchestrator_url": "https://github.com/pytorch/tensordict/actions/runs/32222440820",
-      "orchestrator_run_id": 32222440820,
-      "workflows": {
-        "test-linux.yml": {
-          "status": "success",
-          "conclusion": "success",
-          "url": "https://github.com/pytorch/tensordict/actions/runs/32222440820/job/95975390970",
-          "display_name": "Linux Tests"
-        },
-        "test-macos.yml": {
-          "status": "success",
-          "conclusion": "success",
-          "url": "https://github.com/pytorch/tensordict/actions/runs/32222440820/job/95975391165",
-          "display_name": "MacOS Tests"
-        },
-        "test-rl-gpu.yml": {
-          "status": "failure",
-          "conclusion": "failure",
-          "url": "https://github.com/pytorch/tensordict/actions/runs/32222440820/job/95975390956",
-          "display_name": "RL GPU Tests"
-        },
-        "lint.yml": {
-          "status": "success",
-          "conclusion": "success",
-          "url": "https://github.com/pytorch/tensordict/actions/runs/32222440820/job/95975390922",
-          "display_name": "Lint"
-        },
-        "docs.yml": {
-          "status": "success",
-          "conclusion": "success",
-          "url": "https://github.com/pytorch/tensordict/actions/runs/32222440820/job/95975391000",
-          "display_name": "Documentation"
-        },
-        "benchmarks.yml": {
-          "status": "success",
-          "conclusion": "success",
-          "url": "https://github.com/pytorch/tensordict/actions/runs/32222440820/job/95975390514",
           "display_name": "Benchmarks"
         }
       },
