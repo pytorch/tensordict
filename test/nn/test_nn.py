@@ -6416,6 +6416,29 @@ class TestTensorDictParams:
         assert inner._parameters["w"] is inner["w"]
         assert set(dict(module.named_parameters())) == {"params.a", "params.sub.w"}
 
+    @pytest.mark.parametrize("swap", [False, True])
+    @pytest.mark.parametrize("assign", [False, True])
+    def test_load_state_dict_lazy_stack(self, swap, assign):
+        # #3748: the leaves of a lazy stack held by a TensorDictParams must be
+        # loaded like any other leaf.
+        params = TensorDictParams(TensorDict(w=torch.zeros(3)))
+        params["lz"] = lazy_stack(
+            [TensorDict(l=torch.zeros(2)), TensorDict(l=torch.zeros(2))]
+        )
+        params["td"] = TensorDict(l=torch.zeros(2))
+        module = self._parent(params)
+        state = {k: torch.ones_like(v) for k, v in module.state_dict().items()}
+
+        torch.__future__.set_swap_module_params_on_conversion(swap)
+        try:
+            module.load_state_dict(state, assign=assign)
+        finally:
+            torch.__future__.set_swap_module_params_on_conversion(False)
+
+        assert (params["w"] == 1).all()
+        assert (params["td", "l"] == 1).all()
+        assert (params["lz", "l"] == 1).all()
+
     @pytest.mark.parametrize(
         "device",
         [
