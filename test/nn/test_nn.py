@@ -6899,6 +6899,27 @@ class TestTensorDictParams:
         assert isinstance(params.extra, nn.Parameter)
         assert (params.extra == 9).all()
 
+    @pytest.mark.parametrize("requires_grad", [False, True])
+    def test_load_state_dict_assign_registered_parameter_grad(self, requires_grad):
+        # An assigned state-dict Parameter must keep the destination's
+        # requires_grad, as nn.Module does.
+        params = TensorDictParams(TensorDict(a=torch.zeros(3)))
+        params.register_parameter(
+            "extra", nn.Parameter(torch.zeros(2), requires_grad=requires_grad)
+        )
+        module = self._parent(params)
+        state = {
+            "params.a": torch.zeros(3),
+            "params.extra": nn.Parameter(
+                torch.ones(2), requires_grad=not requires_grad
+            ),
+        }
+
+        module.load_state_dict(state, assign=True)
+
+        assert params.extra.requires_grad is requires_grad
+        assert (params.extra == 1).all()
+
     @pytest.mark.parametrize("locked", [False, True])
     def test_load_state_dict_assign_registered_buffer_partial(self, locked):
         # #3683/#3774: a value for a buffer added with register_buffer is

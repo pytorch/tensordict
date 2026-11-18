@@ -1669,6 +1669,8 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
                                 val = nn.Parameter(
                                     val, requires_grad=dest.requires_grad
                                 )
+                            else:
+                                val.requires_grad_(dest.requires_grad)
                             self._parameters[name] = val
                         else:
                             self._buffers[name] = val
