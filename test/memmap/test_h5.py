@@ -3396,6 +3396,23 @@ class TestH5Indexing:
         assert h5td["s"] == b"a string!"
         assert h5td["f"] == 1
 
+    @pytest.mark.parametrize("method", ["set_at_", "update_at_"])
+    def test_write_with_broadcast_boolean_mask(self, tmp_path, method):
+        td = TensorDict(a=torch.zeros(3, 2, 4), batch_size=[3, 2])
+        mask = torch.tensor([[True, False], [False, True], [True, False]])
+        values = torch.arange(1.0, 13.0).reshape(3, 4)
+        expected = td["a"].clone()
+        expected[mask] = values
+        h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+        try:
+            if method == "set_at_":
+                h5td.set_at_("a", values, mask)
+            else:
+                h5td.update_at_({"a": values}, mask)
+            torch.testing.assert_close(h5td["a"], expected)
+        finally:
+            h5td.close()
+
     def test_h5_setitem_key_in_place(self, data):
         # h5td[key] = value writes into the existing array: the dtype of the
         # file is kept, and a new shape raises. A new key takes the value.

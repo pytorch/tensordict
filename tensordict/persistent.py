@@ -427,6 +427,8 @@ class _H5Backend(_PersistentBackend):
                     "tensordict will cast the entire array in memory and index it using the mask. "
                     "This is suboptimal and may lead to performance issue."
                 )
+                if not isinstance(idx, tuple):
+                    idx = (idx,)
                 idx = tuple(
                     (
                         expand_right(torch.as_tensor(_idx), node.shape).numpy()
