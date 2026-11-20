@@ -1628,7 +1628,10 @@ def _unflatten_state_dict(flat_sd):
 
     Creates intermediate nodes from both data keys and _metadata keys, so
     that tensor-collection nodes that carry only metadata (e.g. NonTensorData)
-    are preserved in the nested structure.
+    are preserved in the nested structure. A _metadata key without a batch
+    size, such as the ``{"version": 1}`` that ``nn.Module.state_dict`` writes
+    for each submodule, only annotates a node that holds data: a submodule
+    without parameters or buffers (a ``ReLU``) gets no node.
     """
     _metadata = getattr(flat_sd, "_metadata", None)
     root = collections.OrderedDict()
@@ -1652,12 +1655,22 @@ def _unflatten_state_dict(flat_sd):
         for meta_key, meta_value in _metadata.items():
             if meta_key == "":
                 root._metadata[""] = meta_value
-            else:
-                parts = meta_key.split(".")
-                current = root
+                continue
+            parts = meta_key.split(".")
+            current = root
+            if isinstance(meta_value, dict) and "batch_size" in meta_value:
                 for part in parts:
                     current = _ensure_nested(current, part)
-                current._metadata[""] = meta_value
+            else:
+                # A level without a batch size is not a tensor collection:
+                # nn.Module writes {"version": 1} for every submodule, even
+                # one without parameters or buffers, and an empty node would
+                # become an empty entry in load_state_dict (#3590).
+                for part in parts:
+                    current = current.get(part) if isinstance(current, dict) else None
+                if not isinstance(current, dict):
+                    continue
+            current._metadata[""] = meta_value
 
     return root
 

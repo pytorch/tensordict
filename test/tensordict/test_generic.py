@@ -9054,6 +9054,35 @@ class TestGeneric:
         with pytest.raises(RuntimeError, match="Failed to update 'weight'"):
             td.load_state_dict({"weight": torch.zeros(5, 5), "bias": torch.zeros(3)})
 
+    @pytest.mark.parametrize("locked", [False, True])
+    def test_load_state_dict_from_module_without_params(self, locked):
+        # #3590: the state dict of a module has a _metadata key, but no value,
+        # for a submodule without parameters or buffers (ReLU, Dropout). The
+        # load adds no empty entry for it, so a locked tensordict loads too.
+        def make():
+            return nn.Sequential(
+                nn.Linear(3, 4), nn.ReLU(), nn.Sequential(nn.Dropout(), nn.Linear(4, 2))
+            )
+
+        src, m = make(), make()
+        td = TensorDict.from_module(m)
+        if locked:
+            td.lock_()
+        keys = set(td.keys(True))
+        td.load_state_dict(src.state_dict())
+        assert set(td.keys(True)) == keys
+        for p, p_src in zip(m.parameters(), src.parameters()):
+            assert torch.equal(p, p_src)
+        assert torch.stack([td, TensorDict.from_module(make())]).batch_size == (2,)
+
+    def test_load_state_dict_empty_nested_tensordict(self):
+        # #3590: an empty nested tensordict of a tensordict's state dict has a
+        # batch size in _metadata, and is still loaded
+        src = TensorDict({"a": 0, "e": TensorDict(batch_size=[2])}, [])
+        td = TensorDict().load_state_dict(src.state_dict(), strict=False)
+        assert set(td.keys(True)) == {"a", "e"}
+        assert td["e"].batch_size == (2,)
+
     def test_state_dict_flat_roundtrip(self):
         td = TensorDict({"a": 1, "b": {"c": 2, "d": {"e": 3}}}, [])
         sd = td.state_dict()
