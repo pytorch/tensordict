@@ -1779,6 +1779,11 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             keys = self._leaf_keys()
         data = self.data
         for name, key in keys.items():
+            val = state_dict.get(prefix + name)
+            if val is None:
+                # A partial load leaves this registered copy untouched: writing
+                # it back would overwrite in-place changes to the members.
+                continue
             node = self._param_td
             under_lazy_stack = False
             for part in _unravel_key_to_tuple(key)[:-1]:

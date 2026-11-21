@@ -6439,6 +6439,22 @@ class TestTensorDictParams:
         assert (params["td", "l"] == 1).all()
         assert (params["lz", "l"] == 1).all()
 
+    def test_load_state_dict_lazy_stack_partial_keeps_members(self):
+        # A partial load must not write the registration-time stacked copy
+        # back into lazy-stack members that were changed in place.
+        params = TensorDictParams(TensorDict(w=torch.zeros(3)))
+        params["lz"] = lazy_stack(
+            [TensorDict(l=torch.zeros(2)), TensorDict(l=torch.zeros(2))]
+        )
+        with torch.no_grad():
+            params["lz"].tensordicts[0]["l"].fill_(5)
+        assert (params["lz"].tensordicts[0]["l"] == 5).all()
+        module = self._parent(params)
+
+        module.load_state_dict({"params.w": torch.ones(3)}, strict=False)
+
+        assert (params["lz"].tensordicts[0]["l"] == 5).all()
+
     @pytest.mark.parametrize(
         "device",
         [
