@@ -6416,6 +6416,45 @@ class TestTensorDictParams:
         assert inner._parameters["w"] is inner["w"]
         assert set(dict(module.named_parameters())) == {"params.a", "params.sub.w"}
 
+    @pytest.mark.parametrize("swap", [False, True])
+    @pytest.mark.parametrize("assign", [False, True])
+    def test_load_state_dict_lazy_stack(self, swap, assign):
+        # #3748: the leaves of a lazy stack held by a TensorDictParams must be
+        # loaded like any other leaf.
+        params = TensorDictParams(TensorDict(w=torch.zeros(3)))
+        params["lz"] = lazy_stack(
+            [TensorDict(l=torch.zeros(2)), TensorDict(l=torch.zeros(2))]
+        )
+        params["td"] = TensorDict(l=torch.zeros(2))
+        module = self._parent(params)
+        state = {k: torch.ones_like(v) for k, v in module.state_dict().items()}
+
+        torch.__future__.set_swap_module_params_on_conversion(swap)
+        try:
+            module.load_state_dict(state, assign=assign)
+        finally:
+            torch.__future__.set_swap_module_params_on_conversion(False)
+
+        assert (params["w"] == 1).all()
+        assert (params["td", "l"] == 1).all()
+        assert (params["lz", "l"] == 1).all()
+
+    def test_load_state_dict_lazy_stack_partial_keeps_members(self):
+        # A partial load must not write the registration-time stacked copy
+        # back into lazy-stack members that were changed in place.
+        params = TensorDictParams(TensorDict(w=torch.zeros(3)))
+        params["lz"] = lazy_stack(
+            [TensorDict(l=torch.zeros(2)), TensorDict(l=torch.zeros(2))]
+        )
+        with torch.no_grad():
+            params["lz"].tensordicts[0]["l"].fill_(5)
+        assert (params["lz"].tensordicts[0]["l"] == 5).all()
+        module = self._parent(params)
+
+        module.load_state_dict({"params.w": torch.ones(3)}, strict=False)
+
+        assert (params["lz"].tensordicts[0]["l"] == 5).all()
+
     @pytest.mark.parametrize(
         "device",
         [

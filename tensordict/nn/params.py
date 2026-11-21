@@ -1770,6 +1770,34 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
             unexpected_keys,
             error_msgs,
         )
+        # #3748: a leaf under a lazy stack is registered by _reset_params as a
+        # tensor stacked from the members of the stack, which shares no storage
+        # with them. The base load writes into that copy only: write the loaded
+        # values back into the members. This is a no-op for other leaves and
+        # for the assign=True path, which already writes into the members.
+        if keys is None:
+            keys = self._leaf_keys()
+        data = self.data
+        for name, key in keys.items():
+            val = state_dict.get(prefix + name)
+            if val is None:
+                # A partial load leaves this registered copy untouched: writing
+                # it back would overwrite in-place changes to the members.
+                continue
+            node = self._param_td
+            under_lazy_stack = False
+            for part in _unravel_key_to_tuple(key)[:-1]:
+                node = node._get_str(part, NO_DEFAULT)
+                if isinstance(node, LazyStackedTensorDict):
+                    under_lazy_stack = True
+                    break
+            if not under_lazy_stack:
+                continue
+            dest = self._parameters.get(name)
+            if dest is None:
+                dest = self._buffers.get(name)
+            if dest is not None:
+                data.set(key, dest, inplace=True)
         if (
             len(error_msgs) > n_errors
             and torch.__future__.get_swap_module_params_on_conversion()
