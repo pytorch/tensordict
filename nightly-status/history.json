@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-11-20T18:13:28.262133+00:00",
+  "last_updated": "2026-11-21T06:51:18.123482+00:00",
   "stats": {
     "last_7_days": {
       "days": 7,
@@ -13,12 +13,59 @@
       "days": 30,
       "runs_with_data": 30,
       "total_workflow_runs": 150,
-      "total_success": 143,
-      "total_failure": 7,
-      "success_rate": 95.3
+      "total_success": 144,
+      "total_failure": 6,
+      "success_rate": 96.0
     }
   },
   "history": [
+    {
+      "date": "2026-11-21",
+      "orchestrator_ran": true,
+      "orchestrator_status": "success",
+      "orchestrator_url": "https://github.com/pytorch/tensordict/actions/runs/44874656323",
+      "orchestrator_run_id": 44874656323,
+      "workflows": {
+        "test-linux.yml": {
+          "status": "success",
+          "conclusion": "success",
+          "url": "https://github.com/pytorch/tensordict/actions/runs/44874656323/job/136756614599",
+          "display_name": "Linux Tests"
+        },
+        "test-macos.yml": {
+          "status": "success",
+          "conclusion": "success",
+          "url": "https://github.com/pytorch/tensordict/actions/runs/44874656323/job/136756614814",
+          "display_name": "MacOS Tests"
+        },
+        "test-rl-gpu.yml": {
+          "status": "success",
+          "conclusion": "success",
+          "url": "https://github.com/pytorch/tensordict/actions/runs/44874656323/job/136756614546",
+          "display_name": "RL GPU Tests"
+        },
+        "docs.yml": {
+          "status": "success",
+          "conclusion": "success",
+          "url": "https://github.com/pytorch/tensordict/actions/runs/44874656323/job/136756614605",
+          "display_name": "Documentation"
+        },
+        "benchmarks.yml": {
+          "status": "success",
+          "conclusion": "success",
+          "url": "https://github.com/pytorch/tensordict/actions/runs/44874656323/job/136756614492",
+          "display_name": "Benchmarks"
+        }
+      },
+      "summary": {
+        "total": 5,
+        "success": 5,
+        "failure": 0,
+        "skipped": 0,
+        "other": 0,
+        "success_rate": 100.0
+      }
+    },
     {
       "date": "2026-11-20",
       "orchestrator_ran": true,
@@ -4536,59 +4583,6 @@
         "skipped": 0,
         "other": 0,
         "success_rate": 83.3
-      }
-    },
-    {
-      "date": "2026-08-23",
-      "orchestrator_ran": true,
-      "orchestrator_status": "failure",
-      "orchestrator_url": "https://github.com/pytorch/tensordict/actions/runs/32622282699",
-      "orchestrator_run_id": 32622282699,
-      "workflows": {
-        "test-linux.yml": {
-          "status": "failure",
-          "conclusion": "failure",
-          "url": "https://github.com/pytorch/tensordict/actions/runs/32622282699/job/97152171141",
-          "display_name": "Linux Tests"
-        },
-        "test-macos.yml": {
-          "status": "success",
-          "conclusion": "success",
-          "url": "https://github.com/pytorch/tensordict/actions/runs/32622282699/job/97152171148",
-          "display_name": "MacOS Tests"
-        },
-        "test-rl-gpu.yml": {
-          "status": "failure",
-          "conclusion": "failure",
-          "url": "https://github.com/pytorch/tensordict/actions/runs/32622282699/job/97152171192",
-          "display_name": "RL GPU Tests"
-        },
-        "lint.yml": {
-          "status": "success",
-          "conclusion": "success",
-          "url": "https://github.com/pytorch/tensordict/actions/runs/32622282699/job/97152171058",
-          "display_name": "Lint"
-        },
-        "docs.yml": {
-          "status": "success",
-          "conclusion": "success",
-          "url": "https://github.com/pytorch/tensordict/actions/runs/32622282699/job/97152171187",
-          "display_name": "Documentation"
-        },
-        "benchmarks.yml": {
-          "status": "success",
-          "conclusion": "success",
-          "url": "https://github.com/pytorch/tensordict/actions/runs/32622282699/job/97152171070",
-          "display_name": "Benchmarks"
-        }
-      },
-      "summary": {
-        "total": 6,
-        "success": 4,
-        "failure": 2,
-        "skipped": 0,
-        "other": 0,
-        "success_rate": 66.7
       }
     }
   ]
