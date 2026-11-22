@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-11-21T18:11:16.013814+00:00",
+  "last_updated": "2026-11-22T06:50:22.532679+00:00",
   "stats": {
     "last_7_days": {
       "days": 7,
@@ -19,6 +19,53 @@
     }
   },
   "history": [
+    {
+      "date": "2026-11-22",
+      "orchestrator_ran": true,
+      "orchestrator_status": "success",
+      "orchestrator_url": "https://github.com/pytorch/tensordict/actions/runs/44992893059",
+      "orchestrator_run_id": 44992893059,
+      "workflows": {
+        "test-linux.yml": {
+          "status": "success",
+          "conclusion": "success",
+          "url": "https://github.com/pytorch/tensordict/actions/runs/44992893059/job/137117651224",
+          "display_name": "Linux Tests"
+        },
+        "test-macos.yml": {
+          "status": "success",
+          "conclusion": "success",
+          "url": "https://github.com/pytorch/tensordict/actions/runs/44992893059/job/137117651531",
+          "display_name": "MacOS Tests"
+        },
+        "test-rl-gpu.yml": {
+          "status": "success",
+          "conclusion": "success",
+          "url": "https://github.com/pytorch/tensordict/actions/runs/44992893059/job/137117651218",
+          "display_name": "RL GPU Tests"
+        },
+        "docs.yml": {
+          "status": "success",
+          "conclusion": "success",
+          "url": "https://github.com/pytorch/tensordict/actions/runs/44992893059/job/137117651227",
+          "display_name": "Documentation"
+        },
+        "benchmarks.yml": {
+          "status": "success",
+          "conclusion": "success",
+          "url": "https://github.com/pytorch/tensordict/actions/runs/44992893059/job/137117651241",
+          "display_name": "Benchmarks"
+        }
+      },
+      "summary": {
+        "total": 5,
+        "success": 5,
+        "failure": 0,
+        "skipped": 0,
+        "other": 0,
+        "success_rate": 100.0
+      }
+    },
     {
       "date": "2026-11-21",
       "orchestrator_ran": true,
@@ -4520,59 +4567,6 @@
           "status": "success",
           "conclusion": "success",
           "url": "https://github.com/pytorch/tensordict/actions/runs/32816033529/job/97704415374",
-          "display_name": "Benchmarks"
-        }
-      },
-      "summary": {
-        "total": 6,
-        "success": 5,
-        "failure": 1,
-        "skipped": 0,
-        "other": 0,
-        "success_rate": 83.3
-      }
-    },
-    {
-      "date": "2026-08-24",
-      "orchestrator_ran": true,
-      "orchestrator_status": "failure",
-      "orchestrator_url": "https://github.com/pytorch/tensordict/actions/runs/32696762423",
-      "orchestrator_run_id": 32696762423,
-      "workflows": {
-        "test-linux.yml": {
-          "status": "success",
-          "conclusion": "success",
-          "url": "https://github.com/pytorch/tensordict/actions/runs/32696762423/job/97340254545",
-          "display_name": "Linux Tests"
-        },
-        "test-macos.yml": {
-          "status": "success",
-          "conclusion": "success",
-          "url": "https://github.com/pytorch/tensordict/actions/runs/32696762423/job/97340254412",
-          "display_name": "MacOS Tests"
-        },
-        "test-rl-gpu.yml": {
-          "status": "failure",
-          "conclusion": "failure",
-          "url": "https://github.com/pytorch/tensordict/actions/runs/32696762423/job/97340254396",
-          "display_name": "RL GPU Tests"
-        },
-        "lint.yml": {
-          "status": "success",
-          "conclusion": "success",
-          "url": "https://github.com/pytorch/tensordict/actions/runs/32696762423/job/97340254051",
-          "display_name": "Lint"
-        },
-        "docs.yml": {
-          "status": "success",
-          "conclusion": "success",
-          "url": "https://github.com/pytorch/tensordict/actions/runs/32696762423/job/97340254476",
-          "display_name": "Documentation"
-        },
-        "benchmarks.yml": {
-          "status": "success",
-          "conclusion": "success",
-          "url": "https://github.com/pytorch/tensordict/actions/runs/32696762423/job/97340253838",
           "display_name": "Benchmarks"
         }
       },
