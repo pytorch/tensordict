@@ -8695,70 +8695,113 @@ class TestTensorDictParams:
         ):
             self._parent(params).to(target)
 
-    @pytest.mark.parametrize("op", _CONVERSIONS)
-    def test_apply_none_buffer_and_parameter(self, op):
-        # #3726: a None buffer next to a None parameter. A conversion that
-        # replaces the leaves would lose the None parameter (#3547): every
-        # conversion raises as before.
-        params = self._apply_params_with_none("parameter", False, op)
-        params.register_buffer("unused_buffer", None)
-        with pytest.raises(
-            AttributeError, match="'NoneType' object has no attribute 'data'"
-        ):
-            self._convert(self._parent(params), op)
+    def _params_with_other(self, extra, op):
+        # The leaves with a registered "extra" that is not a leaf: a buffer,
+        # a non-persistent buffer, a parameter, or a None parameter (#3772).
+        if op == "to_empty":
+            with torch.device("meta"):
+                params = self._apply_params()
+        else:
+            params = self._apply_params()
+        if extra == "buffer":
+            params.register_buffer("extra", torch.ones(2))
+        elif extra == "non_persistent":
+            params.register_buffer("extra", torch.ones(2), persistent=False)
+        elif extra == "parameter":
+            params.register_parameter("extra", nn.Parameter(torch.ones(2)))
+        else:  # none_parameter
+            params.register_parameter("extra", None)
+        return params
 
-    def test_apply_none_buffer_and_registered_tensor(self):
-        # #3726: a None buffer next to a tensor registered with
-        # register_buffer, which is not a leaf: raises as before (#3547).
-        params = self._apply_params_with_none("buffer", False, None)
-        params.register_buffer("extra", torch.ones(2))
-        with pytest.raises(
-            AttributeError, match="'NoneType' object has no attribute 'data'"
-        ):
-            self._parent(params).to(torch.float64)
+    @pytest.mark.parametrize(
+        "extra", ["buffer", "non_persistent", "parameter", "none_parameter"]
+    )
+    @pytest.mark.parametrize("op", _CONVERSIONS)
+    def test_apply_none_buffer_with_other_registration(self, op, extra):
+        # #3772: a None buffer next to another registration that is not a
+        # leaf made every conversion raise AttributeError: a register_buffer
+        # buffer, a non-persistent one, a parameter, or a None parameter.
+        # The None buffer is now skipped as without any other registration
+        # (#3726) and the rest converts as it does without the None buffer:
+        # the extra one is kept, or dropped by the conversions that replace
+        # the leaves (#3547), exactly as without the None buffer.
+        params = self._params_with_other(extra, op)
+        params.register_buffer("unused", None)
+        ref = self._params_with_other(extra, op)
+        module, ref_module = self._parent(params), self._parent(ref)
+        self._convert(module, op)
+        self._convert(ref_module, op)
+        assert self._registered(params) == self._registered(ref)
+        assert list(params._parameters) == list(ref._parameters)
+        assert list(params._buffers) == [*ref._buffers, "unused"]
+        assert params._buffers["unused"] is None and params.unused is None
+        assert list(params["sub"]._parameters) == list(ref["sub"]._parameters)
+        assert list(params["sub"]._buffers) == list(ref["sub"]._buffers)
+        assert self._registered(params["sub"]) == self._registered(ref["sub"])
+
+    @pytest.mark.parametrize("op", _CONVERSIONS)
+    def test_apply_none_buffer_nested_other_registration(self, op):
+        # #3772: a None buffer on the top TensorDictParams next to a
+        # registered buffer on a nested one raises too. The nested extra
+        # follows what it does without the None buffer, whatever the
+        # conversion does to it.
+        params = self._params_with_other("buffer", op)
+        params["sub"].register_buffer("extra", torch.ones(2))
+        params.register_buffer("unused", None)
+        ref = self._params_with_other("buffer", op)
+        ref["sub"].register_buffer("extra", torch.ones(2))
+        module, ref_module = self._parent(params), self._parent(ref)
+        self._convert(module, op)
+        self._convert(ref_module, op)
+        assert self._registered(params) == self._registered(ref)
+        assert list(params._parameters) == list(ref._parameters)
+        assert list(params._buffers) == [*ref._buffers, "unused"]
+        assert params._buffers["unused"] is None
+        assert list(params["sub"]._parameters) == list(ref["sub"]._parameters)
+        assert list(params["sub"]._buffers) == list(ref["sub"]._buffers)
+        assert self._registered(params["sub"]) == self._registered(ref["sub"])
 
     @pytest.mark.parametrize("target", [torch.float64, "meta"])
     def test_apply_none_buffer_top_and_nested(self, target):
-        # #3726: a None buffer on the top TensorDictParams and on a nested
-        # one. A conversion that replaces the leaves would lose the nested
-        # one (#3547): every conversion raises as before.
+        # #3772: a None buffer on the top TensorDictParams next to one on a
+        # nested TensorDictParams raised too. The nested one follows what a
+        # nested None buffer does without the top one: kept by the
+        # conversions that keep the leaves, dropped by the ones that replace
+        # them (#3547).
         params = self._apply_params_with_none("buffer", True, None)
         params.register_buffer("unused", None)
-        with pytest.raises(
-            AttributeError, match="'NoneType' object has no attribute 'data'"
-        ):
-            self._parent(params).to(target)
+        ref = self._apply_params_with_none("buffer", True, None)
+        module, ref_module = self._parent(params), self._parent(ref)
+        module.to(target)
+        ref_module.to(target)
+        assert self._registered(params) == self._registered(ref)
+        assert list(params._buffers) == [*ref._buffers, "unused"]
+        assert params._buffers["unused"] is None
+        assert list(params["sub"]._parameters) == list(ref["sub"]._parameters)
+        assert list(params["sub"]._buffers) == list(ref["sub"]._buffers)
+        assert self._registered(params["sub"]) == self._registered(ref["sub"])
 
     @pytest.mark.parametrize("target", [torch.float64, "meta"])
-    @pytest.mark.parametrize("other", [None, "parameter"])
-    def test_apply_none_buffer_nested_get_post_hook(self, other, target):
-        # #3726: the check that a None buffer can be skipped reads the leaves
-        # without the get_post_hooks of a nested TensorDictParams. Next to a
-        # None parameter the conversion raises as before and never calls the
-        # hook; alone, the hook runs as often as without the None buffer.
+    def test_apply_none_buffer_nested_get_post_hook(self, target):
+        # #3772: next to a None parameter, the conversion now runs and the
+        # get_post_hook of the nested TensorDictParams runs as often as
+        # without the None buffer.
         def make(none_buffer):
             params = self._apply_params()
             if none_buffer:
                 params.register_buffer("unused", None)
-            if other == "parameter":
-                params.register_parameter("none_param", None)
+            params.register_parameter("none_param", None)
             calls = []
             params["sub"].register_get_post_hook(lambda td, val: calls.append(1))
             return params, calls
 
         params, calls = make(True)
-        if other == "parameter":
-            with pytest.raises(
-                AttributeError, match="'NoneType' object has no attribute 'data'"
-            ):
-                self._parent(params).to(target)
-            assert calls == []
-            return
         ref, ref_calls = make(False)
         self._parent(params).to(target)
         self._parent(ref).to(target)
         assert len(calls) == len(ref_calls)
         assert "unused" in params._buffers and params._buffers["unused"] is None
+        assert list(params._parameters) == list(ref._parameters)
 
     @pytest.mark.parametrize("nested", [False, True])
     @pytest.mark.parametrize(
