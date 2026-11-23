@@ -3749,6 +3749,70 @@ class TestNN:
         assert dict(params.named_parameters()).keys() == {"a", "b.c", "b.d"}
 
 
+@pytest.mark.parametrize("backend", [None, "eager", "aot_eager", "inductor"])
+@pytest.mark.parametrize("as_context", [False, True])
+def test_to_module_shared_layer_restores_state(backend, as_context):
+    torch.manual_seed(0)
+    layer = torch.nn.Linear(3, 3)
+    module = torch.nn.Sequential(layer, torch.nn.Tanh(), layer)
+    originals = dict(module.named_parameters(remove_duplicate=False))
+    params = TensorDict.from_module(module).data.clone()
+    for name in ("weight", "bias"):
+        params["0", name] = torch.full_like(params["0", name], 0.1, requires_grad=True)
+        params["2", name] = torch.full_like(params["2", name], 0.5, requires_grad=True)
+    leaves = dict(params.items(True, True))
+    saved = params.clone()
+
+    def call(p, x):
+        if as_context:
+            with p.to_module(module, preserve_module_state=False):
+                return module(x)
+        swap = p.to_module(module, preserve_module_state=False)
+        result = module(x)
+        swap.to_module(module, preserve_module_state=False)
+        return result
+
+    counter = None if backend is None else CompileCounterWithBackend(backend)
+    run = (
+        call
+        if counter is None
+        else torch.compile(call, backend=counter, fullgraph=True)
+    )
+    x = torch.ones(2, 3)
+    for _ in range(2):
+        result = run(params, x)
+        expected = torch.nn.functional.linear(
+            torch.tanh(
+                torch.nn.functional.linear(
+                    x, leaves["0", "weight"], leaves["0", "bias"]
+                )
+            ),
+            leaves["0", "weight"],
+            leaves["0", "bias"],
+        )
+        torch.testing.assert_close(result, expected)
+        for name, original in originals.items():
+            assert (
+                dict(module.named_parameters(remove_duplicate=False))[name] is original
+            )
+        for key, leaf in leaves.items():
+            assert params[key] is leaf
+            torch.testing.assert_close(params[key], saved[key])
+        actual_grads = torch.autograd.grad(
+            result.sum(), tuple(leaves.values()), allow_unused=True
+        )
+        expected_grads = torch.autograd.grad(
+            expected.sum(), tuple(leaves.values()), allow_unused=True
+        )
+        for actual, reference in zip(actual_grads, expected_grads):
+            if reference is None:
+                assert actual is None
+            else:
+                torch.testing.assert_close(actual, reference)
+    if counter is not None:
+        assert counter.frame_count == 1
+
+
 @pytest.mark.parametrize("mode", [None, "reduce-overhead"])
 class TestFunctional:
     # in-place modif raises an error even if fullgraph=False
