@@ -255,7 +255,7 @@ def _replaced_entries(
     td,
     entries: list,
     skip_wrappers: bool = False,
-    seen: dict | None = None,
+    seen: dict | list | None = None,
     source=None,
 ) -> list:
     """Lists the ``(sub-tensordict, key, value)`` of ``swap`` that are not the values of ``td``.
@@ -266,7 +266,7 @@ def _replaced_entries(
     listed, unless both require grad: the gradient of the value of ``td``
     then lands on the wrapper, which is written back.
 
-    With a ``seen`` dict, given when the module uses a submodule more than
+    With ``seen``, given when the module uses a submodule more than
     once, the submodule holds the values of its first entry in ``td``, the
     ``source`` of the later entries: these values and their wrappers are not
     listed for the later entries either, which keep their own values.
@@ -279,14 +279,18 @@ def _replaced_entries(
             sub = td._get_str(key, default=NO_DEFAULT)
             # to_module swaps a shared submodule once and gives each of its
             # entries the same dict; it sets memo["shared"] when it does.
-            _replaced_entries(
-                val,
-                sub,
-                entries,
-                skip_wrappers,
-                seen,
-                None if seen is None else seen.setdefault(id(val), sub),
-            )
+            if isinstance(seen, list):
+                # Older Dynamo versions cannot take id() of a traced dict.
+                for previous, previous_source in seen:
+                    if previous is val:
+                        sub_source = previous_source
+                        break
+                else:
+                    sub_source = sub
+                    seen.append((val, sub))
+            else:
+                sub_source = None if seen is None else seen.setdefault(id(val), sub)
+            _replaced_entries(val, sub, entries, skip_wrappers, seen, sub_source)
             continue
         current = td._get_str(key, None)
         if current is not val and not (
@@ -1623,8 +1627,7 @@ class _Conversion:
         hooks = memo["hooks"]
         if return_swap:
             _swap = {}
-            if not is_dynamo:
-                memo[weakref.ref(module)] = _swap
+            memo[id(module) if is_dynamo else weakref.ref(module)] = _swap
 
         if use_state_dict:
             if inplace is not None:
@@ -1721,10 +1724,11 @@ class _Conversion:
                 else:
                     child = module._modules.get(key)
 
-                if not is_dynamo:
-                    local_out = memo.get(weakref.ref(child), NO_DEFAULT)
+                local_out = memo.get(
+                    id(child) if is_dynamo else weakref.ref(child), NO_DEFAULT
+                )
 
-                if is_dynamo or local_out is NO_DEFAULT:
+                if local_out is NO_DEFAULT:
                     local_out = value._to_module(
                         child,
                         inplace=inplace,
@@ -1746,7 +1750,10 @@ class _Conversion:
             if isinstance(swap_dest, dict):
                 return _swap
             elif swap_dest is not None:
-                for td, key, val in _replaced_entries(_swap, swap_dest, []):
+                seen = None
+                if memo is not None and "shared" in memo:
+                    seen = [] if is_dynamo else {}
+                for td, key, val in _replaced_entries(_swap, swap_dest, [], seen=seen):
                     td._set_str(
                         key,
                         val,
