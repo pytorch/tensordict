@@ -8,7 +8,7 @@ from __future__ import annotations
 import collections
 import sys
 from copy import deepcopy
-from typing import Any, Callable, Iterable, List, overload, TYPE_CHECKING
+from typing import Any, Callable, Iterable, List, overload, Sequence, TYPE_CHECKING
 
 from tensordict._nestedkey import NestedKey
 from tensordict._td import TensorDict
@@ -207,12 +207,12 @@ class TensorDictSequential(TensorDictModule):
     _select_before_return = False
 
     @property
-    def out_keys(self):
+    def out_keys(self) -> Sequence[NestedKey]:
         """The keys that the modules write, each listed once, or those chosen with :meth:`select_out_keys`."""
         return self._out_keys_apparent
 
     @out_keys.setter
-    def out_keys(self, value: List[NestedKey]):
+    def out_keys(self, value: Sequence[NestedKey]) -> None:
         self._out_keys = self._out_keys_apparent = unravel_key_list(list(value))
         self._complete_out_keys = list(self._out_keys)
 
