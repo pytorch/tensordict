@@ -1462,7 +1462,13 @@ class TensorDictStore(_StoreConnection, _StoreUnsupported, TensorDictBase):
                 non_blocking=non_blocking,
             )
         elif key[0] in self.keys():
-            self._get_str(key[0], NO_DEFAULT)._set_tuple(
+            td = self._get_str(key[0], NO_DEFAULT)
+            if not is_tensor_collection(td):
+                # a key that goes through a leaf: same error as TensorDict
+                raise KeyError(
+                    f"The entry {key[0]} is already present in tensordict {self}."
+                )
+            td._set_tuple(
                 key[1:],
                 value,
                 inplace=inplace,
