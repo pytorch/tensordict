@@ -3854,6 +3854,25 @@ def _stored_value(source, dest):
     return _stored_non_tensor(dest, source)
 
 
+def _writes_read_value(source, dest) -> bool:
+    """Whether ``update_`` writes the ``NonTensorData`` ``source`` in place of ``dest``, the value of a non-tensor leaf that a store reads.
+
+    A store reads such a leaf as its value, neither a tensor nor a tensor
+    collection, which ``copy_`` cannot write into: the source is written back
+    in its place (#3750). A ``NonTensorStack`` is left out, as ``copy_`` of
+    a stack into a ``NonTensorData`` raises.
+    """
+    from tensordict.tensorclass import NonTensorStack
+
+    return (
+        _is_non_tensor(type(source))
+        and not isinstance(source, NonTensorStack)
+        and dest is not None
+        and not isinstance(dest, Tensor)
+        and not _is_tensor_collection(type(dest))
+    )
+
+
 def _update_at_aliases(update_at_: Callable) -> Callable:
     """Accepts the argument names that the overrides of ``update_at_`` took before 0.15.
 
@@ -7678,10 +7697,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                         f"The key {_unravel_key_to_tuple(key)} was not found in the dest tensordict."
                     )
             keys_to_update = None
-        # The tensor leaves of self that the copy_ calls of _apply_nest below
-        # change, to write back where they are copies of the stored data. A
-        # lazy stack in the input splits self into its elements: those leaves
-        # are not recorded, and stay unchanged.
+        # The leaves of self that the copy_ calls of _apply_nest below change,
+        # to write back where they are copies of the stored data: a tensor, or
+        # a non-tensor leaf, which a file or a store reads into a new object
+        # (#3750). A lazy stack in the input splits self into its elements:
+        # those leaves are not recorded, and stay unchanged.
         written = None
         # The keys of the non-tensor values that a shared or memory-mapped
         # leaf of self cannot store: they are skipped on every route (#2487).
@@ -7703,6 +7723,9 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                             raise KeyError(
                                 f"The key {name} was not found in the dest tensordict."
                             )
+                        if written is not None and _writes_read_value(source, dest):
+                            written.append((name, source))
+                            return None
                         if not isinstance(dest, Tensor):
                             source = _stored_value(source, dest)
                             if source is None:
@@ -7710,7 +7733,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                                 skipped.append(name if len(name) > 1 else name[0])
                                 return None
                         dest.copy_(source, non_blocking=non_blocking)
-                        if written is not None and isinstance(dest, Tensor):
+                        if written is not None:
                             written.append((name, dest))
 
             if entries is not None:
@@ -7784,13 +7807,16 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                     raise KeyError(
                         f"The key {name} was not found in the dest tensordict."
                     )
+                if written is not None and _writes_read_value(source, dest):
+                    written.append((name, source))
+                    return None
                 if not isinstance(dest, Tensor):
                     source = _stored_value(source, dest)
                     if source is None:
                         skipped.append(name)
                         return None
                 dest.copy_(source, non_blocking=non_blocking)
-                if written is not None and isinstance(dest, Tensor):
+                if written is not None:
                     written.append((name, dest))
 
             named = True
@@ -7901,9 +7927,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             return vals, other_val, None
 
         def finish():
-            if self._reads_return_copies:
-                self._write_back(new_keys, vals, "update_")
             if not has_non_tensor:
+                self._write_back(new_keys, vals, "update_")
                 return
             from tensordict import NonTensorStack
 
@@ -7912,6 +7937,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
             # copy_ raises for a NonTensorStack into a NonTensorData:
             # these leaves are skipped too.
             skipped = []
+            # where self reads copies, such as a file or a store, each read
+            # of a non-tensor leaf is a new object: the copied leaves are
+            # written back with the tensor leaves (#3750)
+            written_keys = list(new_keys)
+            written_vals = list(vals)
 
             def inplace_update(name, source, dest):
                 if (
@@ -7927,6 +7957,11 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                         skipped.append(name)
                     else:
                         dest.copy_(source, non_blocking=non_blocking)
+                        written_keys.append(name)
+                        written_vals.append(dest)
+                elif self._reads_return_copies and _writes_read_value(source, dest):
+                    written_keys.append(name)
+                    written_vals.append(source)
 
             input_dict_or_td._apply_nest(
                 inplace_update,
@@ -7937,6 +7972,8 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                 named=True,
                 is_leaf=_is_leaf_written,
             )
+            if self._reads_return_copies:
+                self._write_back(written_keys, written_vals, "update_")
             if skipped:
                 _warn_update_skipped(skipped)
 

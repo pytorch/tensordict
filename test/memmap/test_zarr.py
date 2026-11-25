@@ -1575,6 +1575,47 @@ class TestZarrWriteOps:
         ztd.copy_(other)
         torch.testing.assert_close(reopened.to_tensordict(), other)
 
+    @pytest.mark.parametrize(
+        "method",
+        ["update_dict", "update_", "copy_", "update_keys_to_update", "non_tensor_only"],
+    )
+    def test_inplace_update_writes_non_tensor(self, tmp_path, method):
+        # #3750: update_ and copy_ write a non-tensor entry that holds one
+        # value for the whole batch to the store, as a TensorDict does
+        td = TensorDict(x=torch.zeros(2), n={"y": torch.zeros(2)}, batch_size=[2])
+        td.set_non_tensor("s", "old")
+        td.set_non_tensor(("n", "t"), "old")
+        ztd = PersistentTensorDict.from_dict(
+            td, filename=tmp_path / "s.zarr", backend="zarr"
+        )
+        new = TensorDict(
+            x=torch.ones(2),
+            s=NonTensorData("new", batch_size=[2]),
+            n=TensorDict(
+                y=torch.ones(2),
+                t=NonTensorData("new", batch_size=[2]),
+                batch_size=[2],
+            ),
+            batch_size=[2],
+        )
+        for data in (ztd, td):
+            if method == "update_dict":
+                data.update_({"x": torch.ones(2), "s": "new", "n": {"t": "new"}})
+            elif method == "update_":
+                assert data.update_(new) is data
+            elif method == "copy_":
+                assert data.copy_(new) is data
+            elif method == "update_keys_to_update":
+                data.update_(new, keys_to_update=["x", "s", ("n", "t")])
+            else:
+                data.update_({"s": "new", "n": {"t": "new"}})
+        assert td["s"] == "new"
+        assert td["n", "t"] == "new"
+        reopened = PersistentTensorDict.from_zarr(tmp_path / "s.zarr")
+        assert reopened["s"] == "new"
+        assert reopened["n", "t"] == "new"
+        torch.testing.assert_close(reopened["x"], td["x"])
+
     def test_inplace_methods_write_lazy_stack(self, ztd, tmp_path):
         # #2570: the in-place methods of a lazy stack write to its zarr members
         expected = ztd.to_tensordict()

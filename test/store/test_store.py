@@ -1297,6 +1297,47 @@ class TestTensorDictStore:
         assert (store_td["nested", "b"] == 0).all()
         assert store_td["s"] == "hello"
 
+    @pytest.mark.parametrize(
+        "method",
+        ["update_dict", "update_", "copy_", "update_keys_to_update", "non_tensor_only"],
+    )
+    def test_inplace_update_writes_non_tensor(self, store_td, method):
+        """update_ and copy_ write a batch-wide non-tensor entry, as on a TensorDict (#3750)."""
+        td = TensorDict(
+            x=torch.zeros(10),
+            n=TensorDict(y=torch.zeros(10), batch_size=[10]),
+            batch_size=[10],
+        )
+        td.set_non_tensor("s", "old")
+        td.set_non_tensor(("n", "t"), "old")
+        store_td.update(td.clone())
+        new = TensorDict(
+            x=torch.ones(10),
+            s=NonTensorData("new", batch_size=[10]),
+            n=TensorDict(
+                y=torch.ones(10),
+                t=NonTensorData("new", batch_size=[10]),
+                batch_size=[10],
+            ),
+            batch_size=[10],
+        )
+        for data in (store_td, td):
+            if method == "update_dict":
+                data.update_({"x": torch.ones(10), "s": "new", "n": {"t": "new"}})
+            elif method == "update_":
+                assert data.update_(new) is data
+            elif method == "copy_":
+                assert data.copy_(new) is data
+            elif method == "update_keys_to_update":
+                data.update_(new, keys_to_update=["x", "s", ("n", "t")])
+            else:
+                data.update_({"s": "new", "n": {"t": "new"}})
+        assert td["s"] == "new"
+        assert td["n", "t"] == "new"
+        assert store_td["s"] == "new"
+        assert store_td["n", "t"] == "new"
+        torch.testing.assert_close(store_td["x"], td["x"])
+
     def test_update_from_store_round_trips(self, store_td, store_kwargs):
         """update_ from a store reads it as often as a TensorDict destination does."""
         td = TensorDict(
