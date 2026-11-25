@@ -20,7 +20,8 @@ import unittest
 import warnings
 import weakref
 from collections import OrderedDict
-from collections.abc import MutableSequence
+from collections.abc import MutableSequence, Sequence
+from types import MappingProxyType
 
 import functorch
 import pytest
@@ -776,6 +777,42 @@ class TestTDModule:
 
         td = TensorDict({"1": torch.ones(1), "2": torch.ones(1) * 3}, [])
         assert (module(td)["a"] == 4).all()
+
+    def test_input_keys_any_mapping_or_sequence(self):
+        # A read-only mapping and an immutable non-tuple sequence are accepted
+        # like a dict and a list.
+        class _ReadOnlySeq(Sequence):
+            def __init__(self, items):
+                self._items = tuple(items)
+
+            def __getitem__(self, index):
+                return self._items[index]
+
+            def __len__(self):
+                return len(self._items)
+
+        def fn(x, y):
+            return x + y
+
+        td = TensorDict({"1": torch.ones(1), "2": torch.ones(1) * 3}, [])
+        with warnings.catch_warnings(record=True) as recorded:
+            warnings.simplefilter("always")
+            from_mapping = TensorDictModule(
+                fn,
+                in_keys=MappingProxyType({"1": "x", "2": "y"}),
+                out_keys=_ReadOnlySeq(["a"]),
+                out_to_in_map=False,
+            )
+        assert not recorded
+        from_sequence = TensorDictModule(
+            fn, in_keys=_ReadOnlySeq(["1", "2"]), out_keys=_ReadOnlySeq(["a"])
+        )
+        assert (from_mapping(td)["a"] == 4).all()
+        assert (from_sequence(td)["a"] == 4).all()
+        assert from_sequence.in_keys == ["1", "2"]
+        assert from_sequence.out_keys == ["a"]
+        from_sequence.in_keys = _ReadOnlySeq(["2", "1"])
+        assert from_sequence.in_keys == ["2", "1"]
 
     def test_input_keys_match_reversed(self):
         in_keys = {"1": "x", "2": "y"}

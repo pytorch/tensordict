@@ -17,7 +17,6 @@ from typing import (
     Dict,
     Iterable,
     Mapping,
-    MutableSequence,
     Optional,
     Sequence,
 )
@@ -588,7 +587,7 @@ class TensorDictModuleBase(nn.Module):
 
     @in_keys.setter
     def in_keys(self, value: Sequence[NestedKey]) -> None:
-        self._in_keys = unravel_key_list(value)
+        self._in_keys = unravel_key_list(list(value))
 
     @property
     def out_keys(self) -> Sequence[NestedKey]:
@@ -873,16 +872,18 @@ class TensorDictModule(TensorDictModuleBase):
             tensors, or a dict or a tensordict. A dict or a tensordict that
             holds all the ``out_keys`` is read by key, so its order does not
             matter.
-        in_keys (NestedKey, list of NestedKey, or dict): the entries that the
-            module reads from the input tensordict. If a list, the values are
-            passed as positional arguments, in this order. If a dict, the values
-            are passed as keyword arguments. By default, the dict maps an
-            argument name to a tensordict key: ``in_keys={"x": "obs"}`` calls
-            ``module(x=td["obs"])``. One tensordict key can feed several
-            arguments. ``out_to_in_map=False`` reverses the direction.
-        out_keys (NestedKey or list of NestedKey): the keys where the outputs
-            of ``module`` are written, one key per output, in order. An output
-            whose key is ``"_"`` is not written.
+        in_keys (NestedKey, sequence of NestedKey, or mapping): the entries
+            that the module reads from the input tensordict. A tuple is read as
+            one nested key, not as a sequence of keys. If a sequence, the values
+            are passed as positional arguments, in this order. If a mapping,
+            such as a dict, the values are passed as keyword arguments. By
+            default, the mapping goes from an argument name to a tensordict
+            key: ``in_keys={"x": "obs"}`` calls ``module(x=td["obs"])``. One
+            tensordict key can feed several arguments. ``out_to_in_map=False``
+            reverses the direction.
+        out_keys (NestedKey or sequence of NestedKey): the keys where the
+            outputs of ``module`` are written, one key per output, in order.
+            An output whose key is ``"_"`` is not written.
 
     Keyword Args:
         out_to_in_map (bool, optional): the direction of a dict ``in_keys``.
@@ -1032,12 +1033,12 @@ class TensorDictModule(TensorDictModuleBase):
     ) -> None:
         super().__init__()
 
-        if out_to_in_map is not None and not isinstance(in_keys, dict):
+        if out_to_in_map is not None and not isinstance(in_keys, Mapping):
             warnings.warn(
                 "out_to_in_map is not None but is only used when in_key is a dictionary."
             )
 
-        if isinstance(in_keys, dict):
+        if isinstance(in_keys, Mapping):
             if out_to_in_map is None:
                 out_to_in_map = True
 
@@ -1055,13 +1056,13 @@ class TensorDictModule(TensorDictModuleBase):
         else:
             if isinstance(in_keys, (str, tuple)):
                 in_keys = [in_keys]
-            elif not isinstance(in_keys, MutableSequence):
+            elif not isinstance(in_keys, Sequence):
                 raise ValueError(self._IN_KEY_ERR)
             self._kwargs = None
 
         if isinstance(out_keys, (str, tuple)):
             out_keys = [out_keys]
-        elif not isinstance(out_keys, MutableSequence):
+        elif not isinstance(out_keys, Sequence):
             raise ValueError(self._OUT_KEY_ERR)
         try:
             in_keys = unravel_key_list(list(in_keys))
