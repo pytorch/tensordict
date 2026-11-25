@@ -9214,6 +9214,32 @@ class TestTensorDictParams:
         torch.testing.assert_close(params["a"].data, dense["a"])
         assert isinstance(params["a"], nn.Parameter)
 
+    @pytest.mark.parametrize("flatten", [True, False])
+    @pytest.mark.parametrize("lock", [False, True])
+    def test_load_state_dict_non_tensor(self, lock, flatten):
+        # #3540: load_state_dict loads the non-tensor leaves, as on the
+        # wrapped tensordict
+        def make(a, s):
+            return TensorDict(
+                a=torch.full((3,), a),
+                s=s,
+                n=TensorDict(t=s, m=TensorDictParams(TensorDict(u=s))),
+            )
+
+        sd = make(1.0, "new").state_dict(flatten=flatten)
+        params = TensorDictParams(make(0.0, "old"), lock=lock)
+        dense = make(0.0, "old")
+        with torch.no_grad():
+            assert params.load_state_dict(sd) is params
+        dense.load_state_dict(sd)
+        for key in ("s", ("n", "t"), ("n", "m", "u")):
+            assert dense[key] == "new"
+            assert params[key] == "new"
+        torch.testing.assert_close(params["a"].data, dense["a"])
+        assert isinstance(params["a"], nn.Parameter)
+        old = TensorDictParams(make(0.0, "old"), lock=lock)
+        assert params._param_td.is_locked is old._param_td.is_locked
+
     _NON_TENSOR_AT_OPS = {
         "set_at_": lambda td, src: td.set_at_("s", "new", 1),
         "set_at_slice": lambda td, src: td.set_at_("s", "new", slice(0, 2)),

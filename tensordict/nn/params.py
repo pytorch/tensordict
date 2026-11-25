@@ -311,6 +311,16 @@ def _data_and_non_tensor(value):
     return value if is_non_tensor(value) else value.data
 
 
+def _data_keeping_non_tensor(params):
+    # params.data, with the non-tensor leaves of params rather than new ones,
+    # so that writes into them reach params (#2263).
+    if not params._param_td._has_non_tensor:
+        return params.data
+    return params._param_td._fast_apply(
+        _data_and_non_tensor, is_leaf=_is_leaf_nontensor, propagate_lock=True
+    )
+
+
 def _set_replaced_non_tensor(param_td, data):
     # set_at_ and update_at_ replace a non-tensor leaf of data with a stack
     # instead of writing into it: put the new leaf in param_td (#2740).
@@ -412,12 +422,7 @@ def _apply_on_data_and_non_tensor(func):
         if writes_existing:
             _raise_if_entry_missing(self._param_td, args[0] if args else kwargs["key"])
         has_non_tensor = self._param_td._has_non_tensor
-        if has_non_tensor:
-            data = self._param_td._fast_apply(
-                _data_and_non_tensor, is_leaf=_is_leaf_nontensor, propagate_lock=True
-            )
-        else:
-            data = self.data
+        data = _data_keeping_non_tensor(self)
         getattr(data, func.__name__)(*args, **kwargs)
         if has_non_tensor and replaces_leaves:
             _set_replaced_non_tensor(self._param_td, data)
@@ -1572,7 +1577,8 @@ class TensorDictParams(TensorDictBase, nn.Module):  # type: ignore[override,misc
         state_dict = collections.OrderedDict(state_dict)
         if _metadata is not None:
             state_dict._metadata = _metadata
-        self.data.load_state_dict(
+        # self.data would load the non-tensor leaves into new ones (#3540).
+        _data_keeping_non_tensor(self).load_state_dict(
             state_dict, strict=strict, assign=assign, from_flatten=from_flatten
         )
         return self
