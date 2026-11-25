@@ -1423,6 +1423,22 @@ class TestZarrWriteOps:
         assert "new" in ztd.keys()
         assert ztd["new"].shape == torch.Size([3, 4])
 
+    @pytest.mark.parametrize("key", [("b", "c", "z"), ("b", "c", "z", "w")])
+    @pytest.mark.parametrize("method", ["set", "set_", "setitem", "update"])
+    def test_set_key_through_leaf(self, ztd, key, method):
+        # a key that goes through a leaf raises the KeyError of TensorDict:
+        # the zarr store raised an AttributeError (#3751)
+        c = ztd["b", "c"].clone()
+        with pytest.raises(KeyError, match="The entry c is already present"):
+            if method == "setitem":
+                ztd[key] = torch.ones(3, 4)
+            elif method == "update":
+                ztd.update({key: torch.ones(3, 4)})
+            else:
+                getattr(ztd, method)(key, torch.ones(3, 4))
+        assert set(ztd.keys(True, True)) == {"a", ("b", "c")}
+        torch.testing.assert_close(ztd["b", "c"], c)
+
     def test_set_replace_warns(self, ztd):
         with pytest.warns(UserWarning, match="Replacing an array"):
             ztd.set("a", torch.rand(3, 4), inplace=False)

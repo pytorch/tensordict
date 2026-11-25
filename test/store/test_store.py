@@ -224,6 +224,22 @@ class TestTensorDictStore:
         td.clear_redis()
         td.close()
 
+    @pytest.mark.parametrize("key", [("n", "y", "z"), ("n", "y", "z", "w")])
+    @pytest.mark.parametrize("method", ["set", "set_", "setitem", "update"])
+    def test_set_key_through_leaf(self, store_td, key, method):
+        # a key that goes through a leaf raises the KeyError of TensorDict:
+        # the store raised an AttributeError (#3751)
+        store_td["n", "y"] = torch.zeros(10)
+        with pytest.raises(KeyError, match="The entry y is already present"):
+            if method == "setitem":
+                store_td[key] = torch.ones(10)
+            elif method == "update":
+                store_td.update({key: torch.ones(10)})
+            else:
+                getattr(store_td, method)(key, torch.ones(10))
+        assert set(store_td.keys(True, True)) == {("n", "y")}
+        assert (store_td["n", "y"] == 0).all()
+
     @pytest.mark.parametrize("key", [("n", "y"), ("n", "m", "y")])
     @pytest.mark.parametrize("method", ["set", "set_", "set_at_"])
     def test_nested_set_returns_root(self, store_td, key, method):

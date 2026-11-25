@@ -1064,6 +1064,24 @@ class TestH5Serialization:
         assert set(h5td.keys(True, True)) == {"a", ("b", "c")}
         h5td.close()
 
+    @pytest.mark.parametrize("key", [("n", "y", "z"), ("n", "y", "z", "w")])
+    @pytest.mark.parametrize("method", ["set", "set_", "setitem", "update"])
+    def test_set_key_through_leaf(self, tmp_path, key, method):
+        # a key that goes through a leaf raises the KeyError of TensorDict:
+        # the file raised an AttributeError (#3751)
+        td = TensorDict(n=TensorDict(y=torch.zeros(3), batch_size=[3]), batch_size=[3])
+        h5td = PersistentTensorDict.from_dict(td, filename=tmp_path / "file.h5")
+        with pytest.raises(KeyError, match="The entry y is already present"):
+            if method == "setitem":
+                h5td[key] = torch.ones(3)
+            elif method == "update":
+                h5td.update({key: torch.ones(3)})
+            else:
+                getattr(h5td, method)(key, torch.ones(3))
+        assert set(h5td.keys(True, True)) == {("n", "y")}
+        assert (h5td["n", "y"] == 0).all()
+        h5td.close()
+
     def test_rename_key_overwrite_read_group(self, tmp_path):
         # the overwritten group was read first: reads and writes after the
         # rename go to the new node, not to the deleted group
