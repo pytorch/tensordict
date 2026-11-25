@@ -2279,6 +2279,49 @@ def test_inplace_methods_write(tmp_path):
 
 
 @pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
+@pytest.mark.parametrize(
+    "method",
+    ["update_dict", "update_", "copy_", "update_keys_to_update", "non_tensor_only"],
+)
+def test_inplace_update_writes_non_tensor(tmp_path, method):
+    # #3750: update_ and copy_ write a non-tensor entry that holds one value
+    # for the whole batch to the file, as a TensorDict does
+    td = TensorDict(x=torch.zeros(2), n={"y": torch.zeros(2)}, batch_size=[2])
+    td.set_non_tensor("s", "old")
+    td.set_non_tensor(("n", "t"), "old")
+    filename = tmp_path / "file.h5"
+    h5td = PersistentTensorDict.from_dict(td, filename=filename)
+    new = TensorDict(
+        x=torch.ones(2),
+        s=NonTensorData("new", batch_size=[2]),
+        n=TensorDict(
+            y=torch.ones(2), t=NonTensorData("new", batch_size=[2]), batch_size=[2]
+        ),
+        batch_size=[2],
+    )
+    for data in (h5td, td):
+        if method == "update_dict":
+            data.update_({"x": torch.ones(2), "s": "new", "n": {"t": "new"}})
+        elif method == "update_":
+            assert data.update_(new) is data
+        elif method == "copy_":
+            assert data.copy_(new) is data
+        elif method == "update_keys_to_update":
+            data.update_(new, keys_to_update=["x", "s", ("n", "t")])
+        else:
+            data.update_({"s": "new", "n": {"t": "new"}})
+    assert td["s"] == "new"
+    assert td["n", "t"] == "new"
+    h5td.close()
+    reopened = PersistentTensorDict.from_h5(filename)
+    # h5 reads a str as bytes (#2255)
+    assert reopened["s"] in ("new", b"new")
+    assert reopened["n", "t"] in ("new", b"new")
+    torch.testing.assert_close(reopened["x"], td["x"])
+    reopened.close()
+
+
+@pytest.mark.skipif(not _has_h5py, reason="h5py not found.")
 def test_inplace_methods_write_lazy_stack(tmp_path):
     # #2570: the in-place methods of a lazy stack write to its h5 members, also
     # beside a dense member and in a stack of stacks
