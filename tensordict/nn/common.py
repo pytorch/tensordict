@@ -16,12 +16,9 @@ from typing import (
     Callable,
     Dict,
     Iterable,
-    List,
-    MutableSequence,
+    Mapping,
     Optional,
     Sequence,
-    Tuple,
-    Union,
 )
 
 import torch
@@ -584,16 +581,16 @@ class TensorDictModuleBase(nn.Module):
         return hasattr(module, "in_keys") and hasattr(module, "out_keys")
 
     @property
-    def in_keys(self):
+    def in_keys(self) -> Sequence[NestedKey]:
         """The keys that the module reads from the input tensordict."""
         return self._in_keys
 
     @in_keys.setter
-    def in_keys(self, value: List[Union[str, Tuple[str]]]):
-        self._in_keys = unravel_key_list(value)
+    def in_keys(self, value: Sequence[NestedKey]) -> None:
+        self._in_keys = unravel_key_list(list(value))
 
     @property
-    def out_keys(self):
+    def out_keys(self) -> Sequence[NestedKey]:
         """The keys that the module writes to the output tensordict.
 
         After :meth:`select_out_keys`, only the selected keys. The full list
@@ -602,17 +599,17 @@ class TensorDictModuleBase(nn.Module):
         return self._out_keys_apparent
 
     @out_keys.setter
-    def out_keys(self, value: List[Union[str, Tuple[str]]]):
+    def out_keys(self, value: Sequence[NestedKey]) -> None:
         self._out_keys = self._out_keys_apparent = unravel_key_list(list(value))
 
     # Below the setter: type checkers drop a setter that does not follow its
     # getter, and then see out_keys as read-only (#3237).
     @property
-    def out_keys_source(self):
+    def out_keys_source(self) -> list[NestedKey]:
         """All the keys that the module writes, before :meth:`select_out_keys`."""
         return self._out_keys
 
-    def select_out_keys(self, *out_keys) -> TensorDictModuleBase:
+    def select_out_keys(self, *out_keys: NestedKey) -> TensorDictModuleBase:
         """Keeps only some of the ``out_keys`` in the output of the module, and returns the module.
 
         Use it to drop intermediate outputs, for example those of a
@@ -875,16 +872,18 @@ class TensorDictModule(TensorDictModuleBase):
             tensors, or a dict or a tensordict. A dict or a tensordict that
             holds all the ``out_keys`` is read by key, so its order does not
             matter.
-        in_keys (NestedKey, list of NestedKey, or dict): the entries that the
-            module reads from the input tensordict. If a list, the values are
-            passed as positional arguments, in this order. If a dict, the values
-            are passed as keyword arguments. By default, the dict maps an
-            argument name to a tensordict key: ``in_keys={"x": "obs"}`` calls
-            ``module(x=td["obs"])``. One tensordict key can feed several
-            arguments. ``out_to_in_map=False`` reverses the direction.
-        out_keys (NestedKey or list of NestedKey): the keys where the outputs
-            of ``module`` are written, one key per output, in order. An output
-            whose key is ``"_"`` is not written.
+        in_keys (NestedKey, sequence of NestedKey, or mapping): the entries
+            that the module reads from the input tensordict. A tuple is read as
+            one nested key, not as a sequence of keys. If a sequence, the values
+            are passed as positional arguments, in this order. If a mapping,
+            such as a dict, the values are passed as keyword arguments. By
+            default, the mapping goes from an argument name to a tensordict
+            key: ``in_keys={"x": "obs"}`` calls ``module(x=td["obs"])``. One
+            tensordict key can feed several arguments. ``out_to_in_map=False``
+            reverses the direction.
+        out_keys (NestedKey or sequence of NestedKey): the keys where the
+            outputs of ``module`` are written, one key per output, in order.
+            An output whose key is ``"_"`` is not written.
 
     Keyword Args:
         out_to_in_map (bool, optional): the direction of a dict ``in_keys``.
@@ -1017,8 +1016,13 @@ class TensorDictModule(TensorDictModuleBase):
     def __init__(
         self,
         module: Callable,
-        in_keys: NestedKey | List[NestedKey] | Dict[NestedKey:str],
-        out_keys: NestedKey | List[NestedKey],
+        in_keys: (
+            NestedKey
+            | Sequence[NestedKey]
+            | Mapping[str, NestedKey]
+            | Mapping[Any, str]
+        ),
+        out_keys: NestedKey | Sequence[NestedKey],
         *,
         out_to_in_map: bool | None = None,
         inplace: bool | str = True,
@@ -1029,12 +1033,12 @@ class TensorDictModule(TensorDictModuleBase):
     ) -> None:
         super().__init__()
 
-        if out_to_in_map is not None and not isinstance(in_keys, dict):
+        if out_to_in_map is not None and not isinstance(in_keys, Mapping):
             warnings.warn(
                 "out_to_in_map is not None but is only used when in_key is a dictionary."
             )
 
-        if isinstance(in_keys, dict):
+        if isinstance(in_keys, Mapping):
             if out_to_in_map is None:
                 out_to_in_map = True
 
@@ -1052,13 +1056,13 @@ class TensorDictModule(TensorDictModuleBase):
         else:
             if isinstance(in_keys, (str, tuple)):
                 in_keys = [in_keys]
-            elif not isinstance(in_keys, MutableSequence):
+            elif not isinstance(in_keys, Sequence):
                 raise ValueError(self._IN_KEY_ERR)
             self._kwargs = None
 
         if isinstance(out_keys, (str, tuple)):
             out_keys = [out_keys]
-        elif not isinstance(out_keys, MutableSequence):
+        elif not isinstance(out_keys, Sequence):
             raise ValueError(self._OUT_KEY_ERR)
         try:
             in_keys = unravel_key_list(list(in_keys))
@@ -1382,17 +1386,17 @@ class TensorDictModuleWrapper(TensorDictModuleBase):
         self.td_module = td_module
 
     @property
-    def out_keys(self):
+    def out_keys(self) -> Sequence[NestedKey]:
         """The keys that the module writes, by default those of ``td_module``."""
         return self.__dict__.get("_out_keys_apparent", self.td_module.out_keys)
 
     @out_keys.setter
-    def out_keys(self, value: List[Union[str, Tuple[str]]]):
+    def out_keys(self, value: Sequence[NestedKey]) -> None:
         self.td_module.out_keys = value
         self._out_keys_apparent = self.td_module.out_keys
 
     @property
-    def out_keys_source(self):
+    def out_keys_source(self) -> list[NestedKey]:
         """All the keys that ``td_module`` writes, before :meth:`select_out_keys`."""
         return self.td_module.out_keys_source
 
@@ -1488,24 +1492,19 @@ class WrapModule(TensorDictModuleBase):
 
     """
 
-    in_keys = []
-    out_keys = []
-
     def __init__(
         self,
         func: Callable[[TensorDictBase], TensorDictBase],
         *,
         inplace: bool = False,
-        in_keys: List[NestedKey] | None = None,
-        out_keys: List[NestedKey] | None = None,
+        in_keys: Sequence[NestedKey] | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
     ) -> None:
         super().__init__()
         self.func = func
         self.inplace = inplace
-        if in_keys is not None:
-            self.in_keys = in_keys
-        if out_keys is not None:
-            self.out_keys = out_keys
+        self.in_keys = [] if in_keys is None else in_keys
+        self.out_keys = [] if out_keys is None else out_keys
 
     def forward(self, data: TensorDictBase) -> TensorDictBase:
         """Calls ``func`` on ``data`` and returns the result, or ``data`` updated with it if ``inplace=True``."""
@@ -1557,8 +1556,8 @@ class as_tensordict_module:
     def __init__(
         self,
         *,
-        in_keys: List[NestedKey] | NestedKey,
-        out_keys: List[NestedKey] | NestedKey,
+        in_keys: Sequence[NestedKey] | NestedKey,
+        out_keys: Sequence[NestedKey] | NestedKey,
     ) -> None:
         if isinstance(in_keys, NestedKey):
             in_keys = [in_keys]
