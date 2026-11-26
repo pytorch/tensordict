@@ -19712,6 +19712,18 @@ class TestGeneric:
         assert td.apply(lambda x: x * 2, batch_size=[3], out=out) is out
         assert_allclose_td(out, td * 2)
 
+    def test_apply_inplace_frees_results(self):
+        td = TensorDict(a=torch.ones(3), b={"c": torch.ones(3), "d": torch.ones(3)})
+        refs = []
+
+        def fn(x):
+            assert all(r() is None for r in refs)
+            refs.append(weakref.ref(y := x + 1))
+            return y
+
+        td.apply(fn, inplace=True)
+        assert len(refs) == 3
+
     @pytest.mark.parametrize("nested_keys", [False, True])
     def test_named_apply_out(self, nested_keys):
         # named_apply writes into out= and returns it, as apply does
