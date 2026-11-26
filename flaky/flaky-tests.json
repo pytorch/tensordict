@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-11-25T06:24:47.037866+00:00",
+  "generated_at": "2026-11-26T06:18:45.522083+00:00",
   "repository": "pytorch/tensordict",
   "analysis_period": {
-    "start": "2026-11-11",
+    "start": "2026-11-12",
     "end": "2026-11-15",
-    "runs_analyzed": 30
+    "runs_analyzed": 10
   },
   "summary": {
     "total_tests": 79650,

@@ -1,4 +1,4 @@
-# Flaky Test Report - 2026-11-25
+# Flaky Test Report - 2026-11-26
 
 ## Summary
 
@@ -7,7 +7,7 @@
 - **Newly confirmed**: 0
 - **Resolved since previous report**: 0
 - **Total tests analyzed**: 79650
-- **CI runs analyzed**: 30
+- **CI runs analyzed**: 10
 
 ---
 
@@ -24,4 +24,4 @@ No test has recent fail/pass evidence on the same commit and CI environment.
 
 ---
 
-*Generated at 2026-11-25T06:24:47.037866+00:00*
+*Generated at 2026-11-26T06:18:45.522083+00:00*
