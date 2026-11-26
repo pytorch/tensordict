@@ -10190,6 +10190,7 @@ class TensorDictBase(*_TENSORDICTBASE_MIXINS, MutableMapping, TensorCollection):
                         validated=checked,
                         non_blocking=False,
                     )
+            item_trsf = None
 
         if filter_empty and not any_set:
             return
