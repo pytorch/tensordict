@@ -2198,6 +2198,60 @@ class TestTensorDicts(TestTensorDictsBase):
         td = getattr(self, td_name)(device)
         assert is_tensor_collection(torch.std(td.float(), dim=dim))
 
+    @pytest.mark.parametrize("func", [torch.var, torch.std])
+    @pytest.mark.parametrize("unbiased", [False, True])
+    @pytest.mark.parametrize("keepdim", [False, True])
+    def test_var_std_unbiased(self, td_name, device, func, unbiased, keepdim, tmpdir):
+        # #3720: torch.var and torch.std take their third positional argument
+        # as `unbiased`, as they do on a tensor, and the fourth as `keepdim`.
+        if td_name == "td_with_unbatched":
+            pytest.skip("UnbatchedTensor incompatible with reduction ops")
+        td = getattr(self, td_name)(device)
+        td = _to_float(td, td_name, tmpdir)
+        leaves = dict(td.items(True, True))
+        result = func(td, 0, unbiased, keepdim)
+        assert is_tensor_collection(result)
+        assert result.batch_size == torch.Size(
+            [1, *td.batch_size[1:]] if keepdim else td.batch_size[1:]
+        )
+        for key, val in leaves.items():
+            torch.testing.assert_close(result[key], func(val, 0, unbiased, keepdim))
+        # the spelling of the issue, with three positional arguments, the
+        # keyword spelling, and `correction` all give the same values
+        for key, val in leaves.items():
+            expected = func(val, 0, unbiased, keepdim)
+            torch.testing.assert_close(
+                func(td, 0, unbiased)[key], func(val, 0, unbiased)
+            )
+            torch.testing.assert_close(
+                func(td, 0, unbiased=unbiased, keepdim=keepdim)[key],
+                expected,
+            )
+            torch.testing.assert_close(
+                func(td, 0, correction=int(unbiased), keepdim=keepdim)[key],
+                expected,
+            )
+
+    @pytest.mark.parametrize("func", [torch.var, torch.std])
+    @pytest.mark.parametrize("unbiased", [False, True])
+    def test_var_std_unbiased_no_dim(self, td_name, device, func, unbiased, tmpdir):
+        # #3720: without a dim, a lone bool selects the estimator, as
+        # torch.var(tensor, unbiased) does, and `unbiased` and `correction`
+        # cannot be given together.
+        if td_name == "td_with_unbatched":
+            pytest.skip("UnbatchedTensor incompatible with reduction ops")
+        td = getattr(self, td_name)(device)
+        td = _to_float(td, td_name, tmpdir)
+        leaves = dict(td.items(True, True))
+        result = func(td, unbiased)
+        assert is_tensor_collection(result)
+        assert result.batch_size == torch.Size([])
+        for key, val in leaves.items():
+            torch.testing.assert_close(result[key], func(val, unbiased))
+        # `unbiased` and `correction` together are rejected, as on a tensor
+        with pytest.raises(TypeError, match="invalid combination of arguments"):
+            func(td, 0, unbiased, correction=1)
+
     def test_maximum(self, td_name, device):
         td = getattr(self, td_name)(device)
         if td_name == "td_params":
