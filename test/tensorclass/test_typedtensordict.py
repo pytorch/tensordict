@@ -609,6 +609,54 @@ class TestNotRequired:
 # ---------------------------------------------------------------------------
 
 
+class _ArchiveDeep(TypedTensorDict):
+    z: Tensor
+
+
+class _ArchiveInner(TypedTensorDict):
+    y: Tensor
+    deep: _ArchiveDeep
+
+
+class _ArchiveState(TypedTensorDict):
+    x: Tensor
+    inner: _ArchiveInner
+    plain: TensorDict
+
+
+class _ArchiveSubState(_ArchiveState):
+    w: Tensor
+
+
+def _archive_state(cls=_ArchiveState):
+    extra = {"w": torch.full((3,), 4.0)} if cls is _ArchiveSubState else {}
+    return cls(
+        x=torch.arange(3.0),
+        inner=_ArchiveInner(
+            y=torch.ones(3),
+            deep=_ArchiveDeep(z=torch.full((3,), 2.0), batch_size=[3]),
+            batch_size=[3],
+        ),
+        # a plain TensorDict field stays a TensorDict, and a TypedTensorDict
+        # in it keeps its class
+        plain=TensorDict(
+            v=torch.full((3,), 3.0),
+            held=_ArchiveDeep(z=torch.full((3,), 5.0), batch_size=[3]),
+            batch_size=[3],
+        ),
+        batch_size=[3],
+        **extra,
+    )
+
+
+def _collection_types(td):
+    return {
+        key: type(value)
+        for key, value in td.items(True, False)
+        if isinstance(value, TensorDictBase)
+    }
+
+
 class TestTensorDictOps:
     @pytest.fixture
     def state(self):
@@ -730,6 +778,93 @@ class TestTensorDictOps:
         state.set("eta", torch.ones(5, 3))
         state.is_locked = True
         assert (state.detach()["eta"] == 1).all()
+
+    # #3324: an archive write returned the TensorDict that load_memmap gives,
+    # while a directory write returns the class, at every level.
+    @pytest.mark.parametrize("cls", [_ArchiveState, _ArchiveSubState])
+    @pytest.mark.parametrize("method", ["memmap", "save", "dumps", "memmap_like"])
+    @pytest.mark.parametrize("spelling", ["suffix", "archive=True"])
+    def test_archive_write_keeps_class(self, tmp_path, cls, method, spelling):
+        state = _archive_state(cls)
+        if spelling == "suffix":
+            path = tmp_path / "state.tdz"
+            out = getattr(state, method)(path)
+        else:
+            path = tmp_path / "state.bin"
+            out = getattr(state, method)(path, archive=True)
+        assert path.is_file()
+        directory = getattr(state, method)(tmp_path / "dir")
+        assert type(out) is cls
+        assert _collection_types(out) == _collection_types(directory)
+        assert type(out.inner) is _ArchiveInner
+        assert type(out.inner.deep) is _ArchiveDeep
+        assert type(out.plain) is TensorDict
+        assert type(out["plain", "held"]) is _ArchiveDeep
+        expected = state if method != "memmap_like" else state.apply(torch.zeros_like)
+        assert (out.to_tensordict() == expected.to_tensordict()).all()
+        assert (out.inner.deep.z == expected.inner.deep.z).all()
+        # the result wraps what load_memmap returns: leaves are views into one
+        # mapping of the archive, unlocked, on the same device and batch size
+        loaded = TensorDict.load_memmap(
+            path, mode="r+" if method == "memmap_like" else None
+        )
+        assert out.is_locked == loaded.is_locked
+        assert out.device == loaded.device
+        assert out.batch_size == loaded.batch_size
+        assert out.names == loaded.names
+        storages = {
+            leaf.untyped_storage().data_ptr() for leaf in out.values(True, True)
+        }
+        assert storages == {
+            leaf.untyped_storage().data_ptr() for leaf in out._source.values(True, True)
+        }
+        assert len(storages) == 1
+        if method == "memmap_like":
+            # mode="r+": an in-place write through a nested typed field
+            # reaches the archive
+            out.inner.deep.z.fill_(7.0)
+            out.plain["held"].z.fill_(8.0)
+            reloaded = TensorDict.load_memmap(path)
+            assert (reloaded["inner", "deep", "z"] == 7).all()
+            assert (reloaded["plain", "held", "z"] == 8).all()
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"num_threads": 2},
+            {"compression": "deflate"},
+            {"existsok": False},
+            {"atomic": True},
+        ],
+    )
+    def test_archive_memmap_options_keep_class(self, tmp_path, kwargs):
+        # #3324
+        out = _archive_state().memmap(tmp_path / "state.tdz", **kwargs)
+        assert type(out) is _ArchiveState
+        assert type(out.inner.deep) is _ArchiveDeep
+        assert (out.inner.deep.z == 2).all()
+
+    def test_archive_write_of_lazy_source_keeps_class(self, tmp_path):
+        # #3324: the source of the result is the lazy stack load_memmap gives
+        state = _ArchiveDeep.from_tensordict(
+            lazy_stack([TensorDict(z=torch.full((), float(i))) for i in range(3)])
+        )
+        for method in ("memmap", "save", "memmap_like"):
+            out = getattr(state, method)(tmp_path / f"{method}.tdz")
+            assert type(out) is _ArchiveDeep
+            assert isinstance(out._source, LazyStackedTensorDict)
+            assert out.z.shape == (3,)
+
+    @pytest.mark.parametrize("method", ["memmap", "save", "memmap_like"])
+    @pytest.mark.parametrize("suffix", ["", ".tdz"])
+    def test_load_memmap_of_typed_write_is_tensordict(self, tmp_path, method, suffix):
+        # #3324 changes only the result of the write: the files are those of
+        # a TensorDict, which load_memmap returns at every level
+        path = tmp_path / f"state{suffix}"
+        getattr(_archive_state(), method)(path)
+        loaded = TensorDict.load_memmap(path)
+        assert set(_collection_types(loaded).values()) == {TensorDict}
+        assert type(loaded) is TensorDict
 
 
 # ---------------------------------------------------------------------------
