@@ -1100,14 +1100,71 @@ def _stack_uninit_params(list_of_params, dim: int = 0, out=None):
     return out
 
 
+def _var_std_correction(
+    name: str,
+    dim: Any,
+    unbiased: bool | None,
+    correction: int | None,
+) -> Tuple[Any, int | None]:
+    """Reads the arguments that ``torch.var`` and ``torch.std`` take.
+
+    torch puts ``unbiased`` before ``keepdim`` among their positional
+    arguments, and also takes a lone bool where ``dim`` goes, so
+    ``torch.var(td, 0, False)`` asks for the biased estimate, as it does on
+    a tensor. The methods instead read ``(dim, keepdim)`` and take the
+    estimator through ``correction`` (#3720).
+
+    Args:
+        name (str): the name of the torch function, for the error messages.
+        dim (int, tuple of int or None): the ``dim`` argument of the torch call.
+        unbiased (bool or None): the ``unbiased`` argument of the torch call.
+        correction (int or None): the ``correction`` argument of the torch call.
+
+    Returns:
+        The dim to reduce, and the correction to pass to the method, with
+        ``unbiased`` turned into a correction of ``1`` or ``0``.
+    """
+    if isinstance(dim, bool):
+        if unbiased is not None:
+            raise TypeError(f"{name}() got multiple values for 'unbiased'")
+        dim, unbiased = None, dim
+    if unbiased is not None:
+        if correction is not None:
+            raise TypeError(f"{name}() got both 'unbiased' and 'correction'")
+        correction = int(unbiased)
+    return dim, correction
+
+
 @implements_for_td(torch.var)
-def _var(td: T, *args: Any, **kwargs: Any) -> T:
-    return td.var(*args, **kwargs)
+def _var(
+    td: T,
+    dim: int | Tuple[int, ...] | None = None,
+    unbiased: bool | None = None,
+    keepdim: bool = False,
+    *,
+    correction: int | None = None,
+    **kwargs: Any,
+) -> T:
+    dim, correction = _var_std_correction("var", dim, unbiased, correction)
+    if correction is not None:
+        kwargs["correction"] = correction
+    return td.var(dim=dim, keepdim=keepdim, **kwargs)
 
 
 @implements_for_td(torch.std)
-def _std(td: T, *args: Any, **kwargs: Any) -> T:
-    return td.std(*args, **kwargs)
+def _std(
+    td: T,
+    dim: int | Tuple[int, ...] | None = None,
+    unbiased: bool | None = None,
+    keepdim: bool = False,
+    *,
+    correction: int | None = None,
+    **kwargs: Any,
+) -> T:
+    dim, correction = _var_std_correction("std", dim, unbiased, correction)
+    if correction is not None:
+        kwargs["correction"] = correction
+    return td.std(dim=dim, keepdim=keepdim, **kwargs)
 
 
 @implements_for_td(torch.mean)
